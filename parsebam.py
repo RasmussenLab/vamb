@@ -1,3 +1,17 @@
+# # Changes to do
+# 
+# get_contig_rpkms should return an array.array('f').
+# 
+# split main to four functions:
+# 
+# read_bam_files: first part of current main, but instead saves the rpkms in a {path: array} dict.
+# 
+# save_arrays (or some name): makes a dir and saves all the arrays using array.array.tofile
+# 
+# load_as_np_array(paths, length): Inits a NP arr, then loads as columns using array.array.fromfile.
+# 
+# write_table(path, nparray): just use same lines as from parsecontigs.py's write function
+
 
 # Metagenomic RPKM estimator
 
@@ -59,19 +73,18 @@ Requires the module pysam to run."""
 
 
 
-import pysam
+import pysam as _pysam
 
-import sys
-import os
-import multiprocessing
-import argparse
-import time
-
-from collections import defaultdict
-
+import sys as _sys
+import os as _os
+import multiprocessing as _multiprocessing
+import argparse as _argparse
+import numpy as _np
+import gzip as _gzip
 
 
-def get_all_references(alignedsegment):
+
+def _get_all_references(alignedsegment):
     """Given a pysam aligned segment, returns a list with the names of all
     references the read maps to, both primary and secondary hits.
     """
@@ -93,7 +106,7 @@ def get_all_references(alignedsegment):
 
 
 
-def filter_segments(segmentiterator, minscore):
+def _filter_segments(segmentiterator, minscore):
     """Returns an iterator of AlignedSegment filtered for reads with low
     alignment score, and for any segments identical to the previous segment.
     This is necessary as BWA MEM produces dopplegangers.
@@ -124,135 +137,235 @@ def filter_segments(segmentiterator, minscore):
 
 
 
-def get_contig_rpkms(identifier, path, minscore):
+def get_contig_rpkms(path, minscore):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
+    
+    Inputs:
+        path: Path to BAM file
+        minscore: Minimum alignment score (AS field) to consider
+        
+    Outputs:
+        path: Same as input path
+        rpkms A float32-array with RPKM for each contig in BAM header
     """
     
-    print('Parsing file:', path)
-    
-    bamfile = pysam.AlignmentFile(path, "rb")
-    
+    bamfile = _pysam.AlignmentFile(path, "rb")
+
     # We can only get secondary alignment reference names, not indices. So we must
     # make an idof dict to look up the indices.
     idof = {contig: i for i, contig in enumerate(bamfile.references)}
     contiglengths = bamfile.lengths
-    halfreads = [0] * len(contiglengths)
+    halfreads = _np.zeros(len(contiglengths), dtype=_np.int32)
     
     nhalfreads = 0
-    for segment in filter_segments(bamfile, minscore):
+    for segment in _filter_segments(bamfile, minscore):
         nhalfreads += 1
         
         # Read w. unmapped mates count twice as they represent a whole read
         value = 2 if segment.mate_is_unmapped else 1
         
-        for reference in get_all_references(segment):
+        for reference in _get_all_references(segment):
             id = idof[reference]
             halfreads[id] += value
             
     bamfile.close()
+    del idof
     
-    print('Done parsing file:', path)
-    
-    rpkms = list()
+    rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
     
     # Compensate for having paired reads
     millionmappedreads = nhalfreads / 2e6
     
-    for contiglength, nhalfreads in zip(contiglengths, halfreads):
+    for i, (contiglength, nhalfreads) in enumerate(zip(contiglengths, halfreads)):
         kilobases = contiglength / 1000
-        rpkms.append(nhalfreads / (kilobases * millionmappedreads))
+        rpkms[i] = nhalfreads / (kilobases * millionmappedreads)
     
-    return identifier, rpkms
+    return path, rpkms
 
 
 
-def main(paths, minscore, outfile, is_matrix):
-    """Spawns processes to parse BAM files and get contig rpkms from them,
-    then prints the resulting table to an output file"""
+def read_bamfiles(paths, minscore, processors):
+    """Spawns processes to parse BAM files and get contig rpkms.
+    
+    Input:
+        path: Path to BAM file
+        minscore: Minimum alignment score (AS field) to consider
+        processors: Number of processes to spawn
+
+    Outputs:
+        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
+        contignames: A list of contignames from first BAM header
+    """
     
     # Get references and lengths from first BAM file.
     # We need these to print them in the output.
     # Might as well do it before spawning all those processes.
-    firstfile = pysam.AlignmentFile(paths[0], "rb")
-    references = firstfile.references
-    lengths = firstfile.lengths
+    firstfile = _pysam.AlignmentFile(paths[0], "rb")
+    contignames = firstfile.references
+    ncontigs = len(contignames)
     
-    if not len(references) == len(lengths):
+    if ncontigs == 0:
         raise ValueError('Could not parse headers of first bam-file')
+        
+    del firstfile
     
     # Spawn independent processed to calculate RPKM for each of the BAM files
     processresults = list()
-    processes_done = 0
-    
-    # This is just to print to terminal when a process finishes. Not necessary.
-    def callback(result, totalps=len(paths)):
-        "Generator yielding processed"
-        nonlocal processes_done
-        processes_done += 1
-        print('Files processed: {}/{}'.format(processes_done, totalps))
-        return None
 
     # Queue all the processes
-    with multiprocessing.Pool(processes=args.processors) as pool:
-        for fileno, path in enumerate(paths):
-            arguments = (fileno, path, args.minscore)
-            processresults.append(pool.apply_async(get_contig_rpkms, arguments,
-                                                  callback=callback, error_callback=callback))
+    with _multiprocessing.Pool(processes=processors) as pool:
+        for path in paths:
+            arguments = (path, minscore)
+            processresults.append(pool.apply_async(get_contig_rpkms, arguments))
         
         # For some reason, this is needed.
         pool.close()
         pool.join()
             
-    print('All processes finished. Checking outputs')
-    sample_rpkms = list()
+    sample_rpkms = dict()
     
     for processresult in processresults:
         if processresult.successful():
-            sample_rpkms.append(processresult.get())
+            path, rpkm = processresult.get()
+            sample_rpkms[path] = rpkm
             
         else:
-            raise multiprocessing.ProcessError
-    
-    # sample_rpkms now contain (identifier, sample_rpkms) tuples, in the order
-    # they were returned from the pool. We want to sort them by identifier,
-    # so that we know which RPKMs belong to which BAM file
-    sample_rpkms.sort()
-    
-    # Now we can discard the identifiers
-    sample_rpkms = [i[1] for i in sample_rpkms]
-    
-    # Each BAM file MUST contain the same headers
-    if not all(len(rpkms) == len(lengths) for rpkms in sample_rpkms):
-        raise ValueError('Not all BAM files contain the same amount of headers.')
-    
-    print('Outputs alright. Printing table.')
-    
-    with open(outfile, 'w') as filehandle:
-        # Print header if asked
-        if not is_matrix:
-            print('#contig\tcontiglength', '\t'.join(paths), sep='\t', file=filehandle)
-    
-        # Print the actual output
-        for fields in zip(references, lengths, *sample_rpkms):
-            numbers = '\t'.join([str(round(i, 3)) for i in fields[2:]])
+            return processresult
+            raise _multiprocessing.ProcessError
             
-            if not is_matrix:
-                print(fields[0], fields[1], sep='\t', end='\t', file=filehandle)
-                
-            print(numbers, file=filehandle)
+    # Check results have same length
+    wrong = [(path, len(rpkm)) for path, rpkm in sample_rpkms.items()
+             if len(rpkm) != ncontigs]
+    
+    if wrong:
+        message = ('Expected number of headers: ' +
+                   str(ncontigs) +
+                   '\nfollowing samples have wrong number of headers:\n' +
+                   '\n'.join(p+'\t'+str(i) for p, i in wrong))
+        raise ValueError(message)
+            
+    return sample_rpkms, contignames
+
+
+
+def sample_rpkms_tonpz(sample_rpkms, path):
+    """Saves an RPKM dictionary to a path as .npz file.
+    
+    Inputs:
+        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
+        path: Path to save to
+        
+    Output: None
+    """
+    
+    _np.savez_compressed(path, **sample_rpkms)
+
+
+
+def array_fromnpz(path, columns):
+    """Creates a (n-contigs x n-bamfiles) array from an npz object as created
+    by sample_rpkms_tonpz.
+    
+    Inputs: 
+        path: Path to npz object
+        columns: Names of BAM file paths in npz object in correct order
+        
+    Output: A (n-contigs x n-bamfiles) array with each column being the corre-
+    sponding numpy array from the npz file, normalized so each row sums to 1
+    """
+    
+    npz = _np.load(path)
+    
+    ncontigs = len(npz[columns[0]])
+    ncolumns = len(columns)
+    
+    arr = _np.empty((ncontigs, ncolumns))
+    
+    for i, filename in enumerate(columns):
+        column = npz[filename]
+        
+        if not len(column) == ncontigs:
+            errormessage = 'Expected {} contigs, but {} has {}'
+            raise ValueError(errormessage.format(ncontigs, filename, len(column)))
+        
+        arr[:, i] = column
+        
+    # Normalize to rows sum to 1
+    rowsums = _np.sum(arr, axis=1)
+    rowsums[rowsums == 0] = 1
+    arr /= rowsums.reshape((-1, 1))
+    
+    return arr
+
+
+
+def array_from_sample_rpkms(sample_rpkms, columns):
+    """Creates a (n-contigs x n-bamfiles) array from a sample_rpkms
+    (expected to be a {path: Numpy-32-float-RPKM} dictionary)
+    
+    Inputs: 
+        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
+        columns: Names of BAM file paths in sample_rpkms object in correct order
+        
+    Output: A (n-contigs x n-bamfiles) array with each column being the corre-
+    sponding array from sample_rpkms, normalized so each row sums to 1
+    """
+    
+    ncontigs = len(next(iter(sample_rpkms.values())))
+    
+    for filename, array in sample_rpkms.items():
+        if not len(array) == ncontigs:
+            errormessage = 'Expected {} contigs, but {} has {}'
+            raise ValueError(errormessage.format(ncontigs, filename, len(array)))
+    
+    arr = _np.zeros((ncontigs, len(sample_rpkms)), dtype=_np.float32)
+    
+    for n, path in enumerate(columns):
+        rpkm = sample_rpkms[path]
+        arr[:, n] = rpkm
+    
+    # Normalize to rows sum to 1
+    rowsums = _np.sum(arr, axis=1)
+    rowsums[rowsums == 0] = 1
+    arr /= rowsums.reshape((-1, 1))
+    
+    return arr
+
+
+
+def write_rpkms(path, sample_rpkms, columns, contignames):
+    """Writes an RPKMs table to specified output path.
+    
+    Input:
+        path: Path to write output
+        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
+        columns: Names of BAM file paths in sample_rpkms object in correct order
+        contignames: A list of contig headers in order
+    Outputs: None
+    """
+    
+    rpkms = [sample_rpkms[column] for column in columns]
+    
+    formatstring = '{}\t' + '\t'.join(['{:.4f}']*len(rpkms)) + '\n'
+    header = '#contignames\t' + '\t'.join(columns) + '\n'
+    
+    with _gzip.open(path, 'w') as file:
+        file.write(header.encode())
+        for contigname, *values in zip(contignames, *rpkms):
+            file.write(formatstring.format(contigname, *values).encode())
 
 
 
 if __name__ == '__main__':
-    usage = "python rpkmtable.py [OPTION ...] OUTFILE BAMFILE [BAMFILE ...]"
-    parser = argparse.ArgumentParser(
+    usage = "python parsebam.py [OPTION ...] OUTFILE BAMFILE [BAMFILE ...]"
+    parser = _argparse.ArgumentParser(
         description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=_argparse.RawDescriptionHelpFormatter,
         usage=usage)
     
     # Get the maximal number of extra processes to spawn
-    cpus = os.cpu_count()
+    cpus = _os.cpu_count()
     
     # Positional arguments
     parser.add_argument('outfile', help='path to output file')
@@ -268,9 +381,9 @@ if __name__ == '__main__':
         help='only print RPKM, not headers, contignames or lengths')
     
     # If no arguments, print help
-    if len(sys.argv) == 1:
+    if len(_sys.argv) == 1:
         parser.print_help()
-        sys.exit()
+        _sys.exit()
         
     args = parser.parse_args()
     
@@ -279,12 +392,12 @@ if __name__ == '__main__':
         raise argsparse.ArgumentTypeError('Zero or negative processors provided.')
         
     # Check presence of output file
-    if os.path.exists(args.outfile):
+    if _os.path.exists(args.outfile):
         raise FileExistsError('Output file: ' + args.outfile)
         
     # Check presence of all BAM files
     for bamfile in args.bamfiles:
-        if not os.path.isfile(bamfile):
+        if not _os.path.isfile(bamfile):
             raise FileNotFoundError('Bam file: ' + bamfile)
             
     # If more CPUs than files, scale down CPUs
@@ -301,12 +414,6 @@ if __name__ == '__main__':
         for n, bamfile in enumerate(args.bamfiles):
             print('\tcol ', str(n+1), ': ', bamfile, sep='')
     
-    starttime = time.time()
-    print('Starting RPKM estimation.')
-    
-    # Run the stuff!
-    main(args.bamfiles, args.minscore, args.outfile, args.matrix)
-    
-    elapsed = round(time.time() - starttime)
-    print('Done in {} seconds.'.format(elapsed))
+    sample_rpkms, contignames = read_bamfiles(args.bamfiles, args.minscore, args.processors)
+    write_rpkms(args.outfile, sample_rpkms, args.bamfiles, contignames)
 

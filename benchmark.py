@@ -31,7 +31,12 @@ def load_reference(path):
     
     with open(path) as filehandle:
         for line in filehandle:
-            binid, contig, length = line.split('\t')
+            stripped = line.rstrip()
+            
+            if line == '' or line[0] == '#':
+                continue
+            
+            binid, contig, length = stripped.split('\t')
             length = int(length)
             
             true_binof[contig] = binid
@@ -49,7 +54,12 @@ def load_observed(path):
     
     with open(path) as filehandle:
         for line in filehandle:
-            binid, contigname = line.rstrip().split('\t')
+            stripped = line.rstrip()
+            
+            if line == '' or line[0] == '#':
+                continue
+                
+            binid, contigname = stripped.split('\t')
             obs_contigsof[binid].add(contigname)
             
     return obs_contigsof
