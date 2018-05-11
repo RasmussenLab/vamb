@@ -17,14 +17,14 @@ Algorithm:
 (6): If no more points or MAX_CLUSTERS have been reached: Stop, else go to (1)
 """
 
-import sys
-import os
-import argparse
-import numpy as np
+import sys as _sys
+import os as _os
+import argparse as _argparse
+import numpy as _np
 
 
 
-def distances_to_vector(matrix, index):
+def _distances_to_vector(matrix, index):
     
     # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
     # For two vectors x and y with numbers xi and yi,
@@ -34,7 +34,7 @@ def distances_to_vector(matrix, index):
     # D = ((x @ y.T) / len(x)) - 1) / -2 =>
     # D = (x @ y.T - len(x)) * (-1 / 2len(x))
     
-    # Matrix should have already been normalized (subtract mean, div by std)
+    # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
     vectorlength = matrix.shape[1]
     result = matrix @ matrix[index].T
     result -= vectorlength
@@ -44,23 +44,23 @@ def distances_to_vector(matrix, index):
 
 
 
-def getinner(matrix, point, inner_threshold):
+def _getinner(matrix, point, inner_threshold):
     """Gets the distance vector, array of inner points and average distance
     to inner points from a starting point"""
     
-    distances = distances_to_vector(matrix, point)
-    inner_points = np.where(distances < inner_threshold)[0]
+    distances = _distances_to_vector(matrix, point)
+    inner_points = _np.where(distances < inner_threshold)[0]
     
     if len(inner_points) == 1:
         average_distance = 0
     else:
-        average_distance = np.sum(distances[inner_points]) / (len(inner_points) - 1)
+        average_distance = _np.sum(distances[inner_points]) / (len(inner_points) - 1)
 
     return distances, inner_points, average_distance
 
 
 
-def sample_clusters(matrix, point, max_attempts, inner_threshold, outer_threshold):
+def _sample_clusters(matrix, point, max_attempts, inner_threshold, outer_threshold):
     """Keeps sampling new points within the inner points until it has sampled
     max_attempts without getting a new set of inner points with lower average
     distance"""
@@ -70,16 +70,16 @@ def sample_clusters(matrix, point, max_attempts, inner_threshold, outer_threshol
     # Keep track of tried points to avoid sampling the same more than once
     tried = {point}
     
-    distances, inner_points, average_distance = getinner(matrix, point, inner_threshold)
+    distances, inner_points, average_distance = _getinner(matrix, point, inner_threshold)
     
     while len(inner_points) - len(tried) > 0 and futile_attempts < max_attempts:
-        sample = np.random.choice(inner_points)
+        sample = _np.random.choice(inner_points)
         while sample in tried: # Not sure there is a faster way to prevent resampling
-            sample = np.random.choice(inner_points)
+            sample = _np.random.choice(inner_points)
             
         tried.add(sample)
         
-        inner = getinner(matrix, sample, inner_threshold)
+        inner = _getinner(matrix, sample, inner_threshold)
         sample_dist, sample_inner, sample_average =  inner
         
         if sample_average < average_distance:
@@ -93,16 +93,27 @@ def sample_clusters(matrix, point, max_attempts, inner_threshold, outer_threshol
         else:
             futile_attempts += 1
             
-    outer_points = np.where(distances < outer_threshold)[0]
+    outer_points = _np.where(distances < outer_threshold)[0]
     
     return point, inner_points, outer_points
 
 
 
 def clusters(matrix, inner_threshold, outer_threshold, max_clusters, max_steps, min_size):
-    """Yields (medoid, points) pairs from a obs x features matrix"""
+    """Yields (medoid, points) pairs from a (obs x features) matrix
     
-    np.random.seed(324645) # Reproducability even when it's random.
+    Inputs:
+        matrix: A (obs x features) Numpy matrix of values
+        inner_threshold: Optimal medoid search within this distance from medoid
+        outer_threshold: Radius of clusters extracted from medoid
+        max_clusters: Stop generating clusters after N output clusters
+        max_steps: Stop searching for optimal medoid after N futile attempts
+        min_size: Don't output clusters with fewer than N elements
+        
+    Output: A generator yielding (medoid_0_indexed, points_0_indexed) pairs
+    """
+    
+    _np.random.seed(324645) # Reproducability even when it's random.
     
     # This list keeps track of points to remove because they compose the inner circle
     # of clusters. We only remove points when we create a cluster with more than one
@@ -117,17 +128,20 @@ def clusters(matrix, inner_threshold, outer_threshold, max_clusters, max_steps, 
     # Normalize - this simplifies calculating the Pearson distance
     # and boosts speed tremendously
     matrix -= matrix.mean(axis=1).reshape((len(matrix), 1))
-    matrix /= np.std(matrix, axis=1).reshape((len(matrix), 1))
+    std = _np.std(matrix, axis=1).reshape((len(matrix), 1))
+    std[std == 0] = 1
+    matrix /= std
+    del std
     
     # We initialize clusters from most extreme to less extreme. This is
     # arbitrary and just to have some kind of reproducability.
     # Note to Simon: Sorting by means makes no sense with normalized rows.
-    extremes = np.max(matrix, axis=1)
-    argextremes = np.argsort(extremes)
+    extremes = _np.max(matrix, axis=1)
+    argextremes = _np.argsort(extremes)
     
     # This is to keep track of the original order of the points, even when we
     # remove points as the clustering proceeds.
-    indices = np.arange(len(matrix))
+    indices = _np.arange(len(matrix))
     
     clusters_completed = 0
     
@@ -139,7 +153,7 @@ def clusters(matrix, inner_threshold, outer_threshold, max_clusters, max_steps, 
         seed = argextremes[-seed_index -1]
         
         # Find medoid using iterative sampling function above
-        sampling = sample_clusters(matrix, seed, max_steps, inner_threshold, outer_threshold)
+        sampling = _sample_clusters(matrix, seed, max_steps, inner_threshold, outer_threshold)
         medoid, inner_points, outer_points = sampling
         
         # Write data to output if the cluster is not too small
@@ -155,43 +169,23 @@ def clusters(matrix, inner_threshold, outer_threshold, max_clusters, max_steps, 
         # Only remove points if we have more than 1 point in cluster
         # Note that these operations are really expensive.
         if len(inner_points) > 1 or len(argextremes) == seed_index:
-            matrix = np.delete(matrix, toremove, 0)
-            indices = np.delete(indices, toremove, 0)
-            extremes = np.delete(extremes, toremove, 0)
-            argextremes = np.argsort(extremes)
+            matrix = _np.delete(matrix, toremove, 0)
+            indices = _np.delete(indices, toremove, 0)
+            extremes = _np.delete(extremes, toremove, 0)
+            argextremes = _np.argsort(extremes)
             seed_index = 0
             toremove.clear()
 
 
 
-def main(input, output, inner, outer, max_clusters, moves, min_size):
-    '''Canopy clustering'''
-
-    matrix = np.loadtxt(input, delimiter='\t', dtype=np.float32)
-    
-    with open(output, 'w') as filehandle:
-        print('#clustername', 'contigindex(1-indexed)', sep='\t', file=filehandle)
-        
-        clusters = cluster(matrix, inner, outer, max_clusters, moves, min_size)
-        
-        for clusternumber, (medoid, cluster) in enumerate(clusters):
-            clustername = 'cluster_' + str(clusternumber + 1)
-            
-            for clusterindex in cluster:
-                print(clustername, clusterindex + 1, sep='\t', file=filehandle)
-
-
-
 if __name__ == '__main__':
-    
-    parserkws = {'prog': 'medoid_clustering.py',
-                 'formatter_class': lambda prog: argparse.HelpFormatter(prog, max_help_position=50, width=130),
-                 'usage': '%(prog)s [options]',
-                 'description': __doc__}
+    usage = "python cluster.py [OPTIONS ...] INPUT OUTPUT"
+    parser = _argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=_argparse.RawDescriptionHelpFormatter,
+        usage=usage)
    
     # create the parser
-    parser = argparse.ArgumentParser(**parserkws)
-   
     parser.add_argument('input', help='input dataset')
     parser.add_argument('output', help='output clusters')
     parser.add_argument('-i', dest='inner', help='inner threshold [0.08]', default=0.08, type=float)
@@ -201,18 +195,29 @@ if __name__ == '__main__':
     parser.add_argument('-s', dest='min_size', help='Minimum cluster size to output [1]', default=1, type=int)
     
     # Print help if no arguments are given
-    if len(sys.argv) == 1:
+    if len(_sys.argv) == 1:
         parser.print_help()
-        sys.exit()
+        _sys.exit()
 
     args = parser.parse_args()
     
-    if not os.path.isfile(args.input):
+    if not _os.path.isfile(args.input):
         raise FileNotFoundError(args.input)
     
-    if os.path.isfile(args.output):
+    if _os.path.isfile(args.output):
         raise FileExistsError(args.output)
    
-    main(args.input, args.output, args.inner, args.outer, args.max_clusters,
-         args.moves, args.min_size)
+    matrix = _np.loadtxt(args.input, delimiter='\t', dtype=_np.float32)
+    
+    with open(args.output, 'w') as filehandle:
+        print('#clustername', 'contigindex(1-indexed)', sep='\t', file=filehandle)
+        
+        clusters = cluster(matrix, args.inner, args.outer, args.max_clusters, 
+                           args.moves, args.min_size)
+        
+        for clusternumber, (medoid, cluster) in enumerate(clusters):
+            clustername = 'cluster_' + str(clusternumber + 1)
+            
+            for clusterindex in cluster:
+                print(clustername, clusterindex + 1, sep='\t', file=filehandle)
 

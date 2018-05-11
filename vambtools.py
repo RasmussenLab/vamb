@@ -3,10 +3,10 @@ import gzip as _gzip
 import numpy as _np
 
 if __package__ is None or __package__ == '':
-    from vambtools_c import reverse_complement_kmer, _kmercounts, _fourmerfreq, _freq_432mers
+    from vambtools_c import _kmercounts, _fourmerfreq, zeros
     
 else:
-    from vamb.vambtools_c import reverse_complement_kmer, _kmercounts, _fourmerfreq, _freq_432mers
+    from vamb.vambtools_c import _kmercounts, _fourmerfreq, zeros
 
 
 
@@ -78,8 +78,8 @@ class FastaEntry:
     __slots__ = ['header', 'sequence']
     
     def __init__(self, header, sequence):
-        if not header or not sequence:
-            raise ValueError('Header and sequence must be nonempty')
+        if header[0] in ('>', '#') or header[0].isspace():
+            raise ValueError('Header cannot begin with #, > or whitespace')
             
         self.header = header
         self.sequence = bytearray(sequence)
@@ -129,9 +129,6 @@ class FastaEntry:
     
     def fourmer_freq(self):
         return _fourmerfreq(self.sequence)
-    
-    def freq_432mers(self):
-        return _freq_432mers(self.sequence)
 
 
 
@@ -151,7 +148,7 @@ def byte_iterfasta(filehandle):
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'
         raise TypeError(errormsg) from None
 
-    header = probeline.strip(b'>\n')
+    header = probeline.strip(b'>\n').decode()
     buffer = list()
 
     # Iterate over lines
