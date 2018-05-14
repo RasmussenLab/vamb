@@ -31,10 +31,10 @@ cdef unsigned char[:] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7,
         49, 134, 117, 84, 35, 131, 110, 73, 20, 127, 102, 61, 4, 135,
         121, 91, 45, 133, 115, 81, 31, 130, 108, 70, 16, 126, 100, 58, 0])
 
-cpdef zeros(typecode, size):
+cpdef array.array zeros(typecode, int size):
     """Returns a zeroed-out array.array of size `size`"""
     
-    arr = array.array(typecode)
+    cpdef array.array arr = array.array(typecode)
     array.resize(arr, size)
     array.zero(arr)
     
@@ -109,7 +109,6 @@ cdef void c_fourmer_freq(int[:] counts, float[:] result):
     
     cdef int countsum = 0
     cdef int i
-    cdef unsigned char[:] converter = complementer_fourmer
     
     for i in range(256):
         countsum += counts[i]
@@ -120,7 +119,7 @@ cdef void c_fourmer_freq(int[:] counts, float[:] result):
     cdef float floatsum = <float>countsum
 
     for i in range(256):
-        result[converter[i]] += counts[i] / floatsum
+        result[complementer_fourmer[i]] += counts[i] / floatsum
             
 # Assining these arrays for each sequence takes about 6% longer time than
 # having assigned them once in userspace. Worth it.
