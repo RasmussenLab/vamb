@@ -5,13 +5,12 @@ Input: Path to tab-sep rows of cluster, contig as produced by cluster.py
     
 Output: Same as clusterpath, but with merged clusters
 
-This program represents each cluster as a vertex in a graph. Any two clusters
-with more than <threshold> overlap in contigs as counter per basepair of length
-is connected with an edge with weight equal to their overlap.
-The walktrap algorithm then finds dense subgraphs. These are merged as new
-clusters and printed to output file.
+This program represents each cluster as a vertex in a graph. A pair of contigs
+for which the size of their intersection of sets of contigs divided by the size
+of the smaller of the contigs are connected by an edge.
 
-Reference for walktrap algorithm: http://arxiv.org/abs/physics/0512106
+By default, this scripts merges communities of clusters. Import the script as
+a Python module to access clique merging and subgraph merging.
 """
 
 
@@ -20,7 +19,7 @@ import sys as _sys
 import os as _os
 from collections import defaultdict as _defaultdict
 import itertools as _itertools
-import igraph as _igraph
+#import igraph as _igraph
 import argparse as _argparse
 
 
@@ -49,16 +48,8 @@ def read_clusters_from_disk(path):
 
 
 
-def graph_from_clusters(contigsof, threshold):
-    """Creates the graph representing each cluster and their mututal overlaps.
+def _iter_overlapping_pairs(contigsof, threshold=0.5):
     
-    Input:
-        contigsof: A {clustername: set(contignames)} dict
-        threshold: Minimum fraction of overlapping contigs to create edge
-        
-    Output: Graph with each vertex being a cluster and each edge their overlap.
-    """
-
     pairs = set()
     clustersof = _defaultdict(list)
     
@@ -71,56 +62,158 @@ def graph_from_clusters(contigsof, threshold):
     
     del clustersof
     
-    # Create a weighted graph
-    graph = _igraph.Graph()
-    graph.es["weight"] = True
+    while pairs:
+        cluster1, cluster2 = pairs.pop()        
+        contigs1 = contigsof[cluster1]
+        contigs2 = contigsof[cluster2]
+        intersection = contigs1.intersection(contigs2)
+        overlap = len(intersection) / min(len(contigs1), len(contigs2))
+        
+        if overlap > threshold:
+            yield (cluster1, cluster2), overlap
 
-    # Add all the clusters as vertices
-    graph.add_vertices(list(contigsof))
+
+
+# def comminuty_merge(contigsof, threshold=0.5, steps=4):
+#     """Merges all communities of clusters using the Walktrap algorithm(1)
+#     (1) http://arxiv.org/abs/physics/0512106
     
-    for cluster1, cluster2 in pairs:           
-            contigs1 = contigsof[cluster1]
-            contigs2 = contigsof[cluster2]
-            intersection = contigs1.intersection(contigs2)
-            overlap = len(intersection) / min(len(contigs1), len(contigs2))
-
-            if overlap > threshold:
-                graph[cluster1, cluster2] = overlap
+#     Inputs:
+#         contigsof: A {clustername: set(contignames)} dict
+#         threshold [0.5]: Minimum fraction of overlapping contigs to create edge
+#         steps [4]: Number of random walking steps in the walktrap
     
-    return graph
+#     Output: A {clustername: set(contignames)} dict
+#     """
+    
+#     # Create a weighted graph
+#     graph = _igraph.Graph()
+#     graph.es["weight"] = True
+
+#     # Add all the clusters as vertices
+#     graph.add_vertices(list(contigsof))
+    
+#     for (cluster1, cluster2), overlap in _iter_overlapping_pairs(contigsof, threshold):           
+#         graph[cluster1, cluster2] = overlap
+    
+#     merged = dict()
+    
+#     # If *all* contigs are disjoint, just return input
+#     if len(graph.es['weight']) == 0:
+#         return contigsof
+        
+#     dendrogram = graph.community_walktrap(weights='weight', steps=steps)
+#     clusters = dendrogram.as_clustering()
+#     subgraphs = clusters.subgraphs()
+
+#     for subgraphnumber, subgraph in enumerate(subgraphs):
+#         mergedname = 'cluster_' + str(subgraphnumber + 1)
+#         mergedcluster = set()
+        
+#         for cluster in subgraph.vs['name']:
+#             mergedcluster.update(contigsof[cluster])
+            
+#         merged[mergedname] = mergedcluster
+    
+#     return merged
 
 
 
-def walktrap(graph, contigsof):
-    """Do the walktrap algorithm on the graph.
+def _bron_kerbosch(r, p, x, cliques, edges):
+    """Finds all maximal cliques in a graph"""
+    
+    # https://en.wikipedia.org/wiki/Bron%E2%80%93Kerbosch_algorithm#With_pivoting
+    if p or x:
+        u = max((p | x), key=lambda v: len(edges.get(v)))
+        for v in p - edges[u]:
+            _bron_kerbosch(r | {v}, p & edges[v], x & edges[v], cliques, edges)
+            p.remove(v)
+            x.add(v)
+            
+    else:
+        cliques.append(r)
+
+
+
+def clique_merge(contigsof, threshold=0.5):
+    """Merges all maximal cliques of clusters.
     
     Inputs:
-        graph: Graph with each vertex being a cluster and each edge their overlap
         contigsof: A {clustername: set(contignames)} dict
+        threshold [0.5]: Minimum fraction of overlapping contigs to create edge
     
     Output: A {clustername: set(contignames)} dict
     """
     
-    merged = dict()
+    # Calculate all edges between the vertices
+    edges = _defaultdict(set)
+    for (cluster1, cluster2), overlap in _iter_overlapping_pairs(contigsof, threshold):  
+        edges[cluster1].add(cluster2)
+        edges[cluster2].add(cluster1)
     
-    # If *all* contigs are disjoint, just return input
-    if len(graph.es['weight']) == 0:
-        return contigsof
-        
-    dendrogram = graph.community_walktrap(weights='weight')
-    clusters = dendrogram.as_clustering()
-    subgraphs = clusters.subgraphs()
+    # Find all maximal 2-cliques or larger w. Bron-Kerbosch algorithm
+    cliques = list()
+    _bron_kerbosch(set(), set(edges), set(), cliques, edges)
 
-    for subgraphnumber, subgraph in enumerate(subgraphs):
-        mergedname = 'cluster_' + str(subgraphnumber + 1)
-        mergedcluster = set()
-        
-        for cluster in subgraph.vs['name']:
-            mergedcluster.update(contigsof[cluster])
-            
-        merged[mergedname] = mergedcluster
+    # All maximal 1-cliques (i.e. vertices with degree zero) are added
+    loners = list(set(contigsof) - set(edges))
     
-    return merged
+    for loner in loners:
+        cliques.append({loner})
+    
+    del loners, edges
+    
+    # Now simply add the results to a dictionary with new names for clusters.
+    mergedclusters = dict()
+    
+    for i, clique in enumerate(cliques):
+        mergedname = 'cluster_' + str(i + 1)
+        contigs = set()
+        
+        for cluster in clique:
+            contigs.update(contigsof[cluster])
+            
+        mergedclusters[mergedname] = contigs
+        
+    return mergedclusters
+
+
+
+def subgraph_merge(contigsof, threshold=0.5):
+    """Merges all connected graphs of clusters together.
+    
+    Inputs:
+        contigsof: A {clustername: set(contignames)} dict
+        threshold [0.5]: Minimum fraction of overlapping contigs to create edge
+    
+    Output: A {clustername: set(contignames)} dict
+    """
+    
+    # Calculate all edges between the vertices
+    subgraphs = {cluster: {cluster} for cluster in contigsof}
+    
+    for (cluster1, cluster2), overlap in _iter_overlapping_pairs(contigsof, threshold):  
+        subgraph = subgraphs[cluster1] | subgraphs[cluster2]
+            
+        for cluster in subgraph:
+            subgraphs[cluster] = subgraph
+    
+    deduplicated_subgraphs = {frozenset(subgraph) for subgraph in subgraphs.values()}
+    
+    del subgraphs
+    
+    mergedclusters = dict()
+    
+    for i, subgraph in enumerate(deduplicated_subgraphs):
+        mergedname = 'cluster_' + str(i + 1)
+        contigs = set()
+        
+        for cluster in subgraph:
+            contigs.update(contigsof[cluster])
+            
+        mergedclusters[mergedname] = contigs
+        
+    return mergedclusters
 
 
 
@@ -134,7 +227,7 @@ def write_merged_clusters(path, mergedclusters):
     Output: None
     """
         
-    with open(outputpath, 'w') as outfile:
+    with open(path, 'w') as outfile:
         print('#clustername', '#contigindex(1-indexed)', sep='\t', file=outfile)
         
         for mergedname, contigs in mergedclusters.items():
@@ -177,7 +270,6 @@ if __name__ == '__main__':
         raise ValueError('Min overlap must be 0 < m < 1, not ' + str(args.min_overlap))
         
     contigsof = read_clusters_from_disk(args.clusterfile)
-    graph = graph_from_clusters(contigsof, args.min_overlap)
-    merged = walktrap(graph, contigsof)
+    merged = subgraph_merge(contigsof, args.min_overlap)
     write_merged_clusters(args.outputfile, merged)
 

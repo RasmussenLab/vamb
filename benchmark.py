@@ -59,7 +59,12 @@ def load_observed(path):
             if line == '' or line[0] == '#':
                 continue
                 
-            binid, contigname = stripped.split('\t')
+            try:
+                binid, contigname = stripped.split('\t')
+            except:
+                print(stripped)
+                raise
+                
             obs_contigsof[binid].add(contigname)
             
     return obs_contigsof

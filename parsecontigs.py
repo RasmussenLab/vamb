@@ -15,10 +15,10 @@ import numpy as _np
 import gzip as _gzip
 
 if __package__ is None or __package__ == '':
-    import vambtools
+    import vambtools as _vambtools
     
 else:
-    import vamb.vambtools as vambtools
+    import vamb.vambtools as _vambtools
 
 
 
@@ -60,10 +60,12 @@ TNF_HEADER = '#contigheader\t' + '\t'.join([
 
 
 
-def read_contigs(contigpath):
+def read_contigs(contigpath, minlength=2000):
     """Parses a FASTA file and produces a list of headers and a matrix of TNF.
     
-    Input: Path to a FASTA file
+    Input:
+        contigpath: Path to a FASTA file with contigs
+        min_length[2000]: Minimum length of contigs
     
     Outputs:
         contignames: A list of contig headers
@@ -73,19 +75,22 @@ def read_contigs(contigpath):
     tnf_list = list()
     contignames = list()
 
-    with vambtools.Reader(contigpath, 'rb') as contigfile:
-        entries = vambtools.byte_iterfasta(contigfile)
+    with _vambtools.Reader(contigpath, 'rb') as contigfile:
+        entries = _vambtools.byte_iterfasta(contigfile)
 
         for entry in entries:
+            if len(entry) < minlength:
+                continue
+                
             tnf_list.append(entry.fourmer_freq())
             contignames.append(entry.header)
             
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
-    vambtools.zscore(tnfs, axis=0, inplace=True)
+    _vambtools.zscore(tnfs, axis=0, inplace=True)
     
-    return contignames, tnfs
+    return tnfs, contignames
 
 
 
@@ -112,7 +117,7 @@ def write_tnf(tnfpath, contignames, tnfs):
 if __name__ == '__main__':
     parserkws = {'prog': 'calculate_tnf.py',
                  'formatter_class': _argparse.RawDescriptionHelpFormatter,
-                 'usage': 'calculate_tnf.py contigs.fna(.gz) tnfout lengthsout',
+                 'usage': 'parsecontigs.py contigs.fna(.gz) tnfout lengthsout',
                  'description': __doc__}
 
     # Create the parser
@@ -120,6 +125,9 @@ if __name__ == '__main__':
 
     parser.add_argument('contigs', help='FASTA file of contigs')
     parser.add_argument('tnfout', help='TNF output path')
+    
+    parser.add_argument('-m', dest='minlength', type=int, default=2000,
+                        help='minimum length of contigs [2000]')
 
     # Print help if no arguments are given
     if len(_sys.argv) == 1:
@@ -127,16 +135,16 @@ if __name__ == '__main__':
         _sys.exit()
 
     args = parser.parse_args()
+    
+    if args.minlength < 4:
+        raise ValueError('Minlength must be at least 4')
 
     if not _os.path.isfile(args.contigs):
         raise FileNotFoundError(args.contigs)
 
     if _os.path.exists(args.tnfout):
         raise FileExistsError(args.tnfout)
-        
-    if _os.path.exists(args.lengthsout):
-        raise FileExistsError(args.lengthsout)
     
-    contignames, tnfs = read_contigs(args.contigs)
+    contignames, tnfs = read_contigs(args.contigs, args.minlength)
     write_tnf(args.tnfout, contignames, tnfs)
 
