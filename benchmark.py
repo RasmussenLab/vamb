@@ -4,13 +4,14 @@ __doc__ = """Benchmarks observed clusters given a reference.
 observed file should be tab-sep lines of: cluster, contig
 reference should be tab-sep lines of: cluster, contig, length
 
+The cluster names need not be the same for obs. and ref. file, but the contig
+names do.
+
 For references without lengths, or if you wish to not weigh contigs
 by length, set length of all contigs in reference to 1.
 
-NOTE: The numbers are the number of (observed, true) bin combinations
-that pass the criteria. Thus, for relaxed criteria where recall < 0.5,
-or where observed bins are not disjoint, the same true bin may be
-counted more than once."""
+NOTE: This version counts the number of reference bins detected at the
+different levents of recall and precision."""
 
 
 
@@ -18,126 +19,165 @@ import sys
 import os
 import argparse
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 
 
-def load_reference(path):
-    """Load a reference with tab-sep lines of: binid, contigname, length"""
+class Reference:
+    """Reference """
     
-    true_lengthof = dict()
-    true_binof = dict()
-    lengthof = dict()
-    
-    with open(path) as filehandle:
+    def __init__(self, filehandle):
+        """Load a reference with tab-sep lines of: binid, contigname, length"""       
+        self.contigsof = defaultdict(set)
+        self.binof = dict()
+        self.contiglength = dict()
+        self.binlength = dict()
+
         for line in filehandle:
             stripped = line.rstrip()
-            
+
             if line == '' or line[0] == '#':
                 continue
-            
-            binid, contig, length = stripped.split('\t')
+
+            binid, contigname, length = stripped.split('\t')
+                
             length = int(length)
+
+            self.contigsof[binid].add(contigname)
+            self.binof[contigname] = binid
+            self.binlength[binid] = self.binlength.get(binid, 0) + length
+            self.contiglength[contigname] = length
             
-            true_binof[contig] = binid
-            true_lengthof[binid] = true_lengthof.get(binid, 0) + length
-            lengthof[contig] = length
-            
-    return true_lengthof, true_binof, lengthof
+        self.ncontigs = len(self.contiglength)
+        self.nbins = len(self.contigsof)
+        
+    def flatten_lengths(self):
+        for contig in self.contiglength:
+            self.contiglength[contig] = 1
+        
+        for binid in self.binlength:
+            self.binlength[binid] = len(self.contigsof[binid])
 
 
 
-def load_observed(path):
-    """Load observed bins as tab-sep lines of: binind, contigname"""
-    
-    obs_contigsof = defaultdict(set)
-    
-    with open(path) as filehandle:
+class Observed:
+    def __init__(self, filehandle, reference):
+        """Load observed bins as tab-sep lines of: binind, contigname"""
+        self.contigsof = defaultdict(set)
+        self.binof = dict()
+        self.binlength = dict()
+
         for line in filehandle:
             stripped = line.rstrip()
-            
+
             if line == '' or line[0] == '#':
                 continue
-                
-            try:
-                binid, contigname = stripped.split('\t')
-            except:
-                print(stripped)
-                raise
-                
-            obs_contigsof[binid].add(contigname)
+
+            binid, contigname = stripped.split('\t')
+            self.contigsof[binid].add(contigname)
             
-    return obs_contigsof
-
-
-
-def compare_real_obs_bins(obs_contigsof, true_lengthof, true_binof, lengthof):
-    """Calculates a {bin [(sens1, spec1), (sens2, spec2) ...], bin2 ...}
-    for all true bins and their (sensitivity, specificity) to the observed contigs"""
-    
-    obs_sens_spec = defaultdict(list)
-    
-    # Compare observed and expected bins
-    for obs_contigs in obs_contigsof.values():
-        obs_length = 0
-        
-        for contig in obs_contigs:
+            self.contigsof[binid].add(contigname)
+            self.binof[contigname] = binid
+            
             try:
-                obs_length += lengthof[contig]
+                contiglength = reference.contiglength[contigname]
             except KeyError:
-                errormsg = 'contig {} not present in reference'.format(contig)
-                raise KeyError(errormsg) from None
-
-        # Group contigs in observed bin by which bin they truly belong to
-        groups = defaultdict(set)
-        for contig in obs_contigs:
-            truebin = true_binof[contig]
-            groups[truebin].add(contig)
-
-        # For each of these groups within the observed bin:
-        for truebin, contigs in groups.items():
-            length_of_group = sum(lengthof[contig] for contig in contigs)
+                message = 'Contig {} not in reference'.format(contigname)
+                raise KeyError(message) from None
+                
+            self.binlength[binid] = self.binlength.get(binid, 0) + contiglength
             
-            assert length_of_group <= obs_length
-
-            sensitivity = length_of_group / true_lengthof[truebin]
-            specificity = length_of_group / obs_length
-
-            # Append specificity and sensitivity to the truebins
-            obs_sens_spec[truebin].append((sensitivity, specificity))
-
-    return obs_sens_spec
+        self.ncontigs = sum(len(contigs) for contigs in self.contigsof.values())
+        self.nbins = len(self.contigsof)
+        
+    def flatten_lengths(self):       
+        for binid in self.binlength:
+            self.binlength[binid] = len(self.contigsof[binid])
 
 
 
-def print_sens_spec(obs_sens_spec):
-    """Prints the result."""
+class BenchMarkResult:
+    _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    _DEFAULTPRECISIONS = [0.7, 0.8, 0.9, 0.95, 0.99]
     
-    recalls = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95)
-    precisions = (0.7, 0.8, 0.9, 0.95, 0.99)
-
-    print('\tRecall')
-    print('Prec.', '\t'.join([str(r) for r in recalls]), sep='\t')
-
-    for min_precision in precisions:
-        passed_bins = [0] * len(recalls)
-
-        for truebin, recall_precision_pairs in obs_sens_spec.items():
-            for recall, precision in recall_precision_pairs:
-                for i, min_recall in enumerate(recalls):
-                    if precision >= min_precision and recall >= min_recall:
-                        passed_bins[i] += 1
-
-        print(min_precision, '\t'.join([str(c) for c in passed_bins]), sep='\t')
-
-
-
-def main(referencepath, observedpath):
-    true_lengthof, true_binof, lengthof = load_reference(referencepath)
-    obs_contigsof = load_observed(observedpath)
-    obs_sens_spec = compare_real_obs_bins(obs_contigsof, true_lengthof, true_binof, lengthof)
+    def __init__(self, *fakeargs, reference=None, observed=None,
+                 recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS):
+        
+        if len(fakeargs) > 0:
+            raise ValueError('Only allows keyword arguments for safety.')
+            
+        if reference is None or observed is None:
+            raise ValueError('Must supply reference and observed')
+        
+        self.nreferencebins = reference.nbins
+        self.nobservedbins = observed.nbins
+        self.precisions = sorted(precisions)
+        self.recalls = sorted(recalls)
+        
+        self._binsfound = Counter()
+        
+        for true_binid, true_contigs in reference.contigsof.items():
+            true_binlength = reference.binlength[true_binid]
     
-    print_sens_spec(obs_sens_spec)
+            obs_bins = {observed.binof.get(contig, None) for contig in true_contigs}
+            obs_bins.discard(None)
+            
+            recalls_precisions = list()
+            for obs_bin in obs_bins:
+                obs_binlength = observed.binlength[obs_bin]
+                intersection = observed.contigsof[obs_bin] & true_contigs
+                intersection_length = sum(reference.contiglength[i] for i in intersection)
+            
+                recall = intersection_length / true_binlength
+                precision = intersection_length / obs_binlength
+    
+                recalls_precisions.append((recall, precision))
+
+            for min_recall in recalls:
+                for min_precision in precisions:
+                    for recall, precision in recalls_precisions:
+                        if recall >= min_recall and precision >= min_precision:
+                            self._binsfound[(min_recall, min_precision)] += 1
+                            break
+                            
+    def __getitem__(self, key):
+        if key not in self._binsfound:
+            raise KeyError('Not initialized with that recall, precision pair')
+            
+        return self._binsfound[key]
+    
+    def atrecall(self, recall):
+        if not recall in self.recalls:
+            raise ValueError('Not initialized with that recall')
+            
+        return [self[(recall, p)] for p in self.precisions]
+    
+    def atprecision(self, precision):
+        if not precision in self.precisions:
+            raise KeyError('Not initialized with that precision')
+            
+        return [self[(r, precision)] for r in self.recalls]
+    
+    def reference_fraction(self, key):
+        """As fraction of existing bins"""
+        
+        return self[key] / self.nreferencebins
+    
+    def observed_fraction(self, key):
+        """As fraction of existing bins"""
+        
+        return self[key] / self.nobservedbins
+    
+    def printmatrix(self):
+        """Prints the result."""
+
+        print('\tRecall')
+        print('Prec.', '\t'.join([str(r) for r in self.recalls]), sep='\t')
+
+        for min_precision in self.precisions:
+            row = [self._binsfound[(recall, min_precision)] for recall in self.recalls]
+            row.sort(reverse=True)
+            print(min_precision, '\t'.join([str(i) for i in row]), sep='\t')        
 
 
 
@@ -166,6 +206,14 @@ if __name__ == '__main__':
 
     if not os.path.isfile(args.reference):
         raise FileNotFoundError(args.reference)
-
-    main(args.reference, args.observed)
+        
+    with open(args.reference) as filehandle:
+        reference = Reference(filehandle)
+        
+    with open(args.observed) as filehandle:
+        observed = Observed(filehandle, reference)
+        
+    results = BenchMarkResult(reference=reference, observed=observed)
+    
+    results.printmatrix()
 
