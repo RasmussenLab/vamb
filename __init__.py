@@ -12,5 +12,4 @@ from . import vambtools
 from . import parsebam
 from . import parsecontigs
 from . import cluster
-from . import mergeclusters
 from . import benchmark
