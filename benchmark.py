@@ -60,7 +60,12 @@ class Reference:
             if line == '' or line[0] == '#':
                 continue
 
-            binid, contigname, length = stripped.split('\t')
+            try:
+                binid, contigname, length = stripped.split('\t')
+            except ValueError as error:
+                argument = error.args[0]
+                if argument.startswith("not enough values to unpack"):
+                    raise ValueError(argument + '. Did you pass it a filehandle?')
                 
             length = int(length)
             contigsof[binid].add(contigname)
@@ -137,6 +142,9 @@ class BenchMarkResult:
     Init from Reference object and Observed object using keywords:
     result = BenchmarkResult(reference=reference, observed=observed)
     
+    recall_weight is the weight of recall relative to precision; to weigh
+    precision higher than recall, use a value between 0 and 1.
+    
     Get number of references found at recall, precision:
         result[(recall, precision)]
     Get number of references found at recall or precision
@@ -149,7 +157,8 @@ class BenchMarkResult:
     _DEFAULTPRECISIONS = [0.7, 0.8, 0.9, 0.95, 0.99]
     
     def __init__(self, *fakeargs, reference=None, observed=None,
-                 recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS):
+                 recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS,
+                 recall_weight=1.0):
         
         if len(fakeargs) > 0:
             raise ValueError('Only allows keyword arguments for safety.')
@@ -157,10 +166,12 @@ class BenchMarkResult:
         if reference is None or observed is None:
             raise ValueError('Must supply reference and observed')
         
+        self.recall_weight = recall_weight
         self.nreferencebins = reference.nbins
         self.nobservedbins = observed.nbins
         self.precisions = sorted(precisions)
         self.recalls = sorted(recalls)
+        self.fscoreof = dict()
         
         self._binsfound = Counter()
         
@@ -171,6 +182,8 @@ class BenchMarkResult:
             obs_bins.discard(None)
             
             recalls_precisions = list()
+            max_fscore = 0
+            
             for obs_bin in obs_bins:
                 obs_binlength = observed.binlength[obs_bin]
                 intersection = observed.contigsof[obs_bin] & true_contigs
@@ -179,7 +192,14 @@ class BenchMarkResult:
                 recall = intersection_length / true_binlength
                 precision = intersection_length / obs_binlength
     
+                fscore = (recall_weight*recall_weight + 1) * (precision*recall)
+                fscore /= (recall_weight*recall_weight*precision + recall)
+                if fscore > max_fscore:
+                    max_fscore = fscore
+                    
                 recalls_precisions.append((recall, precision))
+                
+            self.fscoreof[true_binid] = max_fscore
 
             for min_recall in recalls:
                 for min_precision in precisions:
@@ -187,6 +207,12 @@ class BenchMarkResult:
                         if recall >= min_recall and precision >= min_precision:
                             self._binsfound[(min_recall, min_precision)] += 1
                             break
+                            
+        # Calculate mean fscore:
+        if len(self.fscoreof) == 0:
+            self.fmean = 0
+        else:
+            self.fmean = sum(self.fscoreof.values()) / len(self.fscoreof.values())
                             
     def __getitem__(self, key):
         if key not in self._binsfound:
