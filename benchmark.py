@@ -24,15 +24,36 @@ from collections import defaultdict, Counter
 
 
 class Reference:
-    """Reference """
-    
-    def __init__(self, filehandle):
-        """Load a reference with tab-sep lines of: binid, contigname, length"""       
-        self.contigsof = defaultdict(set)
-        self.binof = dict()
-        self.contiglength = dict()
-        self.binlength = dict()
+    """Reference clusters.
 
+    Init with {name: set_of_contig} dict (a) and {contigname: length} dict (b):
+    Reference(a, b)
+    
+    Init with file of tab-sep lines w. clustername, contigname, contiglength:
+    Reference.fromfile(open_filehandle)
+    """
+    
+    def __init__(self, contigsof, contiglength):
+        self.contigsof = contigsof
+        self.contiglength = contiglength
+        self.ncontigs = len(self.contiglength)
+        self.nbins = len(self.contigsof)
+        
+        self.binof = dict()
+        self.binlength = dict()
+        
+        for cluster, contigs in self.contigsof.items():
+            for contig in contigs:
+                self.binof[contig] = cluster
+                length = self.contiglength[contig]
+                self.binlength[cluster] = self.binlength.get(cluster, 0) + length
+    
+    @classmethod
+    def fromfile(cls, filehandle):
+        """Load a reference with tab-sep lines of: binid, contigname, length"""       
+        contigsof = defaultdict(set)
+        contiglength = dict()
+        
         for line in filehandle:
             stripped = line.rstrip()
 
@@ -42,14 +63,10 @@ class Reference:
             binid, contigname, length = stripped.split('\t')
                 
             length = int(length)
-
-            self.contigsof[binid].add(contigname)
-            self.binof[contigname] = binid
-            self.binlength[binid] = self.binlength.get(binid, 0) + length
-            self.contiglength[contigname] = length
+            contigsof[binid].add(contigname)
+            contiglength[contigname] = length
             
-        self.ncontigs = len(self.contiglength)
-        self.nbins = len(self.contigsof)
+        return cls(contigsof, contiglength)
         
     def flatten_lengths(self):
         for contig in self.contiglength:
@@ -61,11 +78,41 @@ class Reference:
 
 
 class Observed:
-    def __init__(self, filehandle, reference):
+    """Observed clusters.
+
+    Init with {name: set_of_contig} dict and Reference object (b):
+    Observed(a, b)
+    
+    Init with file of tab-sep lines w. clustername, contigname and Reference:
+    Reference.fromfile(open_filehandle, reference_object)
+    """
+    
+    def __init__(self, contigsof, reference):
         """Load observed bins as tab-sep lines of: binind, contigname"""
-        self.contigsof = defaultdict(set)
+        self.contigsof = contigsof
+        self.ncontigs = sum(len(contigs) for contigs in self.contigsof.values())
+        self.nbins = len(self.contigsof)
+        
         self.binof = dict()
         self.binlength = dict()
+        
+        for cluster, contigs in self.contigsof.items():
+            for contig in contigs:
+                self.binof[contig] = cluster
+                
+                try:
+                    contiglength = reference.contiglength[contig]
+                except KeyError:
+                    message = 'Contig {} not in reference'.format(contig)
+                    raise KeyError(message) from None
+                
+                self.binlength[cluster] = self.binlength.get(cluster, 0) + contiglength
+                
+    
+    @classmethod
+    def fromfile(cls, filehandle, reference):
+        """Load observed bins as tab-sep lines of: binind, contigname"""
+        contigsof = defaultdict(set)
 
         for line in filehandle:
             stripped = line.rstrip()
@@ -74,22 +121,10 @@ class Observed:
                 continue
 
             binid, contigname = stripped.split('\t')
-            self.contigsof[binid].add(contigname)
-            
-            self.contigsof[binid].add(contigname)
-            self.binof[contigname] = binid
-            
-            try:
-                contiglength = reference.contiglength[contigname]
-            except KeyError:
-                message = 'Contig {} not in reference'.format(contigname)
-                raise KeyError(message) from None
-                
-            self.binlength[binid] = self.binlength.get(binid, 0) + contiglength
-            
-        self.ncontigs = sum(len(contigs) for contigs in self.contigsof.values())
-        self.nbins = len(self.contigsof)
-        
+            contigsof[binid].add(contigname)
+
+        return cls(contigsof, reference)
+    
     def flatten_lengths(self):       
         for binid in self.binlength:
             self.binlength[binid] = len(self.contigsof[binid])
@@ -97,6 +132,19 @@ class Observed:
 
 
 class BenchMarkResult:
+    """An object holding some benchmarkresults:
+    
+    Init from Reference object and Observed object using keywords:
+    result = BenchmarkResult(reference=reference, observed=observed)
+    
+    Get number of references found at recall, precision:
+        result[(recall, precision)]
+    Get number of references found at recall or precision
+        result.atrecall/atprecision(recall/precision)
+    Print number of references at all recalls and precisions:
+        result.printmatrix()
+    """
+    
     _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     _DEFAULTPRECISIONS = [0.7, 0.8, 0.9, 0.95, 0.99]
     
@@ -208,10 +256,10 @@ if __name__ == '__main__':
         raise FileNotFoundError(args.reference)
         
     with open(args.reference) as filehandle:
-        reference = Reference(filehandle)
+        reference = Reference.fromfile(filehandle)
         
     with open(args.observed) as filehandle:
-        observed = Observed(filehandle, reference)
+        observed = Observed.fromfile(filehandle, reference)
         
     results = BenchMarkResult(reference=reference, observed=observed)
     
