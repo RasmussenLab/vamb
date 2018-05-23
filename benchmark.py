@@ -19,6 +19,7 @@ import sys
 import os
 import argparse
 
+from math import sqrt
 from collections import defaultdict, Counter
 
 
@@ -29,8 +30,18 @@ class Reference:
     Init with {name: set_of_contig} dict (a) and {contigname: length} dict (b):
     Reference(a, b)
     
-    Init with file of tab-sep lines w. clustername, contigname, contiglength:
-    Reference.fromfile(open_filehandle)
+    Init with iterator of tab-sep lines of clustername, contigname, contiglength:
+    with open('/path/to/reference.tsv') as line_iterator:
+        filtered_lines = (line for line in line_iterator if 'human' in line)
+        reference = Reference.fromfile(filtered_lines) # or with filehandle
+    
+    Attributes:
+        self.nbins: Number of bins
+        self.ncontigs: Number of contigs
+        self.contigsof: binname: set(contigsnames) dict
+        self.binof: contigname: binname dict
+        self.contiglength: contigname: contiglength dict
+        self.binlength: binname: sum_of_contiglengths_for_bin dict
     """
     
     def __init__(self, contigsof, contiglength):
@@ -151,10 +162,38 @@ class BenchMarkResult:
         result.atrecall/atprecision(recall/precision)
     Print number of references at all recalls and precisions:
         result.printmatrix()
+        
+    Attributes:
+        self.nreferencebins: Number of reference bins
+        self.nobservedbins: Number of observed bins
+        self.recalls: Tuple of sorted recalls used to init the object
+        self.precisions: Tuple of sorted precisions used to init the object
+        self.recall_weight: Weight of recall when computing Fn-score
+        self.fscoreof: ref_bin_name: float dict of reference bin Fn-scores
+        self.fmean: Mean fscore
+        self.mccof: ref_bin_name: float dict of MCC values
+        self.mccmean: Mean Matthew's Correlation Coefficient (MCC)
+        self._binsfound: (recall, prec): n_bins Counter
     """
     
     _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     _DEFAULTPRECISIONS = [0.7, 0.8, 0.9, 0.95, 0.99]
+    
+    @staticmethod
+    def _mcc(true_pos, true_neg, false_pos, false_neg, sqrt=sqrt):
+        mcc_num = true_pos * true_neg - false_pos * false_neg
+        mcc_den = (true_pos + false_pos) * (true_pos + false_neg)
+        mcc_den *= (true_neg + false_pos) * (true_neg + false_neg)
+        mcc = mcc_num / sqrt(mcc_den)
+        
+        return mcc
+    
+    @staticmethod
+    def _fscore(recall, precision, recall_weight):
+        fscore = (recall_weight*recall_weight + 1) * (precision*recall)
+        fscore /= (recall_weight*recall_weight*precision + recall)
+        
+        return fscore
     
     def __init__(self, *fakeargs, reference=None, observed=None,
                  recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS,
@@ -169,37 +208,47 @@ class BenchMarkResult:
         self.recall_weight = recall_weight
         self.nreferencebins = reference.nbins
         self.nobservedbins = observed.nbins
-        self.precisions = sorted(precisions)
-        self.recalls = sorted(recalls)
+        self.precisions = tuple(sorted(precisions))
+        self.recalls = tuple(sorted(recalls))
         self.fscoreof = dict()
+        self.mccof = dict()
         
         self._binsfound = Counter()
         
-        for true_binid, true_contigs in reference.contigsof.items():
-            true_binlength = reference.binlength[true_binid]
-    
-            obs_bins = {observed.binof.get(contig, None) for contig in true_contigs}
-            obs_bins.discard(None)
-            
+        referencelength = sum(reference.contiglength.values())
+        
+        for true_binid, true_contigs in reference.contigsof.items():            
             recalls_precisions = list()
             max_fscore = 0
+            max_mcc = -1
+            
+            obs_bins = {observed.binof.get(contig, None) for contig in true_contigs}
+            obs_bins.discard(None)
+            ref_binsize = reference.binlength[true_binid]
             
             for obs_bin in obs_bins:
-                obs_binlength = observed.binlength[obs_bin]
+                obs_binsize = observed.binlength[obs_bin]
                 intersection = observed.contigsof[obs_bin] & true_contigs
-                intersection_length = sum(reference.contiglength[i] for i in intersection)
-            
-                recall = intersection_length / true_binlength
-                precision = intersection_length / obs_binlength
+                true_pos = sum(reference.contiglength[i] for i in intersection)
+                true_neg = referencelength + true_pos - ref_binsize - obs_binsize
+                false_pos = obs_binsize - true_pos
+                false_neg = ref_binsize - true_pos
+                
+                mcc = self._mcc(true_pos, true_neg, false_pos, false_neg)
+                recall = true_pos / (true_pos + false_neg)
+                precision = true_pos / (true_pos + false_pos)
+                fscore = self._fscore(recall, precision, recall_weight)
+                
+                if mcc > max_mcc:
+                    max_mcc = mcc
     
-                fscore = (recall_weight*recall_weight + 1) * (precision*recall)
-                fscore /= (recall_weight*recall_weight*precision + recall)
                 if fscore > max_fscore:
                     max_fscore = fscore
                     
                 recalls_precisions.append((recall, precision))
                 
             self.fscoreof[true_binid] = max_fscore
+            self.mccof[true_binid] = max_mcc
 
             for min_recall in recalls:
                 for min_precision in precisions:
@@ -210,9 +259,15 @@ class BenchMarkResult:
                             
         # Calculate mean fscore:
         if len(self.fscoreof) == 0:
-            self.fmean = 0
+            self.fmean = 0.0
         else:
-            self.fmean = sum(self.fscoreof.values()) / len(self.fscoreof.values())
+            self.fmean = sum(self.fscoreof.values()) / len(self.fscoreof)
+            
+        # Calculate mean mcc:
+        if len(self.mccof) == 0:
+            self.mccmean = 0.0
+        else:
+            self.mccmean = sum(self.mccof.values()) / len(self.mccof)
                             
     def __getitem__(self, key):
         if key not in self._binsfound:
