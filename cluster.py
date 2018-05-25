@@ -19,11 +19,37 @@
 
 #!/usr/bin/env python3
 
-__doc__ = """Iterative medoid clustering.
+__doc__ = """Iterative medoid clustering of Numpy arrays.
 
-Input: An observations x features matrix in text format.
+Implements two core functions: cluster and tandemcluster, along with the helper
+functions writeclusters and readclusters.
+For all functions in this module, a collection of clusters are represented as
+a {clustername, set(elements)} dict.
 
-Output: Tab-sep lines with clustername, observation(1-indexed).
+Clustering algorithm:
+(1): Pick random seed observation S
+(2): Define inner_obs(S) = all observations with Pearson distance from S < INNER
+(3): Sample MOVES observations I from inner_obs
+(4): If any inner_obs(i) > inner_obs(S) for i in I: Let S be i, go to (2)
+     Else: Outer_obs(S) = all observations with Pearson distance from S < OUTER
+(5): Output outer_obs(S) as cluster, remove inner_obs(S) from observations
+(6): If no more observations or MAX_CLUSTERS have been reached: Stop
+     Else: Go to (1)
+
+Tandem clustering agorithm:
+(1): Pick random observation S
+(2): Define inner_obs(S) = 10,000 closest obs to S
+(3): Define outer_obs(S) = 20,000 closest obs to S
+(4): Remove inner_obs(S) from dataset
+(5): Cluster outer_obs(S) with algorithm above, add result to clusters.
+(6): If more than 20,000 observations remain: Go to (1)
+(7): Assign each obs to the largest cluster it features in
+"""
+
+cmd_doc = """Iterative medoid clustering.
+
+    Input: An observations x features matrix in text format.
+    Output: Tab-sep lines with clustername, observation(1-indexed).
 """
 
 import sys as _sys
@@ -390,7 +416,7 @@ def readclusters(filehandle, min_size=1):
 if __name__ == '__main__':
     usage = "python cluster.py [OPTIONS ...] INPUT OUTPUT"
     parser = _argparse.ArgumentParser(
-        description=__doc__,
+        description=cmd_doc,
         formatter_class=_argparse.RawDescriptionHelpFormatter,
         usage=usage)
    
@@ -407,6 +433,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', dest='min_size',
                         help='minimum cluster size to output [1]',default=1, type=int)
     parser.add_argument('--precluster', help='precluster first [False]', action='store_true')
+    parser.add_argument('--spearman', help='use Spearman, not Pearson distance [False]', action='store_true')
     
     # Print help if no arguments are given
     if len(_sys.argv) == 1:
@@ -434,11 +461,11 @@ if __name__ == '__main__':
     
     if args.precluster:
         contigsof = tandemcluster(matrix, None, args.inner, outer=None,
-                               max_steps=args.max_steps)
+                               max_steps=args.max_steps, spearman=args.spearman)
         
     else:
         contigsof = cluster(matrix, None, args.inner, outer=None,
-                                max_steps=args.max_steps)
+                                max_steps=args.max_steps, spearman=args.spearman)
             
     with open(args.output, 'w') as filehandle:
         writeclusters(filehandle, contigsof, args.max_clusters, args.min_size)
