@@ -60,7 +60,7 @@ TNF_HEADER = '#contigheader\t' + '\t'.join([
 
 
 
-def read_contigs(contigpath, minlength=2000):
+def read_contigs(byte_iterator, minlength=2000):
     """Parses a FASTA file and produces a list of headers and a matrix of TNF.
     
     Input:
@@ -68,29 +68,34 @@ def read_contigs(contigpath, minlength=2000):
         min_length[2000]: Minimum length of contigs
     
     Outputs:
-        contignames: A list of contig headers
         tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
+        contignames: A list of contig headers
+        
     """
     
     tnf_list = list()
     contignames = list()
+    lengths = list()
+    
+    if byte_iterator is not iter(byte_iterator):
+        raise ValueError('byte_iterator is not a byte iterator')
+        
+    entries = _vambtools.byte_iterfasta(byte_iterator)
 
-    with _vambtools.Reader(contigpath, 'rb') as contigfile:
-        entries = _vambtools.byte_iterfasta(contigfile)
+    for entry in entries:
+        if len(entry) < minlength:
+            continue
 
-        for entry in entries:
-            if len(entry) < minlength:
-                continue
-                
-            tnf_list.append(entry.fourmer_freq())
-            contignames.append(entry.header)
+        tnf_list.append(entry.fourmer_freq())
+        contignames.append(entry.header)
+        lengths.append(len(entry))
             
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
     _vambtools.zscore(tnfs, axis=0, inplace=True)
     
-    return tnfs, contignames
+    return tnfs, contignames, lengths
 
 
 
@@ -145,6 +150,8 @@ if __name__ == '__main__':
     if _os.path.exists(args.tnfout):
         raise FileExistsError(args.tnfout)
     
-    contignames, tnfs = read_contigs(args.contigs, args.minlength)
+    with _vambtools.Reader(args.contigs, 'rb') as filehandle:
+        contignames, tnfs, lengths = read_contigs(filehandle, args.minlength)
+        
     write_tnf(args.tnfout, contignames, tnfs)
 
