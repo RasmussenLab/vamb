@@ -1,21 +1,3 @@
-# # To do:
-# 
-# changelog: Instead of having a clusters iterator, now has a subcluster function and cluster iterator
-# now has its own random state instead of sharing state with general numpy
-# now can return clusters with contigs by name
-
-
-# Algorithm:
-# (1): Pick random seed observation S
-# (2): Define inner_obs(S) = all observations with Pearson distance from S < INNER
-# (3): Sample MOVES observations I from inner_obs
-# (4): If any inner_obs(i) > inner_obs(S) for i in I: Let S be i, go to (2)
-#      Else: Outer_obs(S) = all observations with Pearson distance from S < OUTER
-# (5): Output outer_obs(S) as cluster, remove inner_obs(S) from observations
-# (6): If no more observations or MAX_CLUSTERS have been reached: Stop
-#      Else: Go to (1)
-
-
 
 #!/usr/bin/env python3
 
@@ -54,9 +36,11 @@ cmd_doc = """Iterative medoid clustering.
 
 import sys as _sys
 import os as _os
-import argparse as _argparse
 import numpy as _np
 from collections import defaultdict as _defaultdict
+
+if __name__ == '__main__':
+    import argparse
 
 
 
@@ -397,13 +381,13 @@ def readclusters(filehandle, min_size=1):
     
     contigsof = _defaultdict(set)
     
-    for line in file:
+    for line in filehandle:
         stripped = line.strip()
         
         if stripped[0] == '#':
             continue
             
-        clustername, contigname = line.split('\t')
+        clustername, contigname = stripped.split('\t')
         
         contigsof[clustername].add(contigname)
         
@@ -415,9 +399,9 @@ def readclusters(filehandle, min_size=1):
 
 if __name__ == '__main__':
     usage = "python cluster.py [OPTIONS ...] INPUT OUTPUT"
-    parser = _argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         description=cmd_doc,
-        formatter_class=_argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         usage=usage)
    
     # create the parser

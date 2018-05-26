@@ -1,10 +1,11 @@
 # Vamb
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
+
 Please contact jakni@bioinformatics.dtu.dk for bug fixes and feature requests.
 
 Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent 
-representation. It performs well with many samples and alright relying only on the nucleotide composition. Vamb is implemented almost purely in Python and can be used both from commandline and from 
-within a Python interpreter.
+representation. It performs excellently with many samples, well with 5-10 samples and poorly relying only on the nucleotide composition. Vamb is implemented almost purely in Python and can be used both 
+from commandline and from within a Python interpreter.
 
 ### Installation
 Vamb requires Python 3.5 or newer and the following Python packages to run:

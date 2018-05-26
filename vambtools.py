@@ -1,4 +1,5 @@
 
+import os as _os
 import gzip as _gzip
 import numpy as _np
 
@@ -132,17 +133,35 @@ class FastaEntry:
 
 
 
-def byte_iterfasta(filehandle):
-    "Yields FastaEntries from a binary opened fasta file."
-
+def byte_iterfasta(filehandle, comment=b'#'):
+    """Yields FastaEntries from a binary opened fasta file.
+    
+    Usage:
+    >>> with Reader('/dir/fasta.fna', 'rb') as filehandle:
+    ...     entries = byte_iterfasta(filehandle) # a generator
+    
+    Inputs:
+        filehandle: Any iterator of binary lines of a FASTA file
+        comment: Ignore lines beginning with any whitespace + comment
+        
+    Output: Generator of FastaEntry-objects from file
+    """
+    
     # Skip to first header
     try:
         for probeline in filehandle:
-            if probeline.startswith(b'>'):
+            stripped = probeline.lstrip()
+            if stripped.startswith(comment):
+                pass
+                
+            elif probeline[0:1] == b'>':
                 break
                 
+            else:
+                raise ValueError('First non-comment line is not a Fasta header')
+                
         else: # nobreak
-            raise TypeError('No headers in this file.')
+            raise ValueError('Empty or outcommented file')
             
     except TypeError:
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'
@@ -168,4 +187,146 @@ def byte_iterfasta(filehandle):
             buffer.append(upper)
 
     yield FastaEntry(header, b''.join(buffer))
+
+
+
+def loadfasta(byte_iterator, keep=None, comment=b'#'):
+    """Loads a FASTA file into a dictionary.
+    
+    Usage:
+    >>> with Reader('/dir/fasta.fna', 'rb') as filehandle:
+    ...     fastadict = loadfasta(filehandle)
+    
+    Input:
+        byte_iterator: Iterator of binary lines of FASTA file
+        keep: Keep entries with headers in `keep`. If None, keep all entries
+        comment: Ignore lines beginning with any whitespace + comment
+    
+    Output: {header: FastaEntry} dict
+    """
+    
+    entries = dict()
+    
+    for entry in byte_iterfasta(byte_iterator, comment=comment):
+        if keep is None or entry.header in keep:
+            entries[entry.header] = entry
+        
+    return entries
+
+
+
+def writebins(directory, bins, fastadict, maxbins=250):
+    """Writes bins as FASTA files in a directory, one file per bin.
+    
+    Inputs:
+        directory: Directory to create or put files in
+        bins: {'name': {set of contignames}} dictionary
+        fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
+        maxbins: Raise an error if trying to make more bins than this
+        
+    Output: None
+    """
+    
+    # Safety measure so someone doesn't accidentally make 5000 tiny bins
+    if len(bins) > maxbins:
+        raise ValueError('Bins exceed maxbins')
+    
+    # Check that the directory is not a non-directory file,
+    # and that its parent directory indeed exists
+    parentdir = _os.path.dirname(directory)
+    
+    if parentdir != '' and not _os.path.isdir(parentdir):
+        raise NotADirectoryError(parentdir)
+        
+    if _os.path.isfile(directory):
+        raise NotADirectoryError(directory)
+    
+    # Check that all contigs in all bins are in the fastadict
+    allcontigs = set()
+    
+    for contigs in bins.values():
+        contigset = set(contigs)
+        allcontigs.update(contigset)
+    
+    for contig in allcontigs:
+        if contig not in fastadict:
+            raise IndexError('{} not in fastadict'.format(contig))
+            
+    del allcontigs, contigset
+    
+    # Make the directory if it does not exist - if it does, do nothing
+    try:
+        _os.mkdir(directory)
+    except FileExistsError:
+        pass
+    except:
+        raise
+    
+    # Now actually print all the contigs to files
+    for binname, contigs in bins.items():
+        filename = _os.path.join(directory, binname + '.fna')
+        
+        with open(filename, 'w') as file:
+            for contig in contigs:
+                entry = fastadict[contig]
+                print(entry.format(), file=file)
+
+
+
+def read_tsv(file):
+    """Loads array in TSV format
+    
+    Input: Open file or path to file with tsv-formatted array
+
+    Output: A Numpy array
+    """
+    
+    array = _np.loadtxt(file, delimiter='\t', comments='#', dtype=_np.float32)
+    
+    return array
+
+
+
+def read_npz(file):
+    """Loads array in .npz-format
+    
+    Input: Open file or path to file with npz-formatted array
+
+    Output: A Numpy array
+    """
+    
+    npz = _np.load(file)
+    array = npz['arr_0']
+    npz.close()
+    
+    return array
+
+
+
+def write_tsv(file, array, header=''):
+    """Writes a Numpy array to an open file or path in .tsv format
+    
+    Inputs:
+        file: Open file or path to file
+        array: Numpy array
+        headers: String to use as header (will be prepended by #)
+    
+    Output: None
+    """
+    
+    _np.savetxt(file, array, fmt='%.4f', delimiter='\t', header=header, comments='#')
+
+
+
+def write_npz(file, array):
+    """Writes a Numpy array to an open file or path in .npz format
+    
+    Inputs:
+        file: Open file or path to file
+        array: Numpy array
+        headers: String to use as header (will be prepended by #)
+    
+    Output: None
+    """
+    _np.savez_compressed(file, array)
 

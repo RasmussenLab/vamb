@@ -10,7 +10,6 @@ z-normalized through axis 0.
 
 import sys as _sys
 import os as _os
-import argparse as _argparse
 import numpy as _np
 import gzip as _gzip
 
@@ -19,6 +18,9 @@ if __package__ is None or __package__ == '':
     
 else:
     import vamb.vambtools as _vambtools
+    
+if __name__ == '__main__':
+    import argparse
 
 
 
@@ -60,17 +62,17 @@ TNF_HEADER = '#contigheader\t' + '\t'.join([
 
 
 
-def read_contigs(byte_iterator, minlength=2000):
-    """Parses a FASTA file and produces a list of headers and a matrix of TNF.
+def read_contigs(byte_iterator, minlength=100):
+    """Parses a FASTA file open in binary reading mode.
     
     Input:
-        contigpath: Path to a FASTA file with contigs
-        min_length[2000]: Minimum length of contigs
+        byte_iterator: Iterator of binary lines of a FASTA file
+        minlength[100]: Ignore any references shorter than N bases 
     
     Outputs:
         tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
         contignames: A list of contig headers
-        
+        lengths: A list of contig lengths
     """
     
     tnf_list = list()
@@ -78,7 +80,7 @@ def read_contigs(byte_iterator, minlength=2000):
     lengths = list()
     
     if byte_iterator is not iter(byte_iterator):
-        raise ValueError('byte_iterator is not a byte iterator')
+        raise ValueError('byte_iterator is not an iterator')
         
     entries = _vambtools.byte_iterfasta(byte_iterator)
 
@@ -121,12 +123,12 @@ def write_tnf(tnfpath, contignames, tnfs):
 
 if __name__ == '__main__':
     parserkws = {'prog': 'calculate_tnf.py',
-                 'formatter_class': _argparse.RawDescriptionHelpFormatter,
+                 'formatter_class': argparse.RawDescriptionHelpFormatter,
                  'usage': 'parsecontigs.py contigs.fna(.gz) tnfout lengthsout',
                  'description': __doc__}
 
     # Create the parser
-    parser = _argparse.ArgumentParser(**parserkws)
+    parser = argparse.ArgumentParser(**parserkws)
 
     parser.add_argument('contigs', help='FASTA file of contigs')
     parser.add_argument('tnfout', help='TNF output path')
