@@ -38,3 +38,4 @@ from . import parsecontigs
 from . import cluster
 from . import benchmark
 from . import filtercontigs
+from . import encode
