@@ -8,7 +8,7 @@ functions writeclusters and readclusters.
 For all functions in this module, a collection of clusters are represented as
 a {clustername, set(elements)} dict.
 
-Clustering algorithm:
+cluster algorithm:
 (1): Pick random seed observation S
 (2): Define inner_obs(S) = all observations with Pearson distance from S < INNER
 (3): Sample MOVES observations I from inner_obs
@@ -18,7 +18,7 @@ Clustering algorithm:
 (6): If no more observations or MAX_CLUSTERS have been reached: Stop
      Else: Go to (1)
 
-Tandem clustering agorithm:
+tandemcluster agorithm:
 (1): Pick random observation S
 (2): Define inner_obs(S) = 10,000 closest obs to S
 (3): Define outer_obs(S) = 20,000 closest obs to S
@@ -312,7 +312,7 @@ def cluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
     
     Inputs:
         matrix: A (obs x features) Numpy matrix of values
-        labels: Numpy array with labels for matrix rows. None or 1-D array
+        labels: Numpy array with labels for matrix rows or None.
         inner: Optimal medoid search within this distance from medoid
         outer: Radius of clusters extracted from medoid. If None, same as inner
         max_steps: Stop searching for optimal medoid after N futile attempts
@@ -334,7 +334,8 @@ def cluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
 
 
 
-def writeclusters(filehandle, clusters, max_clusters=None, min_size=1):
+def writeclusters(filehandle, clusters, max_clusters=None, min_size=1,
+                 header=None):
     """Writes clusters to an open filehandle.
     
     Inputs:
@@ -351,7 +352,8 @@ def writeclusters(filehandle, clusters, max_clusters=None, min_size=1):
     if iter(clusters) is not clusters:
         clusters = clusters.items()
     
-    print('#clustername', 'contignames', sep='\t', file=filehandle)
+    if header is not None and len(header) > 0:
+        print('# ' + header, file=filehandle)
     
     clusternumber = 0
     for clustername, contigs in clusters:
@@ -407,8 +409,10 @@ if __name__ == '__main__':
     # create the parser
     parser.add_argument('input', help='input dataset')
     parser.add_argument('output', help='output clusters')
-    parser.add_argument('-i', dest='inner', help='inner distance threshold', type=float)
-    parser.add_argument('-o', dest='outer', help='outer distnace threshold', type=float)
+    parser.add_argument('inner', dest='inner', help='inner distance threshold', type=float)
+    parser.add_argument('outer', dest='outer', help='outer distnace threshold', type=float)
+    
+    
     parser.add_argument('-c', dest='max_clusters',
                         help='stop after creating N clusters [None, i.e. infinite]', type=int)
     parser.add_argument('-m', dest='max_steps',
@@ -432,6 +436,15 @@ if __name__ == '__main__':
     elif args.outer < args.inner:
         raise ValueError('outer threshold must exceed or be equal to inner threshold')
         
+    if args.inner <= 0:
+        raise ValueError('inner threshold must be larger than 1.')
+        
+    if args.minsize < 1:
+        raise ValueError('Minimum size must be 1 or above.')
+        
+    if args.max_steps < 1:
+        raise ValueError('Max steps must be 1 or above.')
+        
     if args.max_clusters is not None and args.precluster:
         raise ValueError('Conflicting arguments: precluster and max_clusters')
     
@@ -440,6 +453,10 @@ if __name__ == '__main__':
     
     if _os.path.isfile(args.output):
         raise FileExistsError(args.output)
+        
+    directory = _os.path.dirname(args.output)
+    if directory and not _os.path.isdir(directory):
+        raise NotADirectoryError(directory)
    
     matrix = _np.loadtxt(args.input, delimiter='\t', dtype=_np.float32)
     
@@ -450,7 +467,10 @@ if __name__ == '__main__':
     else:
         contigsof = cluster(matrix, None, args.inner, outer=None,
                                 max_steps=args.max_steps, spearman=args.spearman)
-            
+    
+    header = "clustername\tcontigindex(1-indexed)"
+    
     with open(args.output, 'w') as filehandle:
-        writeclusters(filehandle, contigsof, args.max_clusters, args.min_size)
+        writeclusters(filehandle, contigsof, args.max_clusters, args.min_size,
+                     header=header)
 

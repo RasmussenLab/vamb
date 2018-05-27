@@ -16,40 +16,46 @@ depths reconstruction.
 
 
 
-__cmd_doc__ = """VAE"""
+__cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 
 
 
-import sys
-import os
-import numpy as np
-import pandas as pd
+import sys as _sys
+import os as _os
+import numpy as _np
 
+import torch as _torch
+from torch import nn as _nn
+from torch import optim as _optim 
+from torch.autograd import Variable as _Variable
+from torch.nn import functional as _F
+from torch.utils.data import DataLoader as _DataLoader
+from torch.utils.data.dataset import TensorDataset as _TensorDataset
+
+if __package__ is None or __package__ == '':
+    import vambtools as _vambtools
+    
+else:
+    import vamb.vambtools as _vambtools
+    
 if __name__ == '__main__':
     import argparse
-
-import torch
-from torch import nn, optim 
-from torch.autograd import Variable
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import TensorDataset
 
 
 
 def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
-    depthstensor = torch.Tensor(depthsarray)
-    tnftensor = torch.Tensor(tnfarray)
+    depthstensor = _torch.Tensor(depthsarray)
+    tnftensor = _torch.Tensor(tnfarray)
     
-    dataset = TensorDataset(depthstensor, tnftensor)
-    loader = DataLoader(dataset=dataset, batch_size=batchsize, shuffle=False,
+    dataset = _TensorDataset(depthstensor, tnftensor)
+    loader = _DataLoader(dataset=dataset, batch_size=batchsize, shuffle=False,
                         num_workers=1, pin_memory=cuda)
     
     return loader
 
 
 
-class VAE(nn.Module):
+class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
     
     init with:
@@ -76,31 +82,31 @@ class VAE(nn.Module):
         self.nlatent = latent
       
         # Initialize lists for holding hidden layers
-        self.encoderlayers = nn.ModuleList()
-        self.encodernorms = nn.ModuleList()
-        self.decoderlayers = nn.ModuleList()
-        self.decodernorms = nn.ModuleList()
+        self.encoderlayers = _nn.ModuleList()
+        self.encodernorms = _nn.ModuleList()
+        self.decoderlayers = _nn.ModuleList()
+        self.decodernorms = _nn.ModuleList()
         
         # Add all other hidden layers (do nothing if only 1 hidden layer)
         for nin, nout in zip([self.nfeatures] + self.nhiddens, self.nhiddens):
-            self.encoderlayers.append(nn.Linear(nin, nout))
-            self.encodernorms.append(nn.BatchNorm1d(nout))
+            self.encoderlayers.append(_nn.Linear(nin, nout))
+            self.encodernorms.append(_nn.BatchNorm1d(nout))
       
         # Latent layers
-        self.mu = nn.Linear(self.nhiddens[-1], self.nlatent)
-        self.logsigma = nn.Linear(self.nhiddens[-1], self.nlatent)
+        self.mu = _nn.Linear(self.nhiddens[-1], self.nlatent)
+        self.logsigma = _nn.Linear(self.nhiddens[-1], self.nlatent)
             
         # Add first decoding layer
         for nin, nout in zip([self.nlatent] + self.nhiddens[::-1], self.nhiddens[::-1]):
-            self.decoderlayers.append(nn.Linear(nin, nout))
-            self.decodernorms.append(nn.BatchNorm1d(nout))
+            self.decoderlayers.append(_nn.Linear(nin, nout))
+            self.decodernorms.append(_nn.BatchNorm1d(nout))
       
         # Reconstruction (output) layer
-        self.outputlayer = nn.Linear(self.nhiddens[0], self.nfeatures)
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nfeatures)
       
         # Activation functions
-        self.relu = nn.LeakyReLU()
-        self.softplus = nn.Softplus()
+        self.relu = _nn.LeakyReLU()
+        self.softplus = _nn.Softplus()
    
     def _encode(self, tensor):
         tensors = list()
@@ -118,14 +124,14 @@ class VAE(nn.Module):
    
     # sample with gaussian noise
     def reparameterize(self, mu, logsigma):
-        epsilon = torch.randn(mu.size(0), mu.size(1))
+        epsilon = _torch.randn(mu.size(0), mu.size(1))
         
         if self.usecuda:
             epsilon = epsilon.cuda()
         
-        epsilon = Variable(epsilon)
+        epsilon = _Variable(epsilon)
       
-        latent = mu + epsilon * torch.exp(logsigma/2)
+        latent = mu + epsilon * _torch.exp(logsigma/2)
       
         return latent
     
@@ -139,13 +145,13 @@ class VAE(nn.Module):
         reconstruction = self.outputlayer(tensor)
         
         # Decompose reconstruction to depths and tnf signal
-        depths_out = F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
+        depths_out = _F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
         
         return depths_out, tnf_out
     
     def forward(self, depths, tnf):
-        tensor = torch.cat((depths, tnf), 1)
+        tensor = _torch.cat((depths, tnf), 1)
         mu, logsigma = self._encode(tensor)
         latent = self.reparameterize(mu, logsigma)
         depths_out, tnf_out = self._decode(latent)
@@ -153,11 +159,11 @@ class VAE(nn.Module):
         return depths_out, tnf_out, mu, logsigma
     
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma, tnfweight):
-        criterion = nn.MSELoss() 
+        criterion = _nn.MSELoss() 
 
         mse = tnfweight * criterion(tnf_out, tnf_in)
-        bce = F.binary_cross_entropy(depths_out, depths_in, size_average=False) 
-        kld = -0.5 * torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
+        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=False) 
+        kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
 
         loss = bce + kld + mse
         return loss, bce, mse, kld
@@ -171,8 +177,8 @@ class VAE(nn.Module):
         epoch_mseloss = 0
 
         for depths_in, tnf_in in data_loader:
-            depths = Variable(depths_in)
-            tnf = Variable(tnf_in)
+            depths = _Variable(depths_in)
+            tnf = _Variable(tnf_in)
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
@@ -211,12 +217,16 @@ class VAE(nn.Module):
         """
         
         self.eval()
+        
+        depths, tnf = data_loader.dataset.tensors
+        length = len(depths)
 
-        mu_arrays = list()
+        result = _np.empty((length, self.nlatent), dtype=_np.float32)
 
+        row = 0
         for batch, (depths, tnf) in enumerate(data_loader):
-            depths = Variable(depths)
-            tnf = Variable(tnf)
+            depths = _Variable(depths)
+            tnf = _Variable(tnf)
 
             # Move input to GPU if requested
             if self.usecuda:
@@ -231,26 +241,17 @@ class VAE(nn.Module):
                 mu = mu.cpu()
 
             mu_array = mu.data.numpy()
-            mu_arrays.append(mu_array)
-
-        if len(mu_arrays) == 0:
-            return np.array([], dtype=np.float32)
-
-        length = sum(len(i) for i in mu_arrays)
-        width = mu_arrays[0].shape[1]
-        
-        result = np.empty((length, width), dtype=np.float32)
-
-        i = 0
-        for array in mu_arrays:
-            result[i:i+len(array)] = array
-            i += len(array)
+            
+            result[row: row + len(mu_array)] = mu_array
+            row += len(mu_array)
+            
+        assert row == length
 
         return result
 
 
 
-def trainvae(depths, tnf, nhiddens=[325, 325], latent=40, nepochs=300,
+def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
             batchsize=100, cuda=False, tnfweight=1, lrate=1e-4, verbose=False):
     
     """Create an latent encoding iterator from depths array and tnf array.
@@ -261,7 +262,7 @@ def trainvae(depths, tnf, nhiddens=[325, 325], latent=40, nepochs=300,
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
         nhiddens: List of n_neurons in the hidden layers of VAE [325, 325]
-        latent: Number of n_neurons in the latent layer [40]
+        nlatent: Number of n_neurons in the latent layer [40]
         nepochs: Train for this many epochs before encoding [300]
         batchsize: Mini-batch size for training [100]
         cuda: Use CUDA (GPU acceleration) [False]
@@ -278,7 +279,7 @@ def trainvae(depths, tnf, nhiddens=[325, 325], latent=40, nepochs=300,
     if any(i < 1 for i in nhiddens):
         raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
         
-    if latent < 1:
+    if nlatent < 1:
         raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
         
     if nepochs < 1:
@@ -299,12 +300,12 @@ def trainvae(depths, tnf, nhiddens=[325, 325], latent=40, nepochs=300,
     nsamples, ntnfs = [tensor.shape[1] for tensor in data_loader.dataset.tensors]
         
     # Instantiate the VAE
-    model = VAE(nsamples, ntnfs, nhiddens, latent, cuda)
+    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda)
     
     if cuda:
         model.cuda()
         
-    optimizer = optim.Adam(model.parameters(), lr=lrate)
+    optimizer = _optim.Adam(model.parameters(), lr=lrate)
    
     # Train
     for epoch in range(nepochs):
@@ -315,9 +316,12 @@ def trainvae(depths, tnf, nhiddens=[325, 325], latent=40, nepochs=300,
 
 
 if __name__ == '__main__':
+    
+    ################ Create parser ############################
+    
     usage = "python encode.py DEPTHSFILE TNFFILE [OPTIONS ...]"
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description=__cmd_doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage=usage)
     
@@ -329,7 +333,7 @@ if __name__ == '__main__':
     # Optional arguments
     parser.add_argument('-n', dest='nhiddens', type=int, nargs='+',
                         default=[325, 325], help='hidden neurons [325 325]')
-    parser.add_argument('-l', dest='latent', type=int,
+    parser.add_argument('-l', dest='nlatent', type=int,
                         default=40, help='latent neurons [40]')
     parser.add_argument('-e', dest='nepochs', type=int,
                         default=300, help='epochs [300]')
@@ -344,14 +348,19 @@ if __name__ == '__main__':
     # If no arguments, print help
     if len(_sys.argv) == 1:
         parser.print_help()
-        sys.exit()
+        _sys.exit()
         
     args = parser.parse_args()
+    
+    ################# Check inputs ###################
+    
+    if args.cuda and not _torch.cuda.is_available():
+        raise ModuleNotFoundError('Cuda is not available for PyTorch')
     
     if any(i < 1 for i in args.nhiddens):
         raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
         
-    if args.latent < 1:
+    if args.nlatent < 1:
         raise ValueError('Minimum 1 latent neuron, not {}'.format(args.latent))
         
     if args.nepochs < 1:
@@ -366,16 +375,34 @@ if __name__ == '__main__':
     if args.lrate < 0:
         raise ValueError('Learning rate cannot be negative')
         
-    if not os.path.isfile(args.depthsfile):
+    if not _os.path.isfile(args.depthsfile):
         raise FileNotFoundError(args.depthsfile)
         
-    if not os.path.isfile(args.tnffile):
+    if not _os.path.isfile(args.tnffile):
         raise FileNotFoundError(args.tnffile)
         
-    if os.path.exists(args.outfile):
+    if _os.path.exists(args.outfile):
         raise FileExistsError(args.outfile)
     
-    directory = os.path.dirname(args.outfile)
-    if directory and not os.path.isdir(directory):
+    directory = _os.path.dirname(args.outfile)
+    if directory and not _os.path.isdir(directory):
         raise NotADirectoryError(directory)
+        
+    ############## Run program #######################
+    
+    depths = _vambtools.read_tsv(args.depthsfile)
+    tnf = _vambtools.read_tsv(args.tnffile)
+    
+    vae, data_loader = trainvae(depths, tnf, nhiddens=args.nhiddens, latent=args.latent,
+                                nepochs=args.nepochs, batchsize=args.batchsize,
+                                cuda=args.cuda, tnfweight=args.tnfweight,
+                                lrate=args.lrate, verbose=True)
+    
+    latent = vae.encode(data_loader)
+    
+    _vambtools.write_tsv(args.outfile, latent)
+
+
+
+
 

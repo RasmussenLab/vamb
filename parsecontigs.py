@@ -1,6 +1,13 @@
 
 __doc__ = """Calculate z-normalized tetranucleotide frequency from a FASTA file.
 
+Usage:
+>>> with open('/path/to/contigs.fna', 'rb') as filehandle
+...     tnfs, contignames, lengths = read_contigs(filehandle)
+"""
+
+__cmd_doc__ = """Calculate z-normalized tetranucleotide frequency from a FASTA file.
+
 Input: A fasta file containing only A, C, G, T and N sequences
 Output: A (n_sequences * 136) matrix of tetranucleotide frequencies,
 z-normalized through axis 0.
@@ -72,7 +79,7 @@ def read_contigs(byte_iterator, minlength=100):
     Outputs:
         tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
         contignames: A list of contig headers
-        lengths: A list of contig lengths
+        lengths: A Numpy array of contig lengths
     """
     
     tnf_list = list()
@@ -91,33 +98,15 @@ def read_contigs(byte_iterator, minlength=100):
         tnf_list.append(entry.fourmer_freq())
         contignames.append(entry.header)
         lengths.append(len(entry))
-            
+    
+    lengths = _np.array(lengths, dtype=_np.int)
+    
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
     _vambtools.zscore(tnfs, axis=0, inplace=True)
     
     return tnfs, contignames, lengths
-
-
-
-def write_tnf(tnfpath, contignames, tnfs):
-    """Writes a TNF table to specified output path.
-    
-    Input:
-        tnfpath: Path to write output
-        contignames: A list of contig headers
-        tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
-    
-    Outputs: None
-    """
-    
-    formatstring = '{}\t' + '\t'.join(['{:.4f}']*136) + '\n'
-    
-    with _gzip.open(tnfpath, 'w') as file:
-        file.write(TNF_HEADER.encode())
-        for contigname, tnf in zip(contignames, tnfs):
-            file.write(formatstring.format(contigname, *tnf).encode())
 
 
 
@@ -133,8 +122,8 @@ if __name__ == '__main__':
     parser.add_argument('contigs', help='FASTA file of contigs')
     parser.add_argument('tnfout', help='TNF output path')
     
-    parser.add_argument('-m', dest='minlength', type=int, default=2000,
-                        help='minimum length of contigs [2000]')
+    parser.add_argument('-m', dest='minlength', type=int, default=100,
+                        help='minimum length of contigs [100]')
 
     # Print help if no arguments are given
     if len(_sys.argv) == 1:
@@ -151,9 +140,13 @@ if __name__ == '__main__':
 
     if _os.path.exists(args.tnfout):
         raise FileExistsError(args.tnfout)
+        
+    directory = _os.path.dirname(args.tnfout)
+    if directory and not _os.path.isdir(directory):
+        raise NotADirectoryError(directory)
     
     with _vambtools.Reader(args.contigs, 'rb') as filehandle:
-        contignames, tnfs, lengths = read_contigs(filehandle, args.minlength)
+        tnfs, contignames, lengths = read_contigs(filehandle, args.minlength)
         
-    write_tnf(args.tnfout, contignames, tnfs)
+    _vambtools.write_tsv(args.tnfout, tnfs)
 

@@ -10,7 +10,6 @@ from commandline and from within a Python interpreter.
 ### Installation
 Vamb requires Python 3.5 or newer and the following Python packages to run:
 - PyTorch
-- pandas
 - Numpy
 - pysam
 
