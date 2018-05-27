@@ -1,5 +1,5 @@
 
-__doc__ = """Filtering contigs by length
+__doc__ = """Filter contigs by length
 
 Input: Path to FASTA file with contigs
 Output: Writes FASTA file of filtered contigs
@@ -19,13 +19,12 @@ else:
 
 
 
-def filtercontigs(inpath, outpath, minlength=2000):
-    with open(inpath, 'rb') as infile, open(outpath, 'w') as outfile:
-        fasta_entries = _vambtools.byte_iterfasta(infile)
-        
-        for entry in fasta_entries:
-            if len(entry) > minlength:
-                print(entry.format(), file=outfile)
+def filtercontigs(infile, outfile, minlength=2000):
+    fasta_entries = _vambtools.byte_iterfasta(infile)
+
+    for entry in fasta_entries:
+        if len(entry) > minlength:
+            print(entry.format(), file=outfile)
 
 
 
@@ -60,4 +59,10 @@ if __name__ == '__main__':
     if _os.path.exists(args.outpath):
         raise FileExistsError(args.outpath)
         
-    filtercontigs(args.inpath, args.outpath, args.minlength)
+    directory = _os.path.dirname(args.outpath)
+    if directory and not _os.path.isdir(directory):
+        raise NotADirectoryError(directory)
+    
+    with open(args.inpath) as infile, open(args.outpath, 'w') as outfile:
+        filtercontigs(infile, outfile, args.minlength)
+

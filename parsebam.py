@@ -64,9 +64,15 @@ import pysam as _pysam
 import sys as _sys
 import os as _os
 import multiprocessing as _multiprocessing
-import argparse as _argparse
 import numpy as _np
 import gzip as _gzip
+
+if __name__ == '__main__':
+    import argparse as _argparse
+
+
+
+DEFAULT_PROCESSES = min(8, _os.cpu_count())
 
 
 
@@ -123,7 +129,7 @@ def _filter_segments(segmentiterator, minscore):
 
 
 
-def get_contig_rpkms(path, minscore=50, minlength=2000):
+def _get_contig_rpkms(path, minscore=50, minlength=2000):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
     
@@ -175,19 +181,20 @@ def get_contig_rpkms(path, minscore=50, minlength=2000):
 
 
 
-def read_bamfiles(paths, minscore=50, minlength=2000, processors=_os.cpu_count()):
+def read_bamfiles(paths, minscore=50, minlength=100,
+                  processes=DEFAULT_PROCESSES):
     """Spawns processes to parse BAM files and get contig rpkms.
     
     Input:
         path: Path to BAM file
         minscore [50]: Minimum alignment score (AS field) to consider
-        minlength [2000]: Discard any references shorter than N bases 
-        processors [all]: Number of processes to spawn
+        minlength [100]: Ignore any references shorter than N bases 
+        processes [{}]: Number of processes to spawn
 
     Outputs:
         sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
         contignames: A list of contignames from first BAM header
-    """
+    """.format(DEFAULT_PROCESSES)
     
     # Get references and lengths from first BAM file.
     # We need these to print them in the output.
@@ -210,10 +217,10 @@ def read_bamfiles(paths, minscore=50, minlength=2000, processors=_os.cpu_count()
     processresults = list()
 
     # Queue all the processes
-    with _multiprocessing.Pool(processes=processors) as pool:
+    with _multiprocessing.Pool(processes=processes) as pool:
         for path in paths:
             arguments = (path, minscore, minlength)
-            processresults.append(pool.apply_async(get_contig_rpkms, arguments))
+            processresults.append(pool.apply_async(_get_contig_rpkms, arguments))
         
         # For some reason, this is needed.
         pool.close()
@@ -245,12 +252,12 @@ def read_bamfiles(paths, minscore=50, minlength=2000, processors=_os.cpu_count()
 
 
 
-def sample_rpkms_tonpz(sample_rpkms, path):
+def write_samplerpkm(path, sample_rpkms):
     """Saves an RPKM dictionary to a path as .npz file.
     
     Inputs:
+        path: Path to save to.
         sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
-        path: Path to save to
         
     Output: None
     """
@@ -259,7 +266,7 @@ def sample_rpkms_tonpz(sample_rpkms, path):
 
 
 
-def array_fromnpz(path, columns):
+def read_npz(path, columns):
     """Creates a (n-contigs x n-bamfiles) array from an npz object as created
     by sample_rpkms_tonpz.
     
@@ -287,6 +294,8 @@ def array_fromnpz(path, columns):
         
         arr[:, i] = column
         
+    npz.close()
+        
     # Normalize to rows sum to 1
     rowsums = _np.sum(arr, axis=1)
     rowsums[rowsums == 0] = 1
@@ -296,7 +305,7 @@ def array_fromnpz(path, columns):
 
 
 
-def array_from_sample_rpkms(sample_rpkms, columns):
+def toarray(sample_rpkms, columns):
     """Creates a (n-contigs x n-bamfiles) array from a sample_rpkms
     (expected to be a {path: Numpy-32-float-RPKM} dictionary)
     
@@ -330,26 +339,24 @@ def array_from_sample_rpkms(sample_rpkms, columns):
 
 
 
-def write_rpkms(path, sample_rpkms, columns, contignames):
-    """Writes an RPKMs table to specified output path.
+def write_rpkms(filehandle, sample_rpkms, columns):
+    """Writes an RPKMs dict to specified output path.
     
     Input:
-        path: Path to write output
+        filehandle: Open filehandle to write to
         sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
         columns: Names of BAM file paths in sample_rpkms object in correct order
-        contignames: A list of contig headers in order
     Outputs: None
     """
     
     rpkms = [sample_rpkms[column] for column in columns]
     
-    formatstring = '{}\t' + '\t'.join(['{:.4f}']*len(rpkms)) + '\n'
-    header = '#contignames\t' + '\t'.join(columns) + '\n'
+    formatstring = '\t'.join(['{:.4f}']*len(rpkms)) + '\n'
+    header = '# ' + '\t'.join(columns) + '\n'
     
-    with _gzip.open(path, 'w') as file:
-        file.write(header.encode())
-        for contigname, *values in zip(contignames, *rpkms):
-            file.write(formatstring.format(contigname, *values).encode())
+    filehandle.write(header)
+    for values in zip(*rpkms):
+        filehandle.write(formatstring.format(*values))
 
 
 
@@ -361,7 +368,7 @@ if __name__ == '__main__':
         usage=usage)
     
     # Get the maximal number of extra processes to spawn
-    cpus = _os.cpu_count()
+    cpus = min(8, _os.cpu_count())
     
     # Positional arguments
     parser.add_argument('outfile', help='path to output file')
@@ -370,9 +377,9 @@ if __name__ == '__main__':
     # Optional arguments
     parser.add_argument('-a', dest='minscore', type=int, default=50,
                         help='minimum alignment score [50]')
-    parser.add_argument('-l', dest='minlength', type=int, default=2000,
-                        help='discard any references shorter than N [2000]')
-    parser.add_argument('-p', dest='processors', type=int, default=cpus,
+    parser.add_argument('-m', dest='minlength', type=int, default=100,
+                        help='discard any references shorter than N [100]')
+    parser.add_argument('-p', dest='processes', type=int, default=cpus,
                         help=('number of extra processes to spawn '
                               '[min(' + str(cpus) + ', nfiles)]'))
     
@@ -384,8 +391,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # Check number of cores
-    if args.processors < 1:
-        raise argsparse.ArgumentTypeError('Zero or negative processors provided.')
+    if args.processes < 1:
+        raise argsparse.ArgumentTypeError('Zero or negative processes requuested.')
         
     if args.minlength < 4:
         raise ValueError('Minlength must be at least 4')
@@ -394,20 +401,26 @@ if __name__ == '__main__':
     if _os.path.exists(args.outfile):
         raise FileExistsError('Output file: ' + args.outfile)
         
+    directory = _os.path.dirname(args.outfile)
+    if directory and not _os.path.isdir(directory):
+        raise NotADirectoryError(directory)
+        
     # Check presence of all BAM files
     for bamfile in args.bamfiles:
         if not _os.path.isfile(bamfile):
             raise FileNotFoundError('Bam file: ' + bamfile)
             
     # If more CPUs than files, scale down CPUs
-    if args.processors > len(args.bamfiles):
-        args.processors = len(args.bamfiles)
-        print('More processes given than files, scaling to {}.'.format(args.processors))
+    if args.processes > len(args.bamfiles):
+        args.processes = len(args.bamfiles)
+        print('More processes given than files, scaling to {}.'.format(args.processes))
     
-        print('Number of files:', len(args.bamfiles))
-    print('Number of parallel processes:', args.processors)
+    print('Number of files:', len(args.bamfiles))
+    print('Number of parallel processes:', args.processes)
     
     sample_rpkms, contignames = read_bamfiles(args.bamfiles, args.minscore,
-                                              args.minlength, args.processors)
-    write_rpkms(args.outfile, sample_rpkms, args.bamfiles, contignames)
+                                              args.minlength, args.processes)
+    
+    with open(args.outfile, 'w') as file:
+        write_rpkms(file, sample_rpkms, args.bamfiles)
 

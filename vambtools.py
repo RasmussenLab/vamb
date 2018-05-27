@@ -273,7 +273,7 @@ def writebins(directory, bins, fastadict, maxbins=250):
 
 
 
-def read_tsv(file):
+def read_tsv(file, dtype=_np.float32):
     """Loads array in TSV format
     
     Input: Open file or path to file with tsv-formatted array
@@ -281,7 +281,7 @@ def read_tsv(file):
     Output: A Numpy array
     """
     
-    array = _np.loadtxt(file, delimiter='\t', comments='#', dtype=_np.float32)
+    array = _np.loadtxt(file, delimiter='\t', comments='#', dtype=dtype)
     
     return array
 

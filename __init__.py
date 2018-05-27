@@ -17,15 +17,15 @@ To get it running, you need:
 - Python v >= 3.5 with some modules installed:
     pytorch
     numpy
-    pandas
     pysam
 
 General workflow:
 1) Filter contigs by size using vamb.filtercontigs
-2) Calculate TNF using vamb.parsecontigs
-3) Create RPKM table using vamb.parsebam
-4) Train autoencoder using vamb.encode
-5) Cluster latent representation using vamb.cluster
+2) Map reads to contigs to obtain BAM file
+3) Calculate TNF of contigs using vamb.parsecontigs
+4) Create RPKM table from BAM files using vamb.parsebam
+5) Train autoencoder using vamb.encode
+6) Cluster latent representation using vamb.cluster
 """
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
