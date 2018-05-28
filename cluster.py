@@ -409,8 +409,8 @@ if __name__ == '__main__':
     # create the parser
     parser.add_argument('input', help='input dataset')
     parser.add_argument('output', help='output clusters')
-    parser.add_argument('inner', dest='inner', help='inner distance threshold', type=float)
-    parser.add_argument('outer', dest='outer', help='outer distnace threshold', type=float)
+    parser.add_argument('inner', help='inner distance threshold', type=float)
+    parser.add_argument('outer', help='outer distnace threshold', type=float)
     
     
     parser.add_argument('-c', dest='max_clusters',
