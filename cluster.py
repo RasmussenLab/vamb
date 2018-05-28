@@ -439,7 +439,7 @@ if __name__ == '__main__':
     if args.inner <= 0:
         raise ValueError('inner threshold must be larger than 1.')
         
-    if args.minsize < 1:
+    if args.min_size < 1:
         raise ValueError('Minimum size must be 1 or above.')
         
     if args.max_steps < 1:
