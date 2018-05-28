@@ -7,41 +7,117 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 representation. It performs excellently with many samples, well with 5-10 samples and poorly relying only on the nucleotide composition. Vamb is implemented almost purely in Python and can be used both 
 from commandline and from within a Python interpreter.
 
-### Installation
-Vamb requires Python 3.5 or newer and the following Python packages to run:
-- PyTorch
-- Numpy
-- pysam
+# Installation
 
-### Running from command line
-PUT SOMETHING HERE WHEN THE API IS MORE STABLE.
+Vamb requires the following Python packages to run:
 
-### Running from Python
-PUT SOMETHING HERE WHEN THE API IS MORE STABLE.
+* PyTorch
+* Numpy
+* pysam
 
-### Workflow
-__1. Calculation of tetranucleotide frequencies__
+So make sure you have those installed. When you have that:
 
-First the tetranucleotide frequencies (TNF) of a FASTA file containing the contigs must be calculated. TNFs are represented by their canonical kmer, so there are 136 of them. The TNFs are 
-zscore-normalized across contigs. As TNF is unstable with short contigs, all contigs with a length below a certain threshold is removed.
+__If you have `git` installed__:
 
-__2. Calculation of relative contig abundance__
+    [jakni@nissen:scripts]$ git clone https://github.com/jakobnissen/vamb vamb
+    
+__If you don't__
 
-Contig abundance is calculated as reads per kilobase reference per million mapped reads (RPKM). As BWA mem handles redundant references poorly, each segment is counted as half a hit, unless the other 
-segment is unmapped in which case it's counted as one hit. Secondary hits are counted as well.
+You then presumably have access to the vamb directory with this notebook, so just put it wherever:
 
-__3. Compressing with variational autoencoder__
+    [jakni@nissen:scripts]$ cp -r /path/to/vamb/directory vamb
 
-TNF is represented as a (contigs x 136) array, abundance as a (contigs x samples) array. These are zscore-normalized across the X axis and fed into a variational autoencoder. The loss is a sum of binary 
-cross-entropy of abundance, mean square error of TNF and Kullback-Leibler divergence between the latent representation and a gaussian prior.
+# Quickstart
 
-__4. Iterative medoid clustering of latent representation__
+Take a brief look on the options with:
 
-xxx
+    [jakni@nissen:scripts]$ python vamb/runvamb.py --help
 
-__5. Cluster merging with walktrap algorithm__
+Do the defaults look alright? They probably do, but you might want to check number of processes to launch, GPU acceleration and whether you want the faster `tandemclustering` option enabled.
 
-xxx
+Then just do:
 
+    [jakni@nissen:scripts]$ python vamb/runvamb.py outdir contigs.fna path/to/bamfiles/*.bam
 
-### FAQ
+# Running from command line
+
+You can run either the entire pipeline from commandline, or each module independently.
+
+---
+
+__For the entire pipeline__, you need to use the `runvamb.py` script:
+
+    [jakni@nissen:~]$ python Documents/scripts/vamb/runvamb.py --help
+    usage: python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]
+
+    Run the Vamb pipeline.
+
+    Creates a new direcotry and runs each module of the Vamb pipeline in the
+    new directory. Does not yet support resuming stopped runs - in order to do so,
+    
+    [ lines elided ]
+
+You use it like this:
+
+    [jakni@nissen:~] python path/to/vamb/runvamb.py output_directory contig.fna path/to/bamfiles/*.bam
+    
+__For each module__, you find the relevant script:
+
+    [jakni@nissen:~]$ python Documents/scripts/vamb/parsecontigs.py --help
+    usage: parsecontigs.py contigs.fna(.gz) tnfout lengthsout
+
+    Calculate z-normalized tetranucleotide frequency from a FASTA file.
+    
+    [ lines elided ]
+
+# Tutorial and running from Python
+
+See the `tutorial.ipynb` notebook for an in-depth walkthrough of the Vamb package.
+
+# Prerequisites
+
+Like other metagenomic binners, Vamb relies on two properties of the DNA sequences to be binned:
+
+* The kmer-composition of the sequence (here tetranucleotide frequency, *TNF*) and
+* The abundance of the contigs in each sample (the *depth* or the *RPKM).
+
+So before you can run Vamb, you need to have files from which Vamb can calculate these values.
+
+* TNF is calculated from a regular fasta file of DNA sequences.
+* Depth is calculated from BAM-files of mapping reads to that same fasta file.
+
+The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences. Vamb *can* work on 
+shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples. 
+
+With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs become overwhelming. The 
+better approach is to split the dataset up into smaller chuncks and bin them independently.
+
+There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or 
+because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask.
+
+In those situations, you can still pass the argument `minlength` if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads 
+during mapping which are then not mapped to the larger contigs, but it can work alright.
+
+### Recommended preparation
+
+__1) Preprocess the reads and check their quality__
+
+We recommend AdapterRemoval combined with FastQC for this.
+
+__2) Assemble each sample individually OR co-assemble and get the contigs out__
+
+We recommend using metaSPAdes on each sample individually.
+
+__3) Concatenate the FASTA files together while making sure all contig headers stay unique__
+
+We recommend prepending the sample name to each contig header from that sample.
+
+__4) Remove all small contigs from the FASTA file__
+
+There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of all contigs, and throwing out good data. We recommend choosing a length cutoff of 
+~2000 bp.
+
+__5) Map the reads to the FASTA file to obtain 6 .bam files__
+
+We have used BWA MEM for mapping, fully aware that it is not suited for this task. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` and multiple secondary hits tagged 
+`XA:Z` can work.
