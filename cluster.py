@@ -28,7 +28,7 @@ tandemcluster agorithm:
 (7): Assign each obs to the largest cluster it features in
 """
 
-cmd_doc = """Iterative medoid clustering.
+__cmd_doc__ = """Iterative medoid clustering.
 
     Input: An observations x features matrix in text format.
     Output: Tab-sep lines with clustername, observation(1-indexed).
@@ -38,6 +38,14 @@ import sys as _sys
 import os as _os
 import numpy as _np
 from collections import defaultdict as _defaultdict
+
+if __package__ is None or __package__ == '':
+    import vambtools as _vambtools
+    import threshold as _threshold
+    
+else:
+    import vamb.vambtools as _vambtools
+    import vamb.threshold as _threshold
 
 if __name__ == '__main__':
     import argparse
@@ -61,50 +69,11 @@ def _checklabels(labels, length):
 
 
 
-def _normalize(matrix, spearman=False):
-    """Returns a new, z-score normalized matrix across axis 1"""
-    
-    if spearman:
-        # Two successive argsorts gives the elementwise ranking
-        matrix = _np.argsort(matrix, axis=1) 
-        matrix = _np.argsort(matrix, axis=1)
-    
-    normalized = matrix - matrix.mean(axis=1).reshape((len(matrix), 1))
-    std = _np.std(normalized, axis=1).reshape((len(normalized), 1))
-    std[std == 0] = 1
-    normalized /= std
-    
-    return normalized
-
-
-
-def _distances_to_vector(matrix, index):
-    """Calculates the Pearson distances from row `index` to all rows
-    in the matrix, including itself. Returns numpy array of distances"""
-    
-    # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
-    # For two vectors x and y with numbers xi and yi,
-    # P = sum((xi-x_mean)*(yi-y_mean)) / (std(y) * std(x) * len(x)).
-    # If we normalize matrix so x_mean = y_mean = 0 and std(x) = std(y) = 1,
-    # this reduces to sum(xi*yi) / len(x) = x @ y.T / len(x) =>
-    # D = ((x @ y.T) / len(x)) - 1) / -2 =>
-    # D = (x @ y.T - len(x)) * (-1 / 2len(x))
-    
-    # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
-    vectorlength = matrix.shape[1]
-    result = _np.dot(matrix, matrix[index].T)
-    result -= vectorlength
-    result *= -1 / (2 * vectorlength)
-    
-    return result
-
-
-
 def _getinner(matrix, point, inner_threshold):
     """Gets the distance vector, array of inner points and average distance
     to inner points from a starting point"""
     
-    distances = _distances_to_vector(matrix, point)
+    distances = _vambtools.pearson_distances(matrix, point)
     inner_points = _np.where(distances < inner_threshold)[0]
     
     if len(inner_points) == 1:
@@ -220,7 +189,7 @@ def _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000):
     
     while len(matrix) > nextract:
         seed = randomstate.randint(len(matrix))
-        distances = _distances_to_vector(matrix, seed)
+        distances = _vambtools.pearson_distances(matrix, seed)
         
         sorted_distances = _np.sort(distances)
         innerdistance = sorted_distances[nremove]
@@ -239,37 +208,65 @@ def _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000):
 
 
 
-def _mergeclusters(contigsof):
-    """Given a cluster dict, for each obs in multiple clusters, only keep
-    it in the largest cluster it appears in. Modifies dict in-place."""
+def _collapse(clustername, cluster, contigsof, clusterof):
+    """When a new cluster is created among other clusters which might share
+    its points, assigns the points to the largest cluster.
     
-    clustersof = _defaultdict(list)
-    
-    for cluster, contigs in contigsof.items():
-        for contig in contigs:
-            clustersof[contig].append(cluster)
-            
-    # We don't have to do anything about contigs in only one cluster
-    clustersof = {co: cl for co, cl in clustersof.items() if len(cl) > 1}
-    
-    # Here, we assign each contig to the largest cluster it appears in
-    while clustersof:
-        contig, clusters = clustersof.popitem()
-        largestcluster = max(clusters, key=lambda x: len(contigsof[x]))
+    Inputs:
+        clustername: some hashable identifier of cluster
+        cluster: Set of points
+        contigsof: {identifier: set(points) dict for all clusters}
+        clusterof: {point: identifier} for all points
         
-        for cluster in clusters:
-            if cluster is not largestcluster:
-                contigsof[cluster].remove(contig)
-                
-    # Finally, we remove all clusters with less than minclusters members
-    toremove = [cl for cl, co in contigsof.items() if len(co) == 0]
+    Output: None
+    """
+
+    # Get list of contigs sorted by length of set they're in
+    # We sort to minimize contig reassignment
     
-    for key in toremove:
-        contigsof.pop(key)    
+    membership = list()
+    for contig in cluster:
+        if contig in clusterof:
+            length = len(contigsof[clusterof[contig]])
+
+        else:
+            length = 0
+
+        membership.append((contig, length))
+
+    membership.sort(key=lambda x: x[1], reverse=True)
+
+    # From contig in largest set to that in smallest:
+    for contig, length in membership:
+        # If it's already in a larger set, remove it from this proposed set
+        if length > len(cluster):
+            cluster.remove(contig)
+
+        # Else, since they're sorted, we're done here
+        else:
+            break
+
+    # All remaining contigs now truly belong to this proposed set
+    for contig in cluster:
+        # Remove it from other clusters if they are in another cluster
+        # and delete the cluster all its contigs are now gone
+        if contig in clusterof:
+            othername = clusterof[contig]
+            othercluster = contigsof[othername]
+            othercluster.remove(contig)
+
+            if len(othercluster) == 0:
+                contigsof.pop(othername)
+
+        # Finally, add this new proposed cluster to set of clusters
+        clusterof[contig] = clustername
+
+    if len(cluster) > 0:
+        contigsof[clustername] = cluster
 
 
 
-def tandemcluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
+def tandemcluster(matrix, labels, inner, outer=None, max_steps=15, normalized=False):
     """Splits the datasets, then clusters each partition before merging
     the resulting clusters. This is faster, especially on larger datasets, but
     less accurate than normal clustering.
@@ -280,9 +277,9 @@ def tandemcluster(matrix, labels, inner, outer=None, max_steps=15, spearman=Fals
         inner: Optimal medoid search within this distance from medoid
         outer: Radius of clusters extracted from medoid. If None, same as inner
         max_steps: Stop searching for optimal medoid after N futile attempts
-        spearman: Use Spearman, not Pearson correlation
+        normalized: Matrix is already zscore-normalized [False]
     
-    Output: {medoid: set(labels_in_cluster) dictionary}
+    Output: {(partition, medoid): set(labels_in_cluster) dictionary}
     """
     
     if outer is None:
@@ -291,23 +288,31 @@ def tandemcluster(matrix, labels, inner, outer=None, max_steps=15, spearman=Fals
     elif outer < inner:
         raise ValueError('outer must exceed or be equal to inner')
     
+    
     labels = _checklabels(labels, len(matrix))
-    matrix = _normalize(matrix, spearman=spearman)
+    
+    if not normalized:
+        matrix = _vambtools.zscore(matrix, axis=1)
     
     randomstate = _np.random.RandomState(324645) 
+    
     contigsof = dict()
+    clusterof = dict()
     
-    for submatrix, sublabels in _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000):
+    partitions = _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000)
+    
+    for partition, (submatrix, sublabels) in enumerate(partitions):
         for medoid, cluster in _cluster(submatrix, sublabels, inner, outer, max_steps):
-            contigsof[medoid] = cluster
+            _collapse((partition, medoid), cluster, contigsof, clusterof)
         
-    _mergeclusters(contigsof)
-    
+        # Allow the garbage collector to delete the normalized matrix
+        matrix = None
+            
     return contigsof
 
 
 
-def cluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
+def cluster(matrix, labels, inner, outer=None, max_steps=15, normalized=False):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
     
     Inputs:
@@ -316,7 +321,7 @@ def cluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
         inner: Optimal medoid search within this distance from medoid
         outer: Radius of clusters extracted from medoid. If None, same as inner
         max_steps: Stop searching for optimal medoid after N futile attempts
-        spearman: Use Spearman, not Pearson correlation
+        normalized: Matrix is already zscore-normalized [False]
     
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
@@ -328,7 +333,9 @@ def cluster(matrix, labels, inner, outer=None, max_steps=15, spearman=False):
         raise ValueError('outer must exceed or be equal to inner')
     
     labels = _checklabels(labels, len(matrix))
-    matrix = _normalize(matrix, spearman=spearman)
+    
+    if not normalized:
+        matrix = _vambtools.zscore(matrix, axis=1)
     
     return _cluster(matrix, labels, inner, outer, max_steps)
 
@@ -341,7 +348,9 @@ def writeclusters(filehandle, clusters, max_clusters=None, min_size=1,
     Inputs:
         filehandle: An open filehandle that can be written to
         clusters: An iterator generated by function `clusters` or dict
+        max_clusters: Stop printing after this many clusters [None]
         min_size: Don't output clusters smaller than N contigs
+        header: Commented one-line header to add
         
     Output: None
     """
@@ -353,7 +362,13 @@ def writeclusters(filehandle, clusters, max_clusters=None, min_size=1,
         clusters = clusters.items()
     
     if header is not None and len(header) > 0:
-        print('# ' + header, file=filehandle)
+        if '\n' in header:
+            raise ValueError('Header cannot contain newline')
+        
+        if header[0] != '#':
+            header = '# ' + header
+        
+        print(header, file=filehandle)
     
     clusternumber = 0
     for clustername, contigs in clusters:
@@ -402,17 +417,18 @@ def readclusters(filehandle, min_size=1):
 if __name__ == '__main__':
     usage = "python cluster.py [OPTIONS ...] INPUT OUTPUT"
     parser = argparse.ArgumentParser(
-        description=cmd_doc,
+        description=__cmd_doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage=usage)
    
     # create the parser
     parser.add_argument('input', help='input dataset')
     parser.add_argument('output', help='output clusters')
-    parser.add_argument('inner', help='inner distance threshold', type=float)
-    parser.add_argument('outer', help='outer distnace threshold', type=float)
     
-    
+    parser.add_argument('-i', dest='inner',
+                        help='inner distance threshold [0 = Auto]',default=0.0, type=float)
+    parser.add_argument('-o', dest='outer',
+                        help='outer distance threshold [0 = Auto]',default=0.0, type=float)
     parser.add_argument('-c', dest='max_clusters',
                         help='stop after creating N clusters [None, i.e. infinite]', type=int)
     parser.add_argument('-m', dest='max_steps',
@@ -421,7 +437,6 @@ if __name__ == '__main__':
     parser.add_argument('-s', dest='min_size',
                         help='minimum cluster size to output [1]',default=1, type=int)
     parser.add_argument('--precluster', help='precluster first [False]', action='store_true')
-    parser.add_argument('--spearman', help='use Spearman, not Pearson distance [False]', action='store_true')
     
     # Print help if no arguments are given
     if len(_sys.argv) == 1:
@@ -430,14 +445,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    if args.outer is None:
-        args.outer = args.inner
+    if args.inner < 0.0 or args.outer < 0.0:
+        raise ValueError('Thresholds must be non-negative')
     
-    elif args.outer < args.inner:
-        raise ValueError('outer threshold must exceed or be equal to inner threshold')
+    if args.inner == 0.0 and args.outer > 0.0:
+        raise ValueError('Cannot specify outer threshold when inner is Auto')
         
-    if args.inner <= 0:
-        raise ValueError('inner threshold must be larger than 1.')
+    if args.outer < args.inner:
+        raise ValueError('Outer threshold must exceed inner threshold when specified')
+    
+    if args.outer == 0.0 and args.inner > 0.0:
+        args.outer = args.inner
         
     if args.min_size < 1:
         raise ValueError('Minimum size must be 1 or above.')
@@ -459,14 +477,30 @@ if __name__ == '__main__':
         raise NotADirectoryError(directory)
    
     matrix = _np.loadtxt(args.input, delimiter='\t', dtype=_np.float32)
+    _vambtools.zscore(matrix, axis=1, inplace=True)
+    
+    if args.outer == 0.0 and args.inner == 0.0:
+            result = _getthreshold(matrix, normalized=True)
+            threshold, support, separated = result
+            
+            if separated < 0.25:
+                print('Warning: Less than 25% of contigs had well-separated threshold', file=_sys.stderr)
+
+            if support < 0.50:
+                print('Warning: Less than 50% of contigs has *any* observable threshold', file=_sys.stderr)
+                
+            args.inner = threshold
     
     if args.precluster:
         contigsof = tandemcluster(matrix, None, args.inner, outer=None,
-                               max_steps=args.max_steps, spearman=args.spearman)
+                               max_steps=args.max_steps, normalized=True)
         
     else:
         contigsof = cluster(matrix, None, args.inner, outer=None,
-                                max_steps=args.max_steps, spearman=args.spearman)
+                                max_steps=args.max_steps, normalized=True)
+    
+    # Allow the garbage collector to clean the original matrix
+    del matrix
     
     header = "clustername\tcontigindex(1-indexed)"
     

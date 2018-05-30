@@ -183,18 +183,7 @@ def _get_contig_rpkms(path, minscore=50, minlength=2000):
 
 def read_bamfiles(paths, minscore=50, minlength=100,
                   processes=DEFAULT_PROCESSES):
-    """Spawns processes to parse BAM files and get contig rpkms.
-    
-    Input:
-        path: Path to BAM file
-        minscore [50]: Minimum alignment score (AS field) to consider
-        minlength [100]: Ignore any references shorter than N bases 
-        processes [{}]: Number of processes to spawn
-
-    Outputs:
-        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
-        contignames: A list of contignames from first BAM header
-    """.format(DEFAULT_PROCESSES)
+    "Placeholder docstring"
     
     # Get references and lengths from first BAM file.
     # We need these to print them in the output.
@@ -249,6 +238,21 @@ def read_bamfiles(paths, minscore=50, minlength=100,
         raise ValueError(message)
             
     return sample_rpkms, contignames
+
+
+
+read_bamfiles.__doc__ = """Spawns processes to parse BAM files and get contig rpkms.
+    
+Input:
+    path: Path to BAM file
+    minscore [50]: Minimum alignment score (AS field) to consider
+    minlength [100]: Ignore any references shorter than N bases 
+    processes [{}]: Number of processes to spawn
+
+Outputs:
+    sample_rpkms: A {{path: Numpy-32-float-RPKM}} dictionary
+    contignames: A list of contignames from first BAM header
+""".format(DEFAULT_PROCESSES)
 
 
 

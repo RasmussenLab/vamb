@@ -11,6 +11,28 @@ else:
 
 
 
+def pearson_distances(matrix, index):
+    """Calculates the Pearson distances from row `index` to all rows
+    in the matrix, including itself. Returns numpy array of distances"""
+    
+    # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
+    # For two vectors x and y with numbers xi and yi,
+    # P = sum((xi-x_mean)*(yi-y_mean)) / (std(y) * std(x) * len(x)).
+    # If we normalize matrix so x_mean = y_mean = 0 and std(x) = std(y) = 1,
+    # this reduces to sum(xi*yi) / len(x) = x @ y.T / len(x) =>
+    # D = ((x @ y.T) / len(x)) - 1) / -2 =>
+    # D = (x @ y.T - len(x)) * (-1 / 2len(x))
+    
+    # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
+    vectorlength = matrix.shape[1]
+    result = _np.dot(matrix, matrix[index].T)
+    result -= vectorlength
+    result *= -1 / (2 * vectorlength)
+    
+    return result
+
+
+
 def zscore(array, axis=None, inplace=False):
     "Calculates zscore for an array. A cheap copy of scipy.stats.zscore."
     
