@@ -1,41 +1,9 @@
 
-__doc__ = """Estimate threshold for clustering of latent representation.
-
-Usage:
->>> threshold, support, separation = threshold.getthreshold(latent)
-
-Samples many contigs from latent representation. For each, find the distribution
-of distances to other contig. If possible, find the valley between the peaks
-representing the close and far contigs. Return the median of seen valleys.
-"""
-
-
-
-__cmd_doc__ = """Estimate threshold for clustering of latent representation.
-
-Prints results to stdout."""
-
-
-
-import sys as _sys
-import os as _os
-import numpy as _np
-import random as _random
-from math import sqrt as _sqrt
-
-if __package__ is None or __package__ == '':
-    import vambtools as _vambtools
-    
-else:
-    import vamb.vambtools as _vambtools
-    
-if __name__ == '__main__':
-    import argparse
-
-
-
-class TooLittleData(Exception):
-    pass
+import sys
+import os
+import numpy as np
+import random
+from math import sqrt
 
 
 
@@ -43,7 +11,7 @@ class TooLittleData(Exception):
 
 # This is the PDF of normal with µ=0, s=0.015 from -0.4975 to 0.4975 with intervals
 # of 0.005, for a total of 200 values
-_NORMALPDF = _np.array([3.60430797e-238, 2.15804846e-233, 1.15623351e-228, 5.54338405e-224,
+NORMALPDF = np.array([3.60430797e-238, 2.15804846e-233, 1.15623351e-228, 5.54338405e-224,
        2.37820584e-219, 9.12996205e-215, 3.13641528e-210, 9.64146896e-206,
        2.65214895e-201, 6.52826346e-197, 1.43794572e-192, 2.83421224e-188,
        4.99881774e-184, 7.88946029e-180, 1.11422358e-175, 1.40812903e-171,
@@ -94,48 +62,52 @@ _NORMALPDF = _np.array([3.60430797e-238, 2.15804846e-233, 1.15623351e-228, 5.543
        9.64146896e-206, 3.13641528e-210, 9.12996205e-215, 2.37820584e-219,
        5.54338405e-224, 1.15623351e-228, 2.15804846e-233, 3.60430797e-238])
 
+NBINS = 400
 
-_NBINS = 400
-
-_FENCEPOSTS = _np.linspace(0, 1, _NBINS + 1)
-_DIFFXS = _np.linspace(1.5*(1/_NBINS), 1-0.5*(1/_NBINS), _NBINS - 1)
-
+FENCEPOSTS = np.linspace(0, 1, NBINS + 1)
+DIFFXS = np.linspace(1.5*(1/NBINS), 1-0.5*(1/NBINS), NBINS - 1)
 
 
-def _countdists(matrix, index, bins=_FENCEPOSTS):
+
+class TooLittleData(Exception):
+    pass
+
+
+
+def countdists(matrix, index, distfunction, bins=FENCEPOSTS):
     """Return number of distances in each of 400 bins from 0 to 1."""
     
     if index >= len(matrix):
         raise IndexError('Array out of range')
     
-    distances = _vambtools.pearson_distances(matrix, index)
-    histogram, _ = _np.histogram(distances, bins=bins)
+    distances = distfunction(matrix, index)
+    histogram, _ = np.histogram(distances, bins=bins)
     histogram[0] -= 1 # compensate for self-correlation of chosen contig
     
     return histogram
 
 
 
-def _densityof(histogram, pdf=_NORMALPDF):
-    """Converts the output of _countdists to a smooth density using a poor man's
+def densityof(histogram, pdf=NORMALPDF):
+    """Converts the output of countdists to a smooth density using a poor man's
     gaussian kernel density estimation.
     This prevents the differentiation for being all over the place.
     """
     
-    density = _np.zeros(600)
+    density = np.zeros(600)
     for i, number in enumerate(histogram):
         density[i:i+200] += pdf * number
         
     normalized = density[100:-100]
     
-    normalized /= _np.sum(normalized)
-    normalized *= _NBINS
+    normalized /= np.sum(normalized)
+    normalized *= NBINS
     
     return normalized
 
 
 
-def _differentiate(kde, deltax=1/_NBINS):
+def differentiate(kde, deltax=1/NBINS):
     """Simple numerial differentiation of array of values."""
     
     if len(kde) < 2:
@@ -145,7 +117,7 @@ def _differentiate(kde, deltax=1/_NBINS):
 
 
 
-def _findvalley(kde, nobs, maxsize=2500, xs=_DIFFXS, nbins=_NBINS):
+def findvalley(kde, nobs, maxsize=2500, xs=DIFFXS, nbins=NBINS):
     """Returns a distance values that separates close and far observations,
     and whether or not the separation was good.
     """
@@ -153,7 +125,7 @@ def _findvalley(kde, nobs, maxsize=2500, xs=_DIFFXS, nbins=_NBINS):
     if len(kde) != len(xs) + 1:
         raise ValueError('length of kde must be length of xs + 1')
     
-    diffs = _differentiate(kde)
+    diffs = differentiate(kde)
     trios = zip(diffs, kde[1:], xs)
     withins = 0
     separated = False
@@ -167,7 +139,7 @@ def _findvalley(kde, nobs, maxsize=2500, xs=_DIFFXS, nbins=_NBINS):
             return 0, False
         
         # Find first a negative slope on a significant peak
-        if diff < 0 and kde > 0.001:
+        if diff < 0 and kde > 52.4584976 * 3 / nobs: # 3 contigs has this density
             peakkde = kde
             break
             
@@ -196,18 +168,21 @@ def _findvalley(kde, nobs, maxsize=2500, xs=_DIFFXS, nbins=_NBINS):
                 separated = True
                 
             break
+            
+    if valley > 0.45:
+        valley = 0
+        separated = False
         
     return valley, separated
 
 
 
-def getthreshold(latent, samples=1000, normalized=False, maxsize=2500):
+def getthreshold(latent, distfunction, samples, maxsize):
     """Estimate the clustering threshold from random sampling.
     
     Inputs:
         latent: An (n_contigs x n_latent) Numpy array
         samples: Number of random contigs to sample [1000]
-        normalized: Latent repr. is already zscore-normalized [False]
         maxsize: Discard sample if more than N contigs are within estimated
                  sample threshold [2500]
         
@@ -216,26 +191,15 @@ def getthreshold(latent, samples=1000, normalized=False, maxsize=2500):
         support: Fraction of contigs with any estimated threshold
         separation: Fraction of contigs well separated
     """
-    
-    if len(latent) < 1000:
-        raise TooLittleData('Cannot estimate from less than 1000 contigs')
-        
-    if len(latent) < samples:
-        raise TooLittleData('Specified more samples than available contigs')
-    
-    if not normalized:
-        normalized = _vambtools.zscore(latent, axis=1)
-    else:
-        normalized = latent
         
     valleys = list()
     nseparated = 0
     
-    indices = _random.sample(range(len(normalized)), k=samples)
+    indices = random.sample(range(len(latent)), k=samples)
     for index in indices:
-        disthistogram = _countdists(normalized, index)
-        kde = _densityof(disthistogram)
-        valley, separated = _findvalley(kde, len(latent), maxsize=maxsize)
+        disthistogram = countdists(latent, index, distfunction)
+        kde = densityof(disthistogram)
+        valley, separated = findvalley(kde, len(latent), maxsize=maxsize)
         
         if valley == 0:
             continue
@@ -252,52 +216,4 @@ def getthreshold(latent, samples=1000, normalized=False, maxsize=2500):
     median = valleys[len(valleys) // 2]
         
     return median, len(valleys) / samples, nseparated / samples
-
-
-
-if __name__ == '__main__':
-    usage = "python threshold.py [OPTIONS ...] LATENT"
-    parser = argparse.ArgumentParser(
-        description=__cmd_doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage=usage)
-   
-    # create the parser
-    parser.add_argument('latent', help='input dataset')
-    
-    parser.add_argument('-s', dest='samples', type=int, default=1000,
-                        help='number of contigs to sample [1000]')
-    
-    # Print help if no arguments are given
-    if len(_sys.argv) == 1:
-        parser.print_help()
-        _sys.exit()
-
-    args = parser.parse_args()
-    
-    if args.samples < 3:
-        raise ValueError('Must take at least 3 samples')
-    
-    if not _os.path.isfile(args.latent):
-        raise FileNotFoundError(args.latent)
-   
-    latent = _np.loadtxt(args.latent, delimiter='\t', dtype=_np.float32)
-    _vambtools.zscore(latent, axis=1, inplace=True)
-    
-    result = getthreshold(latent, samples=args.samples, normalized=True)
-    
-    threshold, support, separated = result
-    
-    if separated < 0.25:
-        print('Warning: Less than 25% of contigs had well-separated threshold', file=_sys.stderr)
-        
-    if support < 0.50:
-        print('Warning: Less than 50% of contigs has *any* observable threshold', file=_sys.stderr)
-        
-    supportstr = round(100 * support, 1)
-    separatedstr = round(100 * separated, 1)
-        
-    print('Estimated threshold:', round(threshold, 4))
-    print('Sampled contigs with any threshold: ', supportstr, '%')
-    print('Sampled contigs with well-defined threshold: ', separatedstr, '%')
 

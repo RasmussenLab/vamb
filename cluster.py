@@ -52,20 +52,25 @@ if __name__ == '__main__':
 
 
 
-def _checklabels(labels, length):
-    """If labels are None, returns an array of integers 1 to length.
-    Else checks that labels are already of correct length and unique"""
+def _pearson_distances(matrix, index):
+    """Calculates the Pearson distances from row `index` to all rows
+    in the matrix, including itself. Returns numpy array of distances"""
     
-    if labels is None:
-        labels = _np.arange(length) + 1
-        
-    elif type(labels) != _np.ndarray or len(labels) != length:
-        raise ValueError('labels must be a 1D Numpy array with same length as matrix')
-        
-    if len(set(labels)) != length:
-        raise ValueError('Labels must be unique')
-        
-    return labels
+    # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
+    # For two vectors x and y with numbers xi and yi,
+    # P = sum((xi-x_mean)*(yi-y_mean)) / (std(y) * std(x) * len(x)).
+    # If we normalize matrix so x_mean = y_mean = 0 and std(x) = std(y) = 1,
+    # this reduces to sum(xi*yi) / len(x) = x @ y.T / len(x) =>
+    # D = ((x @ y.T) / len(x)) - 1) / -2 =>
+    # D = (x @ y.T - len(x)) * (-1 / 2len(x))
+    
+    # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
+    vectorlength = matrix.shape[1]
+    result = _np.dot(matrix, matrix[index].T)
+    result -= vectorlength
+    result *= -1 / (2 * vectorlength)
+    
+    return result
 
 
 
@@ -73,7 +78,7 @@ def _getinner(matrix, point, inner_threshold):
     """Gets the distance vector, array of inner points and average distance
     to inner points from a starting point"""
     
-    distances = _vambtools.pearson_distances(matrix, point)
+    distances = _pearson_distances(matrix, point)
     inner_points = _np.where(distances < inner_threshold)[0]
     
     if len(inner_points) == 1:
@@ -189,7 +194,7 @@ def _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000):
     
     while len(matrix) > nextract:
         seed = randomstate.randint(len(matrix))
-        distances = _vambtools.pearson_distances(matrix, seed)
+        distances = _pearson_distances(matrix, seed)
         
         sorted_distances = _np.sort(distances)
         innerdistance = sorted_distances[nremove]
@@ -266,78 +271,141 @@ def _collapse(clustername, cluster, contigsof, clusterof):
 
 
 
-def tandemcluster(matrix, labels, inner, outer=None, max_steps=15, normalized=False):
+def _check_inputs(max_steps, inner, outer):
+    """Checks whether max_steps, inner and outer are okay.
+    Can be run before loading matrix into memory."""
+    
+    # before matrix has loaded
+    if max_steps < 1:
+        raise ValueError('maxsteps must be a positive integer')
+    
+    if inner is None:
+        if outer is not None:
+            raise ValueError('If inner is None, outer must be None')
+        
+    elif outer is None:
+        outer = inner
+        
+    elif outer < inner:
+        raise ValueError('outer must exceed or be equal to inner')
+        
+    return inner, outer
+
+
+
+def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
+    """Checks matrix, labels, nsamples, maxsize and estimates inner if necessary."""
+    
+    if len(matrix) < 1:
+        raise ValueError('Matrix must have at least 1 observation.')
+    
+    # After matrix has been loaded
+    if labels is None:
+        labels = _np.arange(len(matrix)) + 1
+        
+    elif type(labels) != _np.ndarray or len(labels) != len(matrix):
+        raise ValueError('labels must be a 1D Numpy array with same length as matrix')
+        
+    if len(set(labels)) != len(matrix):
+        raise ValueError('Labels must be unique')
+        
+    if len(matrix) < 1000:
+        raise ValueError('Cannot estimate from less than 1000 contigs')
+        
+    if len(matrix) < nsamples:
+        raise ValueError('Specified more samples than available contigs')
+    
+    if inner is None:
+        try:
+            _gt = _threshold.getthreshold(matrix, _pearson_distances, nsamples, maxsize)
+            inner, support, separation = _gt
+            outer = inner
+            
+            if separation < 0.25:
+                sep = round(separation * 100, 1)
+                wn = 'Warning: Only {}% of contigs has well-separated threshold'
+                print(wn.format(sep), file=_sys.stderr)
+
+            if support < 0.50:
+                sup = round(support * 100, 1)
+                wn = 'Warning: Only {}% of contigs has *any* observable threshold'
+                print(wn.format(sup), file=_sys.stderr)
+                
+        except _threshold.TooLittleData as error:
+            wn = 'Warning: Too little data: {}. Setting threshold to 0.08'
+            print(wn.format(error.args[0]), file=_sys.stderr)
+            inner = outer = 0.08
+        
+    return labels, inner, outer
+
+
+
+def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
+            normalized=False, nsamples=1000, maxsize=2500):
+    """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
+    
+    Inputs:
+        matrix: A (obs x features) Numpy matrix of values
+        labels: None or Numpy array with labels for matrix rows [None = ints]
+        inner: Optimal medoid search within this distance from medoid [None = auto]
+        outer: Radius of clusters extracted from medoid. [None = inner]
+        max_steps: Stop searching for optimal medoid after N futile attempts [15]
+        normalized: Matrix is already zscore-normalized [False]
+        nsamples: Estimate threshold from N samples [1000]
+        maxsize: Discard sample if more than N contigs are within threshold [2500]
+    
+    Output: Generator of (medoid, set(labels_in_cluster)) tuples.
+    """
+    
+    if not normalized:
+        matrix = _vambtools.zscore(matrix, axis=1)
+        
+    inner, outer = _check_inputs(max_steps, inner, outer)
+    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize)
+    
+    return _cluster(matrix, labels, inner, outer, max_steps)
+
+
+
+def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
+            normalized=False, nsamples=1000, maxsize=2500):
     """Splits the datasets, then clusters each partition before merging
     the resulting clusters. This is faster, especially on larger datasets, but
     less accurate than normal clustering.
     
     Inputs:
         matrix: A (obs x features) Numpy matrix of values
-        labels: Numpy array with labels for matrix rows. None or 1-D array
-        inner: Optimal medoid search within this distance from medoid
-        outer: Radius of clusters extracted from medoid. If None, same as inner
-        max_steps: Stop searching for optimal medoid after N futile attempts
+        labels: None or Numpy array with labels for matrix rows [None = ints]
+        inner: Optimal medoid search within this distance from medoid [None = auto]
+        outer: Radius of clusters extracted from medoid. [None = inner]
+        max_steps: Stop searching for optimal medoid after N futile attempts [15]
         normalized: Matrix is already zscore-normalized [False]
+        nsamples: Estimate threshold from N samples [1000]
+        maxsize: Discard sample if more than N contigs are within threshold [2500]
     
     Output: {(partition, medoid): set(labels_in_cluster) dictionary}
     """
     
-    if outer is None:
-        outer = inner
-        
-    elif outer < inner:
-        raise ValueError('outer must exceed or be equal to inner')
-    
-    
-    labels = _checklabels(labels, len(matrix))
-    
     if not normalized:
         matrix = _vambtools.zscore(matrix, axis=1)
+        
+    inner, outer = _check_inputs(max_steps, inner, outer)
+    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize)
     
     randomstate = _np.random.RandomState(324645) 
     
     contigsof = dict()
     clusterof = dict()
     
-    partitions = _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000)
+    partitions = _precluster(matrix, labels, randomstate, nremove=10000, nextract=30000)
     
     for partition, (submatrix, sublabels) in enumerate(partitions):
         for medoid, cluster in _cluster(submatrix, sublabels, inner, outer, max_steps):
             _collapse((partition, medoid), cluster, contigsof, clusterof)
         
-        # Allow the garbage collector to delete the normalized matrix
         matrix = None
             
     return contigsof
-
-
-
-def cluster(matrix, labels, inner, outer=None, max_steps=15, normalized=False):
-    """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
-    
-    Inputs:
-        matrix: A (obs x features) Numpy matrix of values
-        labels: Numpy array with labels for matrix rows or None.
-        inner: Optimal medoid search within this distance from medoid
-        outer: Radius of clusters extracted from medoid. If None, same as inner
-        max_steps: Stop searching for optimal medoid after N futile attempts
-        normalized: Matrix is already zscore-normalized [False]
-    
-    Output: Generator of (medoid, set(labels_in_cluster)) tuples.
-    """
-
-    if outer is None:
-        outer = inner
-        
-    elif outer < inner:
-        raise ValueError('outer must exceed or be equal to inner')
-    
-    labels = _checklabels(labels, len(matrix))
-    
-    if not normalized:
-        matrix = _vambtools.zscore(matrix, axis=1)
-    
-    return _cluster(matrix, labels, inner, outer, max_steps)
 
 
 
@@ -426,14 +494,11 @@ if __name__ == '__main__':
     parser.add_argument('output', help='output clusters')
     
     parser.add_argument('-i', dest='inner',
-                        help='inner distance threshold [0 = Auto]',default=0.0, type=float)
+                        help='inner distance threshold [No = Auto]', type=float)
     parser.add_argument('-o', dest='outer',
-                        help='outer distance threshold [0 = Auto]',default=0.0, type=float)
+                        help='outer distance threshold [No = Auto]', type=float)
     parser.add_argument('-c', dest='max_clusters',
                         help='stop after creating N clusters [None, i.e. infinite]', type=int)
-    parser.add_argument('-m', dest='max_steps',
-                        help='stop searchin for optimal medoid after N attempts [15]',
-                        default=15, type=int)
     parser.add_argument('-s', dest='min_size',
                         help='minimum cluster size to output [1]',default=1, type=int)
     parser.add_argument('--precluster', help='precluster first [False]', action='store_true')
@@ -445,26 +510,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    if args.inner < 0.0 or args.outer < 0.0:
-        raise ValueError('Thresholds must be non-negative')
-    
-    if args.inner == 0.0 and args.outer > 0.0:
-        raise ValueError('Cannot specify outer threshold when inner is Auto')
-        
-    if args.outer < args.inner:
-        raise ValueError('Outer threshold must exceed inner threshold when specified')
-    
-    if args.outer == 0.0 and args.inner > 0.0:
-        args.outer = args.inner
-        
-    if args.min_size < 1:
-        raise ValueError('Minimum size must be 1 or above.')
-        
-    if args.max_steps < 1:
-        raise ValueError('Max steps must be 1 or above.')
-        
-    if args.max_clusters is not None and args.precluster:
-        raise ValueError('Conflicting arguments: precluster and max_clusters')
+    inner, outer = _check_inputs(15, args.inner, args.outer)
     
     if not _os.path.isfile(args.input):
         raise FileNotFoundError(args.input)
@@ -475,29 +521,19 @@ if __name__ == '__main__':
     directory = _os.path.dirname(args.output)
     if directory and not _os.path.isdir(directory):
         raise NotADirectoryError(directory)
-   
+        
+    if args.max_clusters is not None and args.precluster:
+        raise ValueError('Cannot pass max clusters with precluster.')
+    
     matrix = _np.loadtxt(args.input, delimiter='\t', dtype=_np.float32)
     _vambtools.zscore(matrix, axis=1, inplace=True)
-    
-    if args.outer == 0.0 and args.inner == 0.0:
-            result = _getthreshold(matrix, normalized=True)
-            threshold, support, separated = result
-            
-            if separated < 0.25:
-                print('Warning: Less than 25% of contigs had well-separated threshold', file=_sys.stderr)
-
-            if support < 0.50:
-                print('Warning: Less than 50% of contigs has *any* observable threshold', file=_sys.stderr)
-                
-            args.inner = threshold
+    labels, inner, outer = _check_params(matrix, inner, outer, None, 1000, 2500)
     
     if args.precluster:
-        contigsof = tandemcluster(matrix, None, args.inner, outer=None,
-                               max_steps=args.max_steps, normalized=True)
+        contigsof = tandemcluster(matrix, labels, inner, outer, normalized=True)
         
     else:
-        contigsof = cluster(matrix, None, args.inner, outer=None,
-                                max_steps=args.max_steps, normalized=True)
+        contigsof = cluster(matrix, labels, inner, outer, normalized=True)
     
     # Allow the garbage collector to clean the original matrix
     del matrix
@@ -505,6 +541,5 @@ if __name__ == '__main__':
     header = "clustername\tcontigindex(1-indexed)"
     
     with open(args.output, 'w') as filehandle:
-        writeclusters(filehandle, contigsof, args.max_clusters, args.min_size,
-                     header=header)
+        writeclusters(filehandle, contigsof, args.max_clusters, args.min_size, header=header)
 
