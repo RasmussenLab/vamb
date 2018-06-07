@@ -33,6 +33,7 @@ if __package__ is None or __package__ == '':
     import parsebam as _parsebam
     import encode as _encode
     import cluster as _cluster
+    import threshold as _threshold
     
 else:
     import vamb.vambtools as _vambtools
@@ -40,6 +41,7 @@ else:
     import vamb.parsebam as _parsebam
     import vamb.encode as _encode
     import vamb.cluster as _cluster
+    import vamb.threshold as _threshold
     
 if __name__ == '__main__':
     import argparse
@@ -73,39 +75,11 @@ def _checkpaths(outdir, contigspath, bampaths):
 def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
         readprocesses=DEFAULT_PROCESSES, nhiddens=[325, 325], nlatent=40,
        nepochs=300, batchsize=100, cuda=False, tnfweight=1.0, lrate=1e-4,
-       verbose=True, tandemcluster=False, max_steps=15, spearman=False,
+       verbose=True, tandemcluster=False, max_steps=15, nsamples=1000,
        min_clustersize=5):
-    
-    """Run the entire Vamb pipeline.
-    
-    Inputs:
-        outdir: Directory to create and put outputs
-        contigspath: Path to contigs FASTA file
-        bampaths: Tuple or lists of paths to BAM files
-        
-        minlength: Ignore sequences with length below this [100]
-        minascore: Ignore reads with alignment score below this [50]
-        readprocesses: N processes to spawn reading BAMs [{}]
-        nhiddens: List of number of neurons in hidden layers [325, 325]
-        nlatent: Number of neurons in latent layer [40]
-        nepochs: Number of training epochs [300]
-        batchsize: Sequences per mini-batch when training [100]
-        cuda: Use CUDA (GPU acceleration software) [False]
-        tnfweight: Relative weight of TNF error when computing loss [1.0]
-        lrate: Learning rate for the optimizer [1e-4]
-        verbose: Print progress to STDOUT [True]
-        tandemcluster: Use fast but inaccurate clustering [False]
-        max_steps: Stop searching for optimal medoid after N futile attempts [15]
-        spearman: Use Spearman, not Pearson correlation [False]
-        min_clustersize: Ignore all clusters with fewer sequences than this [5]
-        
-    Output: None, but creates directory with clusters.tsv file.
-    """.format(DEFAULT_PROCESSES)
+    "placeholder docstring"
     
     ############## NOTE #############################
-    #
-    # MISSING CODE TO INFER THE CLUSTERING SIZE
-    # THIS NEEDS TO BE ADDED, ELSE THIS IS USELESS
     #
     # Things to add/change:
     # - Needed to dump RPKM and reload it? What is mem requirement?
@@ -133,7 +107,7 @@ def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
         print('Computing depths from BAM files', end='\n\n')
     
     sample_rpkms, contignames2 = _parsebam.read_bamfiles(bampaths, minscore=minascore,
-                                                       minlength=minlength, processors=readprocesses)
+                                                       minlength=minlength, processes=readprocesses)
     
     assert contignames == contignames2
     del contignames2
@@ -163,17 +137,19 @@ def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
     
     del tnfs, rpkms
     
+    _vambtools.zscore(latent, axis=1, inplace=True)
+    
     # Cluster and write
     if verbose:
         print('Clustering latent representation', end='\n\n')
     
     if tandemcluster:
-        clusters = _cluster.tandemcluster(latent, contignames, 0.05, 0.05,
-                                          max_steps=max_steps, spearman=spearman)
+        clusters = _cluster.tandemcluster(latent, contignames,
+                                          max_steps=max_steps, normalized=True)
         
     else:
-        clusterit = _cluster.cluster(latent, contignames, 0.05, 0.05,
-                                          max_steps=max_steps, spearman=spearman)
+        clusterit = _cluster.cluster(latent, contignames,
+                                          max_steps=max_steps, normalized=True)
         clusters = dict()
         
         for medoid, cluster in clusterit:
@@ -186,6 +162,34 @@ def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
         
     if verbose:
         print('Done.')
+
+
+
+run.__doc__ = """Run the entire Vamb pipeline.
+
+Inputs:
+    outdir: Directory to create and put outputs
+    contigspath: Path to contigs FASTA file
+    bampaths: Tuple or lists of paths to BAM files
+
+    minlength: Ignore sequences with length below this [100]
+    minascore: Ignore reads with alignment score below this [50]
+    readprocesses: N processes to spawn reading BAMs [{}]
+    nhiddens: List of number of neurons in hidden layers [325, 325]
+    nlatent: Number of neurons in latent layer [40]
+    nepochs: Number of training epochs [300]
+    batchsize: Sequences per mini-batch when training [100]
+    cuda: Use CUDA (GPU acceleration software) [False]
+    tnfweight: Relative weight of TNF error when computing loss [1.0]
+    lrate: Learning rate for the optimizer [1e-4]
+    verbose: Print progress to STDOUT [True]
+    tandemcluster: Use fast but inaccurate clustering [False]
+    max_steps: Stop searching for optimal medoid after N futile attempts [15]
+    nsamples: Number of samples to estimate clustering threshold [1000]
+    min_clustersize: Ignore all clusters with fewer sequences than this [5]
+
+Output: None, but creates directory with clusters.tsv file.
+""".format(DEFAULT_PROCESSES)
 
 
 
@@ -241,8 +245,10 @@ if __name__ == '__main__':
     
     clusto.add_argument('-x', dest='max_steps', metavar='', type=int,
                         default=15, help='maximum clustering steps [15]')
+    clusto.add_argument('-s', dest='nsamples', metavar='', type=int, default=1000,
+                        help='n_samples to determine cluster threshold [1000]')
     clusto.add_argument('--tandem', help='tandem cluster [False]', action='store_true')
-    clusto.add_argument('--spearman', help='use Spearman correlation [False]', action='store_true')
+    
     
     # If no arguments, print help
     if len(_sys.argv) == 1:
@@ -287,17 +293,8 @@ if __name__ == '__main__':
         raise ModuleNotFoundError('Cuda is not available for PyTorch')
         
     # Check clustering options
-#     if args.outer is None:
-#         args.outer = args.inner
-    
-#     elif args.outer < args.inner:
-#         raise ValueError('outer threshold must exceed or be equal to inner threshold')
-        
-#     if args.inner <= 0:
-#         raise ValueError('inner threshold must be larger than 1.')
-
-    args.inner = 0.05
-    args.outer = 0.05
+    if args.nsamples < 5:
+        raise ValueError('Must use at least 5 samples to determine threshold')
     
     if args.max_steps < 1:
         raise ValueError('Max steps must be 1 or above.')
@@ -316,6 +313,6 @@ if __name__ == '__main__':
         verbose=True,
         tandemcluster=args.tandem,
         max_steps=args.max_steps,
-        spearman=args.spearman,
+        nsamples=args.nsamples,
         min_clustersize=1)
 

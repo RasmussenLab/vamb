@@ -248,7 +248,6 @@ class BenchMarkResult:
         self.recalls = tuple(sorted(recalls))
         self.fscoreof = dict()
         self.mccof = dict()
-        
         self._binsfound = Counter()
         
         for true_binid, true_contigs in reference.contigsof.items():
@@ -260,18 +259,12 @@ class BenchMarkResult:
             obs_bins.discard(None)
             ref_binsize = reference.binlength[true_binid]
             
-            for obs_bin in obs_bins:
-                obs_binsize = observed.binlength[obs_bin]
-                intersection = observed.contigsof[obs_bin] & true_contigs
-                true_pos = sum(reference.contiglength[i] for i in intersection)
-                true_neg = referencelength + true_pos - ref_binsize - obs_binsize
-                false_pos = obs_binsize - true_pos
-                false_neg = ref_binsize - true_pos
-                
+            stats = self._iterpairs(observed, reference, true_binid)
+            for true_pos, true_neg, false_pos, false_neg in stats:
                 mcc = self._mcc(true_pos, true_neg, false_pos, false_neg)
                 recall = true_pos / (true_pos + false_neg)
                 precision = true_pos / (true_pos + false_pos)
-                fscore = self._fscore(recall, precision, recall_weight)
+                fscore = self._fscore(true_pos, true_neg, false_pos, false_neg, recall_weight)
                 
                 if mcc > max_mcc:
                     max_mcc = mcc

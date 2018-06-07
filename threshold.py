@@ -209,8 +209,8 @@ def getthreshold(latent, distfunction, samples, maxsize):
         
         valleys.append(valley)
     
-    if len(valleys) < 3:
-        raise TooLittleData('No samples returned valleys')
+    if len(valleys) < 5:
+        raise TooLittleData('Less than 5 samples returned valleys')
     
     valleys.sort()
     median = valleys[len(valleys) // 2]
