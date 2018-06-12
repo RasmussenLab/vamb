@@ -1,17 +1,8 @@
-# Vamb
-Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
-
-Please contact jakni@bioinformatics.dtu.dk for bug fixes and feature requests.
-
-Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent 
-representation. It performs excellently with many samples, well with 5-10 samples and poorly relying only on the nucleotide composition. Vamb is implemented almost purely in Python and can be used both 
-from commandline and from within a Python interpreter.
-
 # Installation
 
 Vamb requires the following Python packages to run:
 
-* PyTorch
+* PyTorch      
 * Numpy
 * pysam
 
@@ -38,41 +29,6 @@ Do the defaults look alright? They probably do, but you might want to check numb
 Then just do:
 
     [jakni@nissen:scripts]$ python vamb/runvamb.py outdir contigs.fna path/to/bamfiles/*.bam
-
-# Running from command line
-
-You can run either the entire pipeline from commandline, or each module independently.
-
----
-
-__For the entire pipeline__, you need to use the `runvamb.py` script:
-
-    [jakni@nissen:~]$ python Documents/scripts/vamb/runvamb.py --help
-    usage: python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]
-
-    Run the Vamb pipeline.
-
-    Creates a new direcotry and runs each module of the Vamb pipeline in the
-    new directory. Does not yet support resuming stopped runs - in order to do so,
-    
-    [ lines elided ]
-
-You use it like this:
-
-    [jakni@nissen:~] python path/to/vamb/runvamb.py output_directory contig.fna path/to/bamfiles/*.bam
-    
-__For each module__, you find the relevant script:
-
-    [jakni@nissen:~]$ python Documents/scripts/vamb/parsecontigs.py --help
-    usage: parsecontigs.py contigs.fna(.gz) tnfout lengthsout
-
-    Calculate z-normalized tetranucleotide frequency from a FASTA file.
-    
-    [ lines elided ]
-
-# Tutorial and running from Python
-
-See the notebooks in the `doc` directory for an in-depth walkthrough of the Vamb package.
 
 # Prerequisites
 
@@ -121,3 +77,34 @@ __5) Map the reads to the FASTA file to obtain BAM files__
 
 We have used BWA MEM for mapping, fully aware that it is not suited for this task. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` and multiple secondary hits tagged 
 `XA:Z` can work.
+
+# Running from command line
+
+You can run either the entire pipeline from commandline, or each module independently.
+
+---
+
+__For the entire pipeline__, you need to use the `runvamb.py` script:
+
+    [jakni@nissen:~]$ python Documents/scripts/vamb/runvamb.py --help
+    usage: python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]
+
+    Run the Vamb pipeline.
+
+    Creates a new direcotry and runs each module of the Vamb pipeline in the
+    new directory. Does not yet support resuming stopped runs - in order to do so,
+    
+    [ lines elided ]
+
+You use it like this:
+
+    [jakni@nissen:~] python path/to/vamb/runvamb.py output_directory contig.fna path/to/bamfiles/*.bam
+    
+__For each module__, you find the relevant script:
+
+    [jakni@nissen:~]$ python Documents/scripts/vamb/parsecontigs.py --help
+    usage: parsecontigs.py contigs.fna(.gz) tnfout lengthsout
+
+    Calculate z-normalized tetranucleotide frequency from a FASTA file.
+    
+    [ lines elided ]

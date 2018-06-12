@@ -43,6 +43,11 @@ if __name__ == '__main__':
 
 
 
+if _torch.__version__ < '0.4':
+    raise ImportError('PyTorch version must be 0.4 or newer')
+
+
+
 def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     depthstensor = _torch.Tensor(depthsarray)
     tnftensor = _torch.Tensor(tnfarray)
