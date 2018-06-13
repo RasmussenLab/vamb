@@ -149,7 +149,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
     
     # Skip to first header
     try:
-        for probeline in filehandle:
+        for linenumber, probeline in enumerate(filehandle):
             stripped = probeline.lstrip()
             if stripped.startswith(comment):
                 pass
@@ -171,7 +171,9 @@ def byte_iterfasta(filehandle, comment=b'#'):
     buffer = list()
 
     # Iterate over lines
-    for linenumber, line in enumerate(filehandle):
+    for line in filehandle:
+        linenumber += 1
+        
         if line.startswith(b'>'):
             yield FastaEntry(header, b''.join(buffer))
             buffer.clear()
@@ -182,7 +184,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
             stripped = upper.translate(None, delete=b'ACGTN')
             
             if len(stripped) > 0:
-                raise ValueError('Non-ACGTN in line {}: {}'.format(linenumber, stripped[0]))
+                raise ValueError('Non-ACGTN in line {}: {}'.format(linenumber + 1, stripped[0]))
             
             buffer.append(upper)
 

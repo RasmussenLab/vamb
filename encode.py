@@ -256,7 +256,7 @@ class VAE(_nn.Module):
 
 
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
+def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=75, nepochs=200,
             batchsize=100, cuda=False, tnfweight=1, lrate=1e-4, verbose=False):
     
     """Create an latent encoding iterator from depths array and tnf array.
@@ -267,8 +267,8 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
         nhiddens: List of n_neurons in the hidden layers of VAE [325, 325]
-        nlatent: Number of n_neurons in the latent layer [40]
-        nepochs: Train for this many epochs before encoding [300]
+        nlatent: Number of n_neurons in the latent layer [75]
+        nepochs: Train for this many epochs before encoding [200]
         batchsize: Mini-batch size for training [100]
         cuda: Use CUDA (GPU acceleration) [False]
         tnfweight: Relative weight of TNF error when computing loss [1.0]
@@ -339,9 +339,9 @@ if __name__ == '__main__':
     parser.add_argument('-n', dest='nhiddens', type=int, nargs='+',
                         default=[325, 325], help='hidden neurons [325 325]')
     parser.add_argument('-l', dest='nlatent', type=int,
-                        default=40, help='latent neurons [40]')
+                        default=75, help='latent neurons [75]')
     parser.add_argument('-e', dest='nepochs', type=int,
-                        default=300, help='epochs [300]')
+                        default=200, help='epochs [200]')
     parser.add_argument('-b', dest='batchsize', type=int,
                         default=100, help='batch size [100]') 
     parser.add_argument('-t', dest='tnfweight', type=float,
@@ -406,8 +406,4 @@ if __name__ == '__main__':
     latent = vae.encode(data_loader)
     
     _vambtools.write_tsv(args.outfile, latent)
-
-
-
-
 

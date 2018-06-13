@@ -12,7 +12,7 @@ cluster algorithm:
 (1): Pick random seed observation S
 (2): Define inner_obs(S) = all observations with Pearson distance from S < INNER
 (3): Sample MOVES observations I from inner_obs
-(4): If any inner_obs(i) > inner_obs(S) for i in I: Let S be i, go to (2)
+(4): If any mean(inner_obs(i)) < mean(inner_obs(S)) for i in I: Let S be i, go to (2)
      Else: Outer_obs(S) = all observations with Pearson distance from S < OUTER
 (5): Output outer_obs(S) as cluster, remove inner_obs(S) from observations
 (6): If no more observations or MAX_CLUSTERS have been reached: Stop
@@ -133,48 +133,36 @@ def _cluster(matrix, labels, inner_threshold, outer_threshold, max_steps):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
 
     randomstate = _np.random.RandomState(324645)
-    
-    # This list keeps track of points to remove because they compose the inner circle
-    # of clusters. We only remove points when we create a cluster with more than one
-    # point, since one-point-clusters don't interfere with other clusters and the
-    # point removal operations are expensive.
-    toremove = list()
-    
-    # This index keeps track of which point we initialize clusters from.
+
+    # The seed keeps track of which point we initialize clusters from.
     # It's necessary since we don't remove points after every cluster.
-    seed_index = 0
-    
-    # We initialize clusters from most extreme to less extreme. This is
-    # arbitrary and just to have some kind of reproducability.
-    # Note to Simon: Sorting by means makes no sense with normalized rows.
-    extremes = _np.max(matrix, axis=1)
-    argextremes = _np.argsort(extremes)
+    # We don't do that since removing points is expensive. If there's only
+    # one point in the outer_points, by definition, the point to be removed
+    # will never be present in any other cluster anyway.
+    seed = 0
+    keepmask = _np.ones(len(matrix), dtype=_np.bool)
     
     while len(matrix) > 0:           
-        # Most extreme point (without picking same point twice)
-        seed = argextremes[-seed_index -1]
-        
         # Find medoid using iterative sampling function above
         sampling = _sample_clusters(matrix, seed, max_steps, inner_threshold, outer_threshold, randomstate)
         medoid, inner_points, outer_points = sampling
+        seed += 1
         
         # Write data to output
         yield labels[medoid], set(labels[outer_points])
-            
-        seed_index += 1
         
         for point in inner_points:
-            toremove.append(point)
+            keepmask[point] = False
 
         # Only remove points if we have more than 1 point in cluster
-        # Note that these operations are really expensive.
-        if len(inner_points) > 1 or len(argextremes) == seed_index:
-            matrix = _np.delete(matrix, toremove, 0)
-            labels = _np.delete(labels, toremove, 0)
-            extremes = _np.delete(extremes, toremove, 0)
-            argextremes = _np.argsort(extremes)
-            seed_index = 0
-            toremove.clear()
+        if len(outer_points) > 1 or seed == len(matrix):
+            matrix = matrix[keepmask]
+            labels = labels[keepmask]
+            
+            # This is quicker than changing existing mask to True
+            keepmask = _np.ones(len(matrix), dtype=_np.bool)
+            
+            seed = 0
 
 
 
@@ -228,7 +216,6 @@ def _collapse(clustername, cluster, contigsof, clusterof):
 
     # Get list of contigs sorted by length of set they're in
     # We sort to minimize contig reassignment
-    
     membership = list()
     for contig in cluster:
         if contig in clusterof:
@@ -275,7 +262,6 @@ def _check_inputs(max_steps, inner, outer):
     """Checks whether max_steps, inner and outer are okay.
     Can be run before loading matrix into memory."""
     
-    # before matrix has loaded
     if max_steps < 1:
         raise ValueError('maxsteps must be a positive integer')
     
@@ -299,7 +285,6 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
     if len(matrix) < 1:
         raise ValueError('Matrix must have at least 1 observation.')
     
-    # After matrix has been loaded
     if labels is None:
         labels = _np.arange(len(matrix)) + 1
         
@@ -314,6 +299,9 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
         
     if len(matrix) < nsamples:
         raise ValueError('Specified more samples than available contigs')
+        
+    if maxsize < 1:
+        raise ValueError('maxsize must be positive number')
     
     if inner is None:
         try:
