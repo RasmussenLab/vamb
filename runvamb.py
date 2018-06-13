@@ -216,9 +216,9 @@ if __name__ == '__main__':
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options options', description=None)
     
-    inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=[100],
+    inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
                          help='ignore sequences shorter than this [100]')
-    inputos.add_argument('-a', dest='minascore', metavar='', type=int, default=[50],
+    inputos.add_argument('-a', dest='minascore', metavar='', type=int, default=50,
                          help='ignore reads with alignment score below this [50]')
     inputos.add_argument('-p', dest='processes', metavar='', type=int, default=DEFAULT_PROCESSES,
                          help=('reading processes to spawn '
@@ -230,9 +230,9 @@ if __name__ == '__main__':
     vambos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
                         default=[325, 325], help='hidden neurons [325 325]')
     vambos.add_argument('-l', dest='nlatent', metavar='', type=int,
-                        default=40, help='latent neurons [40]')
+                        default=75, help='latent neurons [75]')
     vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
-                        default=300, help='epochs [300]')
+                        default=200, help='epochs [200]')
     vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
                         default=100, help='batch size [100]')
     vambos.add_argument('-t', dest='tnfweight',  metavar='',type=float,

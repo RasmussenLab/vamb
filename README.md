@@ -70,9 +70,13 @@ __For each module__, you find the relevant script:
     
     [ lines elided ]
 
-# Tutorial and running from Python
+# Walkthrough from within Python interpreter
 
 See the notebooks in the `doc` directory for an in-depth walkthrough of the Vamb package.
+
+# Troubleshooting
+
+See the Markdown file in the `doc` directory.
 
 # Prerequisites
 

@@ -182,6 +182,8 @@ def getthreshold(latent, distfunction, samples, maxsize):
     
     Inputs:
         latent: An (n_contigs x n_latent) Numpy array
+        distfunction: f such that f(latent, index) returns Numpy array with
+                      distances to each corresponding contig in latent.
         samples: Number of random contigs to sample [1000]
         maxsize: Discard sample if more than N contigs are within estimated
                  sample threshold [2500]
