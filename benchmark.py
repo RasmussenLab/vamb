@@ -218,6 +218,9 @@ class BenchMarkResult:
         mcc_num = true_pos * true_neg - false_pos * false_neg
         mcc_den = (true_pos + false_pos) * (true_pos + false_neg)
         mcc_den *= (true_neg + false_pos) * (true_neg + false_neg)
+        if mcc_den == 0:
+            return 0
+        
         mcc = mcc_num / sqrt(mcc_den)
         
         return mcc
@@ -301,7 +304,8 @@ class BenchMarkResult:
             self.mccmean = sum(self.mccof.values()) / len(self.mccof)
                             
     def __getitem__(self, key):
-        if key not in self._binsfound:
+        recall, precision = key
+        if recall not in self.recalls or precision not in self.precisions:
             raise KeyError('Not initialized with that recall, precision pair')
             
         return self._binsfound[key]
