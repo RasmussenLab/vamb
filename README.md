@@ -1,4 +1,5 @@
 # Vamb
+
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
 
 Please contact jakni@bioinformatics.dtu.dk for bug fixes and feature requests.
@@ -83,24 +84,21 @@ See the Markdown file in the `doc` directory.
 Like other metagenomic binners, Vamb relies on two properties of the DNA sequences to be binned:
 
 * The kmer-composition of the sequence (here tetranucleotide frequency, *TNF*) and
-* The abundance of the contigs in each sample (the *depth* or the *RPKM).
+* The abundance of the contigs in each sample (the *depth* or the *RPKM*).
 
 So before you can run Vamb, you need to have files from which Vamb can calculate these values.
 
 * TNF is calculated from a regular fasta file of DNA sequences.
 * Depth is calculated from BAM-files of mapping reads to that same fasta file.
 
-The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences. Vamb *can* work on 
-shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples. 
+The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples. 
 
-With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs become overwhelming. The 
-better approach is to split the dataset up into smaller chuncks and bin them independently.
+With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. 
+The better approach is to split the dataset up into smaller chuncks and bin them independently.
 
-There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or 
-because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask.
+There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask.
 
-In those situations, you can still pass the argument `minlength` if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads 
-during mapping which are then not mapped to the larger contigs, but it can work alright.
+In those situations, you can still pass the argument `minlength` if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads during mapping which are then not mapped to the larger contigs, but it can work alright.
 
 ### Recommended preparation
 
@@ -118,10 +116,10 @@ We recommend prepending the sample name to each contig header from that sample.
 
 __4) Remove all small contigs from the FASTA file__
 
-There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of all contigs, and throwing out good data. We recommend choosing a length cutoff of 
-~2000 bp.
+There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of all contigs, and throwing out good data. We use a length cutoff of ~2000 bp but 
+haven't tested for the optimal value.
 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
-We have used BWA MEM for mapping, fully aware that it is not suited for this task. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` and multiple secondary hits tagged 
-`XA:Z` can work.
+We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` and multiple 
+secondary hits tagged `XA:Z` can work.

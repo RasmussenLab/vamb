@@ -53,12 +53,10 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     tnftensor = _torch.Tensor(tnfarray)
     
     dataset = _TensorDataset(depthstensor, tnftensor)
-    loader = _DataLoader(dataset=dataset, batch_size=batchsize, shuffle=False,
+    loader = _DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
                         num_workers=1, pin_memory=cuda)
     
     return loader
-
-
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
