@@ -58,6 +58,8 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     
     return loader
 
+
+
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
     
@@ -165,11 +167,12 @@ class VAE(_nn.Module):
         criterion = _nn.MSELoss() 
 
         mse = tnfweight * criterion(tnf_out, tnf_in)
-        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=False) 
+        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=False)
+        ce = - _torch.mean((depths_out.log() * depths_in))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
 
         loss = bce + kld + mse
-        return loss, bce, mse, kld
+        return loss, bce, ce, mse, kld
     
     def trainmodel(self, data_loader, epoch, optimizer, tnfweight, verbose):
         self.train()
@@ -178,6 +181,7 @@ class VAE(_nn.Module):
         epoch_kldloss = 0
         epoch_bceloss = 0
         epoch_mseloss = 0
+        epoch_celoss = 0
 
         for depths_in, tnf_in in data_loader:
             depths = _Variable(depths_in)
@@ -191,7 +195,7 @@ class VAE(_nn.Module):
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
-            loss, bce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
+            loss, bce, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, mu, logsigma, tnfweight)
 
             loss.backward()
@@ -201,12 +205,14 @@ class VAE(_nn.Module):
             epoch_kldloss += kld.data.item()
             epoch_bceloss += bce.data.item()
             epoch_mseloss += mse.data.item()
+            epoch_celoss += ce.data.item()
 
         if verbose:
-            print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.4f}\tMSE: {:.5f}\tKLD: {:.4f}'.format(
+            print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.4f}\tCE: {:.8f}\tMSE: {:.5f}\tKLD: {:.4f}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader.dataset),
                   epoch_bceloss / len(data_loader.dataset),
+                  epoch_celoss / len(data_loader.dataset),
                   epoch_kldloss / len(data_loader.dataset),
                   epoch_mseloss / len(data_loader.dataset)
                   ))
@@ -225,6 +231,7 @@ class VAE(_nn.Module):
         length = len(depths)
 
         result = _np.empty((length, self.nlatent), dtype=_np.float32)
+        kld_result = _np.empty((length, self.nlatent), dtype=_np.float32)
 
         row = 0
         for batch, (depths, tnf) in enumerate(data_loader):
@@ -238,19 +245,23 @@ class VAE(_nn.Module):
 
             # Evaluate
             out_depths, out_tnf, mu, logsigma = self(depths, tnf)
+            kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp())
 
             # Move latent representation back to CPU for output
             if self.usecuda:
                 mu = mu.cpu()
+                kld = kld.cpu()
 
             mu_array = mu.data.numpy()
+            kld_array = kld.data.numpy()
             
             result[row: row + len(mu_array)] = mu_array
+            kld_result[row: row + len(mu_array)] = kld_array
             row += len(mu_array)
             
         assert row == length
 
-        return result
+        return result, kld_result
 
 
 
@@ -337,9 +348,9 @@ if __name__ == '__main__':
     parser.add_argument('-n', dest='nhiddens', type=int, nargs='+',
                         default=[325, 325], help='hidden neurons [325 325]')
     parser.add_argument('-l', dest='nlatent', type=int,
-                        default=75, help='latent neurons [75]')
+                        default=40, help='latent neurons [40]')
     parser.add_argument('-e', dest='nepochs', type=int,
-                        default=200, help='epochs [200]')
+                        default=300, help='epochs [300]')
     parser.add_argument('-b', dest='batchsize', type=int,
                         default=100, help='batch size [100]') 
     parser.add_argument('-t', dest='tnfweight', type=float,
