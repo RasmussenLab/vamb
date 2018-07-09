@@ -165,7 +165,7 @@ class VAE(_nn.Module):
     
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         ce = - _torch.mean((depths_out.log() * depths_in))
-        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=False)
+        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=True)
         mse = _torch.mean((tnf_out - tnf_in).pow(2))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
         loss = 3000 * ce + kld + mse
@@ -206,13 +206,13 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if verbose:
-            print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.4f}\tCE: {:.7f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
+            print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.5f}\tCE: {:.7f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader.dataset),
                   epoch_bceloss / len(data_loader.dataset),
                   epoch_celoss / len(data_loader.dataset),
-                  epoch_kldloss / len(data_loader.dataset),
-                  epoch_mseloss / len(data_loader.dataset)
+                  epoch_mseloss / len(data_loader.dataset),
+                  epoch_kldloss / len(data_loader.dataset)
                   ), file=outfile)
             
     def encode(self, data_loader):
@@ -266,7 +266,18 @@ class VAE(_nn.Module):
          _torch.save(self.state_dict(), filehandle)
 
     @classmethod
-    def load(cls, filehandle, cuda=False):
+    def load(cls, path, cuda=False, evaluate=True):
+        """Instantiates a VAE from a model file.
+        
+        Inputs:
+            path: Path to model file as created by functions VAE.save,
+                  encode.trainvae or torch.save(vae.state_dict(), file).
+            cuda: If network should work on GPU [False]
+            evaluate: Return network in evaluation mode [True]
+               
+        Output: VAE with weights and parameters matching the saved network.
+        """
+        
         dictionary = _torch.load(filehandle)
 
         ntnf = 136
@@ -283,6 +294,9 @@ class VAE(_nn.Module):
         
         if cuda:
             vae.cuda()
+            
+        if evalutate:
+            vae.eval()
         
         vae.load_state_dict(dictionary)
 
