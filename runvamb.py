@@ -77,7 +77,7 @@ def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
        nepochs=300, batchsize=100, cuda=False, tnfweight=1.0, lrate=1e-4,
        verbose=True, tandemcluster=False, max_steps=15, nsamples=1000,
        min_clustersize=5):
-    "placeholder docstring"
+    "placeholder docstring - replaced below this function"
     
     ############## NOTE #############################
     #
@@ -125,9 +125,14 @@ def run(outdir, contigspath, bampaths, minlength=100, minascore=50,
     if verbose:
         print('Making and training VAE on data.')
     
-    vae, dataloader = _encode.trainvae(rpkms, tnfs, nhiddens=nhiddens, nlatent=nlatent,
-                                      nepochs=nepochs, batchsize=batchsize, cuda=cuda,
-                                      tnfweight=tnfweight, lrate=lrate, verbose=verbose)
+    modelfile = _os.path.join(outdir, 'model')
+    logpath = _os.path.join(outdir, 'vae.log')
+    
+    with open(logpath, 'w') as logfile:
+        vae, dataloader = _encode.trainvae(rpkms, tnfs, nhiddens=nhiddens, nlatent=nlatent,
+                                          nepochs=nepochs, batchsize=batchsize, cuda=cuda,
+                                          lrate=lrate, verbose=verbose,
+                                          modelfile=modelfile, logfile=logfile)
     
     # Feed dataloader to VAE
     if verbose:
@@ -230,9 +235,9 @@ if __name__ == '__main__':
     vambos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
                         default=[325, 325], help='hidden neurons [325 325]')
     vambos.add_argument('-l', dest='nlatent', metavar='', type=int,
-                        default=75, help='latent neurons [75]')
+                        default=40, help='latent neurons [40]')
     vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
-                        default=200, help='epochs [200]')
+                        default=300, help='epochs [300]')
     vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
                         default=100, help='batch size [100]')
     vambos.add_argument('-t', dest='tnfweight',  metavar='',type=float,

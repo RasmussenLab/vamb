@@ -12,7 +12,16 @@ else:
 
 
 def zscore(array, axis=None, inplace=False):
-    "Calculates zscore for an array. A cheap copy of scipy.stats.zscore."
+    """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
+    
+    Inputs:
+        array: Numpy array to be normalized
+        axis: Axis to operate across [None = entrie array]
+        inplace: Do not create new array, change input array [False]
+        
+    Output:
+        If inplace is True: None
+        else: New normalized Numpy-array"""
     
     if axis is not None and axis >= array.ndim:
         raise _np.AxisError('array only has {} axes'.format(array.ndim))
@@ -184,7 +193,8 @@ def byte_iterfasta(filehandle, comment=b'#'):
             stripped = upper.translate(None, delete=b'ACGTN')
             
             if len(stripped) > 0:
-                raise ValueError('Non-ACGTN in line {}: {}'.format(linenumber + 1, stripped[0]))
+                possibilities = chr(stripped[0]) + ' or ' + chr(stripped[0] + 32)
+                raise ValueError('Non-ACGTN in line {}: {}'.format(linenumber + 1, possibilities))
             
             buffer.append(upper)
 
