@@ -65,6 +65,7 @@ def _pearson_distances(matrix, index):
     # D = (x @ y.T - len(x)) * (-1 / 2len(x))
     
     # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
+    # Also make sure that no rows are [0, 0, 0 ... ]
     vectorlength = matrix.shape[1]
     result = _np.dot(matrix, matrix[index].T)
     result -= vectorlength
@@ -81,8 +82,15 @@ def _getinner(matrix, point, inner_threshold):
     distances = _pearson_distances(matrix, point)
     inner_points = _np.where(distances < inner_threshold)[0]
     
-    if len(inner_points) == 1:
+    # This happens if std(matrix[points]) == 0, then all pearson distances
+    # become 0.5, even the distance to itself.
+    if len(inner_points) == 0:
+        inner_points = _np.array([point])
+        average_distance = 0   
+    
+    elif len(inner_points) == 1:
         average_distance = 0
+    
     else:
         average_distance = _np.sum(distances[inner_points]) / (len(inner_points) - 1)
 
@@ -123,7 +131,10 @@ def _sample_clusters(matrix, point, max_attempts, inner_threshold, outer_thresho
         else:
             futile_attempts += 1
             
-    outer_points = _np.where(distances < outer_threshold)[0]
+    if inner_threshold == outer_threshold:
+        outer_points = inner_points
+    else:
+        outer_points = _np.where(distances < outer_threshold)[0]
     
     return point, inner_points, outer_points
 
@@ -293,17 +304,17 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
         
     if len(set(labels)) != len(matrix):
         raise ValueError('Labels must be unique')
-        
-    if len(matrix) < 1000:
-        raise ValueError('Cannot estimate from less than 1000 contigs')
-        
-    if len(matrix) < nsamples:
-        raise ValueError('Specified more samples than available contigs')
-        
-    if maxsize < 1:
-        raise ValueError('maxsize must be positive number')
     
     if inner is None:
+        if len(matrix) < 1000 and inner is None:
+            raise ValueError('Cannot estimate from less than 1000 contigs')
+
+        if len(matrix) < nsamples:
+            raise ValueError('Specified more samples than available contigs')
+
+        if maxsize < 1:
+            raise ValueError('maxsize must be positive number')
+        
         try:
             _gt = _threshold.getthreshold(matrix, _pearson_distances, nsamples, maxsize)
             inner, support, separation = _gt
