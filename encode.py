@@ -168,7 +168,7 @@ class VAE(_nn.Module):
         bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=True)
         mse = _torch.mean((tnf_out - tnf_in).pow(2))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
-        loss = 3000 * ce + kld + mse
+        loss = 1000 * ce + kld + mse
         
         return loss, bce, ce, mse, kld
     
@@ -208,11 +208,11 @@ class VAE(_nn.Module):
         if verbose:
             print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.5f}\tCE: {:.7f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
                   epoch + 1,
-                  epoch_loss / len(data_loader.dataset),
-                  epoch_bceloss / len(data_loader.dataset),
-                  epoch_celoss / len(data_loader.dataset),
-                  epoch_mseloss / len(data_loader.dataset),
-                  epoch_kldloss / len(data_loader.dataset)
+                  epoch_loss / len(data_loader),
+                  epoch_bceloss / len(data_loader),
+                  epoch_celoss / len(data_loader),
+                  epoch_mseloss / len(data_loader),
+                  epoch_kldloss / len(data_loader)
                   ), file=outfile)
             
     def encode(self, data_loader):
@@ -278,7 +278,7 @@ class VAE(_nn.Module):
         Output: VAE with weights and parameters matching the saved network.
         """
         
-        dictionary = _torch.load(filehandle)
+        dictionary = _torch.load(path)
 
         ntnf = 136
         nsamples = dictionary['outputlayer.bias'].shape[0] - ntnf
@@ -295,7 +295,7 @@ class VAE(_nn.Module):
         if cuda:
             vae.cuda()
             
-        if evalutate:
+        if evaluate:
             vae.eval()
         
         vae.load_state_dict(dictionary)
