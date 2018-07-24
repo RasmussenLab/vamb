@@ -23,6 +23,7 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 import sys as _sys
 import os as _os
 import numpy as _np
+import random as _random
 
 import torch as _torch
 from torch import nn as _nn
@@ -45,6 +46,36 @@ if __name__ == '__main__':
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
+
+
+
+def _cross_entropy(depths, index0, index1):
+    return float(-_np.mean(_np.log(depths[index0] + 0.001) * depths[index1]))
+
+def _mean_squared_error(tnf, index0, index1):
+    return float(_np.mean(_np.square(tnf[index0] - tnf[index1])))
+
+def _ceratio(depthsarray, tnfarray, nsamples=5000):
+    if nsamples < 1:
+        raise ValueError('nsamples must exceed 1')
+        
+    if len(depthsarray) < 2 or len(tnfarray) < 2:
+        raise ValueError('both arrays must be nonempty')
+    
+    if len(depthsarray) != len(tnfarray):
+        raise ValueError('arrays must have same length')
+    
+    ce = 0
+    mse = 0
+    
+    for i in range(nsamples):
+        index0 = _random.randrange(len(tnfarray) - 1)
+        index1 = _random.randrange(index0 + 1, len(tnfarray))
+        
+        ce += _cross_entropy(depthsarray, index0, index1)
+        mse += _mean_squared_error(tnfarray, index0, index1)
+        
+    return 10 * (mse/ce)
 
 
 
@@ -75,7 +106,7 @@ class VAE(_nn.Module):
         encodes the data in the data loader and returns the encoded matrix
     """
     
-    def __init__(self, nsamples, ntnf, hiddens, latent, cuda):
+    def __init__(self, nsamples, ntnf, hiddens, latent, cuda, ceratio):
         super(VAE, self).__init__()
       
         # Initialize simple attributes
@@ -85,6 +116,7 @@ class VAE(_nn.Module):
         self.nfeatures = nsamples + ntnf
         self.nhiddens = hiddens
         self.nlatent = latent
+        self.ceratio = ceratio
       
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -168,7 +200,7 @@ class VAE(_nn.Module):
         bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=True)
         mse = _torch.mean((tnf_out - tnf_in).pow(2))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
-        loss = 1000 * ce + kld + mse
+        loss = self.ceratio * ce + kld + mse
         
         return loss, bce, ce, mse, kld
     
@@ -345,6 +377,8 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
         
     if lrate < 0:
         raise ValueError('Learning rate cannot be negative')
+        
+    ceratio = _ceratio(depths, tnf)
     
     data_loader = _dataloader_from_arrays(depths, tnf, cuda, batchsize)
     
@@ -352,7 +386,7 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
     nsamples, ntnfs = [tensor.shape[1] for tensor in data_loader.dataset.tensors]
         
     # Instantiate the VAE
-    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda)
+    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, ceratio)
     
     if cuda:
         model.cuda()
