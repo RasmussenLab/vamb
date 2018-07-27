@@ -23,10 +23,11 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 import sys as _sys
 import os as _os
 import numpy as _np
-import random as _random
 import datetime as _datetime
-
 import torch as _torch
+
+from math import log as _log
+
 from torch import nn as _nn
 from torch import optim as _optim 
 from torch.autograd import Variable as _Variable
@@ -48,54 +49,6 @@ if __name__ == '__main__':
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
-
-
-
-def _cross_entropy(depths, index0, index1):
-    return float(-_np.mean(_np.log(depths[index0] + 0.001) * depths[index1]))
-
-def _mean_squared_error(tnf, index0, index1):
-    return float(_np.mean(_np.square(tnf[index0] - tnf[index1])))
-
-def _ceratio(depthsarray, tnfarray, errorsum, tnfratio, nsamples=5000):
-    if nsamples < 1:
-        raise ValueError('nsamples must exceed 1')
-        
-    if len(depthsarray) < 2 or len(tnfarray) < 2:
-        raise ValueError('both arrays must be nonempty')
-    
-    if len(depthsarray) != len(tnfarray):
-        raise ValueError('arrays must have same length')
-        
-    if errorsum <= 0:
-        raise ValueError('errorsum must be > 0')
-        
-    if not (0 < tnfratio < 1):
-        raise ValueError('tnfratio must be 0 < tnfratio < 1')
-        
-    # Get empirical CE and MSE
-    ce = 0
-    mse = 0
-    
-    for i in range(nsamples):
-        index0 = _random.randrange(len(tnfarray) - 1)
-        index1 = _random.randrange(len(tnfarray) - 1)
-        
-        while index0 == index1:
-            index1 = _random.randrange(len(tnfarray) - 1)
-        
-        ce += _cross_entropy(depthsarray, index0, index1)
-        mse += _mean_squared_error(tnfarray, index0, index1)
-        
-    ce /= nsamples
-    mse /= nsamples
-    
-    print('CE, MSE:', ce, mse)
-    
-    cefactor = errorsum * (1 - tnfratio) / ce
-    msefactor = errorsum * tnfratio / mse
-        
-    return cefactor, msefactor
 
 
 
@@ -358,8 +311,8 @@ class VAE(_nn.Module):
 
 
 def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
-             batchsize=100, cuda=False, errorsum=20, tnfratio=0.1,
-             lrate=1e-4, verbose=False,logfile=_sys.stdout, modelfile=None):
+             batchsize=100, cuda=False, errorsum=20, mseratio=0.1,
+             lrate=1e-4, verbose=False, logfile=_sys.stdout, modelfile=None):
     
     """Create an latent encoding iterator from depths array and tnf array.
     First trains the VAE and then returns an iterator yielding the encoding
@@ -373,9 +326,11 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
         nepochs: Train for this many epochs before encoding [200]
         batchsize: Mini-batch size for training [100]
         cuda: Use CUDA (GPU acceleration) [False]
+        errorsum: Balances role of output error versus surprise in loss [20]
+        mseratio: Balances error from TNF versus depths in loss [0.1]
         lrate: Learning rate for the optimizer [1e-4]
         verbose: Print loss and other measures to stdout each epoch [False]
-        logfile: Print loss to this file is verbose is True
+        logfile: Print loss to this file if verbose is True
         modelfile: Save the models weights in this file if not None
         
     Outputs:
@@ -399,12 +354,26 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
     if lrate < 0:
         raise ValueError('Learning rate cannot be negative')
         
-    cefactor, msefactor = _ceratio(depths, tnf, errorsum, tnfratio)
+    if errorsum <= 0:
+        raise ValueError('errorsum must be > 0')
+        
+    if not (0 < mseratio < 1):
+        raise ValueError('mseratio must be 0 < mseratio < 1')
     
     data_loader = _dataloader_from_arrays(depths, tnf, cuda, batchsize)
     
     # Get number of features
     nsamples, ntnfs = [tensor.shape[1] for tensor in data_loader.dataset.tensors]
+    
+    # Get CE and MSE factor in loss calculation:
+    # A completely uninformed network will guess TNF randomly from N(0, 1)
+    # (because of how it's normalized), and depths to be 1/n_samples.
+    # This will give an expected TNF error of 2 and an expected depth of
+    # log(n_samples) / n_samples.
+    expected_ce = _log(nsamples) / nsamples
+    expected_mse = 2
+    cefactor = errorsum * (1 - mseratio) / expected_ce
+    msefactor = errorsum * mseratio / expected_mse
         
     # Instantiate the VAE
     model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, cefactor, msefactor)
@@ -415,18 +384,18 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
     optimizer = _optim.Adam(model.parameters(), lr=lrate)
     
     if verbose:
-        if __version__ in dir():
+        if '__version__' in dir():
             vstring = '.'.join(map(str, __version__))
             print('Starting Vamb encoder version', vstring, file=logfile)
 
         print('CE factor: ', cefactor, file=logfile)
-        print('MSE factor: ', cefactor, file=logfile)
+        print('MSE factor: ', msefactor, file=logfile)
         print('CUDA:', cuda, file=logfile)
         print('N latent: ', nlatent, file=logfile)
-        print('N hidden: ', ', '.join(map(str(nhiddens))), file=logfile)
-        print('N contigs: ', depths.shape[1], file=logfile)
-        print('N samples: ', depths.shape[0], file=logfile)
-        print('Time is: ', _datetime.datetime.now())
+        print('N hidden: ', ', '.join(map(str, nhiddens)), file=logfile)
+        print('N contigs: ', depths.shape[0], file=logfile)
+        print('N samples: ', depths.shape[1], file=logfile)
+        print('Time is: ', _datetime.datetime.now(), file=logfile)
    
     # Train
     for epoch in range(nepochs):
