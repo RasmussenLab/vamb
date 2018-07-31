@@ -19,12 +19,7 @@ import sys as _sys
 import os as _os
 import numpy as _np
 import gzip as _gzip
-
-if __package__ is None or __package__ == '':
-    import vambtools as _vambtools
-    
-else:
-    import vamb.vambtools as _vambtools
+import vamb.vambtools as _vambtools
     
 if __name__ == '__main__':
     import argparse
@@ -104,49 +99,10 @@ def read_contigs(byte_iterator, minlength=100):
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
+    if tnfs.ndim < 2 or tnfs.shape[1] < 2:
+        raise IndexError('Cannot normalize less than 2 contigs')
+    
     _vambtools.zscore(tnfs, axis=0, inplace=True)
     
     return tnfs, contignames, lengths
-
-
-
-if __name__ == '__main__':
-    parserkws = {'prog': 'calculate_tnf.py',
-                 'formatter_class': argparse.RawDescriptionHelpFormatter,
-                 'usage': 'parsecontigs.py contigs.fna(.gz) tnfout lengthsout',
-                 'description': __doc__}
-
-    # Create the parser
-    parser = argparse.ArgumentParser(**parserkws)
-
-    parser.add_argument('contigs', help='FASTA file of contigs')
-    parser.add_argument('tnfout', help='TNF output path')
-    
-    parser.add_argument('-m', dest='minlength', type=int, default=100,
-                        help='minimum length of contigs [100]')
-
-    # Print help if no arguments are given
-    if len(_sys.argv) == 1:
-        parser.print_help()
-        _sys.exit()
-
-    args = parser.parse_args()
-    
-    if args.minlength < 4:
-        raise ValueError('Minlength must be at least 4')
-
-    if not _os.path.isfile(args.contigs):
-        raise FileNotFoundError(args.contigs)
-
-    if _os.path.exists(args.tnfout):
-        raise FileExistsError(args.tnfout)
-        
-    directory = _os.path.dirname(args.tnfout)
-    if directory and not _os.path.isdir(directory):
-        raise NotADirectoryError(directory)
-    
-    with _vambtools.Reader(args.contigs, 'rb') as filehandle:
-        tnfs, contignames, lengths = read_contigs(filehandle, args.minlength)
-        
-    _vambtools.write_tsv(args.tnfout, tnfs)
 
