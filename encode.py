@@ -9,9 +9,6 @@ Usage:
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
 (183882, 40)
-
-Loss is KL-divergence of latent layer + MSE of tnf reconstruction + BCE of
-depths reconstruction.
 """
 
 
@@ -171,19 +168,17 @@ class VAE(_nn.Module):
     
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         ce = - _torch.mean((depths_out.log() * depths_in))
-        bce = _F.binary_cross_entropy(depths_out, depths_in, size_average=True)
         mse = _torch.mean((tnf_out - tnf_in).pow(2))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
         loss = self.cefactor * ce + self.msefactor * mse + kld
         
-        return loss, bce, ce, mse, kld
+        return loss, ce, mse, kld
     
     def trainmodel(self, data_loader, epoch, optimizer, verbose, outfile=_sys.stdout):
         self.train()
 
         epoch_loss = 0
         epoch_kldloss = 0
-        epoch_bceloss = 0
         epoch_mseloss = 0
         epoch_celoss = 0
 
@@ -199,7 +194,7 @@ class VAE(_nn.Module):
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
-            loss, bce, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
+            loss, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, mu, logsigma)
 
             loss.backward()
@@ -207,15 +202,13 @@ class VAE(_nn.Module):
 
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
-            epoch_bceloss += bce.data.item()
             epoch_mseloss += mse.data.item()
             epoch_celoss += ce.data.item()
 
         if verbose:
-            print('Epoch: {}\tLoss: {:.4f}\tBCE: {:.5f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
+            print('Epoch: {}\tLoss: {:.4f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
-                  epoch_bceloss / len(data_loader),
                   epoch_celoss / len(data_loader),
                   epoch_mseloss / len(data_loader),
                   epoch_kldloss / len(data_loader)
@@ -272,7 +265,7 @@ class VAE(_nn.Module):
          _torch.save(self.state_dict(), filehandle)
 
     @classmethod
-    def load(cls, path, cuda=False, evaluate=True):
+    def load(cls, path, cuda=False, evaluate=True, errorsum=20, mseratio=0.1):
         """Instantiates a VAE from a model file.
         
         Inputs:
@@ -295,8 +288,13 @@ class VAE(_nn.Module):
                 nhiddens.append(v.shape[0])
 
         nlatent = dictionary['mu.bias'].shape[0]
+        
+        expected_ce = _log(nsamples) / nsamples
+        expected_mse = 2
+        cefactor = errorsum * (1 - mseratio) / expected_ce
+        msefactor = errorsum * mseratio / expected_mse
 
-        vae = cls(nsamples, ntnf, nhiddens, nlatent, cuda)
+        vae = cls(nsamples, ntnf, nhiddens, nlatent, cuda, cefactor, msefactor)
         
         if cuda:
             vae.cuda()
@@ -310,8 +308,8 @@ class VAE(_nn.Module):
 
 
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
-             batchsize=100, cuda=False, errorsum=20, mseratio=0.1,
+def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
+             batchsize=128, cuda=False, errorsum=1000, mseratio=0.2,
              lrate=1e-4, verbose=False, logfile=_sys.stdout, modelfile=None):
     
     """Create an latent encoding iterator from depths array and tnf array.
@@ -323,11 +321,11 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
         nhiddens: List of n_neurons in the hidden layers of VAE [325, 325]
         nlatent: Number of n_neurons in the latent layer [40]
-        nepochs: Train for this many epochs before encoding [200]
-        batchsize: Mini-batch size for training [100]
+        nepochs: Train for this many epochs before encoding [300]
+        batchsize: Mini-batch size for training [128]
         cuda: Use CUDA (GPU acceleration) [False]
-        errorsum: Balances role of output error versus surprise in loss [20]
-        mseratio: Balances error from TNF versus depths in loss [0.1]
+        errorsum: Balances role of output error versus surprise in loss [1000]
+        mseratio: Balances error from TNF versus depths in loss [0.2]
         lrate: Learning rate for the optimizer [1e-4]
         verbose: Print loss and other measures to stdout each epoch [False]
         logfile: Print loss to this file if verbose is True
@@ -384,22 +382,28 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
     optimizer = _optim.Adam(model.parameters(), lr=lrate)
     
     if verbose:
-        if '__version__' in dir():
+        try:
             vstring = '.'.join(map(str, __version__))
             print('Starting Vamb encoder version', vstring, file=logfile)
+        except NameError:
 
-        print('CE factor: ', cefactor, file=logfile)
-        print('MSE factor: ', msefactor, file=logfile)
+        print('CE factor:', cefactor, file=logfile)
+        print('MSE factor:', msefactor, file=logfile)
         print('CUDA:', cuda, file=logfile)
-        print('N latent: ', nlatent, file=logfile)
-        print('N hidden: ', ', '.join(map(str, nhiddens)), file=logfile)
-        print('N contigs: ', depths.shape[0], file=logfile)
-        print('N samples: ', depths.shape[1], file=logfile)
-        print('Time is: ', _datetime.datetime.now(), file=logfile)
+        print('N latent:', nlatent, file=logfile)
+        print('N hidden:', ', '.join(map(str, nhiddens)), file=logfile)
+        print('N contigs:', depths.shape[0], file=logfile)
+        print('N samples:', depths.shape[1], file=logfile)
+        print('N epochs:', nepochs, file=logfile)
+        print('Batch size:', batchsize, file=logfile)
+        print('Time is:', _datetime.datetime.now(), file=logfile)
    
     # Train
     for epoch in range(nepochs):
         model.trainmodel(data_loader, epoch, optimizer, verbose, logfile)
+        
+    if verbose:
+        print('Done - time is:', _datetime.datetime.now(), file=logfile)
 
     # Save weights - Lord forgive me, for I have sinned when catching all exceptions
     if modelfile is not None:
