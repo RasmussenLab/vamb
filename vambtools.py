@@ -2,12 +2,7 @@
 import os as _os
 import gzip as _gzip
 import numpy as _np
-
-if __package__ is None or __package__ == '':
-    from vambtools_c import _kmercounts, _fourmerfreq, zeros
-    
-else:
-    from vamb.vambtools_c import _kmercounts, _fourmerfreq, zeros
+from vamb._vambtools import _kmercounts, _fourmerfreq, zeros
 
 
 
@@ -341,4 +336,23 @@ def write_npz(file, array):
     Output: None
     """
     _np.savez_compressed(file, array)
+
+
+
+def filtercontigs(infile, outfile, minlength=2000):
+    """Creates new FASTA file with filtered contigs
+    
+    Inputs:
+        infile: Binary opened input FASTA file
+        outfile: Write-opened output FASTA file
+        minlength: Minimum contig length to keep [2000]
+        
+    Output: None
+    """
+    
+    fasta_entries = _vambtools.byte_iterfasta(infile)
+
+    for entry in fasta_entries:
+        if len(entry) > minlength:
+            print(entry.format(), file=outfile)
 
