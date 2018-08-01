@@ -179,25 +179,34 @@ def _get_contig_rpkms(path, minscore=50, minlength=2000):
 
 
 def read_bamfiles(paths, minscore=50, minlength=100,
-                  processes=DEFAULT_PROCESSES):
+                  processes=DEFAULT_PROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
+    
+    if logfile is not None:
+        def _callback(result):
+            path, rpkms = result
+            print('\tProcessed ', path, file=logfile)
+
+        def _error_callback(result):
+            path, rpkms = result
+            print('\tERROR WHEN PROCESSING ', path, file=logfile)
+    else:
+        def _callback(result):
+            pass
+
+        def _error_callback(result):
+            pass
     
     # Get references and lengths from first BAM file.
     # We need these to print them in the output.
     # Might as well do it before spawning all those processes.
     firstfile = _pysam.AlignmentFile(paths[0], "rb")
-    contignames = list()
-    
-    for name, length in zip(firstfile.references, firstfile.lengths):
-        if length >= minlength:
-            contignames.append(name)
-    
-    ncontigs = len(contignames)
+    ncontigs = sum(1 for length in firstfile.lengths if length >= minlength)
+    firstfile.close()
+    del firstfile
     
     if ncontigs == 0:
         raise ValueError('No headers in first bam file after filtering')
-        
-    del firstfile
     
     # Spawn independent processed to calculate RPKM for each of the BAM files
     processresults = list()
@@ -206,35 +215,30 @@ def read_bamfiles(paths, minscore=50, minlength=100,
     with _multiprocessing.Pool(processes=processes) as pool:
         for path in paths:
             arguments = (path, minscore, minlength)
-            processresults.append(pool.apply_async(_get_contig_rpkms, arguments))
+            processresults.append(pool.apply_async(_get_contig_rpkms, arguments,
+                                                   callback=_callback, error_callback=_error_callback))
         
         # For some reason, this is needed.
         pool.close()
         pool.join()
             
-    sample_rpkms = dict()
+    columnof = {p:i for i, p in enumerate(paths)}
+    rpkms = _np.zeros((ncontigs, len(paths)), dtype=_np.float32)
     
     for processresult in processresults:
         if processresult.successful():
             path, rpkm = processresult.get()
-            sample_rpkms[path] = rpkm
+            
+            if len(rpkm) != ncontigs:
+                raise ValueError('Expected {} headers in {}, got {}.'.format(
+                                 ncontigs, path, len(rpkm)))
+            rpkms[:, columnof[path]] = rpkm
             
         else:
             return processresult
             raise _multiprocessing.ProcessError
             
-    # Check results have same length
-    wrong = [(path, len(rpkm)) for path, rpkm in sample_rpkms.items()
-             if len(rpkm) != ncontigs]
-    
-    if wrong:
-        message = ('Expected number of headers: ' +
-                   str(ncontigs) +
-                   '\nfollowing samples have wrong number of headers:\n' +
-                   '\n'.join(p+'\t'+str(i) for p, i in wrong))
-        raise ValueError(message)
-            
-    return sample_rpkms, contignames
+    return rpkms
 
 
 
@@ -245,117 +249,8 @@ Input:
     minscore [50]: Minimum alignment score (AS field) to consider
     minlength [100]: Ignore any references shorter than N bases 
     processes [{}]: Number of processes to spawn
+    logfile: [None] File to print progress to
 
-Outputs:
-    sample_rpkms: A {{path: Numpy-32-float-RPKM}} dictionary
-    contignames: A list of contignames from first BAM header
+Output: A (n_contigs x n_samples) Numpy array with RPKM
 """.format(DEFAULT_PROCESSES)
-
-
-
-def write_samplerpkm(path, sample_rpkms):
-    """Saves an RPKM dictionary to a path as .npz file.
-    
-    Inputs:
-        path: Path to save to.
-        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
-        
-    Output: None
-    """
-    
-    _np.savez_compressed(path, **sample_rpkms)
-
-
-
-def read_npz(path, columns):
-    """Creates a (n-contigs x n-bamfiles) array from an npz object as created
-    by sample_rpkms_tonpz.
-    
-    Inputs: 
-        path: Path to npz object
-        columns: Names of BAM file paths in npz object in correct order
-        
-    Output: A (n-contigs x n-bamfiles) array with each column being the corre-
-    sponding numpy array from the npz file, normalized so each row sums to 1
-    """
-    
-    npz = _np.load(path)
-    
-    ncontigs = len(npz[columns[0]])
-    ncolumns = len(columns)
-    
-    arr = _np.empty((ncontigs, ncolumns))
-    
-    for i, filename in enumerate(columns):
-        column = npz[filename]
-        
-        if not len(column) == ncontigs:
-            errormessage = 'Expected {} contigs, but {} has {}'
-            raise ValueError(errormessage.format(ncontigs, filename, len(column)))
-        
-        arr[:, i] = column
-        
-    npz.close()
-        
-    # Normalize to rows sum to 1
-    rowsums = _np.sum(arr, axis=1)
-    rowsums[rowsums == 0] = 1
-    arr /= rowsums.reshape((-1, 1))
-    
-    return arr
-
-
-
-def toarray(sample_rpkms, columns):
-    """Creates a (n-contigs x n-bamfiles) array from a sample_rpkms
-    (expected to be a {path: Numpy-32-float-RPKM} dictionary)
-    
-    Inputs: 
-        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
-        columns: Names of BAM file paths in sample_rpkms object in correct order
-        
-    Output: A (n-contigs x n-bamfiles) array with each column being the corre-
-    sponding array from sample_rpkms, normalized so each row sums to 1
-    """
-    
-    ncontigs = len(next(iter(sample_rpkms.values())))
-    
-    for filename, array in sample_rpkms.items():
-        if not len(array) == ncontigs:
-            errormessage = 'Expected {} contigs, but {} has {}'
-            raise ValueError(errormessage.format(ncontigs, filename, len(array)))
-    
-    arr = _np.zeros((ncontigs, len(sample_rpkms)), dtype=_np.float32)
-    
-    for n, path in enumerate(columns):
-        rpkm = sample_rpkms[path]
-        arr[:, n] = rpkm
-    
-    # Normalize to rows sum to 1
-    rowsums = _np.sum(arr, axis=1)
-    rowsums[rowsums == 0] = 1
-    arr /= rowsums.reshape((-1, 1))
-    
-    return arr
-
-
-
-def write_rpkms(filehandle, sample_rpkms, columns):
-    """Writes an RPKMs dict to specified output path.
-    
-    Input:
-        filehandle: Open filehandle to write to
-        sample_rpkms: A {path: Numpy-32-float-RPKM} dictionary
-        columns: Names of BAM file paths in sample_rpkms object in correct order
-    Outputs: None
-    """
-    
-    rpkms = [sample_rpkms[column] for column in columns]
-    
-    formatstring = '\t'.join(['{:.4f}']*len(rpkms)) + '\n'
-    header = '# ' + '\t'.join(columns) + '\n'
-    
-    filehandle.write(header)
-    for values in zip(*rpkms):
-        filehandle.write(formatstring.format(*values))
 

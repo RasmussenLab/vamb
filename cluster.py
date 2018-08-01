@@ -275,7 +275,7 @@ def _check_inputs(max_steps, inner, outer):
 
 
 
-def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
+def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
     """Checks matrix, labels, nsamples, maxsize and estimates inner if necessary."""
     
     if len(matrix) < 1:
@@ -307,17 +307,17 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
             
             if separation < 0.25:
                 sep = round(separation * 100, 1)
-                wn = 'Warning: Only {}% of contigs has well-separated threshold'
-                print(wn.format(sep), file=_sys.stderr)
+                wn = '\tWarning: Only {}% of contigs has well-separated threshold'
+                print(wn.format(sep), file=logfile)
 
             if support < 0.50:
                 sup = round(support * 100, 1)
-                wn = 'Warning: Only {}% of contigs has *any* observable threshold'
-                print(wn.format(sup), file=_sys.stderr)
+                wn = '\tWarning: Only {}% of contigs has *any* observable threshold'
+                print(wn.format(sup), file=logfile)
                 
         except _threshold.TooLittleData as error:
-            wn = 'Warning: Too little data: {}. Setting threshold to 0.08'
-            print(wn.format(error.args[0]), file=_sys.stderr)
+            wn = '\tWarning: Too little data: {}. Setting threshold to 0.08'
+            print(wn.format(error.args[0]), file=logfile)
             inner = outer = 0.08
         
     return labels, inner, outer
@@ -325,7 +325,7 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize):
 
 
 def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
-            normalized=False, nsamples=1000, maxsize=2500):
+            normalized=False, nsamples=2000, maxsize=2500, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
     
     Inputs:
@@ -345,14 +345,17 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         matrix = _vambtools.zscore(matrix, axis=1)
         
     inner, outer = _check_inputs(max_steps, inner, outer)
-    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize)
+    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
+    
+    if logfile is not None:
+        print('Clustering threshold:', inner, file=logfile)
     
     return _cluster(matrix, labels, inner, outer, max_steps)
 
 
 
 def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
-            normalized=False, nsamples=1000, maxsize=2500):
+            normalized=False, nsamples=2000, maxsize=2500, logfile=None):
     """Splits the datasets, then clusters each partition before merging
     the resulting clusters. This is faster, especially on larger datasets, but
     less accurate than normal clustering.
@@ -374,7 +377,10 @@ def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         matrix = _vambtools.zscore(matrix, axis=1)
         
     inner, outer = _check_inputs(max_steps, inner, outer)
-    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize)
+    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
+    
+    if logfile is not None:
+        print('\tClustering threshold:', inner, file=logfile)
     
     randomstate = _np.random.RandomState(324645) 
     
@@ -393,7 +399,7 @@ def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
 
 
 
-def writeclusters(filehandle, clusters, max_clusters=None, min_size=1,
+def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):
     """Writes clusters to an open filehandle.
     
@@ -439,7 +445,7 @@ def writeclusters(filehandle, clusters, max_clusters=None, min_size=1,
 
 
 
-def readclusters(filehandle, min_size=1):
+def read_clusters(filehandle, min_size=1):
     """Read clusters from a file as created by function `writeclusters`.
     
     Inputs:

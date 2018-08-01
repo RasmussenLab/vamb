@@ -20,7 +20,6 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 import sys as _sys
 import os as _os
 import numpy as _np
-import datetime as _datetime
 import torch as _torch
 
 from math import log as _log
@@ -31,16 +30,7 @@ from torch.autograd import Variable as _Variable
 from torch.nn import functional as _F
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
-
-if __package__ is None or __package__ == '':
-    import vambtools as _vambtools
-    
-else:
-    import vamb.vambtools as _vambtools
-    from vamb import __version__
-    
-if __name__ == '__main__':
-    import argparse
+import vamb.vambtools as _vambtools
 
 
 
@@ -206,7 +196,7 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if verbose:
-            print('Epoch: {}\tLoss: {:.4f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
+            print('\tEpoch: {}\tLoss: {:.4f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
@@ -265,7 +255,7 @@ class VAE(_nn.Module):
          _torch.save(self.state_dict(), filehandle)
 
     @classmethod
-    def load(cls, path, cuda=False, evaluate=True, errorsum=20, mseratio=0.1):
+    def load(cls, path, cuda=False, evaluate=True, errorsum=None, mseratio=None):
         """Instantiates a VAE from a model file.
         
         Inputs:
@@ -277,6 +267,10 @@ class VAE(_nn.Module):
         Output: VAE with weights and parameters matching the saved network.
         """
         
+        if evaluate is False and (errorsum is None or mseratio is None):
+            raise ValueError('If not set in evaluation mode, errorsum and '
+                             'mseratio must be set.')
+            
         dictionary = _torch.load(path)
 
         ntnf = 136
@@ -382,28 +376,19 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
     optimizer = _optim.Adam(model.parameters(), lr=lrate)
     
     if verbose:
-        try:
-            vstring = '.'.join(map(str, __version__))
-            print('Starting Vamb encoder version', vstring, file=logfile)
-        except NameError:
-
-        print('CE factor:', cefactor, file=logfile)
-        print('MSE factor:', msefactor, file=logfile)
-        print('CUDA:', cuda, file=logfile)
-        print('N latent:', nlatent, file=logfile)
-        print('N hidden:', ', '.join(map(str, nhiddens)), file=logfile)
-        print('N contigs:', depths.shape[0], file=logfile)
-        print('N samples:', depths.shape[1], file=logfile)
-        print('N epochs:', nepochs, file=logfile)
-        print('Batch size:', batchsize, file=logfile)
-        print('Time is:', _datetime.datetime.now(), file=logfile)
+        print('\tCE factor:', cefactor, file=logfile)
+        print('\tMSE factor:', msefactor, file=logfile)
+        print('\tCUDA:', cuda, file=logfile)
+        print('\tN latent:', nlatent, file=logfile)
+        print('\tN hidden:', ', '.join(map(str, nhiddens)), file=logfile)
+        print('\tN contigs:', depths.shape[0], file=logfile)
+        print('\tN samples:', depths.shape[1], file=logfile)
+        print('\tN epochs:', nepochs, file=logfile)
+        print('\tBatch size:', batchsize, file=logfile)
    
     # Train
     for epoch in range(nepochs):
         model.trainmodel(data_loader, epoch, optimizer, verbose, logfile)
-        
-    if verbose:
-        print('Done - time is:', _datetime.datetime.now(), file=logfile)
 
     # Save weights - Lord forgive me, for I have sinned when catching all exceptions
     if modelfile is not None:
@@ -414,88 +399,4 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
 
         
     return model, data_loader
-
-
-
-if __name__ == '__main__':
-    
-    ################ Create parser ############################
-    
-    usage = "python encode.py DEPTHSFILE TNFFILE [OPTIONS ...]"
-    parser = argparse.ArgumentParser(
-        description=__cmd_doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage=usage)
-    
-    # Positional arguments
-    parser.add_argument('depthsfile', help='path to depths/RPKM file')
-    parser.add_argument('tnffile', help='path to TNF file')
-    parser.add_argument('latentfile', help='path to put latent representation')
-    
-    # Optional arguments
-    parser.add_argument('-m', dest='modelfile', help='path to put model weights [None]')
-    parser.add_argument('-n', dest='nhiddens', type=int, nargs='+',
-                        default=[325, 325], help='hidden neurons [325 325]')
-    parser.add_argument('-l', dest='nlatent', type=int,
-                        default=40, help='latent neurons [40]')
-    parser.add_argument('-e', dest='nepochs', type=int,
-                        default=300, help='epochs [300]')
-    parser.add_argument('-b', dest='batchsize', type=int,
-                        default=100, help='batch size [100]') 
-    parser.add_argument('-r', dest='lrate', type=float,
-                        default=0.0001, help='learning rate [1e-4]')
-    parser.add_argument('--cuda', help='Use GPU [False]', action='store_true')
-    
-    # If no arguments, print help
-    if len(_sys.argv) == 1:
-        parser.print_help()
-        _sys.exit()
-        
-    args = parser.parse_args()
-    
-    ################# Check inputs ###################
-    
-    if args.cuda and not _torch.cuda.is_available():
-        raise ModuleNotFoundError('Cuda is not available for PyTorch')
-    
-    if any(i < 1 for i in args.nhiddens):
-        raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
-        
-    if args.nlatent < 1:
-        raise ValueError('Minimum 1 latent neuron, not {}'.format(args.latent))
-        
-    if args.nepochs < 1:
-        raise ValueError('Minimum 1 epoch, not {}'.format(args.nepochs))
-        
-    if args.batchsize < 1:
-        raise ValueError('Minimum batchsize of 1, not {}'.format(args.batchsize))
-        
-    if args.lrate < 0:
-        raise ValueError('Learning rate cannot be negative')
-    
-    for inputfile in (args.depthsfile, args.tnffile):
-        if not _os.path.isfile(inputfile):
-            raise FileNotFoundError(inputfile)
-            
-    for outputfile in (args.outfile, args.modelfile):
-        if _os.path.exists(outputfile):
-            raise FileExistsError(outputfile)
-        
-        directory = _os.path.dirname(outputfile)
-        if directory and not _os.path.isdir(directory):
-            raise NotADirectoryError(directory)
-        
-    ############## Run program #######################
-    
-    depths = _vambtools.read_tsv(args.depthsfile)
-    tnf = _vambtools.read_tsv(args.tnffile)
-    
-    vae, data_loader = trainvae(depths, tnf, nhiddens=args.nhiddens, latent=args.latent,
-                                nepochs=args.nepochs, batchsize=args.batchsize,
-                                cuda=args.cuda, lrate=args.lrate, verbose=True,
-                               modelfile=args.modelfile)
-    
-    latent = vae.encode(data_loader)
-    
-    _vambtools.write_tsv(args.outfile, latent)
 

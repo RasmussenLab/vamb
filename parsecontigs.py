@@ -73,7 +73,7 @@ def read_contigs(byte_iterator, minlength=100):
     
     Outputs:
         tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
-        contignames: A list of contig headers
+        contignames: A lNumpy array of contig headers
         lengths: A Numpy array of contig lengths
     """
     
@@ -94,8 +94,6 @@ def read_contigs(byte_iterator, minlength=100):
         contignames.append(entry.header)
         lengths.append(len(entry))
     
-    lengths = _np.array(lengths, dtype=_np.int)
-    
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
@@ -104,5 +102,8 @@ def read_contigs(byte_iterator, minlength=100):
     
     _vambtools.zscore(tnfs, axis=0, inplace=True)
     
+    lengths = _np.array(lengths, dtype=_np.int)
+    contignames = _np.array(contignames)
+
     return tnfs, contignames, lengths
 

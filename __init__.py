@@ -30,13 +30,12 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-__version__ = (0, 2)
+__version__ = (0, 3)
 
 from . import vambtools
 from . import parsebam
 from . import parsecontigs
 from . import cluster
 from . import benchmark
-from . import filtercontigs
 from . import encode
 
