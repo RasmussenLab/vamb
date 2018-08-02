@@ -196,7 +196,7 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if verbose:
-            print('\tEpoch: {}\tLoss: {:.4f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
+            print('\tEpoch: {}\tLoss: {:.1f}\tCE: {:.5f}\tMSE: {:.5f}\tKLD: {:.5f}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
@@ -270,6 +270,11 @@ class VAE(_nn.Module):
         if evaluate is False and (errorsum is None or mseratio is None):
             raise ValueError('If not set in evaluation mode, errorsum and '
                              'mseratio must be set.')
+            
+        # Set random values
+        elif evaluate is True:
+            errorsum = 1000
+            mseratio = 0.2
             
         dictionary = _torch.load(path)
 
@@ -376,15 +381,15 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
     optimizer = _optim.Adam(model.parameters(), lr=lrate)
     
     if verbose:
-        print('\tCE factor:', cefactor, file=logfile)
-        print('\tMSE factor:', msefactor, file=logfile)
+        print('\tErrorsum:', errorsum, file=logfile)
+        print('\tMSE ratio:', mseratio, file=logfile)
         print('\tCUDA:', cuda, file=logfile)
         print('\tN latent:', nlatent, file=logfile)
         print('\tN hidden:', ', '.join(map(str, nhiddens)), file=logfile)
         print('\tN contigs:', depths.shape[0], file=logfile)
         print('\tN samples:', depths.shape[1], file=logfile)
         print('\tN epochs:', nepochs, file=logfile)
-        print('\tBatch size:', batchsize, file=logfile)
+        print('\tBatch size:', batchsize, end='\n\n', file=logfile)
    
     # Train
     for epoch in range(nepochs):

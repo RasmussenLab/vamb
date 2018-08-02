@@ -46,16 +46,12 @@
 
 
 
-__doc__ = """Metagenomic RPKM estimator
+__doc__ = """Estimate RPKM (depths) from BAM files of reads mapped to contigs.
 
-Author: Jakob Nybo Nissen, DTU Bioinformatics, jakni@bioinformatics.dtu.dk
-    
-This script calculates reads per kilobase per million mapped reads (RPKM),
-when paired end reads are mapped to a contig catalogue with BWA MEM.
-Because of the idiosyncracities of BWA, it will not be accurate with single end
-reads or any other mapper than BWA MEM.
-
-Requires the module pysam to run."""
+Usage:
+>>> bampaths = ['/path/to/bam1.bam', '/path/to/bam2.bam', '/path/to/bam3.bam']
+>>> rpkms = read_bamfiles(bampaths)
+"""
 
 
 
@@ -69,7 +65,7 @@ import gzip as _gzip
 
 
 
-DEFAULT_PROCESSES = min(8, _os.cpu_count())
+DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
 
 
@@ -179,7 +175,7 @@ def _get_contig_rpkms(path, minscore=50, minlength=2000):
 
 
 def read_bamfiles(paths, minscore=50, minlength=100,
-                  processes=DEFAULT_PROCESSES, logfile=None):
+                  subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
     
     if logfile is not None:
@@ -212,7 +208,7 @@ def read_bamfiles(paths, minscore=50, minlength=100,
     processresults = list()
 
     # Queue all the processes
-    with _multiprocessing.Pool(processes=processes) as pool:
+    with _multiprocessing.Pool(processes=subprocesses) as pool:
         for path in paths:
             arguments = (path, minscore, minlength)
             processresults.append(pool.apply_async(_get_contig_rpkms, arguments,
@@ -248,9 +244,9 @@ Input:
     path: Path to BAM file
     minscore [50]: Minimum alignment score (AS field) to consider
     minlength [100]: Ignore any references shorter than N bases 
-    processes [{}]: Number of processes to spawn
+    subprocesses [{}]: Number of subprocesses to spawn
     logfile: [None] File to print progress to
 
 Output: A (n_contigs x n_samples) Numpy array with RPKM
-""".format(DEFAULT_PROCESSES)
+""".format(DEFAULT_SUBPROCESSES)
 
