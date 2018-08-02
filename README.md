@@ -32,7 +32,7 @@ You then presumably have access to the vamb directory with this notebook, so jus
 
 Take a brief look on the options with:
 
-    [jakni@nissen:scripts]$ python vamb/runvamb.py --help
+    [jakni@nissen:scripts]$ python vamb/run.py --help
 
 Do the defaults look alright? They probably do, but you might want to check number of processes to launch, GPU acceleration and whether you want the faster `tandemclustering` option enabled.
 
@@ -40,40 +40,10 @@ Then just do:
 
     [jakni@nissen:scripts]$ python vamb/runvamb.py outdir contigs.fna path/to/bamfiles/*.bam
 
-# Running from command line
 
-You can run either the entire pipeline from commandline, or each module independently.
+# Advanced usage
 
----
-
-__For the entire pipeline__, you need to use the `runvamb.py` script:
-
-    [jakni@nissen:~]$ python Documents/scripts/vamb/runvamb.py --help
-    usage: python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]
-
-    Run the Vamb pipeline.
-
-    Creates a new direcotry and runs each module of the Vamb pipeline in the
-    new directory. Does not yet support resuming stopped runs - in order to do so,
-    
-    [ lines elided ]
-
-You use it like this:
-
-    [jakni@nissen:~] python path/to/vamb/runvamb.py output_directory contig.fna path/to/bamfiles/*.bam
-    
-__For each module__, you find the relevant script:
-
-    [jakni@nissen:~]$ python Documents/scripts/vamb/parsecontigs.py --help
-    usage: parsecontigs.py contigs.fna(.gz) tnfout lengthsout
-
-    Calculate z-normalized tetranucleotide frequency from a FASTA file.
-    
-    [ lines elided ]
-
-# Walkthrough from within Python interpreter
-
-See the notebooks in the `doc` directory for an in-depth walkthrough of the Vamb package.
+If you want to extend Vamb, run only a part of the pipeline or run with altered inputs, you'll need to import it as Python module and run it from within the Python interpreter. See the tutorials in the `doc` directory.
 
 # Troubleshooting
 

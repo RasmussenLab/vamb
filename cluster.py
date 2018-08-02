@@ -278,6 +278,11 @@ def _check_inputs(max_steps, inner, outer):
 def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
     """Checks matrix, labels, nsamples, maxsize and estimates inner if necessary."""
     
+    if logfile is None:
+        warningfile = _sys.stderr
+    else:
+        warningfile = logfile
+    
     if len(matrix) < 1:
         raise ValueError('Matrix must have at least 1 observation.')
     
@@ -305,19 +310,24 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
             inner, support, separation = _gt
             outer = inner
             
+            if logfile is not None:
+                print('Clustering threshold:', inner, file=logfile)
+                print('Threshold support:', support, file=logfile)
+                print('Threshold separation:', separation, file=logfile)
+            
             if separation < 0.25:
                 sep = round(separation * 100, 1)
                 wn = '\tWarning: Only {}% of contigs has well-separated threshold'
-                print(wn.format(sep), file=logfile)
+                print(wn.format(sep), file=warningfile)
 
             if support < 0.50:
                 sup = round(support * 100, 1)
                 wn = '\tWarning: Only {}% of contigs has *any* observable threshold'
-                print(wn.format(sup), file=logfile)
+                print(wn.format(sup), file=warningfile)
                 
         except _threshold.TooLittleData as error:
             wn = '\tWarning: Too little data: {}. Setting threshold to 0.08'
-            print(wn.format(error.args[0]), file=logfile)
+            print(wn.format(error.args[0]), file=warningfile)
             inner = outer = 0.08
         
     return labels, inner, outer
@@ -337,6 +347,7 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [1000]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
+        logfile: Print threshold estimates and certainty to file [None]
     
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
@@ -346,9 +357,6 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         
     inner, outer = _check_inputs(max_steps, inner, outer)
     labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
-    
-    if logfile is not None:
-        print('Clustering threshold:', inner, file=logfile)
     
     return _cluster(matrix, labels, inner, outer, max_steps)
 
@@ -369,6 +377,7 @@ def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [1000]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
+        logfile: Print threshold estimates and certainty to file [None]
     
     Output: {(partition, medoid): set(labels_in_cluster) dictionary}
     """
@@ -378,9 +387,6 @@ def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         
     inner, outer = _check_inputs(max_steps, inner, outer)
     labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
-    
-    if logfile is not None:
-        print('\tClustering threshold:', inner, file=logfile)
     
     randomstate = _np.random.RandomState(324645) 
     
@@ -410,7 +416,9 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         min_size: Don't output clusters smaller than N contigs
         header: Commented one-line header to add
         
-    Output: None
+    Outputs:
+        clusternumber: Number of clusters written
+        ncontigs: Number of contigs written
     """
     
     if not hasattr(filehandle, 'writable') or not filehandle.writable():
@@ -429,6 +437,8 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         print(header, file=filehandle)
     
     clusternumber = 0
+    ncontigs = 0
+    
     for clustername, contigs in clusters:
         if clusternumber == max_clusters:
             break
@@ -442,6 +452,9 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
             print(clustername, contig, sep='\t', file=filehandle)
             
         clusternumber += 1
+        ncontigs += len(contigs)
+        
+    return clusternumber, contigs
 
 
 

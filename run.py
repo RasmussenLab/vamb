@@ -8,7 +8,7 @@ import time
 
 
 
-sys.path.append('../..')
+sys.path.append('..')
 import vamb
 
 
@@ -17,45 +17,55 @@ DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
 
 
-def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
-         nhiddens, nlatent, nepochs, batchsize, cuda, errorsum, mseratio,
-         minclustersize, maxclusters, logfile):
-    # Assume all files are as they should be
+def calc_tnf(outdir, fastapath, mincontiglength, logfile):
+    begintime = time.time()
     
-    # Print starting vamb version ...
-    print('Starting Vamb version ', '.'.join(map(str, vamb.__version__)), file=logfile)
-    print('\tDate and time is', datetime.datetime.now(), file=logfile)
-    starttime = time.time()
-    
-    # Get TNFs, save as npz
     print('\nCalculating TNF', file=logfile)
-    
+        
     with open(fastapath, 'rb') as tnffile:
         tnfs, contignames, contiglengths = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
-    del contiglengths
-    
+        
     vamb.vambtools.write_npz(os.path.join(outdir, 'tnf.npz'), tnfs)
-    tnfdonetime = time.time()
-    seconds = round(tnfdonetime - starttime, 2)
-    print('\tCalculated TNF in {} seconds.'.format(seconds), file=logfile)
     
-    # Parse BAMs, save as npz
-    print('\nParsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses), file=logfile)
+    elapsed = round(time.time() - begintime, 2)
+    ncontigs = len(contiglengths)
+    nbases = contiglengths.sum()
+    print('\tProcessed {} bases in {} contigs'.format(nbases, ncontigs), file=logfile)
+    
+    print('\tCalculated TNF in {} seconds.'.format(elapsed), file=logfile)
+    
+    return tnfs, contignames
+
+
+
+def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses, ncontigs, logfile):
+    begintime = time.time()
+
+    print('\nCalculating RPKM', file=logfile)
+    print('\tParsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses), file=logfile)
     rpkms = vamb.parsebam.read_bamfiles(bampaths, minalignscore, mincontiglength, subprocesses, logfile=logfile)
     
-    if len(rpkms) != len(contignames):
+    if len(rpkms) != ncontigs:
         raise ValueError('Number of FASTA vs BAM file headers do not match. '
                          'Are you sure the BAM files originate from same FASTA file '
                          'and have headers?')
         
     vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
-    bamdonetime = time.time()
-    seconds = round(bamdonetime - tnfdonetime, 2)
-    print('\tCalculated RPKM in {} seconds.'.format(seconds), file=logfile)
+    elapsed = round(time.time() - begintime, 2)
+    print('\tCalculated RPKM in {} seconds.'.format(elapsed), file=logfile)
     
-    # Train, save model
+    return rpkms
+
+
+
+def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
+             errorsum, mseratio, logfile):
+    
+    begintime = time.time()
+    
     print('\nTraining VAE', file=logfile)
-    modelpath = os.path.join(outdir, 'model')
+    
+    modelpath = os.path.join(outdir, 'model.pt')
     vae, dataloader = vamb.encode.trainvae(rpkms, tnfs, nhiddens=nhiddens, nlatent=nlatent,
                                           nepochs=nepochs, batchsize=batchsize, cuda=cuda,
                                           errorsum=errorsum, mseratio=mseratio, verbose=True,
@@ -63,25 +73,60 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
     
     latent = vae.encode(dataloader)
     vamb.vambtools.write_npz(os.path.join(outdir, 'latent.npz'), latent)
-    del tnfs, rpkms, dataloader
     
-    encodedonetime = time.time()
-    seconds = round(encodedonetime - bamdonetime, 2)
-    print('\tTrained VAE and encoded in {} seconds.'.format(seconds), file=logfile)
+    elapsed = round(time.time() - begintime, 2)
+    print('\tTrained VAE and encoded in {} seconds.'.format(elapsed), file=logfile)
     
-    # Cluster, save tsv file
+    return latent
+
+
+
+def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
+    begintime = time.time()
+    
     print('\nClustering', file=logfile)
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames, logfile=logfile)
     
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
-        vamb.cluster.write_clusters(clustersfile, clusteriterator, max_clusters=maxclusters, min_size=minclustersize)
+        clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile,
+                                                              clusteriterator,
+                                                              max_clusters=maxclusters,
+                                                              min_size=minclustersize)
+    
+    print('\tClustered {} contigs in {} bins.'.format(ncontigs, clusternumber), file=logfile)
     
     clusterdonetime = time.time()
-    seconds = round(clusterdonetime - encodedonetime, 2)
-    print('\tClustered contigs in {} seconds.'.format(seconds), file=logfile)
+    elapsed = round(time.time() - begintime, 2)
+    print('\tClustered contigs in {} seconds.'.format(elapsed), file=logfile)
+
+
+
+def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
+         nhiddens, nlatent, nepochs, batchsize, cuda, errorsum, mseratio,
+         minclustersize, maxclusters, logfile):
     
-    seconds = round(clusterdonetime - starttime, 2)
-    print('\nDone with Vamb in {} seconds.'.format(seconds), file=logfile)
+    # Print starting vamb version ...
+    print('Starting Vamb version ', '.'.join(map(str, vamb.__version__)), file=logfile)
+    print('\tDate and time is', datetime.datetime.now(), file=logfile)
+    begintime = time.time()
+    
+    # Get TNFs, save as npz
+    tnfs, contignames = calc_tnf(outdir, fastapath, mincontiglength, logfile)
+    
+    # Parse BAMs, save as npz
+    rpkms = calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses, len(contignames), logfile)
+    
+    # Train, save model
+    latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
+             errorsum, mseratio, logfile)
+    
+    del tnfs, rpkms
+    
+    # Cluster, save tsv file
+    cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)
+    
+    elapsed = round(time.time() - begintime, 2)
+    print('\nCompleted Vamb in {} seconds.'.format(elapsed), file=logfile)
 
 
 
@@ -110,7 +155,7 @@ reqos.add_argument('bamfiles', help='path to BAM files', nargs='+')
 inputos = parser.add_argument_group(title='IO options', description=None)
 
 inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
-                     help='ignore sequences shorter than this [100]')
+                     help='ignore contigs shorter than this [100]')
 inputos.add_argument('-a', dest='minascore', metavar='', type=int, default=50,
                      help='ignore reads with alignment score below this [50]')
 inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
@@ -126,9 +171,9 @@ vambos.add_argument('-l', dest='nlatent', metavar='', type=int,
 vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
                     default=300, help='epochs [300]')
 vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
-                    default=100, help='batch size [100]')
+                    default=128, help='batch size [128]')
 vambos.add_argument('-s', dest='errorsum',  metavar='',type=float,
-                    default=1000.0, help='Amount to learn [1000]')
+                    default=500.0, help='Amount to learn [500]')
 vambos.add_argument('-r', dest='mseratio',  metavar='',type=float,
                     default=0.2, help='Weight of TNF versus depth [0.2]')
 vambos.add_argument('--cuda', help='use GPU [False]', action='store_true')
