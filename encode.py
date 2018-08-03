@@ -307,7 +307,7 @@ class VAE(_nn.Module):
 
 
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
+def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=400,
              batchsize=128, cuda=False, errorsum=1000, mseratio=0.2,
              lrate=1e-4, verbose=False, logfile=_sys.stdout, modelfile=None):
     
@@ -320,10 +320,10 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=300,
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
         nhiddens: List of n_neurons in the hidden layers of VAE [325, 325]
         nlatent: Number of n_neurons in the latent layer [40]
-        nepochs: Train for this many epochs before encoding [300]
+        nepochs: Train for this many epochs before encoding [400]
         batchsize: Mini-batch size for training [128]
         cuda: Use CUDA (GPU acceleration) [False]
-        errorsum: Balances role of output error versus surprise in loss [1000]
+        errorsum: How much latent layer can deviate from prior [1000]
         mseratio: Balances error from TNF versus depths in loss [0.2]
         lrate: Learning rate for the optimizer [1e-4]
         verbose: Print loss and other measures to stdout each epoch [False]

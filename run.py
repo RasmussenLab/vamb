@@ -75,7 +75,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
     vamb.vambtools.write_npz(os.path.join(outdir, 'latent.npz'), latent)
     
     elapsed = round(time.time() - begintime, 2)
-    print('\tTrained VAE and encoded in {} seconds.'.format(elapsed), file=logfile)
+    print('\n\tTrained VAE and encoded in {} seconds.'.format(elapsed), file=logfile)
     
     return latent
 
@@ -169,11 +169,11 @@ vambos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
 vambos.add_argument('-l', dest='nlatent', metavar='', type=int,
                     default=40, help='latent neurons [40]')
 vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
-                    default=300, help='epochs [300]')
+                    default=400, help='epochs [400]')
 vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
                     default=128, help='batch size [128]')
 vambos.add_argument('-s', dest='errorsum',  metavar='',type=float,
-                    default=500.0, help='Amount to learn [500]')
+                    default=1000.0, help='Amount to learn [1000]')
 vambos.add_argument('-r', dest='mseratio',  metavar='',type=float,
                     default=0.2, help='Weight of TNF versus depth [0.2]')
 vambos.add_argument('--cuda', help='use GPU [False]', action='store_true')
