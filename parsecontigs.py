@@ -49,11 +49,6 @@ def read_contigs(byte_iterator, minlength=100):
     tnfs = _np.array(tnf_list, dtype=_np.float32)
     del tnf_list
     
-    if tnfs.ndim < 2 or tnfs.shape[1] < 2:
-        raise IndexError('Cannot normalize less than 2 contigs')
-    
-    _vambtools.zscore(tnfs, axis=0, inplace=True)
-    
     lengths = _np.array(lengths, dtype=_np.int)
     contignames = _np.array(contignames)
 
