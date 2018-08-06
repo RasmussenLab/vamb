@@ -394,3 +394,32 @@ def filtercontigs(infile, outfile, minlength=2000):
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
 
+
+
+def maskbases(lines):
+    """Masks IUPAC ambigious DNA bases and uracil to N
+    
+    Input: Iterator of binary lines
+    Output: Iterator of binary lines
+    """
+    
+    mask = bytes.maketrans(b'swkmyrubdhtSWKMYRUBDHT', b'NNNNNNNNNNNNNNNNNNNNNN')
+    
+    firstline = next(lines)
+    
+    if not isinstance(firstline, bytes):
+        raise TypeError("maskbases takes lines of type 'byte', not ", type(firstline))
+    
+    if firstline[0] == 62:
+        yield firstline
+        
+    else:
+        yield firstline.translate(mask)
+        
+    for line in lines:
+        if line[0] == 62:
+            yield line
+
+        else:
+            yield line.translate(mask)
+
