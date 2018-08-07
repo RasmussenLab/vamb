@@ -1,4 +1,3 @@
-
 import sys
 import os
 import torch
@@ -7,8 +6,7 @@ import datetime
 import time
 
 
-
-sys.path.append('..')
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import vamb
 
 
@@ -165,17 +163,17 @@ inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DE
 vambos = parser.add_argument_group(title='Training options', description=None)
 
 vambos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
-                    default=[325, 325], help='hidden neurons [325 325]')
+                    default=[325, 325, 325], help='hidden neurons [325 325 325]')
 vambos.add_argument('-l', dest='nlatent', metavar='', type=int,
-                    default=40, help='latent neurons [40]')
+                    default=40, help='latent neurons [100]')
 vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
                     default=400, help='epochs [400]')
 vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
                     default=128, help='batch size [128]')
 vambos.add_argument('-s', dest='errorsum',  metavar='',type=float,
-                    default=1000.0, help='Amount to learn [1000]')
+                    default=1000.0, help='Amount to learn [3000]')
 vambos.add_argument('-r', dest='mseratio',  metavar='',type=float,
-                    default=0.2, help='Weight of TNF versus depth [0.2]')
+                    default=0.2, help='Weight of TNF versus depth [0.25]')
 vambos.add_argument('--cuda', help='use GPU [False]', action='store_true')
 
 clusto = parser.add_argument_group(title='Clustering options', description=None)
