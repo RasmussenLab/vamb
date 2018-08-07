@@ -306,14 +306,17 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
             raise ValueError('maxsize must be positive number')
         
         try:
+            if logfile is not None:
+                print('\tEstimating threshold with {} samples'.format(nsamples), file=logfile)
+            
             _gt = _threshold.getthreshold(matrix, _pearson_distances, nsamples, maxsize)
             inner, support, separation = _gt
             outer = inner
             
             if logfile is not None:
-                print('Clustering threshold:', inner, file=logfile)
-                print('Threshold support:', support, file=logfile)
-                print('Threshold separation:', separation, file=logfile)
+                print('\tClustering threshold:', inner, file=logfile)
+                print('\tThreshold support:', support, file=logfile)
+                print('\tThreshold separation:', separation, file=logfile)
             
             if separation < 0.25:
                 sep = round(separation * 100, 1)
@@ -454,7 +457,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         clusternumber += 1
         ncontigs += len(contigs)
         
-    return clusternumber, contigs
+    return clusternumber, ncontigs
 
 
 
