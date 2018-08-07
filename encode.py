@@ -71,7 +71,7 @@ class VAE(_nn.Module):
         encodes the data in the data loader and returns the encoded matrix
     """
     
-    def __init__(self, nsamples, ntnf, hiddens, latent, cuda, cefactor, msefactor, dropout):
+    def __init__(self, nsamples, ntnf, hiddens, latent, cuda, cefactor, msefactor):
         super(VAE, self).__init__()
       
         # Initialize simple attributes
@@ -83,7 +83,6 @@ class VAE(_nn.Module):
         self.nlatent = latent
         self.cefactor = cefactor
         self.msefactor = msefactor
-        self.dropout = dropout
       
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -111,14 +110,13 @@ class VAE(_nn.Module):
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.softplus = _nn.Softplus()
-        self.dropoutlayer = _nn.Dropout(p=self.dropout)
    
     def _encode(self, tensor):
         tensors = list()
         
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
-            tensor = self.dropoutlayer(encodernorm(self.relu(encoderlayer(tensor))))
+            tensor = encodernorm(self.relu(encoderlayer(tensor)))
             tensors.append(tensor)
       
         # Latent layers
@@ -144,7 +142,7 @@ class VAE(_nn.Module):
         tensors = list()
         
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
-            tensor = self.dropoutlayer(decodernorm(self.relu(decoderlayer(tensor))))
+            tensor = decodernorm(self.relu(decoderlayer(tensor)))
             tensors.append(tensor)
             
         reconstruction = self.outputlayer(tensor)
@@ -261,7 +259,6 @@ class VAE(_nn.Module):
     def save(self, filehandle):
         state = {'cefactor': self.cefactor,
                  'msefactor': self.msefactor,
-                 'dropout': self.dropout,
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
                  'nsamples': self.nsamples,
@@ -287,13 +284,12 @@ class VAE(_nn.Module):
         
         cefactor = dictionary['cefactor']
         msefactor = dictionary['msefactor']
-        dropout = dictionary['dropout']
         nhiddens = dictionary['nhiddens']
         nlatent = dictionary['nlatent']
         nsamples = dictionary['nsamples']
         state = dictionary['state']
 
-        vae = cls(nsamples, 136, nhiddens, nlatent, cuda, cefactor, msefactor, dropout)
+        vae = cls(nsamples, 136, nhiddens, nlatent, cuda, cefactor, msefactor)
         vae.load_state_dict(state)
         
         if cuda:
@@ -306,8 +302,8 @@ class VAE(_nn.Module):
 
 
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
-             batchsize=256, cuda=False, errorsum=3000, mseratio=0.25, dropout=0.05,
+def trainvae(depths, tnf, nhiddens=[325, 325, 325], nlatent=100, nepochs=400,
+             batchsize=128, cuda=False, errorsum=3000, mseratio=0.25,
              lrate=1e-4, verbose=False, logfile=_sys.stdout, modelfile=None):
     
     """Create an latent encoding iterator from depths array and tnf array.
@@ -317,14 +313,13 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
     Inputs:
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
-        nhiddens: List of n_neurons in the hidden layers of VAE [325, 325]
+        nhiddens: List of n_neurons in the hidden layers of VAE [325, 325, 325]
         nlatent: Number of n_neurons in the latent layer [100]
         nepochs: Train for this many epochs before encoding [400]
-        batchsize: Mini-batch size for training [256]
+        batchsize: Mini-batch size for training [128]
         cuda: Use CUDA (GPU acceleration) [False]
         errorsum: How much latent layer can deviate from prior [3000]
         mseratio: Balances error from TNF versus depths in loss [0.25]
-        dropout: Dropout of hidden layers [0.05]
         lrate: Learning rate for the optimizer [1e-4]
         verbose: Print loss and other measures to stdout each epoch [False]
         logfile: Print loss to this file if verbose is True
@@ -354,9 +349,6 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
     if errorsum <= 0:
         raise ValueError('errorsum must be > 0')
         
-    if not (0 < dropout < 1):
-        raise ValueError('dropout must be 0 < dropout < 1')
-        
     if not (0 < mseratio < 1):
         raise ValueError('mseratio must be 0 < mseratio < 1')
     
@@ -376,7 +368,7 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
     msefactor = errorsum * mseratio / expected_mse
         
     # Instantiate the VAE
-    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, cefactor, msefactor, dropout)
+    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, cefactor, msefactor)
     
     if cuda:
         model.cuda()
@@ -393,7 +385,6 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
         print('\tN samples:', depths.shape[1], file=logfile)
         print('\tN epochs:', nepochs, file=logfile)
         print('\tBatch size:', batchsize, file=logfile)
-        print('\tDropout:', dropout, end='\n\n', file=logfile)
    
     # Train
     for epoch in range(nepochs):
