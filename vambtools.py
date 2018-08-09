@@ -260,7 +260,7 @@ def loadfasta(byte_iterator, keep=None, comment=b'#'):
 
 
 
-def writebins(directory, bins, fastadict, maxbins=250):
+def write_bins(directory, bins, fastadict, maxbins=250):
     """Writes bins as FASTA files in a directory, one file per bin.
     
     Inputs:
@@ -278,13 +278,14 @@ def writebins(directory, bins, fastadict, maxbins=250):
     
     # Check that the directory is not a non-directory file,
     # and that its parent directory indeed exists
-    parentdir = _os.path.dirname(directory)
+    abspath = os.path.abspath(directory)
+    parentdir = _os.path.dirname(abspath)
     
     if parentdir != '' and not _os.path.isdir(parentdir):
         raise NotADirectoryError(parentdir)
         
-    if _os.path.isfile(directory):
-        raise NotADirectoryError(directory)
+    if _os.path.isfile(abspath):
+        raise NotADirectoryError(abspath)
     
     # Check that all contigs in all bins are in the fastadict
     allcontigs = set()
