@@ -1,7 +1,11 @@
 
 #!/usr/bin/env python3
 
-__doc__ = """Iterative medoid clustering of Numpy arrays.
+__doc__ = """Iterative medoid clustering.
+
+Usage:
+>>> cluster_iterator = cluster(rpkms, tnfs, labels=contignames)
+>>> clusters = dict(cluster_iterator)
 
 Implements two core functions: cluster and tandemcluster, along with the helper
 functions writeclusters and readclusters.
@@ -337,7 +341,7 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
 
 
 
-def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
+def cluster(matrix, labels=None, inner=None, outer=None, max_steps=25,
             normalized=False, nsamples=2000, maxsize=2500, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
     
@@ -346,7 +350,7 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         labels: None or Numpy array with labels for matrix rows [None = ints]
         inner: Optimal medoid search within this distance from medoid [None = auto]
         outer: Radius of clusters extracted from medoid. [None = inner]
-        max_steps: Stop searching for optimal medoid after N futile attempts [15]
+        max_steps: Stop searching for optimal medoid after N futile attempts [25]
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [1000]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
@@ -355,7 +359,7 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
     
-    if not normalized:
+    if not normalized is True:
         matrix = _vambtools.zscore(matrix, axis=1)
         
     inner, outer = _check_inputs(max_steps, inner, outer)
@@ -365,7 +369,7 @@ def cluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
 
 
 
-def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
+def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=25,
             normalized=False, nsamples=2000, maxsize=2500, logfile=None):
     """Splits the datasets, then clusters each partition before merging
     the resulting clusters. This is faster, especially on larger datasets, but
@@ -376,7 +380,7 @@ def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=15,
         labels: None or Numpy array with labels for matrix rows [None = ints]
         inner: Optimal medoid search within this distance from medoid [None = auto]
         outer: Radius of clusters extracted from medoid. [None = inner]
-        max_steps: Stop searching for optimal medoid after N futile attempts [15]
+        max_steps: Stop searching for optimal medoid after N futile attempts [25]
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [1000]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
