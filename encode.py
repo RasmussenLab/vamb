@@ -22,7 +22,7 @@ import os as _os
 import numpy as _np
 import torch as _torch
 
-from math import log as _log
+from math import log as _log, cos as _cos
 
 from torch import nn as _nn
 from torch import optim as _optim 
@@ -170,13 +170,14 @@ class VAE(_nn.Module):
         
         return loss, ce, mse, kld
     
-    def trainmodel(self, data_loader, epoch, optimizer, verbose, outfile=_sys.stdout):
+    def trainmodel(self, data_loader, epoch, optimizer, decay, verbose, outfile=_sys.stdout):
         self.train()
 
         epoch_loss = 0
         epoch_kldloss = 0
         epoch_mseloss = 0
         epoch_celoss = 0
+        learning_rate = optimizer.param_groups[0]['lr']
 
         for depths_in, tnf_in in data_loader:
             depths = _Variable(depths_in)
@@ -202,13 +203,16 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if verbose:
-            print('\tEpoch: {}\tLoss: {:.7f}\tCE: {:.7f}\tMSE: {:.7f}\tKLD: {:.7f}'.format(
+            print('\tEpoch: {}\tLoss: {:.7f}\tCE: {:.7f}\tMSE: {:.7f}\tKLD: {:.7f}\tLR: {:.4e}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
                   epoch_mseloss / len(data_loader),
-                  epoch_kldloss / len(data_loader)
+                  epoch_kldloss / len(data_loader),
+                  learning_rate
                   ), file=outfile)
+            
+        optimizer.param_groups[0]['lr'] = learning_rate * decay
             
     def encode(self, data_loader):
         """Encode a data loader to a latent representation with VAE
@@ -306,8 +310,8 @@ class VAE(_nn.Module):
 
 
 def trainvae(depths, tnf, nhiddens=[325, 325, 325], nlatent=100, nepochs=400,
-             batchsize=128, cuda=False, capacity=3000, mseratio=0.1,
-             lrate=1e-4, verbose=False, logfile=_sys.stdout, modelfile=None):
+             batchsize=128, cuda=False, capacity=1000, mseratio=0.1, lrate=1e-2,
+             decay=0.98, verbose=False, logfile=_sys.stdout, modelfile=None):
     
     """Create an latent encoding iterator from depths array and tnf array.
     First trains the VAE and then returns an iterator yielding the encoding
@@ -316,17 +320,18 @@ def trainvae(depths, tnf, nhiddens=[325, 325, 325], nlatent=100, nepochs=400,
     Inputs:
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
-        nhiddens: List of n_neurons in the hidden layers of VAE [325, 325, 325]
+        nhiddens: List of n_neurons in the hidden layers [325, 325, 325]
         nlatent: Number of n_neurons in the latent layer [100]
         nepochs: Train for this many epochs before encoding [400]
         batchsize: Mini-batch size for training [128]
         cuda: Use CUDA (GPU acceleration) [False]
-        capacity: How much latent layer can deviate from prior [3000]
+        capacity: How much latent layer can deviate from prior [1000]
         mseratio: Balances error from TNF versus depths in loss [0.1]
-        lrate: Learning rate for the optimizer [1e-4]
+        lrate: Starting learning rate for the optimizer [1e-2]
+        decay: Learning rate multiplier per epoch [0.98]
         verbose: Print loss and other measures to stdout each epoch [False]
-        logfile: Print loss to this file if verbose is True
-        modelfile: Save the models weights in this file if not None
+        logfile: Print loss to this file if verbose is True [sys.stdout]
+        modelfile: Save the models weights in this file if not None [None]
         
     Outputs:
         model: The trained VAE
@@ -348,6 +353,9 @@ def trainvae(depths, tnf, nhiddens=[325, 325, 325], nlatent=100, nepochs=400,
         
     if lrate < 0:
         raise ValueError('Learning rate cannot be negative')
+        
+    if not (0 < decay <= 1):
+        raise ValueError('Decay must be in interval ]0:1]')
         
     if capacity <= 0:
         raise ValueError('capacity must be > 0')
@@ -382,11 +390,13 @@ def trainvae(depths, tnf, nhiddens=[325, 325, 325], nlatent=100, nepochs=400,
         print('\tN contigs:', depths.shape[0], file=logfile)
         print('\tN samples:', depths.shape[1], file=logfile)
         print('\tN epochs:', nepochs, file=logfile)
+        print('\tLearning rate:', lrate, file=logfile)
+        print('\tDecay:', decay, file=logfile)
         print('\tBatch size:', batchsize, file=logfile, end='\n\n')
    
     # Train
     for epoch in range(nepochs):
-        model.trainmodel(data_loader, epoch, optimizer, verbose, logfile)
+        model.trainmodel(data_loader, epoch, optimizer, decay, verbose, logfile)
 
     # Save weights - Lord forgive me, for I have sinned when catching all exceptions
     if modelfile is not None:

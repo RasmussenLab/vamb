@@ -1,9 +1,11 @@
+
 import sys
 import os
 import torch
 import argparse
 import datetime
 import time
+
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -57,7 +59,7 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses, nc
 
 
 def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
-             errorsum, mseratio, logfile):
+             capacity, mseratio, logfile):
     
     begintime = time.time()
     
@@ -66,7 +68,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
     modelpath = os.path.join(outdir, 'model.pt')
     vae, dataloader = vamb.encode.trainvae(rpkms, tnfs, nhiddens=nhiddens, nlatent=nlatent,
                                           nepochs=nepochs, batchsize=batchsize, cuda=cuda,
-                                          errorsum=errorsum, mseratio=mseratio, verbose=True,
+                                          capacity=capacity, mseratio=mseratio, verbose=True,
                                           logfile=logfile, modelfile=modelpath)
     
     latent = vae.encode(dataloader)
@@ -100,7 +102,7 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
 
 
 def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
-         nhiddens, nlatent, nepochs, batchsize, cuda, errorsum, mseratio,
+         nhiddens, nlatent, nepochs, batchsize, cuda, capacity, mseratio,
          minclustersize, maxclusters, logfile):
     
     # Print starting vamb version ...
@@ -116,7 +118,7 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
     
     # Train, save model
     latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
-             errorsum, mseratio, logfile)
+             capacity, mseratio, logfile)
     
     del tnfs, rpkms
     
@@ -170,10 +172,10 @@ vambos.add_argument('-e', dest='nepochs', metavar='', type=int,
                     default=400, help='epochs [400]')
 vambos.add_argument('-b', dest='batchsize', metavar='', type=int,
                     default=128, help='batch size [128]')
-vambos.add_argument('-s', dest='errorsum',  metavar='',type=float,
-                    default=1000.0, help='Amount to learn [3000]')
+vambos.add_argument('-s', dest='capacity',  metavar='',type=float,
+                    default=1000.0, help='Amount to learn [1000]')
 vambos.add_argument('-r', dest='mseratio',  metavar='',type=float,
-                    default=0.2, help='Weight of TNF versus depth [0.25]')
+                    default=0.2, help='Weight of TNF versus depth [0.1]')
 vambos.add_argument('--cuda', help='use GPU [False]', action='store_true')
 
 clusto = parser.add_argument_group(title='Clustering options', description=None)
@@ -236,8 +238,8 @@ if args.nepochs < 1:
 if args.batchsize < 1:
     raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
 
-if args.errorsum < 0:
-    raise argparse.ArgumentTypeError('Errorsum cannot be negative')
+if args.capacity < 0:
+    raise argparse.ArgumentTypeError('Capacity cannot be negative')
     
 if args.mseratio <= 0 or args.mseratio >= 1:
     raise argparse.ArgumentTypeError('MSE ratio must be above 0 and below 1')
@@ -263,7 +265,7 @@ with open(logpath, 'w') as logfile:
          nlatent=args.nlatent,
          nepochs=args.nepochs,
          batchsize=args.batchsize,
-         errorsum=args.errorsum,
+         capacity=args.capacity,
          mseratio=args.mseratio,
          cuda=args.cuda,
          minclustersize=args.minsize,
