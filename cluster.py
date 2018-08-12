@@ -54,9 +54,8 @@ def _pearson_distances(matrix, index):
     # D = (x @ y.T - len(x)) * (-1 / 2len(x))
     
     # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
-    # Also make sure that no rows are [0, 0, 0 ... ]
     vectorlength = matrix.shape[1]
-    result = _np.dot(matrix, matrix[index].T)
+    result = _np.dot(matrix, matrix[index].T) # 70% clustering time spent on this line
     result -= vectorlength
     result *= -1 / (2 * vectorlength)
     
