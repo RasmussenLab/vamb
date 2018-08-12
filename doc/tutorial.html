@@ -11791,7 +11791,7 @@ div#notebook {
 <li><code>contigs.fna</code> - The filtered FASTA contigs which were mapped against, and</li>
 <li><code>bamfiles/*.bam</code> - The 6 .bam files from mapping the reads to the contigs above.</li>
 </ul>
-<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Parse-the-FASTA-file">2. <a href="#parsecontigs">Parse the FASTA file</a><a class="anchor-link" href="#2.-Parse-the-FASTA-file">&#182;</a></h3><h3 id="3.-Parse-the-BAM-files">3. <a href="#parsebam">Parse the BAM files</a><a class="anchor-link" href="#3.-Parse-the-BAM-files">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Summary-of-full-workflow">6. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#6.-Summary-of-full-workflow">&#182;</a></h3><h3 id="7.-Optional:-Benchmarking-your-bins">7. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#7.-Optional:-Benchmarking-your-bins">&#182;</a></h3><p><a id="importing"></a></p>
+<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Parse-the-FASTA-file">2. <a href="#parsecontigs">Parse the FASTA file</a><a class="anchor-link" href="#2.-Parse-the-FASTA-file">&#182;</a></h3><h3 id="3.-Parse-the-BAM-files">3. <a href="#parsebam">Parse the BAM files</a><a class="anchor-link" href="#3.-Parse-the-BAM-files">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Summary-of-full-workflow">6. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#6.-Summary-of-full-workflow">&#182;</a></h3><h3 id="7.-Optional:-Benchmarking-your-bins">7. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#7.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="8.-Potential-improvements-to-Vamb">8. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#8.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
 <h2 id="Importing-Vamb-and-getting-help">Importing Vamb and getting help<a class="anchor-link" href="#Importing-Vamb-and-getting-help">&#182;</a></h2><p>First step is to get Vamb imported</p>
 
 <pre><code>[jakni@nissen:~]$ python
@@ -13220,7 +13220,7 @@ bin2     contig3      108716
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">reference_path</span> <span class="o">=</span> <span class="s1">&#39;/home/jakni/Downloads/example/metabat_reference.tsv&#39;</span>
@@ -13230,6 +13230,31 @@ bin2     contig3      108716
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+<div class="output_subarea output_text output_error">
+<pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
+<span class="ansi-green-fg">&lt;ipython-input-1-911c2ed6273c&gt;</span> in <span class="ansi-cyan-fg">&lt;module&gt;</span><span class="ansi-blue-fg">()</span>
+<span class="ansi-green-intense-fg ansi-bold">      2</span> 
+<span class="ansi-green-intense-fg ansi-bold">      3</span> <span class="ansi-green-fg">with</span> open<span class="ansi-blue-fg">(</span>reference_path<span class="ansi-blue-fg">)</span> <span class="ansi-green-fg">as</span> filehandle<span class="ansi-blue-fg">:</span>
+<span class="ansi-green-fg">----&gt; 4</span><span class="ansi-red-fg">     </span>reference <span class="ansi-blue-fg">=</span> vamb<span class="ansi-blue-fg">.</span>benchmark<span class="ansi-blue-fg">.</span>Reference<span class="ansi-blue-fg">.</span>fromfile<span class="ansi-blue-fg">(</span>filehandle<span class="ansi-blue-fg">)</span>
+
+<span class="ansi-red-fg">NameError</span>: name &#39;vamb&#39; is not defined</pre>
+</div>
+</div>
+
 </div>
 </div>
 
@@ -13372,7 +13397,7 @@ bin2     contig3      108716
     <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">precision</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">yticks</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="s1">&#39;Vamb&#39;</span><span class="p">,</span> <span class="s1">&#39;MetaBat2&#39;</span><span class="p">],</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([</span><span class="n">i</span><span class="o">*</span><span class="mi">25</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)],</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">recalls</span><span class="p">)],</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">),</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Recall&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">recalls</span><span class="p">],</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">),</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Recall&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
     
     <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="mf">0.9</span><span class="p">:</span>
         <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;# of Genomes Identified&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
@@ -13421,6 +13446,63 @@ bin2     contig3      108716
 </div>
 </div>
 
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><a id="improvements"></a></p>
+<h2 id="Potential-improvements-to-Vamb">Potential improvements to Vamb<a class="anchor-link" href="#Potential-improvements-to-Vamb">&#182;</a></h2><p>Vamb is under an MIT licence, so please feel free to fork, extend, or copy Vamb however you see fit. If you do, feel free to write us an email.</p>
+<p>Here's a short wish list for improvements to Vamb we haven't had time for:</p>
+<p><strong>Better exploitation of TNF information in clustering</strong></p>
+<p>There's quite a lot of information in the TNF of contigs, and Vamb is fairly bad at exploiting it.</p>
+<p>The expected TNF distance between two contigs follows approximately a chi distribution (there's some theoretical argument for this, but more importantly, it really empirically does). Similarly, the empirical probability of two contigs belonging to different species as a function of the TNF is well modeled by the cumulative density function of a chi distribution.</p>
+<p>However, the exact shape of the chi distribution depends on the phylogenetic distance between the genomes of the contigs, and also the the lengths of the two contigs. Hence, a clustering algorithm which simply looks at the raw TNF value without taking in to account contig lengths is not as effective as it could be.</p>
+<p>When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heurisitcally estimate the parameters of the estimated chi distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a <code>scipy.stats.chi</code> object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.</p>
+<p>A possible future approach could be to encode the depths and TNF independently with the VAE (although it could still train using both depths and TNF at the same time), and, when calculating the contig-contig distances during clustering, using a heuristic approximation of the chi distribution which can be computed quickly. Alternatively, one could cluster exclusively on depths, then afterwards identify contigs in bins with divergent TNF and/or recruit unbinned contigs to bins with similar TNF.</p>
+<p><strong>Switch to a true distance measure for tandem clustering</strong></p>
+<p>There is a current problem in the implementation of tandem clustering. To explain it, let me begin at the beginning:</p>
+<p>There is a problem with the regular clustering algorithm in that it scales O(n<sup>2</sup>), and so becomes painfully slow with larger datasets. We can get around this by splitting the dataset in several partitions, and clustering each partition.</p>
+<p>But this creates another problem: When splitting the dataset, it's highly likely that the contigs of a true bin will end up in different partitions. If that happens, it's impossible for the bin to be reconstructed. And we can't easily partition in a manner which preserves the bins' integrity, because that would require us to know the bins beforehand which is the entire point of clustering!</p>
+<p>We can solve it with the following splitting function:</p>
+
+<pre><code>function split(set contigset, float INNER, float OUTER):
+    while there are more than 20,000 contigs in contigset:
+        S = random contig from contigset
+        partition = All contigs in contigset within OUTER distance of S
+        yield partition
+        superfluous = All contigs in contigset within INNER distance of S
+        delete superfluous from contigset
+
+    yield contigset # last partition with at most 20,000 elements
+
+</code></pre>
+<p>We can prove this works:</p>
+
+<pre><code>For any bin B, for any partition seed S, let C be the contig in B closest to S
+Let F be the contig in B furthest from S
+If |SC| &gt; INNER, all contigs in B remains in contigset and the bin is not split (1)
+If |SF| ≤ OUTER, all contigs in B is contained in the partition, bin is not split (2)
+Let us assume we have picked values of INNER and OUTER such that OUTER-INNER &gt; |CF| (cond. A)
+
+If |SC| &gt; INNER:
+    Bin B is not split since (1)
+
+Else it must be the case that:
+    |SC| ≤ INNER, which can be rearranged by (A) to
+    |SC| ≤ OUTER - |CF|, adding |CF| gives
+    |SC| + |CF| ≤ OUTER, and by the tringle inequality |SF| ≤ |SC| + |CF|:
+    |SF| ≤ OUTER, which, by (2) means bin B is not split
+
+</code></pre>
+<p>Hence we just need to pick values for <code>INNER</code> and <code>OUTER</code> to follow condition A, which means that the difference between <code>INNER</code> and <code>OUTER</code> should be above the cluster diameter for most realistic bins. No problem.</p>
+<p>Unfortunately, this relies on the triangle inequality <code>|SF| ≤ |SC| + |CF|</code> which does not hold true for Pearson distance and Spearman distance, and so bins will likely get split when partitioning, giving lower recalls. This implies that tandem clustering will perform better with other distance measures like 1-norm or 2-norm distance. Of course, we can't just use 1-norm distance when partitioning and then use Pearson when clustering!</p>
+<p>While it would be trivial to change the distance measure used in <code>clustering.py</code>, it is difficult to map e.g. 1-norm distances to a fixed interval [0, 1], and so we have not found a way to approximate the clustering threshold needed. Also, preliminary tests we did have shown that Pearson distance separates the latent representation slightly better than 1- or 2-norm distance (although the loss of accurary by poor partitioning might offset this).</p>
+<p><strong>Create a better autoencoder</strong></p>
+<p>We aren't actually machine learning experts, and the details of the VAE implementation has been a combination of "I think that it might work if we...", blind testing ("stochastic grad student descent" is real), and reading lots of machine learning blogs. I bet there's room for improvement if someone with a solid machine learning background and a deeper theoretical knowledge of neural networks took a crack at designing a VAE for this purpose. In fact, we believe one of the strengths of the Vamb approach is that the VAE itself can likely be much better than the one we've implemented.</p>
+
+</div>
+</div>
 </div>
     </div>
   </div>
