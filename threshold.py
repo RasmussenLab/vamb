@@ -5,8 +5,6 @@ import numpy as np
 import random
 from math import sqrt
 
-
-
 # Constants:
 
 # This is the PDF of normal with µ=0, s=0.015 from -0.4975 to 0.4975 with intervals
