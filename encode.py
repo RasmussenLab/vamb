@@ -179,7 +179,7 @@ class VAE(_nn.Module):
             optimizer.zero_grad()
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
-
+                
             loss, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, mu, logsigma)
 
@@ -198,7 +198,7 @@ class VAE(_nn.Module):
                   epoch_celoss / len(data_loader),
                   epoch_mseloss / len(data_loader),
                   epoch_kldloss / len(data_loader),
-                  learning_rate
+                  learning_rate,
                   ), file=logfile)
             
         optimizer.param_groups[0]['lr'] = learning_rate * decay
@@ -296,9 +296,9 @@ class VAE(_nn.Module):
         
         return vae
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
-             batchsize=128, cuda=False, capacity=2500, mseratio=0.1, lrate=1e-4,
-             decay=1.0, logfile=None, modelfile=None):
+def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
+             batchsize=128, cuda=False, capacity=200, mseratio=0.05, lrate=1e-3,
+             decay=0.99, logfile=None, modelfile=None):
     
     """Create and train an autoencoder from depths array and tnf array.
     
@@ -306,14 +306,14 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=100, nepochs=400,
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
         nhiddens: List of n_neurons in the hidden layers [325, 325]
-        nlatent: Number of neurons in the latent layer [100]
-        nepochs: Train for this many epochs before encoding [400]
+        nlatent: Number of neurons in the latent layer [40]
+        nepochs: Train for this many epochs before encoding [200]
         batchsize: Mini-batch size for training [128]
         cuda: Use CUDA (GPU acceleration) [False]
-        capacity: How information-rich the latent layer can be [2500]
-        mseratio: Balances error from TNF versus depths in loss [0.1]
-        lrate: Starting learning rate for the optimizer [0.0001]
-        decay: Learning rate multiplier per epoch [1]
+        capacity: How information-rich the latent layer can be [200]
+        mseratio: Balances error from TNF versus depths in loss [0.05]
+        lrate: Starting learning rate for the optimizer [0.001]
+        decay: Learning rate multiplier per epoch [0.99]
         logfile: Print status updates to this file if not None [None]
         modelfile: Save models to this file if not None [None]
         
