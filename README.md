@@ -15,18 +15,29 @@ Vamb requires the following Python packages to run:
 * PyTorch
 * Numpy
 * pysam
+* Cython (to compile `_vambtools.pyx`)
 
 So make sure you have those installed. When you have that:
 
 __If you have `git` installed__:
 
-    [jakni@nissen:scripts]$ git clone https://github.com/jakobnissen/vamb vamb
+    [jakni@nissen:scripts]$ git clone https://github.com/jakobnissen/vamb
     
 __If you don't__
 
 You then presumably have access to the vamb directory with this notebook, so just put it wherever:
 
     [jakni@nissen:scripts]$ cp -r /path/to/vamb/directory vamb
+    
+__Compile the \_vambtools.pyx file to your Python version and operating system__
+
+Make sure you have Cython installed (you can install it with `pip` or your Python package manager of choice)
+
+* Go to the src/ directory in the vamb directory
+* run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
+* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
+* You can now import Vamb.
+
 
 # Quickstart
 

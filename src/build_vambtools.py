@@ -1,4 +1,4 @@
-# python build_vambtools_c.py build_ext --inplace
+# python build_vambtools.py build_ext --inplace
 from distutils.core import setup
 from Cython.Build import cythonize
 
