@@ -281,11 +281,6 @@ def _check_inputs(max_steps, inner, outer):
 def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
     """Checks matrix, labels, nsamples, maxsize and estimates inner if necessary."""
     
-    if logfile is None:
-        warningfile = _sys.stderr
-    else:
-        warningfile = logfile
-    
     if len(matrix) < 1:
         raise ValueError('Matrix must have at least 1 observation.')
     
@@ -320,25 +315,14 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
                 print('\tClustering threshold:', inner, file=logfile)
                 print('\tThreshold support:', support, file=logfile)
                 print('\tThreshold separation:', separation, file=logfile)
-            
-            if separation < 0.25:
-                sep = round(separation * 100, 1)
-                wn = '\tWarning: Only {}% of contigs has well-separated threshold'
-                print(wn.format(sep), file=warningfile)
-
-            if support < 0.50:
-                sup = round(support * 100, 1)
-                wn = '\tWarning: Only {}% of contigs has *any* observable threshold'
-                print(wn.format(sup), file=warningfile)
                 
         except _threshold.TooLittleData as error:
+            warningfile = sys.stderr if logfile is None else logfile
             wn = '\tWarning: Too little data: {}. Setting threshold to 0.08'
             print(wn.format(error.args[0]), file=warningfile)
             inner = outer = 0.08
         
     return labels, inner, outer
-
-
 
 def cluster(matrix, labels=None, inner=None, outer=None, max_steps=25,
             normalized=False, nsamples=2000, maxsize=2500, logfile=None):

@@ -6,16 +6,10 @@ import argparse
 import datetime
 import time
 
-
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import vamb
 
-
-
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
-
-
 
 def calc_tnf(outdir, fastapath, mincontiglength, logfile):
     begintime = time.time()
@@ -36,8 +30,6 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
     
     return tnfs, contignames
 
-
-
 def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses, ncontigs, logfile):
     begintime = time.time()
 
@@ -55,8 +47,6 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses, nc
     print('\tCalculated RPKM in {} seconds.'.format(elapsed), file=logfile)
     
     return rpkms
-
-
 
 def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
              capacity, mseratio, logfile):
@@ -78,8 +68,6 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, nepochs, batchsize, cuda,
     print('\n\tTrained VAE and encoded in {} seconds.'.format(elapsed), file=logfile)
     
     return latent
-
-
 
 def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     begintime = time.time()
