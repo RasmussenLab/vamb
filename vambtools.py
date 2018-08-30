@@ -404,7 +404,7 @@ def maskbases(lines):
     Output: Iterator of binary lines
     """
     
-    mask = bytes.maketrans(b'swkmyrubdhtSWKMYRUBDHT', b'NNNNNNNNNNNNNNNNNNNNNN')
+    mask = bytes.maketrans(b'swkmyrubdhvSWKMYRUBDHV', b'NNNNNNNNNNNNNNNNNNNNNN')
     
     firstline = next(lines)
     
