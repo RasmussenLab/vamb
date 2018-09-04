@@ -196,7 +196,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     lengthmask = _np.array(contiglengths, dtype=_np.int32) >= minlength
     rpkms = rpkms[lengthmask]
 
-    # If dump to disk, array returned is None instead
+    # If dump to disk, array returned is None instead of rpkm array
     if outpath is not None:
         arrayresult = None
         _np.savez_compressed(outpath, rpkms)

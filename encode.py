@@ -20,7 +20,7 @@ import torch as _torch
 from math import log as _log, cos as _cos
 
 from torch import nn as _nn
-from torch import optim as _optim 
+from torch import optim as _optim
 from torch.autograd import Variable as _Variable
 from torch.nn import functional as _F
 from torch.utils.data import DataLoader as _DataLoader
@@ -31,38 +31,53 @@ if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
 def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
-    # Normalized depths
-    depthssum = depthsarray.sum(axis=1).reshape((-1, 1))
-    depthssum[depthssum == 0] = 1
-    depthstensor = _torch.Tensor(depthsarray / depthssum)
-    
-    # Normalized TNF
-    tnftensor = _torch.Tensor(_vambtools.zscore(tnfarray, axis=0))
-    
+    # Identify zero'd observations and remove them
+    if len(depthsarray) != len(tnfarray):
+        raise ValueError('The two arrays must have same length, not lengths ' +
+                         str(len(depthsarray)) + ' and ' + str(len(tnfarray)))
+    depthssum = depthsarray.sum(axis=1)
+    tnfsum = tnfarray.sum(axis=1)
+    mask = depthssum != 0
+    mask &= tnfsum != 0
+
+    # Unfortunately, a copy is necessary. It doesn't matter much, as cluster.py
+    # will create a copy anyway after deleting an observation :(
+    depths_copy = depthsarray[mask]
+    tnf_copy = tnfarray[mask]
+    depthssum = depthssum[mask]
+
+    # Normalize arrays and create the Tensors
+    depths_copy /= depthssum.reshape((-1, 1))
+    _vambtools.zscore(tnf_copy, axis=0, inplace=True)
+    depthstensor = _torch.from_numpy(depths_copy)
+    tnftensor = _torch.from_numpy(tnf_copy)
+
+    # Create dataloader
+    workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor)
-    loader = _DataLoader(dataset=dataset, batch_size=batchsize, shuffle=True,
-                        num_workers=1, pin_memory=cuda)
-    
-    return loader
+    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
+                             shuffle=True, num_workers=workers, pin_memory=cuda)
+
+    return dataloader
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
-    
+
     init with:
         nsamples: Length of dimension 1 of depths
         ntnf: Length of dimension 1 of tnf
         hiddens: List with number of hidden neurons per layer
         latent: Number of neurons in hidden layer
         cuda: Boolean, use CUDA or not (GPU accelerated training)
-        
+
     Useful methods:
     encode(self, data_loader):
         encodes the data in the data loader and returns the encoded matrix
     """
-    
+
     def __init__(self, nsamples, ntnf, hiddens, latent, cuda, cefactor, msefactor, kldfactor):
         super(VAE, self).__init__()
-      
+
         # Initialize simple attributes
         self.usecuda = cuda
         self.nsamples = nsamples
@@ -73,92 +88,92 @@ class VAE(_nn.Module):
         self.cefactor = cefactor
         self.msefactor = msefactor
         self.kldfactor = kldfactor
-      
+
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
         self.encodernorms = _nn.ModuleList()
         self.decoderlayers = _nn.ModuleList()
         self.decodernorms = _nn.ModuleList()
-        
+
         # Add all other hidden layers (do nothing if only 1 hidden layer)
         for nin, nout in zip([self.nfeatures] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
-      
+
         # Latent layers
         self.mu = _nn.Linear(self.nhiddens[-1], self.nlatent)
         self.logsigma = _nn.Linear(self.nhiddens[-1], self.nlatent)
-            
+
         # Add first decoding layer
         for nin, nout in zip([self.nlatent] + self.nhiddens[::-1], self.nhiddens[::-1]):
             self.decoderlayers.append(_nn.Linear(nin, nout))
             self.decodernorms.append(_nn.BatchNorm1d(nout))
-      
+
         # Reconstruction (output) layer
         self.outputlayer = _nn.Linear(self.nhiddens[0], self.nfeatures)
-      
+
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.softplus = _nn.Softplus()
-   
+
     def _encode(self, tensor):
         tensors = list()
-        
+
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
             tensor = encodernorm(self.relu(encoderlayer(tensor)))
             tensors.append(tensor)
-      
+
         # Latent layers
         mu = self.mu(tensor)
         logsigma = self.softplus(self.logsigma(tensor))
-        
+
         return mu, logsigma
-   
+
     # sample with gaussian noise
     def reparameterize(self, mu, logsigma):
         epsilon = _torch.randn(mu.size(0), mu.size(1))
-        
+
         if self.usecuda:
             epsilon = epsilon.cuda()
-        
+
         epsilon = _Variable(epsilon)
-      
+
         latent = mu + epsilon * _torch.exp(logsigma/2)
-      
+
         return latent
-    
+
     def _decode(self, tensor):
         tensors = list()
-        
+
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
             tensor = decodernorm(self.relu(decoderlayer(tensor)))
             tensors.append(tensor)
-            
+
         reconstruction = self.outputlayer(tensor)
-        
+
         # Decompose reconstruction to depths and tnf signal
         depths_out = _F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
-        
+
         return depths_out, tnf_out
-    
+
     def forward(self, depths, tnf):
         tensor = _torch.cat((depths, tnf), 1)
         mu, logsigma = self._encode(tensor)
         latent = self.reparameterize(mu, logsigma)
         depths_out, tnf_out = self._decode(latent)
-        
+
         return depths_out, tnf_out, mu, logsigma
-    
+
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         ce = - _torch.mean((depths_out.log() * depths_in))
         mse = _torch.mean((tnf_out - tnf_in).pow(2))
         kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
         loss = self.cefactor * ce + self.msefactor * mse + self.kldfactor * kld
-        
+
         return loss, ce, mse, kld
-    
+
     def trainmodel(self, data_loader, epoch, optimizer, decay, logfile):
         self.train()
 
@@ -179,7 +194,7 @@ class VAE(_nn.Module):
             optimizer.zero_grad()
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
-                
+
             loss, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, mu, logsigma)
 
@@ -200,9 +215,9 @@ class VAE(_nn.Module):
                   epoch_kldloss / len(data_loader),
                   learning_rate,
                   ), file=logfile)
-            
+
         optimizer.param_groups[0]['lr'] = learning_rate * decay
-            
+
     def encode(self, data_loader):
         """Encode a data loader to a latent representation with VAE
 
@@ -212,13 +227,13 @@ class VAE(_nn.Module):
         """
 
         self.eval()
-        
+
         new_data_loader = _DataLoader(dataset=data_loader.dataset,
                                       batch_size=data_loader.batch_size,
                                       shuffle=False,
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
-        
+
         depths, tnf = data_loader.dataset.tensors
         length = len(depths)
 
@@ -249,7 +264,7 @@ class VAE(_nn.Module):
         latent_array = latent.detach().numpy()
 
         return latent_array
-    
+
     def save(self, filehandle):
         state = {'cefactor': self.cefactor,
                  'msefactor': self.msefactor,
@@ -259,24 +274,24 @@ class VAE(_nn.Module):
                  'nsamples': self.nsamples,
                  'state': self.state_dict(),
                 }
-        
+
         _torch.save(state, filehandle)
 
     @classmethod
     def load(cls, path, cuda=False, evaluate=True):
         """Instantiates a VAE from a model file.
-        
+
         Inputs:
             path: Path to model file as created by functions VAE.save,
                   encode.trainvae or torch.save(vae.state_dict(), file).
             cuda: If network should work on GPU [False]
             evaluate: Return network in evaluation mode [True]
-               
+
         Output: VAE with weights and parameters matching the saved network.
         """
-            
+
         dictionary = _torch.load(path)
-        
+
         cefactor = dictionary['cefactor']
         msefactor = dictionary['msefactor']
         kldfactor = dictionary['kldfactor']
@@ -287,21 +302,21 @@ class VAE(_nn.Module):
 
         vae = cls(nsamples, 136, nhiddens, nlatent, cuda, cefactor, msefactor, kldfactor)
         vae.load_state_dict(state)
-        
+
         if cuda:
             vae.cuda()
-            
+
         if evaluate:
             vae.eval()
-        
+
         return vae
 
 def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
              batchsize=128, cuda=False, capacity=200, mseratio=0.05, lrate=1e-3,
              decay=0.99, logfile=None, modelfile=None):
-    
+
     """Create and train an autoencoder from depths array and tnf array.
-    
+
     Inputs:
         depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
         tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
@@ -316,55 +331,57 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
         decay: Learning rate multiplier per epoch [0.99]
         logfile: Print status updates to this file if not None [None]
         modelfile: Save models to this file if not None [None]
-        
+
     Outputs:
         model: The trained VAE
         data_loader A DataLoader instance to feed the VAE for evaluation
         """
-    
+
     # Check all the args here
     if any(i < 1 for i in nhiddens):
         raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
-        
+
     if nlatent < 1:
         raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
-        
+
     if nepochs < 1:
         raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
-        
+
     if batchsize < 1:
         raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
-        
+
     if lrate < 0:
         raise ValueError('Learning rate cannot be negative')
-        
+
     if not (0 < decay <= 1):
         raise ValueError('Decay must be in interval ]0:1]')
-        
+
     if capacity <= 0:
         raise ValueError('capacity must be > 0')
-        
+
     if not (0 < mseratio < 1):
         raise ValueError('mseratio must be 0 < mseratio < 1')
-    
+
     data_loader = _dataloader_from_arrays(depths, tnf, cuda, batchsize)
-    
+
     # Get number of features
     nsamples, ntnfs = [tensor.shape[1] for tensor in data_loader.dataset.tensors]
-    
+    ncontigs = data_loader.dataset.tensors[0].shape[0]
+    n_discarded_contigs = depths.shape[0] - ncontigs
+
     # See the tutorial in documentation to see how these three are derived
     cefactor = nsamples * (1 - mseratio) / _log(nsamples)
     msefactor = mseratio
     kldfactor = 1 / capacity
-        
+
     # Instantiate the VAE
     model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, cefactor, msefactor, kldfactor)
-    
+
     if cuda:
         model.cuda()
-        
+
     optimizer = _optim.Adam(model.parameters(), lr=lrate)
-    
+
     if logfile is not None:
         print('\tCUDA:', cuda, file=logfile)
         print('\tCapacity:', capacity, file=logfile)
@@ -375,9 +392,10 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
         print('\tBatch size:', batchsize, file=logfile)
         print('\tLearning rate:', lrate, file=logfile)
         print('\tDecay:', decay, file=logfile)
-        print('\tN contigs:', depths.shape[0], file=logfile)
+        print('\tN contigs:', ncontigs, file=logfile)
+        print('\tDiscarded (zero) contigs:', n_discarded_contigs, file=logfile)
         print('\tN samples:', depths.shape[1], file=logfile, end='\n\n')
-   
+
     # Train
     for epoch in range(nepochs):
         model.trainmodel(data_loader, epoch, optimizer, decay, logfile)
@@ -388,6 +406,5 @@ def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
             model.save(modelfile)
         except:
             pass
-        
-    return model, data_loader
 
+    return model, data_loader
