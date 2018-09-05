@@ -31,7 +31,12 @@ if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
 def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
-    # Identify zero'd observations and remove them
+    """Create a PyTorch dataloader from depths and tnf arrays.
+    This function copies the underlying arrays, and zero-contigs are removed
+    from the copied dataset, and it's properly normalized before returning.
+    """
+
+    # Identify zero'd observations
     if len(depthsarray) != len(tnfarray):
         raise ValueError('The two arrays must have same length, not lengths ' +
                          str(len(depthsarray)) + ' and ' + str(len(tnfarray)))
@@ -40,8 +45,9 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     mask = depthssum != 0
     mask &= tnfsum != 0
 
-    # Unfortunately, a copy is necessary. It doesn't matter much, as cluster.py
-    # will create a copy anyway after deleting an observation :(
+    # Remove zero-observations Unfortunately, a copy is necessary.
+    # It doesn't matter much, as cluster.py will create a copy anyway when.
+    # removing observations during clustering. This cannot easily prevented.
     depths_copy = depthsarray[mask]
     tnf_copy = tnfarray[mask]
     depthssum = depthssum[mask]
