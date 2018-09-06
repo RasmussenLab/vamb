@@ -297,7 +297,8 @@ class VAE(_nn.Module):
         Output: VAE with weights and parameters matching the saved network.
         """
 
-        dictionary = _torch.load(path)
+        # Forcably load to CPU even if model was saves as GPU model
+        dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
 
         cefactor = dictionary['cefactor']
         msefactor = dictionary['msefactor']
