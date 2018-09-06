@@ -22,7 +22,6 @@ from math import log as _log, cos as _cos
 
 from torch import nn as _nn
 from torch import optim as _optim
-from torch.autograd import Variable as _Variable
 from torch.nn import functional as _F
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
@@ -160,7 +159,7 @@ class VAE(_nn.Module):
         if self.usecuda:
             epsilon = epsilon.cuda()
 
-        epsilon = _Variable(epsilon)
+        epsilon.requires_grad = True
 
         latent = mu + epsilon * _torch.exp(logsigma/2)
 
@@ -209,8 +208,8 @@ class VAE(_nn.Module):
         learning_rate = optimizer.param_groups[0]['lr']
 
         for depths_in, tnf_in in data_loader:
-            depths = _Variable(depths_in)
-            tnf = _Variable(tnf_in)
+            depths_in.requires_grad = True
+            tnf_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
@@ -269,8 +268,8 @@ class VAE(_nn.Module):
 
         row = 0
         for depths, tnf in new_data_loader:
-            depths = _Variable(depths)
-            tnf = _Variable(tnf_batch)
+            depths.requires_grad = True
+            tnf.requires_grad = True
 
             # Move input to GPU if requested
             if self.usecuda:
