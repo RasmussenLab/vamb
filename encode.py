@@ -59,10 +59,9 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     tnftensor = _torch.from_numpy(tnf_copy)
 
     # Create dataloader
-    workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
-                             shuffle=True, num_workers=workers, pin_memory=cuda)
+                             shuffle=True, num_workers=1, pin_memory=cuda)
 
     return dataloader
 
@@ -222,6 +221,8 @@ class VAE(_nn.Module):
                   learning_rate,
                   ), file=logfile)
 
+            logfile.flush()
+
         optimizer.param_groups[0]['lr'] = learning_rate * decay
 
     def encode(self, data_loader):
@@ -288,8 +289,8 @@ class VAE(_nn.Module):
         """Instantiates a VAE from a model file.
 
         Inputs:
-            path: Path to model file as created by functions VAE.save,
-                  encode.trainvae or torch.save(vae.state_dict(), file).
+            path: Path to model file as created by functions VAE.save or
+                  encode.trainvae.
             cuda: If network should work on GPU [False]
             evaluate: Return network in evaluation mode [True]
 
