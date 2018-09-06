@@ -12159,13 +12159,20 @@ DESCRIPTION
     &gt;&gt;&gt; rpkms = read_bamfiles(bampaths)
 
 FUNCTIONS
-    read_bamfiles(paths, minscore=50, minlength=100, subprocesses=4, logfile=None)
+    mergecolumns(pathlist, dtype=&lt;class &#39;numpy.float32&#39;&gt;)
+        Merges multiple npz or npy files with columns to a matrix.
+        
+        All paths must be npz arrays with the array saved as name &#39;arr_0&#39;,
+        and with the same length.
+    
+    read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100, subprocesses=4, logfile=None)
         Spawns processes to parse BAM files and get contig rpkms.
-            
+        
         Input:
-            path: Path to BAM file
+            path: List or tuple of paths to BAM files
+            dumpdirectory: [None] Dir to create and dump per-sample depths NPZ files to
             minscore [50]: Minimum alignment score (AS field) to consider
-            minlength [100]: Ignore any references shorter than N bases 
+            minlength [100]: Ignore any references shorter than N bases
             subprocesses [4]: Number of subprocesses to spawn
             logfile: [None] File to print progress to
         
@@ -12328,8 +12335,9 @@ DESCRIPTION
     Creates a variational autoencoder in PyTorch and tries to represent the depths
     and tnf in the latent space under gaussian noise.
 
-    usage:
-    &gt;&gt;&gt; vae, dataloader = trainvae(depths, tnf) # Make &amp; train VAE on Numpy arrays
+    Usage:
+    &gt;&gt;&gt; vae = VAE(nsamples=6)
+    &gt;&gt;&gt; dataloader = vae.trainmodel(depths, tnf) # Train VAE on Numpy arrays
     &gt;&gt;&gt; latent = vae.encode(dataloader) # Encode to latent representation
     &gt;&gt;&gt; latent.shape
     (183882, 40)
@@ -12338,8 +12346,8 @@ DESCRIPTION
 
 </code></pre>
 <hr>
-<p>Aha, so we need to use the <code>trainvae</code> function first, then the <code>VAE.encode</code> method. You can call the <code>help</code> functions on those, but I'm not showing that here.</p>
-<p>Training networks always take some time. If you have a GPU and CUDA installed, you can pass <code>cuda=True</code> to <code>encode.trainvae</code> to train on your GPU for increased speed. With a beefy GPU, this can make quite a difference. I run this on my laptop, so I'll just use my CPU. And I'll run just 10 epochs rather than the more suitable 200:</p>
+<p>Aha, so we need to create the VAE, then use the <code>trainmodel</code> method first, then the <code>VAE.encode</code> method. You can call the <code>help</code> functions on those, but I'm not showing that here.</p>
+<p>Training networks always take some time. If you have a GPU and CUDA installed, you can pass <code>cuda=True</code> to the VAE to train on your GPU for increased speed. With a beefy GPU, this can make quite a difference. I run this on my laptop, so I'll just use my CPU. And I'll run just 10 epochs rather than the more suitable 200:</p>
 
 </div>
 </div>
@@ -12349,9 +12357,10 @@ DESCRIPTION
 <div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/tmp/model.pt&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">modelfile</span><span class="p">:</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="p">(</span><span class="n">nsamples</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/tmp/model.pt&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">modelfile</span><span class="p">:</span>
     <span class="c1"># Print progress to stdout by passing logfile=sys.stdout</span>
-    <span class="n">vae</span><span class="p">,</span> <span class="n">dataloader</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">trainvae</span><span class="p">(</span><span class="n">rpkms</span><span class="p">,</span> <span class="n">tnfs</span><span class="p">,</span> <span class="n">nepochs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">modelfile</span><span class="o">=</span><span class="n">modelfile</span><span class="p">,</span> <span class="n">logfile</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+    <span class="n">dataloader</span> <span class="o">=</span> <span class="n">vae</span><span class="o">.</span><span class="n">trainmodel</span><span class="p">(</span><span class="n">rpkms</span><span class="p">,</span> <span class="n">tnfs</span><span class="p">,</span> <span class="n">nepochs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">modelfile</span><span class="o">=</span><span class="n">modelfile</span><span class="p">,</span> <span class="n">logfile</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -12377,19 +12386,20 @@ DESCRIPTION
 	Batch size: 128
 	Learning rate: 0.001
 	Decay: 0.99
-	N contigs: 39551
+	N contigs: 36485
+	Discarded (zero) contigs: 3066
 	N samples: 6
 
-	Epoch: 1	Loss: 0.4412315	CE: 0.1258675	MSE: 0.6463289	KLD: 1.7003178	LR: 1.0000e-03
-	Epoch: 2	Loss: 0.3303673	CE: 0.0937398	MSE: 0.4494747	KLD: 1.9371069	LR: 9.9000e-04
-	Epoch: 3	Loss: 0.3211693	CE: 0.0916947	MSE: 0.3987735	KLD: 1.9057259	LR: 9.8010e-04
-	Epoch: 4	Loss: 0.3164427	CE: 0.0906379	MSE: 0.3738174	KLD: 1.8823316	LR: 9.7030e-04
-	Epoch: 5	Loss: 0.3129756	CE: 0.0898444	MSE: 0.3583478	KLD: 1.8484672	LR: 9.6060e-04
-	Epoch: 6	Loss: 0.3109799	CE: 0.0894328	MSE: 0.3474952	KLD: 1.8197404	LR: 9.5099e-04
-	Epoch: 7	Loss: 0.3096027	CE: 0.0891323	MSE: 0.3404975	KLD: 1.8054961	LR: 9.4148e-04
-	Epoch: 8	Loss: 0.3083428	CE: 0.0888484	MSE: 0.3362110	KLD: 1.7769659	LR: 9.3207e-04
-	Epoch: 9	Loss: 0.3069859	CE: 0.0885565	MSE: 0.3306082	KLD: 1.7473984	LR: 9.2274e-04
-	Epoch: 10	Loss: 0.3065839	CE: 0.0884721	MSE: 0.3277577	KLD: 1.7491475	LR: 9.1352e-04
+	Epoch: 1	Loss: 0.4814794	CE: 0.1384806	MSE: 0.6444791	KLD: 1.7433151	LR: 1.0000e-03
+	Epoch: 2	Loss: 0.3615713	CE: 0.1030270	MSE: 0.4713160	KLD: 2.0505662	LR: 9.9000e-04
+	Epoch: 3	Loss: 0.3514335	CE: 0.1007019	MSE: 0.4212977	KLD: 2.0025282	LR: 9.8010e-04
+	Epoch: 4	Loss: 0.3466288	CE: 0.0995897	MSE: 0.3955489	KLD: 2.0067504	LR: 9.7030e-04
+	Epoch: 5	Loss: 0.3420308	CE: 0.0984819	MSE: 0.3759192	KLD: 1.9882584	LR: 9.6060e-04
+	Epoch: 6	Loss: 0.3420815	CE: 0.0986045	MSE: 0.3685986	KLD: 1.9935828	LR: 9.5099e-04
+	Epoch: 7	Loss: 0.3387581	CE: 0.0977818	MSE: 0.3582441	KLD: 1.9559013	LR: 9.4148e-04
+	Epoch: 8	Loss: 0.3366894	CE: 0.0972003	MSE: 0.3534674	KLD: 1.9598763	LR: 9.3207e-04
+	Epoch: 9	Loss: 0.3372181	CE: 0.0973624	MSE: 0.3545201	KLD: 1.9519394	LR: 9.2274e-04
+	Epoch: 10	Loss: 0.3338018	CE: 0.0965511	MSE: 0.3444488	KLD: 1.8856109	LR: 9.1352e-04
 </pre>
 </div>
 </div>
@@ -12403,7 +12413,8 @@ DESCRIPTION
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p>This function first creates a dataloader from the inputs, and then trains the VAE using the data from the dataloader. The dataloader normalizes the TNF such that the mean and standard for each tetranucleotide across all contigs is 0 and 1, respectively, and normalizes the rpkm such that each contig sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
+<p>First we create the VAE, then we train it and get a dataloader. The dataloader normalizes the TNF such that the mean and standard for each tetranucleotide across all contigs is 0 and 1, respectively, and normalizes the rpkm such that each contig sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
+<p>The dataloader also discards all contigs where either the TNF vector or the depths vector is all zeros - we call these contigs <em>zero contigs</em>. The log above states there was 3066 of such contigs. The number of contigs listed above that does <em>not</em> include zero-contigs.</p>
 <p>The VAE encodes the high-dimensional (n_samples + 136 features) input data in a lower dimensional space (nlatent features). When training, it learns an encoding scheme, with which it encodes the input data to a series of normal distributions, and a decoding scheme, in which it uses one value sampled from each normal distribution to reconstruct the input data.</p>
 <p>The theory here is that if the VAE learns to reconstruct the input, the distributions must be a more efficient encoding of the input data, since the same information is contained in fewer neurons. If the input data for the contigs indeed do fall into bins, an efficient encoding would be to simply encode the bin they belong to, then use the "bin identity" to reconstruct the data. We force it to encode to <em>distributions</em> rather than single values because this makes it more robust - it will not as easily overfit to interpret slightly different values as being very distinct if there is an intrinsic noise in each encoding.</p>
 <h3 id="The-loss-function">The loss function<a class="anchor-link" href="#The-loss-function">&#182;</a></h3><p>The loss of the VAE consists of three major terms:</p>
@@ -12444,7 +12455,7 @@ DESCRIPTION
 </li>
 </ol>
 <p>If you look at the outputs from the 10 epochs, you can see the KL-divergence rises the first epoch as it learns the dataset and the latent layer drifts away from its prior. At epoch 2, the penalty associated with KL-divergence outweighs the CE and MSE losses. At this point, the KL will stall, and then fall. This point depends on <code>capacity</code> and the complexity of the dataset.</p>
-<p>Okay, so now we have the trained <code>vae</code> and the <code>dataloader</code>. Let's feed the dataloader to the VAE in order to get the latent representation-</p>
+<p>Okay, so now we have the trained <code>vae</code> and gotten the <code>dataloader</code>. Let's feed the dataloader to the VAE in order to get the latent representation-</p>
 <hr>
 
 </div>
@@ -12476,7 +12487,7 @@ DESCRIPTION
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>(39551, 40)
+<pre>(36485, 40)
 </pre>
 </div>
 </div>
@@ -12490,7 +12501,7 @@ DESCRIPTION
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p>That's 39551 contigs each represented by the (non-noisy) value of 100 latent neurons.</p>
+<p>That's 36485 contigs each represented by the (non-noisy) value of 40 latent neurons.</p>
 <hr>
 <p>Sometimes, you'll want to reuse a VAE you have already trained. For this, I've added the <code>VAE.save</code> method of the VAE class, as well as a <code>VAE.load</code> method. You will have noticed in the example above that I defined a <code>modelfile</code>, a file the VAE will create and save its parameters to. We can always use that file to recreate the VAE and have a pretrained model. But remember - a trained VAE only works on the dataset it's been trained on, and not necessarily on any other!</p>
 <p>I want to <strong>show</strong> that we get the exact same network back that we trained, so here I encode the first contig, delete the VAE, reload the VAE and encode the first contig again. The two encodings should be identical.</p>
@@ -12510,6 +12521,10 @@ DESCRIPTION
 <span class="n">rpkms_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="n">rpkms</span><span class="p">[:</span><span class="mi">128</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
 <span class="n">tnfs_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="n">tnfs</span><span class="p">[:</span><span class="mi">128</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
 
+<span class="c1"># Put VAE in testing mode - strictly not necessary here, since it goes in test</span>
+<span class="c1"># mode when encoding latent, as we did above</span>
+<span class="n">vae</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
 <span class="c1"># Calling the VAE as a function encodes and decodes the arguments,</span>
 <span class="c1"># returning the outputs and the two distribution layers</span>
 <span class="n">depths_out</span><span class="p">,</span> <span class="n">tnf_out</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">logsigma</span> <span class="o">=</span> <span class="n">vae</span><span class="p">(</span><span class="n">rpkms_in</span><span class="p">,</span> <span class="n">tnfs_in</span><span class="p">)</span>
@@ -12521,9 +12536,9 @@ DESCRIPTION
 <span class="k">del</span> <span class="n">vae</span>
 
 <span class="c1"># And reload it:</span>
-<span class="c1"># We need to manually specify whether it should use GPU or not</span>
-<span class="c1"># And whether the network show begin in training or evaluation mode.</span>
-<span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s1">&#39;/tmp/model.pt&#39;</span><span class="p">,</span> <span class="n">cuda</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">evaluate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Here we can specify whether to put it on GPU and whether it should start</span>
+<span class="c1"># in training or testing mode. By default, it&#39;s not on GPU and in testing mode</span>
+<span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s1">&#39;/tmp/model.pt&#39;</span><span class="p">)</span>
 <span class="n">depths_out</span><span class="p">,</span> <span class="n">tnf_out</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">logsigma</span> <span class="o">=</span> <span class="n">vae</span><span class="p">(</span><span class="n">rpkms_in</span><span class="p">,</span> <span class="n">tnfs_in</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">mu</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </pre></div>
@@ -12542,20 +12557,20 @@ DESCRIPTION
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>tensor([  -8.4509, -154.4205,  -51.1516,  134.6331,   -5.6021,   35.9624,
-         103.3496,   89.7303,   -5.6719, -202.2380,   21.2030,   40.8149,
-         -19.5762, -213.6843,   92.9092,  -62.8442,   14.3109, -100.9827,
-         -85.0054,   26.9886,  184.1693, -226.6402,  104.5907, -128.6596,
-          78.9068,   47.2139,  -55.6634,  187.6055,    8.2766,  -22.3542,
-          74.9100, -112.8461,  231.8380,   19.8790,  203.3871,   -4.0732,
-         236.7410,  -88.4885,  -83.7351,  -96.1812])
-tensor([  -8.4509, -154.4205,  -51.1516,  134.6331,   -5.6021,   35.9624,
-         103.3496,   89.7303,   -5.6719, -202.2380,   21.2030,   40.8149,
-         -19.5762, -213.6843,   92.9092,  -62.8442,   14.3109, -100.9827,
-         -85.0054,   26.9886,  184.1693, -226.6402,  104.5907, -128.6596,
-          78.9068,   47.2139,  -55.6634,  187.6055,    8.2766,  -22.3542,
-          74.9100, -112.8461,  231.8380,   19.8790,  203.3871,   -4.0732,
-         236.7410,  -88.4885,  -83.7351,  -96.1812])
+<pre>tensor([ 131.6426,   41.3853,  -95.4966,   79.2878,   58.9090,   21.2225,
+         133.8789,  101.0523,  117.7470,   98.1510,   53.7279, -147.2247,
+        -107.3457,   81.0705,  244.4029,  151.6829,   67.9055,   25.3946,
+        -272.4929, -106.1826,   40.6807,   37.5807, -228.2645, -103.4693,
+          15.3015,  -83.3347,   42.8866,   67.0891,  -94.6694, -107.3439,
+         -51.7495,   -8.1215,  -34.9867,  -58.2951,   66.6882,   42.4227,
+         103.6488,   35.4465, -119.5538,  -99.6371], grad_fn=&lt;SelectBackward&gt;)
+tensor([ 131.6426,   41.3853,  -95.4966,   79.2878,   58.9090,   21.2225,
+         133.8789,  101.0523,  117.7470,   98.1510,   53.7279, -147.2247,
+        -107.3457,   81.0705,  244.4029,  151.6829,   67.9055,   25.3946,
+        -272.4929, -106.1826,   40.6807,   37.5807, -228.2645, -103.4693,
+          15.3015,  -83.3347,   42.8866,   67.0891,  -94.6694, -107.3439,
+         -51.7495,   -8.1215,  -34.9867,  -58.2951,   66.6882,   42.4227,
+         103.6488,   35.4465, -119.5538,  -99.6371], grad_fn=&lt;SelectBackward&gt;)
 </pre>
 </div>
 </div>
@@ -13449,6 +13464,21 @@ bin2     contig3      108716
 <p>However, the exact shape of the chi distribution depends on the phylogenetic distance between the genomes of the contigs, and also the the lengths of the two contigs. Hence, a clustering algorithm which simply looks at the raw TNF value without taking in to account contig lengths is not as effective as it could be.</p>
 <p>When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heurisitcally estimate the parameters of the estimated chi distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a <code>scipy.stats.chi</code> object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.</p>
 <p>A possible future approach could be to encode the depths and TNF independently with the VAE (although it could still train using both depths and TNF at the same time), and, when calculating the contig-contig distances during clustering, using a heuristic approximation of the chi distribution which can be computed quickly. Alternatively, one could cluster exclusively on depths, then afterwards identify contigs in bins with divergent TNF and/or recruit unbinned contigs to bins with similar TNF.</p>
+<p><strong>Determine clustering threshold for each cluster</strong></p>
+<p>This shouldn't be too hard to do, but at the moment I thought about it, we were too close to publication to mess everything up by changing the algorithm.</p>
+<p>The idea is that normally, VAMB estimates the clustering threshold by sampling some random contigs and looking for the threshold which separates a small group of close contigs from the rest. I have written the threshold estimation completely ad hoc. I suspect it's possible to create a more robust and accurate threshold detection method if one thinks some more about it. During clustering, the threshold can then be determined to be optimal for each seed cluster.</p>
+<p>In some very quick-and-dirty preliminary tests, I estimate that it would slow down clustering by 4x, but perhaps a more elegant and quicker solution to threshold estimation can be invented.</p>
+<p><strong>Switch to a more theoretically founded distance measure</strong></p>
+<p>We chose Pearson correlation because Canopy chose it, and because it intuitively made sense. In order to support the choice, we calculated the separation between the distance distributions for within and between-species for a variety of distance measures, including Pearson, Spearman, 1-norm, 2-norm, Jaccard and cosine. Before encoding, 1-norm did slightly better than the others - after encoding, Pearson was the best, but only by a bit.</p>
+<p>I have no idea of how the data <em>ought</em> to be distributed in the encoded space, so let's reason about the input space (abundance, in particular), and assume that whatever distance measure works for input space also works for latent space. Why would Pearson be the right choice?</p>
+<p>Well, really, it wouldn't. For example, the two following depth vectors:</p>
+
+<pre><code>[50 50 51 51]
+[50 51 50 51]
+
+</code></pre>
+<p>Has a Pearson correlation of exactly 0, although the depths are clearly almost 100% correlated in the relevant sense of the word. The problem here is that Pearson is translation invariant, whereas we really want a measure which is <em>not</em> translation invariant (i.e. which measures how close to a fixed ratio there is between the two vectors).</p>
+<p>I don't know what the best measure here is. I don't think the Aitchison distance measure is right to use.</p>
 <p><strong>Switch to a true distance measure for tandem clustering</strong></p>
 <p>There is a current problem in the implementation of tandem clustering. To explain it, let me begin at the beginning:</p>
 <p>There is a problem with the regular clustering algorithm in that it scales O(n<sup>2</sup>), and so becomes painfully slow with larger datasets. We can get around this by splitting the dataset in several partitions, and clustering each partition.</p>
@@ -13487,6 +13517,9 @@ Else it must be the case that:
 <p>Hence we just need to pick values for <code>INNER</code> and <code>OUTER</code> to follow condition A, which means that the difference between <code>INNER</code> and <code>OUTER</code> should be above the cluster diameter for most realistic bins. No problem.</p>
 <p>Unfortunately, this relies on the triangle inequality <code>|SF| ≤ |SC| + |CF|</code> which does not hold true for Pearson distance and Spearman distance, and so bins will likely get split when partitioning, giving lower recalls. This implies that tandem clustering will perform better with other distance measures like 1-norm or 2-norm distance. Of course, we can't just use 1-norm distance when partitioning and then use Pearson when clustering!</p>
 <p>While it would be trivial to change the distance measure used in <code>clustering.py</code>, it is difficult to map e.g. 1-norm distances to a fixed interval [0, 1], and so we have not found a way to approximate the clustering threshold needed. Also, preliminary tests we did have shown that Pearson distance separates the latent representation slightly better than 1- or 2-norm distance (although the loss of accurary by poor partitioning might offset this).</p>
+<p><strong>Replace decay with increasing batch size</strong></p>
+<p>See <a href="https://arxiv.org/abs/1711.00489">https://arxiv.org/abs/1711.00489</a></p>
+<p>The idea here is that decreasing learning rate is equivalent to increasing the batch size, but the latter makes training go faster. The implementation of this is dirt-simple, just create a new <code>DataLoader</code> instance each epoch using the same <code>TensorDataset</code> - because no data is being copied, this takes less than one millisecond.</p>
 <p><strong>Create a better autoencoder</strong></p>
 <p>We aren't actually machine learning experts, and the details of the VAE implementation has been a combination of "I think that it might work if we...", blind testing ("stochastic grad student descent" is real), and reading lots of machine learning blogs. I bet there's room for improvement if someone with a solid machine learning background and a deeper theoretical knowledge of neural networks took a crack at designing a VAE for this purpose. In fact, we believe one of the strengths of the Vamb approach is that the VAE itself can likely be much better than the one we've implemented.</p>
 
