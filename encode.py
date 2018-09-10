@@ -18,7 +18,7 @@ import os as _os
 import numpy as _np
 import torch as _torch
 
-from math import log as _log, cos as _cos
+from math import log as _log
 
 from torch import nn as _nn
 from torch import optim as _optim
@@ -30,32 +30,53 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
-    """Create a PyTorch dataloader from depths and tnf arrays.
-    This function copies the underlying arrays, and zero-contigs are removed
-    from the copied dataset, and it's properly normalized before returning.
+def make_dataloader(rpkm, tnf, batchsize=128, cuda=False):
+    """Create a DataLoader and a contig mask from RPKM and TNF.
+
+    The dataloader is an object feeding minibatches of contigs to the VAE.
+    The data are normalized versions of the input datasets, with "zero" contigs,
+    i.e. contigs where a row in either TNF or RPKM are all zeros, removed.
+    The mask is a boolean mask designating which contigs have been kept.
+
+    Inputs:
+        rpkm: RPKM matrix (N_contigs x N_samples)
+        tnf: TNF matrix (N_contigs x 136)
+        batchsize: Size of minibatches for dataloader
+        cuda: Pagelock memory of dataloader (use when using CUDA)
+
+    Outputs:
+        DataLoader: An object feeding data to the VAE
+        mask: A boolean mask of which contigs are kept
     """
 
-    # Identify zero'd observations
-    if len(depthsarray) != len(tnfarray):
-        raise ValueError('The two arrays must have same length, not lengths ' +
-                         str(len(depthsarray)) + ' and ' + str(len(tnfarray)))
-    depthssum = depthsarray.sum(axis=1)
-    tnfsum = tnfarray.sum(axis=1)
+    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
+        raise ValueError('TNF and RPKM must be Numpy arrays')
+
+    if batchsize < 1:
+        raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
+
+    if len(rpkm) != len(tnf):
+        raise ValueError('Lengths of RPKM and TNF must be the same')
+
+    if tnf.shape[1] != 136:
+        raise ValueError('TNF must be 136 long along axis 1')
+
+    depthssum = rpkm.sum(axis=1)
+    tnfsum = tnf.sum(axis=1)
     mask = depthssum != 0
     mask &= tnfsum != 0
 
     # Remove zero-observations Unfortunately, a copy is necessary.
     # It doesn't matter much, as cluster.py will create a copy anyway when.
     # removing observations during clustering. This cannot easily prevented.
-    depths_copy = depthsarray[mask]
-    tnf_copy = tnfarray[mask]
+    rpkm_copy = rpkm[mask]
+    tnf_copy = tnf[mask]
     depthssum = depthssum[mask]
 
     # Normalize arrays and create the Tensors
-    depths_copy /= depthssum.reshape((-1, 1))
+    rpkm_copy /= depthssum.reshape((-1, 1))
     _vambtools.zscore(tnf_copy, axis=0, inplace=True)
-    depthstensor = _torch.from_numpy(depths_copy)
+    depthstensor = _torch.from_numpy(rpkm_copy)
     tnftensor = _torch.from_numpy(tnf_copy)
 
     # Create dataloader
@@ -63,7 +84,7 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
                              shuffle=True, num_workers=1, pin_memory=cuda)
 
-    return dataloader
+    return dataloader, mask
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
@@ -264,26 +285,27 @@ class VAE(_nn.Module):
         length = len(depths_array)
 
         latent = _torch.zeros((length, self.nlatent), dtype=_torch.float32)
-        assert not latent.is_cuda
+        assert not latent.is_cuda # Should be on CPU, not GPU
 
         row = 0
-        for depths, tnf in new_data_loader:
-            depths.requires_grad = True
-            tnf.requires_grad = True
+        with _torch.no_grad():
+            for depths, tnf in new_data_loader:
+                depths.requires_grad = True
+                tnf.requires_grad = True
 
-            # Move input to GPU if requested
-            if self.usecuda:
-                depths = depths.cuda()
-                tnf = tnf.cuda()
+                # Move input to GPU if requested
+                if self.usecuda:
+                    depths = depths.cuda()
+                    tnf = tnf.cuda()
 
-            # Evaluate
-            out_depths, out_tnf, mu, logsigma = self(depths, tnf)
+                # Evaluate
+                out_depths, out_tnf, mu, logsigma = self(depths, tnf)
 
-            if self.usecuda:
-                mu = mu.cpu()
+                if self.usecuda:
+                    mu = mu.cpu()
 
-            latent[row: row + len(mu)] = mu
-            row += len(mu)
+                latent[row: row + len(mu)] = mu
+                row += len(mu)
 
         assert row == length
         latent_array = latent.detach().numpy()
@@ -334,15 +356,13 @@ class VAE(_nn.Module):
 
         return vae
 
-    def trainmodel(self, depths, tnf, nepochs=200, batchsize=128, lrate=1e-3,
+    def trainmodel(self, dataloader, nepochs=200, batchsize=128, lrate=1e-3,
                  decay=0.99, logfile=None, modelfile=None):
 
-        """Create and train an autoencoder from depths array and tnf array.
+        """Train the autoencoder from depths array and tnf array.
 
         Inputs:
-            vae: A VAE in training mode.
-            depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
-            tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
+            dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [200]
             batchsize: Mini-batch size for training [128]
             lrate: Starting learning rate for the optimizer [0.001]
@@ -353,10 +373,6 @@ class VAE(_nn.Module):
         Outputs: The DataLoader object used to train the VAE
         """
 
-        # Check all the args here
-        if batchsize < 1:
-            raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
-
         if lrate < 0:
             raise ValueError('Learning rate cannot be negative')
 
@@ -366,13 +382,8 @@ class VAE(_nn.Module):
         if not (0 < decay <= 1):
             raise ValueError('Decay must be in interval ]0:1]')
 
-        data_loader = _dataloader_from_arrays(depths, tnf, self.cuda, batchsize)
-
         # Get number of features
-        nsamples = data_loader.dataset.tensors[0][1]
-        ncontigs = data_loader.dataset.tensors[0].shape[0]
-        n_discarded_contigs = depths.shape[0] - ncontigs
-
+        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
         optimizer = _optim.Adam(self.parameters(), lr=lrate)
 
         if logfile is not None:
@@ -386,12 +397,11 @@ class VAE(_nn.Module):
             print('\tLearning rate:', lrate, file=logfile)
             print('\tDecay:', decay, file=logfile)
             print('\tN contigs:', ncontigs, file=logfile)
-            print('\tDiscarded (zero) contigs:', n_discarded_contigs, file=logfile)
-            print('\tN samples:', depths.shape[1], file=logfile, end='\n\n')
+            print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
         for epoch in range(nepochs):
-            self.trainepoch(data_loader, epoch, optimizer, decay, logfile)
+            self.trainepoch(dataloader, epoch, optimizer, decay, logfile)
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:
@@ -400,4 +410,4 @@ class VAE(_nn.Module):
             except:
                 pass
 
-        return data_loader
+        return None

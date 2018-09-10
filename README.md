@@ -59,13 +59,8 @@ If you want to extend Vamb, run only a part of the pipeline or run with altered 
 # Troubleshooting
 
 ### Parsing the fasta file
-__`parsecontigs.read_contigs` fails with ValueError: Non-ACGTN in line [LINE]: [CHAR]__
 
-Vamb can only parse contigs consisting of any bytes in b'acgtnACGTN', so IUPAC ambigious DNA, uracils (U), and anything else will cause an error. You will have to clean the FASTA file and change all the non-ACTGN bases to N. For convenience, you can use the `vamb.vambtools.maskbases` function:
-
-    with vamb.vambtools.Reader('/path/to/contigs.fna', 'rb') as filehandle:
-        masked_lines = vamb.vambtools.maskbases(filehandle)
-        tnfs, contignames, lengths = vamb.parsecontigs.read_contigs(masked_lines)
+No trouble seen so far.
 
 ### Parsing the BAM files
 
