@@ -35,7 +35,8 @@ Make sure you have Cython installed (you can install it with `pip` or your Pytho
 
 * Go to the src/ directory in the vamb directory
 * run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
-* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
+* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent 
+directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
 * You can now import Vamb.
 
 

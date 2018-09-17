@@ -225,8 +225,8 @@ def byte_iterfasta(filehandle, comment=b'#'):
             header = line[1:-1].decode()
 
         else:
+            # Check for un-parsable characters in the sequence
             stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHV \t\n')
-
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-ACGTN in line {}: '{}'".format(linenumber + 1, bad_character))
