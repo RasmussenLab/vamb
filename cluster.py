@@ -14,22 +14,13 @@ a {clustername, set(elements)} dict.
 
 cluster algorithm:
 (1): Pick random seed observation S
-(2): Define inner_obs(S) = all observations with Pearson distance from S < INNER
-(3): Sample MOVES observations I from inner_obs
-(4): If any mean(inner_obs(i)) < mean(inner_obs(S)) for i in I: Let S be i, go to (2)
-     Else: Outer_obs(S) = all observations with Pearson distance from S < OUTER
-(5): Output outer_obs(S) as cluster, remove inner_obs(S) from observations
+(2): Define cluster(S) = all observations with Pearson distance from S < THRESHOLD
+(3): Sample MOVES observations I from cluster(S)
+(4): If any mean(cluster(i)) < mean(cluster(S)) for i in I: Let S be i, go to (2)
+     Else: cluster(S) = all observations with Pearson distance from S < THRESHOLD
+(5): Output cluster(S) as cluster, remove cluster(S) from observations
 (6): If no more observations or MAX_CLUSTERS have been reached: Stop
      Else: Go to (1)
-
-tandemcluster agorithm:
-(1): Pick random observation S
-(2): Define inner_obs(S) = 10,000 closest obs to S
-(3): Define outer_obs(S) = 20,000 closest obs to S
-(4): Remove inner_obs(S) from dataset
-(5): Cluster outer_obs(S) with algorithm above, add result to clusters.
-(6): If more than 20,000 observations remain: Go to (1)
-(7): Assign each obs to the largest cluster it features in
 """
 
 import sys as _sys
@@ -39,12 +30,10 @@ from collections import defaultdict as _defaultdict
 import vamb.vambtools as _vambtools
 import vamb.threshold as _threshold
 
-
-
 def _pearson_distances(matrix, index):
     """Calculates the Pearson distances from row `index` to all rows
     in the matrix, including itself. Returns numpy array of distances"""
-    
+
     # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
     # For two vectors x and y with numbers xi and yi,
     # P = sum((xi-x_mean)*(yi-y_mean)) / (std(y) * std(x) * len(x)).
@@ -52,83 +41,71 @@ def _pearson_distances(matrix, index):
     # this reduces to sum(xi*yi) / len(x) = x @ y.T / len(x) =>
     # D = ((x @ y.T) / len(x)) - 1) / -2 =>
     # D = (x @ y.T - len(x)) * (-1 / 2len(x))
-    
+
     # Matrix should have already been zscore normalized by axis 1 (subtract mean, div by std)
     vectorlength = matrix.shape[1]
     result = _np.dot(matrix, matrix[index].T) # 70% clustering time spent on this line
     result -= vectorlength
     result *= -1 / (2 * vectorlength)
-    
+
     return result
 
+def _getcluster(matrix, point, threshold):
+    """Gets the distance vector, array of cluster points and average distance
+    to cluster points from a starting point"""
 
-
-def _getinner(matrix, point, inner_threshold):
-    """Gets the distance vector, array of inner points and average distance
-    to inner points from a starting point"""
-    
     distances = _pearson_distances(matrix, point)
-    inner_points = _np.where(distances < inner_threshold)[0]
-    
+    cluster = _np.where(distances < threshold)[0]
+
     # This happens if std(matrix[points]) == 0, then all pearson distances
     # become 0.5, even the distance to itself.
-    if len(inner_points) == 0:
-        inner_points = _np.array([point])
-        average_distance = 0   
-    
-    elif len(inner_points) == 1:
+    if len(cluster) == 0:
+        cluster = _np.array([point])
         average_distance = 0
-    
+
+    elif len(cluster) == 1:
+        average_distance = 0
+
     else:
-        average_distance = _np.sum(distances[inner_points]) / (len(inner_points) - 1)
+        average_distance = _np.sum(distances[cluster]) / (len(cluster) - 1)
 
-    return distances, inner_points, average_distance
+    return distances, cluster, average_distance
 
-
-
-def _sample_clusters(matrix, point, max_attempts, inner_threshold, outer_threshold, randomstate):
-    """Keeps sampling new points within the inner points until it has sampled
-    max_attempts without getting a new set of inner points with lower average
+def _sample_clusters(matrix, point, max_attempts, threshold, randomstate):
+    """Keeps sampling new points within the cluster until it has sampled
+    max_attempts without getting a new set of cluster with lower average
     distance"""
-    
+
     futile_attempts = 0
-    
+
     # Keep track of tried points to avoid sampling the same more than once
     tried = {point}
-    
-    distances, inner_points, average_distance = _getinner(matrix, point, inner_threshold)
-    
-    while len(inner_points) - len(tried) > 0 and futile_attempts < max_attempts:
-        sample = randomstate.choice(inner_points)
+
+    distances, cluster, average_distance = _getcluster(matrix, point, threshold)
+
+    while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
+        sample = randomstate.choice(cluster)
         while sample in tried: # Not sure there is a faster way to prevent resampling
-            sample = randomstate.choice(inner_points)
-            
+            sample = randomstate.choice(cluster)
+
         tried.add(sample)
-        
-        inner = _getinner(matrix, sample, inner_threshold)
-        sample_dist, sample_inner, sample_average =  inner
-        
-        if sample_average < average_distance:
+
+        sample_dist, sample_cluster, sample_avg =  _getcluster(matrix, sample, threshold)
+
+        if sample_avg < average_distance:
             point = sample
-            inner_points = sample_inner
-            average_distance = sample_average
+            cluster = sample_cluster
+            average_distance = sample_avg
             distances = sample_dist
             futile_attempts = 0
             tried = {point}
-            
+
         else:
             futile_attempts += 1
-            
-    if inner_threshold == outer_threshold:
-        outer_points = inner_points
-    else:
-        outer_points = _np.where(distances < outer_threshold)[0]
-    
-    return point, inner_points, outer_points
 
+    return point, cluster
 
-
-def _cluster(matrix, labels, inner_threshold, outer_threshold, max_steps):
+def _cluster(matrix, labels, threshold, max_steps):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
 
     randomstate = _np.random.RandomState(324645)
@@ -136,165 +113,53 @@ def _cluster(matrix, labels, inner_threshold, outer_threshold, max_steps):
     # The seed keeps track of which point we initialize clusters from.
     # It's necessary since we don't remove points after every cluster.
     # We don't do that since removing points is expensive. If there's only
-    # one point in the outer_points, by definition, the point to be removed
+    # one point in the cluster, by definition, the point to be removed
     # will never be present in any other cluster anyway.
     seed = 0
     keepmask = _np.ones(len(matrix), dtype=_np.bool)
-    
-    while len(matrix) > 0:           
+
+    while len(matrix) > 0:
         # Find medoid using iterative sampling function above
-        sampling = _sample_clusters(matrix, seed, max_steps, inner_threshold, outer_threshold, randomstate)
-        medoid, inner_points, outer_points = sampling
+        sampling = _sample_clusters(matrix, seed, max_steps, threshold, randomstate)
+        medoid, cluster = sampling
         seed += 1
-        
+
         # Write data to output
-        yield labels[medoid], set(labels[outer_points])
-        
-        for point in inner_points:
+        yield labels[medoid], set(labels[cluster])
+
+        for point in cluster:
             keepmask[point] = False
 
-        # Only remove points if we have more than 1 point in cluster
-        if len(outer_points) > 1 or seed == len(matrix):
+        # Only remove cluster if we have more than 1 point in cluster
+        if len(cluster) > 1 or seed == len(matrix):
             matrix = matrix[keepmask]
             labels = labels[keepmask]
-            
+
             # This is quicker than changing existing mask to True
             keepmask = _np.ones(len(matrix), dtype=_np.bool)
-            
+
             seed = 0
 
+def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile):
+    """Checks matrix, labels, nsamples, maxsize and estimates threshold if necessary."""
 
-
-def _precluster(matrix, labels, randomstate, nremove=10000, nextract=20000):
-    """Does rough preclustering, splits matrix and labels into multiple,
-    overlapping matrixes/labels. Uses a version of Canopy clustering:
-    
-    1) Pick random seed observation, calculate distances P to all other obs
-    2) Inner threshold is `nremove`th smallest dist, other is `nextract`th
-    3) Create new matrix, labels pair for all obs within outer threshold
-    4) Remove all obs within inner dist from set
-    5) Continue from 1) until max `nextract` observations are left
-    """
-    
-    if nextract < nremove:
-        raise ValueError('nextract must exceed or be equal to nremove')
-    
-    while len(matrix) > nextract:
-        seed = randomstate.randint(len(matrix))
-        distances = _pearson_distances(matrix, seed)
-        
-        sorted_distances = _np.sort(distances)
-        innerdistance = sorted_distances[nremove]
-        outerdistance = sorted_distances[nextract]
-        del sorted_distances
-        
-        innerindices = _np.where(distances <= innerdistance)[0]
-        outerindices = _np.where(distances <= outerdistance)[0]
-        
-        yield matrix[outerindices], labels[outerindices]
-        
-        matrix = _np.delete(matrix, innerindices, 0)
-        labels = _np.delete(labels, innerindices, 0)
-    
-    yield matrix, labels
-
-
-
-def _collapse(clustername, cluster, contigsof, clusterof):
-    """When a new cluster is created among other clusters which might share
-    its points, assigns the points to the largest cluster.
-    
-    Inputs:
-        clustername: some hashable identifier of cluster
-        cluster: Set of points
-        contigsof: {identifier: set(points) dict for all clusters}
-        clusterof: {point: identifier} for all points
-        
-    Output: None
-    """
-
-    # Get list of contigs sorted by length of set they're in
-    # We sort to minimize contig reassignment
-    membership = list()
-    for contig in cluster:
-        if contig in clusterof:
-            length = len(contigsof[clusterof[contig]])
-
-        else:
-            length = 0
-
-        membership.append((contig, length))
-
-    membership.sort(key=lambda x: x[1], reverse=True)
-
-    # From contig in largest set to that in smallest:
-    for contig, length in membership:
-        # If it's already in a larger set, remove it from this proposed set
-        if length > len(cluster):
-            cluster.remove(contig)
-
-        # Else, since they're sorted, we're done here
-        else:
-            break
-
-    # All remaining contigs now truly belong to this proposed set
-    for contig in cluster:
-        # Remove it from other clusters if they are in another cluster
-        # and delete the cluster all its contigs are now gone
-        if contig in clusterof:
-            othername = clusterof[contig]
-            othercluster = contigsof[othername]
-            othercluster.remove(contig)
-
-            if len(othercluster) == 0:
-                contigsof.pop(othername)
-
-        # Finally, add this new proposed cluster to set of clusters
-        clusterof[contig] = clustername
-
-    if len(cluster) > 0:
-        contigsof[clustername] = cluster
-
-
-
-def _check_inputs(max_steps, inner, outer):
-    """Checks whether max_steps, inner and outer are okay.
-    Can be run before loading matrix into memory."""
-    
-    if max_steps < 1:
+    if maxsteps < 1:
         raise ValueError('maxsteps must be a positive integer')
-    
-    if inner is None:
-        if outer is not None:
-            raise ValueError('If inner is None, outer must be None')
-        
-    elif outer is None:
-        outer = inner
-        
-    elif outer < inner:
-        raise ValueError('outer must exceed or be equal to inner')
-        
-    return inner, outer
 
-
-
-def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
-    """Checks matrix, labels, nsamples, maxsize and estimates inner if necessary."""
-    
     if len(matrix) < 1:
         raise ValueError('Matrix must have at least 1 observation.')
-    
+
     if labels is None:
         labels = _np.arange(len(matrix)) + 1
-        
+
     elif type(labels) != _np.ndarray or len(labels) != len(matrix):
         raise ValueError('labels must be a 1D Numpy array with same length as matrix')
-        
+
     if len(set(labels)) != len(matrix):
         raise ValueError('Labels must be unique')
-    
-    if inner is None:
-        if len(matrix) < 1000 and inner is None:
+
+    if threshold is None:
+        if len(matrix) < 1000 and threshold is None:
             raise ValueError('Cannot estimate from less than 1000 contigs')
 
         if len(matrix) < nsamples:
@@ -302,174 +167,126 @@ def _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile):
 
         if maxsize < 1:
             raise ValueError('maxsize must be positive number')
-        
+
         try:
             if logfile is not None:
                 print('\tEstimating threshold with {} samples'.format(nsamples), file=logfile)
-            
+
             _gt = _threshold.getthreshold(matrix, _pearson_distances, nsamples, maxsize)
-            inner, support, separation = _gt
-            outer = inner
-            
+            threshold, support, separation = _gt
+
             if logfile is not None:
-                print('\tClustering threshold:', inner, file=logfile)
+                print('\tClustering threshold:', threshold, file=logfile)
                 print('\tThreshold support:', support, file=logfile)
                 print('\tThreshold separation:', separation, file=logfile)
-                
+
         except _threshold.TooLittleData as error:
             warningfile = sys.stderr if logfile is None else logfile
             wn = '\tWarning: Too little data: {}. Setting threshold to 0.08'
             print(wn.format(error.args[0]), file=warningfile)
-            inner = outer = 0.08
-        
-    return labels, inner, outer
+            threshold = 0.08
 
-def cluster(matrix, labels=None, inner=None, outer=None, max_steps=25,
+    return labels, threshold
+
+def cluster(matrix, labels=None, threshold=None, maxsteps=25,
             normalized=False, nsamples=2000, maxsize=2500, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
-    
+
     Inputs:
         matrix: A (obs x features) Numpy matrix of values
         labels: None or Numpy array with labels for matrix rows [None = ints]
-        inner: Optimal medoid search within this distance from medoid [None = auto]
-        outer: Radius of clusters extracted from medoid. [None = inner]
-        max_steps: Stop searching for optimal medoid after N futile attempts [25]
+        threshold: Optimal medoid search within this distance from medoid [None = auto]
+        maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [1000]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
         logfile: Print threshold estimates and certainty to file [None]
-    
+
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
-    
+
     if not normalized is True:
         matrix = _vambtools.zscore(matrix, axis=1)
-        
-    inner, outer = _check_inputs(max_steps, inner, outer)
-    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
-    
-    return _cluster(matrix, labels, inner, outer, max_steps)
 
+    labels, threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
 
-
-def tandemcluster(matrix, labels=None, inner=None, outer=None, max_steps=25,
-            normalized=False, nsamples=2000, maxsize=2500, logfile=None):
-    """Splits the datasets, then clusters each partition before merging
-    the resulting clusters. This is faster, especially on larger datasets, but
-    less accurate than normal clustering.
-    
-    Inputs:
-        matrix: A (obs x features) Numpy matrix of values
-        labels: None or Numpy array with labels for matrix rows [None = ints]
-        inner: Optimal medoid search within this distance from medoid [None = auto]
-        outer: Radius of clusters extracted from medoid. [None = inner]
-        max_steps: Stop searching for optimal medoid after N futile attempts [25]
-        normalized: Matrix is already zscore-normalized [False]
-        nsamples: Estimate threshold from N samples [1000]
-        maxsize: Discard sample if more than N contigs are within threshold [2500]
-        logfile: Print threshold estimates and certainty to file [None]
-    
-    Output: {(partition, medoid): set(labels_in_cluster) dictionary}
-    """
-    
-    if not normalized:
-        matrix = _vambtools.zscore(matrix, axis=1)
-        
-    inner, outer = _check_inputs(max_steps, inner, outer)
-    labels, inner, outer = _check_params(matrix, inner, outer, labels, nsamples, maxsize, logfile)
-    
-    randomstate = _np.random.RandomState(324645) 
-    
-    contigsof = dict()
-    clusterof = dict()
-    
-    partitions = _precluster(matrix, labels, randomstate, nremove=10000, nextract=30000)
-    
-    for partition, (submatrix, sublabels) in enumerate(partitions):
-        for medoid, cluster in _cluster(submatrix, sublabels, inner, outer, max_steps):
-            _collapse((partition, medoid), cluster, contigsof, clusterof)
-        
-        matrix = None
-            
-    return contigsof
-
+    return _cluster(matrix, labels, threshold, maxsteps)
 
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):
     """Writes clusters to an open filehandle.
-    
+
     Inputs:
         filehandle: An open filehandle that can be written to
         clusters: An iterator generated by function `clusters` or dict
         max_clusters: Stop printing after this many clusters [None]
         min_size: Don't output clusters smaller than N contigs
         header: Commented one-line header to add
-        
+
     Outputs:
         clusternumber: Number of clusters written
         ncontigs: Number of contigs written
     """
-    
+
     if not hasattr(filehandle, 'writable') or not filehandle.writable():
         raise ValueError('Filehandle must be a writable file')
-        
+
     if iter(clusters) is not clusters:
         clusters = clusters.items()
-    
+
     if header is not None and len(header) > 0:
         if '\n' in header:
             raise ValueError('Header cannot contain newline')
-        
+
         if header[0] != '#':
             header = '# ' + header
-        
+
         print(header, file=filehandle)
-    
+
     clusternumber = 0
     ncontigs = 0
-    
+
     for clustername, contigs in clusters:
         if clusternumber == max_clusters:
             break
-        
+
         if len(contigs) < min_size:
             continue
-        
+
         clustername = 'cluster_' + str(clusternumber + 1)
-        
+
         for contig in contigs:
             print(clustername, contig, sep='\t', file=filehandle)
-            
+
         clusternumber += 1
         ncontigs += len(contigs)
-        
+
     return clusternumber, ncontigs
 
 
 
 def read_clusters(filehandle, min_size=1):
     """Read clusters from a file as created by function `writeclusters`.
-    
+
     Inputs:
         filehandle: An open filehandle that can be read from
         min_size: Minimum number of contigs in cluster to be kept
-    
+
     Output: A {clustername: set(contigs)} dict"""
-    
+
     contigsof = _defaultdict(set)
-    
+
     for line in filehandle:
         stripped = line.strip()
-        
+
         if stripped[0] == '#':
             continue
-            
-        clustername, contigname = stripped.split('\t')
-        
-        contigsof[clustername].add(contigname)
-        
-    contigsof = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}
-        
-    return contigsof
 
+        clustername, contigname = stripped.split('\t')
+
+        contigsof[clustername].add(contigname)
+
+    contigsof = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}
+
+    return contigsof
