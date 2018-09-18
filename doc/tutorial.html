@@ -11791,7 +11791,7 @@ div#notebook {
 <li><code>contigs.fna</code> - The filtered FASTA contigs which were mapped against, and</li>
 <li><code>bamfiles/*.bam</code> - The 6 .bam files from mapping the reads to the contigs above.</li>
 </ul>
-<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Parse-the-FASTA-file">2. <a href="#parsecontigs">Parse the FASTA file</a><a class="anchor-link" href="#2.-Parse-the-FASTA-file">&#182;</a></h3><h3 id="3.-Parse-the-BAM-files">3. <a href="#parsebam">Parse the BAM files</a><a class="anchor-link" href="#3.-Parse-the-BAM-files">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Summary-of-full-workflow">6. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#6.-Summary-of-full-workflow">&#182;</a></h3><h3 id="7.-Optional:-Benchmarking-your-bins">7. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#7.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="8.-Potential-improvements-to-Vamb">8. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#8.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
+<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Parse-the-FASTA-file">2. <a href="#parsecontigs">Parse the FASTA file</a><a class="anchor-link" href="#2.-Parse-the-FASTA-file">&#182;</a></h3><h3 id="3.-Parse-the-BAM-files">3. <a href="#parsebam">Parse the BAM files</a><a class="anchor-link" href="#3.-Parse-the-BAM-files">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Postprocessing-the-bins">6. <a href="#postprocessing">Postprocessing the bins</a><a class="anchor-link" href="#6.-Postprocessing-the-bins">&#182;</a></h3><h3 id="7.-Summary-of-full-workflow">7. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#7.-Summary-of-full-workflow">&#182;</a></h3><h3 id="8.-Optional:-Benchmarking-your-bins">8. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#8.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="9.-Potential-improvements-to-Vamb">9. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#9.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
 <h2 id="Importing-Vamb-and-getting-help">Importing Vamb and getting help<a class="anchor-link" href="#Importing-Vamb-and-getting-help">&#182;</a></h2><p>First step is to get Vamb imported</p>
 
 <pre><code>[jakni@nissen:~]$ python
@@ -12424,6 +12424,7 @@ DESCRIPTION
 <li>Kullback-Leibler divergence (KLD) measures the dissimilarity between the encoded distributions and the standard gaussian distribution N(0, 1). This penalizes learning.</li>
 </ul>
 <p>All three terms are important. CE and MSE is necessary, because we believe the VAE can only learn to effectively reconstruct the input if it learns to encode the signal from the input into the latent layers. In other words, these terms incentivize the network to learn something. KLD is necessary because we care that the encoding is <em>efficient</em>, viz. it is contained in as little information as possible. The entire point of encoding is to encode a majority of the signal while shedding the noise, and this is only achieved if we place contrains on how much the network is allowed to learn. Without KLD, the network can theoretically learn an infinitely complex encoding, and the network will learn to encode both noise and signal.</p>
+<p>In normal autoencoders, people use binary cross-entropy rather than crossentropy. We believe crossentropy is more correct here, since we normalize by letting the depths sum to one across a contig. In this way, you can view the depths distribution across samples as a probability distribution that a random mapping read will come from each sample.</p>
 <p>In <code>encode.py</code>, the loss function is written as:</p>
 <p>$\alpha \cdot CE + \beta \cdot MSE + \gamma \cdot KLD$</p>
 <p>Where both CE, MSE and KLD is calculated as means over the vectors for which they are defined. The constants $\alpha$, $\beta$ and $\gamma$ are subject to the following constrains:</p>
@@ -12982,6 +12983,40 @@ cluster(matrix, labels=None, inner=None, outer=None, max_steps=25, normalized=Fa
 </div>
 
 </div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<hr>
+<p>The output of <code>vamb.cluster.cluster</code> is a generator, yielding <code>(medoid, cluster)</code> tuples. The generator will compute the clusters on-the-fly, meaning it will only compute the next cluster <em>once you ask for it</em>. Having the clustering return a generator gives a lot of flexibility:</p>
+<p>You can manually iterate over the clusters:</p>
+
+<pre><code>clusters = dict()
+for n, (medoid, cluster) in enumerate(vamb.cluster.cluster(latent)):
+    clusters[medoid] = cluster
+
+    if n + 1 == 1000: # Stop after 1000 clusters
+        break
+
+</code></pre>
+<p>You can just put it directly in a dictionary:</p>
+
+<pre><code>clusters = dict(vamb.cluster.cluster(latent))
+
+</code></pre>
+<p>Or you can use the <code>vamb.cluster.writeclusters</code> function to write the clusters to disk on the fly:</p>
+
+<pre><code>cluster_iterator = vamb.cluster.cluster(latent)
+with open('clusters.tsv', 'w') as clusterfile:
+    vamb.cluster.writeclusters(clusterfile, cluster_iterator)
+
+</code></pre>
+<p>In this example, we will load it into a dictionary immediately:</p>
+<hr>
+
+</div>
+</div>
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[21]:</div>
@@ -13044,7 +13079,7 @@ First element of value: gi|352683411|ref|NC_016077.1|_[Acidaminococcus_intestini
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="postprocessing"></a></p>
-<h2 id="Step-five:-Postprocessing-the-clusters">Step five: Postprocessing the clusters<a class="anchor-link" href="#Step-five:-Postprocessing-the-clusters">&#182;</a></h2><p>We haven't written any dedicated postprocessing modules because how to postprocess really depends on what you're looking for in your data.</p>
+<h2 id="Postprocessing-the-clusters">Postprocessing the clusters<a class="anchor-link" href="#Postprocessing-the-clusters">&#182;</a></h2><p>We haven't written any dedicated postprocessing modules because how to postprocess really depends on what you're looking for in your data.</p>
 <p>One of the greatest weaknesses of Vamb - probably of metagenomic binners in general - is that the bins tend to be highly fragmented. You'll have lots of tiny bins, some of which are legitimate (viruses, plasmids), but most are parts of larger genomes that didn't get binned properly - about 2/3 of the bins here, for example, are 1-contig bins.</p>
 <p>We're in the process of developing a tool for annotating, cleaning and merging bins based on phylogenetic analysis of the genes in the bins. That would be extremely helpful, but for now, we'll have to use more crude approaches:</p>
 <p>We throw away all bins with less than 250,000 basepairs.</p>
@@ -13467,6 +13502,7 @@ bin2     contig3      108716
 <p><strong>Determine clustering threshold for each cluster</strong></p>
 <p>This shouldn't be too hard to do, but at the moment I thought about it, we were too close to publication to mess everything up by changing the algorithm.</p>
 <p>The idea is that normally, VAMB estimates the clustering threshold by sampling some random contigs and looking for the threshold which separates a small group of close contigs from the rest. I have written the threshold estimation completely ad hoc. I suspect it's possible to create a more robust and accurate threshold detection method if one thinks some more about it. During clustering, the threshold can then be determined to be optimal for each seed cluster.</p>
+<p>More interestingly, it could even refuse to produce clusters for which no threshold can be determined (as this indicates it's not separated). When all the cluster-able clusters have been removed, it could resume training or otherwise change the encoding, then cluster the remaining clusters.</p>
 <p>In some very quick-and-dirty preliminary tests, I estimate that it would slow down clustering by 4x, but perhaps a more elegant and quicker solution to threshold estimation can be invented.</p>
 <p><strong>Switch to a more theoretically founded distance measure</strong></p>
 <p>We chose Pearson correlation because Canopy chose it, and because it intuitively made sense. In order to support the choice, we calculated the separation between the distance distributions for within and between-species for a variety of distance measures, including Pearson, Spearman, 1-norm, 2-norm, Jaccard and cosine. Before encoding, 1-norm did slightly better than the others - after encoding, Pearson was the best, but only by a bit.</p>
@@ -13479,6 +13515,8 @@ bin2     contig3      108716
 </code></pre>
 <p>Has a Pearson correlation of exactly 0, although the depths are clearly almost 100% correlated in the relevant sense of the word. The problem here is that Pearson is translation invariant, whereas we really want a measure which is <em>not</em> translation invariant (i.e. which measures how close to a fixed ratio there is between the two vectors).</p>
 <p>I don't know what the best measure here is. I don't think the Aitchison distance measure is right to use.</p>
+<p><strong>Use PyTorch to implement GPU-based clustering</strong></p>
+<p>Clustering right now is implemented in Numpy. The speed bottleneck is the calculation of Pearson distances from one contig to the others, and this is dominated by a single multiplication of a matrix with a vector. While fast when implemented in Numpy with a proper BLAS library underneath, GPUs excel at operations on large, dense matrices. Using PyTorch, it should be possible to implement a device-agnostic clustering, enabling GPU acceleration. In the <code>src</code> directory, there is my attempt at doing it, but on our datasets, it yielded no speed improvements. There must be some speed bottlenecks that could be optimized away, but I didn't want to spend days doing that.</p>
 <p><strong>Switch to a true distance measure for tandem clustering</strong></p>
 <p>There is a current problem in the implementation of tandem clustering. To explain it, let me begin at the beginning:</p>
 <p>There is a problem with the regular clustering algorithm in that it scales O(n<sup>2</sup>), and so becomes painfully slow with larger datasets. We can get around this by splitting the dataset in several partitions, and clustering each partition.</p>
@@ -13521,7 +13559,7 @@ Else it must be the case that:
 <p>See <a href="https://arxiv.org/abs/1711.00489">https://arxiv.org/abs/1711.00489</a></p>
 <p>The idea here is that decreasing learning rate is equivalent to increasing the batch size, but the latter makes training go faster. The implementation of this is dirt-simple, just create a new <code>DataLoader</code> instance each epoch using the same <code>TensorDataset</code> - because no data is being copied, this takes less than one millisecond.</p>
 <p><strong>Create a better autoencoder</strong></p>
-<p>We aren't actually machine learning experts, and the details of the VAE implementation has been a combination of "I think that it might work if we...", blind testing ("stochastic grad student descent" is real), and reading lots of machine learning blogs. I bet there's room for improvement if someone with a solid machine learning background and a deeper theoretical knowledge of neural networks took a crack at designing a VAE for this purpose. In fact, we believe one of the strengths of the Vamb approach is that the VAE itself can likely be much better than the one we've implemented.</p>
+<p>We aren't actually machine learning experts, and the details of the VAE implementation has been a combination of "I think that it might work if we...", blind testing and reading lots of machine learning blogs. I bet there's room for improvement if someone with a solid machine learning background and a deeper theoretical knowledge of neural networks took a crack at designing a VAE for this purpose. In fact, we believe one of the strengths of the Vamb approach is that the VAE itself can likely be much better than the one we've implemented.</p>
 
 </div>
 </div>
