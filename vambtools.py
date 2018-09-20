@@ -189,6 +189,9 @@ def byte_iterfasta(filehandle, comment=b'#'):
     Output: Generator of FastaEntry-objects from file
     """
 
+    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvSWKMYRBDHVn',
+                               b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
+
     # Skip to first header
     try:
         for linenumber, probeline in enumerate(filehandle):
@@ -222,18 +225,16 @@ def byte_iterfasta(filehandle, comment=b'#'):
             header = line[1:-1].decode()
 
         else:
-            upper = line.upper()[:-1]
-            stripped = upper.translate(None, delete=b'ACGTN')
-
+            # Check for un-parsable characters in the sequence
+            stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHV \t\n')
             if len(stripped) > 0:
-                possibilities = chr(stripped[0]) + ' or ' + chr(stripped[0] + 32)
-                raise ValueError('Non-ACGTN in line {}: {}'.format(linenumber + 1, possibilities))
+                bad_character = chr(stripped[0])
+                raise ValueError("Non-ACGTN in line {}: '{}'".format(linenumber + 1, bad_character))
 
-            buffer.append(upper)
+            masked = line[:-1].translate(linemask)
+            buffer.append(masked)
 
     yield FastaEntry(header, b''.join(buffer))
-
-
 
 def loadfasta(byte_iterator, keep=None, comment=b'#'):
     """Loads a FASTA file into a dictionary.
@@ -331,8 +332,6 @@ def read_tsv(file, dtype=_np.float32):
 
     return array
 
-
-
 def read_npz(file):
     """Loads array in .npz-format
 
@@ -347,8 +346,6 @@ def read_npz(file):
 
     return array
 
-
-
 def write_tsv(file, array, header=''):
     """Writes a Numpy array to an open file or path in .tsv format
 
@@ -362,8 +359,6 @@ def write_tsv(file, array, header=''):
 
     _np.savetxt(file, array, fmt='%.4f', delimiter='\t', header=header, comments='#')
 
-
-
 def write_npz(file, array):
     """Writes a Numpy array to an open file or path in .npz format
 
@@ -375,8 +370,6 @@ def write_npz(file, array):
     Output: None
     """
     _np.savez_compressed(file, array)
-
-
 
 def filtercontigs(infile, outfile, minlength=2000):
     """Creates new FASTA file with filtered contigs
@@ -394,32 +387,3 @@ def filtercontigs(infile, outfile, minlength=2000):
     for entry in fasta_entries:
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
-
-
-
-def maskbases(lines):
-    """Masks IUPAC ambigious DNA bases and uracil to N
-
-    Input: Iterator of binary lines
-    Output: Iterator of binary lines
-    """
-
-    mask = bytes.maketrans(b'swkmyrubdhvSWKMYRUBDHV', b'NNNNNNNNNNNNNNNNNNNNNN')
-
-    firstline = next(lines)
-
-    if not isinstance(firstline, bytes):
-        raise TypeError("maskbases takes lines of type 'byte', not ", type(firstline))
-
-    if firstline[0] == 62:
-        yield firstline
-
-    else:
-        yield firstline.translate(mask)
-
-    for line in lines:
-        if line[0] == 62:
-            yield line
-
-        else:
-            yield line.translate(mask)
