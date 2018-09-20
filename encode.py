@@ -90,12 +90,12 @@ class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
 
     Instantiate with:
-        nsamples: Number of samples in depths matrix
-        nhiddens: List of n_neurons in the hidden layers [325, 325]
+        nsamples: Number of samples in abundance matrix
+        nhiddens: List of n_neurons in the hidden layers [[325, 325]]
         nlatent: Number of neurons in the latent layer [40]
-        mseratio: Balances error from TNF versus depths in loss [0.05]
-        capacity: How information-rich the latent layer can be [200]
-        cuda: Boolean, use CUDA or not (GPU accelerated training) [False]
+        mseratio: (α) Approximate TNF/(CE+TNF) ratio in loss. [0.05]
+        capacity: (β) Inverse of KL-divergence weight term in loss [200]
+        cuda: Use CUDA (GPU accelerated training) [False]
 
     Useful methods:
     VAE.trainmodel(rpkm, tnf, nepochs, batchsize, lrate, decay, logfile, modelfile)
@@ -210,12 +210,15 @@ class VAE(_nn.Module):
         return depths_out, tnf_out, mu, logsigma
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
-        ce = - _torch.mean((depths_out.log() * depths_in))
-        mse = _torch.mean((tnf_out - tnf_in).pow(2))
-        kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
+        ce = - _torch.sum((depths_out.log() * depths_in))
+        mse = _torch.sum((tnf_out - tnf_in).pow(2))
+        kld = -0.5 * _torch.sum(1 + logsigma - mu.pow(2) - logsigma.exp())
 
-        cefactor = self.nsamples / _log(self.nsamples) * (1 - self.mseratio)
-        loss = ce * cefactor + mse * self.mseratio + kld / self.capacity
+        # mseratio and capacity is α and β in our paper, respectively
+        ce_weight = (1 - self.mseratio) / _log(self.nsamples)
+        mse_weight = self.mseratio / 136
+        kld_weight = 1 / (self.nsamples * self.capacity)
+        loss = ce * ce_weight + mse * mse_weight + kld * kld_weight
 
         return loss, ce, mse, kld
 
