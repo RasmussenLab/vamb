@@ -4,7 +4,8 @@ Creates a variational autoencoder in PyTorch and tries to represent the depths
 and tnf in the latent space under gaussian noise.
 
 Usage:
->>> vae, dataloader = trainvae(depths, tnf) # Make & train VAE on Numpy arrays
+>>> vae = VAE(nsamples=6)
+>>> dataloader = vae.trainmodel(depths, tnf) # Train VAE on Numpy arrays
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
 (183882, 40)
@@ -17,11 +18,10 @@ import os as _os
 import numpy as _np
 import torch as _torch
 
-from math import log as _log, cos as _cos
+from math import log as _log
 
 from torch import nn as _nn
 from torch import optim as _optim
-from torch.autograd import Variable as _Variable
 from torch.nn import functional as _F
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
@@ -30,32 +30,53 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
-    """Create a PyTorch dataloader from depths and tnf arrays.
-    This function copies the underlying arrays, and zero-contigs are removed
-    from the copied dataset, and it's properly normalized before returning.
+def make_dataloader(rpkm, tnf, batchsize=128, cuda=False):
+    """Create a DataLoader and a contig mask from RPKM and TNF.
+
+    The dataloader is an object feeding minibatches of contigs to the VAE.
+    The data are normalized versions of the input datasets, with "zero" contigs,
+    i.e. contigs where a row in either TNF or RPKM are all zeros, removed.
+    The mask is a boolean mask designating which contigs have been kept.
+
+    Inputs:
+        rpkm: RPKM matrix (N_contigs x N_samples)
+        tnf: TNF matrix (N_contigs x 136)
+        batchsize: Size of minibatches for dataloader
+        cuda: Pagelock memory of dataloader (use when using CUDA)
+
+    Outputs:
+        DataLoader: An object feeding data to the VAE
+        mask: A boolean mask of which contigs are kept
     """
 
-    # Identify zero'd observations
-    if len(depthsarray) != len(tnfarray):
-        raise ValueError('The two arrays must have same length, not lengths ' +
-                         str(len(depthsarray)) + ' and ' + str(len(tnfarray)))
-    depthssum = depthsarray.sum(axis=1)
-    tnfsum = tnfarray.sum(axis=1)
+    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
+        raise ValueError('TNF and RPKM must be Numpy arrays')
+
+    if batchsize < 1:
+        raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
+
+    if len(rpkm) != len(tnf):
+        raise ValueError('Lengths of RPKM and TNF must be the same')
+
+    if tnf.shape[1] != 136:
+        raise ValueError('TNF must be 136 long along axis 1')
+
+    depthssum = rpkm.sum(axis=1)
+    tnfsum = tnf.sum(axis=1)
     mask = depthssum != 0
     mask &= tnfsum != 0
 
     # Remove zero-observations Unfortunately, a copy is necessary.
     # It doesn't matter much, as cluster.py will create a copy anyway when.
     # removing observations during clustering. This cannot easily prevented.
-    depths_copy = depthsarray[mask]
-    tnf_copy = tnfarray[mask]
+    rpkm_copy = rpkm[mask]
+    tnf_copy = tnf[mask]
     depthssum = depthssum[mask]
 
     # Normalize arrays and create the Tensors
-    depths_copy /= depthssum.reshape((-1, 1))
+    rpkm_copy /= depthssum.reshape((-1, 1))
     _vambtools.zscore(tnf_copy, axis=0, inplace=True)
-    depthstensor = _torch.from_numpy(depths_copy)
+    depthstensor = _torch.from_numpy(rpkm_copy)
     tnftensor = _torch.from_numpy(tnf_copy)
 
     # Create dataloader
@@ -63,36 +84,50 @@ def _dataloader_from_arrays(depthsarray, tnfarray, cuda, batchsize):
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
                              shuffle=True, num_workers=1, pin_memory=cuda)
 
-    return dataloader
+    return dataloader, mask
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
 
-    init with:
-        nsamples: Length of dimension 1 of depths
-        ntnf: Length of dimension 1 of tnf
-        hiddens: List with number of hidden neurons per layer
-        latent: Number of neurons in hidden layer
-        cuda: Boolean, use CUDA or not (GPU accelerated training)
+    Instantiate with:
+        nsamples: Number of samples in abundance matrix
+        nhiddens: List of n_neurons in the hidden layers [[325, 325]]
+        nlatent: Number of neurons in the latent layer [40]
+        mseratio: (α) Approximate TNF/(CE+TNF) ratio in loss. [0.05]
+        capacity: (β) Inverse of KL-divergence weight term in loss [200]
+        cuda: Use CUDA (GPU accelerated training) [False]
 
     Useful methods:
-    encode(self, data_loader):
-        encodes the data in the data loader and returns the encoded matrix
+    VAE.trainmodel(rpkm, tnf, nepochs, batchsize, lrate, decay, logfile, modelfile)
+        Trains the model, returning None
+
+    VAE.encode(self, data_loader):
+        Encodes the data in the data loader and returns the encoded matrix.
     """
 
-    def __init__(self, nsamples, ntnf, hiddens, latent, cuda, cefactor, msefactor, kldfactor):
+    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, mseratio=0.05,
+                 capacity=200, cuda=False):
+        if any(i < 1 for i in nhiddens):
+            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
+
+        if nlatent < 1:
+            raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
+
+        if capacity <= 0:
+            raise ValueError('capacity must be > 0')
+
+        if not (0 < mseratio < 1):
+            raise ValueError('mseratio must be 0 < mseratio < 1')
+
         super(VAE, self).__init__()
 
         # Initialize simple attributes
         self.usecuda = cuda
         self.nsamples = nsamples
-        self.ntnf = ntnf
-        self.nfeatures = nsamples + ntnf
-        self.nhiddens = hiddens
-        self.nlatent = latent
-        self.cefactor = cefactor
-        self.msefactor = msefactor
-        self.kldfactor = kldfactor
+        self.mseratio = mseratio
+        self.capacity = capacity
+        self.nhiddens = nhiddens
+        self.nlatent = nlatent
 
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -101,7 +136,7 @@ class VAE(_nn.Module):
         self.decodernorms = _nn.ModuleList()
 
         # Add all other hidden layers (do nothing if only 1 hidden layer)
-        for nin, nout in zip([self.nfeatures] + self.nhiddens, self.nhiddens):
+        for nin, nout in zip([self.nsamples + 136] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
@@ -115,11 +150,14 @@ class VAE(_nn.Module):
             self.decodernorms.append(_nn.BatchNorm1d(nout))
 
         # Reconstruction (output) layer
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nfeatures)
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + 136)
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.softplus = _nn.Softplus()
+
+        if cuda:
+            self.cuda()
 
     def _encode(self, tensor):
         tensors = list()
@@ -142,7 +180,7 @@ class VAE(_nn.Module):
         if self.usecuda:
             epsilon = epsilon.cuda()
 
-        epsilon = _Variable(epsilon)
+        epsilon.requires_grad = True
 
         latent = mu + epsilon * _torch.exp(logsigma/2)
 
@@ -159,7 +197,7 @@ class VAE(_nn.Module):
 
         # Decompose reconstruction to depths and tnf signal
         depths_out = _F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
-        tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
+        tnf_out = reconstruction.narrow(1, self.nsamples, 136)
 
         return depths_out, tnf_out
 
@@ -172,14 +210,19 @@ class VAE(_nn.Module):
         return depths_out, tnf_out, mu, logsigma
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
-        ce = - _torch.mean((depths_out.log() * depths_in))
-        mse = _torch.mean((tnf_out - tnf_in).pow(2))
-        kld = -0.5 * _torch.mean(1 + logsigma - mu.pow(2) - logsigma.exp())
-        loss = self.cefactor * ce + self.msefactor * mse + self.kldfactor * kld
+        ce = - _torch.sum((depths_out.log() * depths_in))
+        mse = _torch.sum((tnf_out - tnf_in).pow(2))
+        kld = -0.5 * _torch.sum(1 + logsigma - mu.pow(2) - logsigma.exp())
+
+        # mseratio and capacity is α and β in our paper, respectively
+        ce_weight = (1 - self.mseratio) / _log(self.nsamples)
+        mse_weight = self.mseratio / 136
+        kld_weight = 1 / (self.nsamples * self.capacity)
+        loss = ce * ce_weight + mse * mse_weight + kld * kld_weight
 
         return loss, ce, mse, kld
 
-    def trainmodel(self, data_loader, epoch, optimizer, decay, logfile):
+    def trainepoch(self, data_loader, epoch, optimizer, decay, logfile):
         self.train()
 
         epoch_loss = 0
@@ -189,8 +232,8 @@ class VAE(_nn.Module):
         learning_rate = optimizer.param_groups[0]['lr']
 
         for depths_in, tnf_in in data_loader:
-            depths = _Variable(depths_in)
-            tnf = _Variable(tnf_in)
+            depths_in.requires_grad = True
+            tnf_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
@@ -241,44 +284,43 @@ class VAE(_nn.Module):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths, tnf = data_loader.dataset.tensors
-        length = len(depths)
+        depths_array, tnf_array = data_loader.dataset.tensors
+        length = len(depths_array)
 
         latent = _torch.zeros((length, self.nlatent), dtype=_torch.float32)
+        assert not latent.is_cuda # Should be on CPU, not GPU
 
         row = 0
-        for batch, (depths, tnf) in enumerate(new_data_loader):
-            depths = _Variable(depths)
-            tnf = _Variable(tnf)
+        with _torch.no_grad():
+            for depths, tnf in new_data_loader:
+                depths.requires_grad = True
+                tnf.requires_grad = True
 
-            # Move input to GPU if requested
-            if self.usecuda:
-                depths = depths.cuda()
-                tnf = tnf.cuda()
+                # Move input to GPU if requested
+                if self.usecuda:
+                    depths = depths.cuda()
+                    tnf = tnf.cuda()
 
-            # Evaluate
-            out_depths, out_tnf, mu, logsigma = self(depths, tnf)
-            latent[row: row + len(mu)] = mu
+                # Evaluate
+                out_depths, out_tnf, mu, logsigma = self(depths, tnf)
 
-            row += len(mu)
+                if self.usecuda:
+                    mu = mu.cpu()
+
+                latent[row: row + len(mu)] = mu
+                row += len(mu)
 
         assert row == length
-
-        # Move latent representation back to CPU for output
-        if self.usecuda:
-            latent = latent.cpu()
-
         latent_array = latent.detach().numpy()
 
         return latent_array
 
     def save(self, filehandle):
-        state = {'cefactor': self.cefactor,
-                 'msefactor': self.msefactor,
-                 'kldfactor': self.kldfactor,
+        state = {'nsamples': self.nsamples,
+                 'mseratio': self.mseratio,
+                 'capacity': self.capacity,
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
-                 'nsamples': self.nsamples,
                  'state': self.state_dict(),
                 }
 
@@ -300,15 +342,14 @@ class VAE(_nn.Module):
         # Forcably load to CPU even if model was saves as GPU model
         dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
 
-        cefactor = dictionary['cefactor']
-        msefactor = dictionary['msefactor']
-        kldfactor = dictionary['kldfactor']
+        nsamples = dictionary['nsamples']
+        mseratio = dictionary['mseratio']
+        capacity = dictionary['capacity']
         nhiddens = dictionary['nhiddens']
         nlatent = dictionary['nlatent']
-        nsamples = dictionary['nsamples']
         state = dictionary['state']
 
-        vae = cls(nsamples, 136, nhiddens, nlatent, cuda, cefactor, msefactor, kldfactor)
+        vae = cls(nsamples, nhiddens, nlatent, mseratio, capacity, cuda)
         vae.load_state_dict(state)
 
         if cuda:
@@ -319,100 +360,58 @@ class VAE(_nn.Module):
 
         return vae
 
-def trainvae(depths, tnf, nhiddens=[325, 325], nlatent=40, nepochs=200,
-             batchsize=128, cuda=False, capacity=200, mseratio=0.05, lrate=1e-3,
-             decay=0.99, logfile=None, modelfile=None):
+    def trainmodel(self, dataloader, nepochs=200, batchsize=128, lrate=1e-3,
+                 decay=0.99, logfile=None, modelfile=None):
 
-    """Create and train an autoencoder from depths array and tnf array.
+        """Train the autoencoder from depths array and tnf array.
 
-    Inputs:
-        depths: An (n_contigs x n_samples) z-normalized Numpy matrix of depths
-        tnf: An (n_contigs x 136) z-normalized Numpy matrix of tnf
-        nhiddens: List of n_neurons in the hidden layers [325, 325]
-        nlatent: Number of neurons in the latent layer [40]
-        nepochs: Train for this many epochs before encoding [200]
-        batchsize: Mini-batch size for training [128]
-        cuda: Use CUDA (GPU acceleration) [False]
-        capacity: How information-rich the latent layer can be [200]
-        mseratio: Balances error from TNF versus depths in loss [0.05]
-        lrate: Starting learning rate for the optimizer [0.001]
-        decay: Learning rate multiplier per epoch [0.99]
-        logfile: Print status updates to this file if not None [None]
-        modelfile: Save models to this file if not None [None]
+        Inputs:
+            dataloader: DataLoader made by make_dataloader
+            nepochs: Train for this many epochs before encoding [200]
+            batchsize: Mini-batch size for training [128]
+            lrate: Starting learning rate for the optimizer [0.001]
+            decay: Learning rate multiplier per epoch [0.99]
+            logfile: Print status updates to this file if not None [None]
+            modelfile: Save models to this file if not None [None]
 
-    Outputs:
-        model: The trained VAE
-        data_loader A DataLoader instance to feed the VAE for evaluation
+        Outputs: The DataLoader object used to train the VAE
         """
 
-    # Check all the args here
-    if any(i < 1 for i in nhiddens):
-        raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
+        if lrate < 0:
+            raise ValueError('Learning rate cannot be negative')
 
-    if nlatent < 1:
-        raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
+        if nepochs < 1:
+            raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
 
-    if nepochs < 1:
-        raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
+        if not (0 < decay <= 1):
+            raise ValueError('Decay must be in interval ]0:1]')
 
-    if batchsize < 1:
-        raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
+        # Get number of features
+        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
+        optimizer = _optim.Adam(self.parameters(), lr=lrate)
 
-    if lrate < 0:
-        raise ValueError('Learning rate cannot be negative')
+        if logfile is not None:
+            print('\tCUDA:', self.usecuda, file=logfile)
+            print('\tCapacity:', self.capacity, file=logfile)
+            print('\tMSE ratio:', self.mseratio, file=logfile)
+            print('\tN latent:', self.nlatent, file=logfile)
+            print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
+            print('\tN epochs:', nepochs, file=logfile)
+            print('\tBatch size:', batchsize, file=logfile)
+            print('\tLearning rate:', lrate, file=logfile)
+            print('\tDecay:', decay, file=logfile)
+            print('\tN contigs:', ncontigs, file=logfile)
+            print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
-    if not (0 < decay <= 1):
-        raise ValueError('Decay must be in interval ]0:1]')
+        # Train
+        for epoch in range(nepochs):
+            self.trainepoch(dataloader, epoch, optimizer, decay, logfile)
 
-    if capacity <= 0:
-        raise ValueError('capacity must be > 0')
+        # Save weights - Lord forgive me, for I have sinned when catching all exceptions
+        if modelfile is not None:
+            try:
+                self.save(modelfile)
+            except:
+                pass
 
-    if not (0 < mseratio < 1):
-        raise ValueError('mseratio must be 0 < mseratio < 1')
-
-    data_loader = _dataloader_from_arrays(depths, tnf, cuda, batchsize)
-
-    # Get number of features
-    nsamples, ntnfs = [tensor.shape[1] for tensor in data_loader.dataset.tensors]
-    ncontigs = data_loader.dataset.tensors[0].shape[0]
-    n_discarded_contigs = depths.shape[0] - ncontigs
-
-    # See the tutorial in documentation to see how these three are derived
-    cefactor = nsamples * (1 - mseratio) / _log(nsamples)
-    msefactor = mseratio
-    kldfactor = 1 / capacity
-
-    # Instantiate the VAE
-    model = VAE(nsamples, ntnfs, nhiddens, nlatent, cuda, cefactor, msefactor, kldfactor)
-
-    if cuda:
-        model.cuda()
-
-    optimizer = _optim.Adam(model.parameters(), lr=lrate)
-
-    if logfile is not None:
-        print('\tCUDA:', cuda, file=logfile)
-        print('\tCapacity:', capacity, file=logfile)
-        print('\tMSE ratio:', mseratio, file=logfile)
-        print('\tN latent:', nlatent, file=logfile)
-        print('\tN hidden:', ', '.join(map(str, nhiddens)), file=logfile)
-        print('\tN epochs:', nepochs, file=logfile)
-        print('\tBatch size:', batchsize, file=logfile)
-        print('\tLearning rate:', lrate, file=logfile)
-        print('\tDecay:', decay, file=logfile)
-        print('\tN contigs:', ncontigs, file=logfile)
-        print('\tDiscarded (zero) contigs:', n_discarded_contigs, file=logfile)
-        print('\tN samples:', depths.shape[1], file=logfile, end='\n\n')
-
-    # Train
-    for epoch in range(nepochs):
-        model.trainmodel(data_loader, epoch, optimizer, decay, logfile)
-
-    # Save weights - Lord forgive me, for I have sinned when catching all exceptions
-    if modelfile is not None:
-        try:
-            model.save(modelfile)
-        except:
-            pass
-
-    return model, data_loader
+        return None

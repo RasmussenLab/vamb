@@ -35,7 +35,8 @@ Make sure you have Cython installed (you can install it with `pip` or your Pytho
 
 * Go to the src/ directory in the vamb directory
 * run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
-* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
+* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent 
+directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
 * You can now import Vamb.
 
 
@@ -59,13 +60,8 @@ If you want to extend Vamb, run only a part of the pipeline or run with altered 
 # Troubleshooting
 
 ### Parsing the fasta file
-__`parsecontigs.read_contigs` fails with ValueError: Non-ACGTN in line [LINE]: [CHAR]__
 
-Vamb can only parse contigs consisting of any bytes in b'acgtnACGTN', so IUPAC ambigious DNA, uracils (U), and anything else will cause an error. You will have to clean the FASTA file and change all the non-ACTGN bases to N. For convenience, you can use the `vamb.vambtools.maskbases` function:
-
-    with vamb.vambtools.Reader('/path/to/contigs.fna', 'rb') as filehandle:
-        masked_lines = vamb.vambtools.maskbases(filehandle)
-        tnfs, contignames, lengths = vamb.parsecontigs.read_contigs(masked_lines)
+No trouble seen so far.
 
 ### Parsing the BAM files
 
