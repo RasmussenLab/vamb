@@ -12,7 +12,7 @@ import numpy as _np
 import gzip as _gzip
 import vamb.vambtools as _vambtools
 
-def read_contigs(byte_iterator, minlength=100):
+def read_contigs(byte_iterator, minlength=100, dtype=_np.float32):
     """Parses a FASTA file open in binary reading mode.
 
     Input:
@@ -42,7 +42,7 @@ def read_contigs(byte_iterator, minlength=100):
         contignames.append(entry.header)
         lengths.append(len(entry))
 
-    tnfs = _np.array(tnf_list, dtype=_np.float32)
+    tnfs = _np.array(tnf_list, dtype=dtype)
     del tnf_list
 
     lengths = _np.array(lengths, dtype=_np.int)

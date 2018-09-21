@@ -69,8 +69,8 @@ def make_dataloader(rpkm, tnf, batchsize=128, cuda=False):
     # Remove zero-observations Unfortunately, a copy is necessary.
     # It doesn't matter much, as cluster.py will create a copy anyway when.
     # removing observations during clustering. This cannot easily prevented.
-    rpkm_copy = rpkm[mask]
-    tnf_copy = tnf[mask]
+    rpkm_copy = rpkm[mask].astype(_np.float32)
+    tnf_copy = tnf[mask].astype(_np.float32)
     depthssum = depthssum[mask]
 
     # Normalize arrays and create the Tensors
@@ -287,7 +287,7 @@ class VAE(_nn.Module):
         depths_array, tnf_array = data_loader.dataset.tensors
         length = len(depths_array)
 
-        latent = _torch.zeros((length, self.nlatent), dtype=_torch.float32)
+        latent = _torch.zeros((length, self.nlatent), dtype=data_loader.dataset.tensors[0].dtype)
         assert not latent.is_cuda # Should be on CPU, not GPU
 
         row = 0
