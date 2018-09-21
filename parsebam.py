@@ -144,7 +144,7 @@ def _filter_segments(segmentiterator, minscore):
 
 
 
-def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
+def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000, dtype=_np.float32):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
 
@@ -184,7 +184,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     bamfile.close()
     del idof
 
-    rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
+    rpkms = _np.zeros(len(contiglengths), dtype=dtype)
 
     millionmappedreads = nhalfreads / 1e6
 
@@ -208,18 +208,18 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
 
 
 def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
-                  subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
+                  subprocesses=DEFAULT_SUBPROCESSES, dtype=_np.float32, logfile=None):
     "Placeholder docstring - replaced after this func definition"
 
     # Define callback function depending on whether a logfile exists or not
     if logfile is not None:
         def _callback(result):
-            path, rpkms = result
+            path, rpkms, length = result
             print('\tProcessed ', path, file=logfile)
 
         def _error_callback(result):
-            path, rpkms = result
             print('\tERROR WHEN PROCESSING ', path, file=logfile)
+            raise _multiprocessing.ProcessError('ERROR WHEN PROCESSING ' + path)
     else:
         def _callback(result):
             pass
@@ -290,7 +290,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
     # one big matrix...
     if dumpdirectory is None:
         columnof = {p:i for i, p in enumerate(paths)}
-        rpkms = _np.zeros((ncontigs, len(paths)), dtype=_np.float32)
+        rpkms = _np.zeros((ncontigs, len(paths)), dtype=dtype)
 
         for processresult in processresults:
             path, rpkm, length = processresult.get()
@@ -299,7 +299,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
     # If we did, instead merge them from the disk
     else:
         dumppaths = [_os.path.join(dumpdirectory, str(i) + '.npz') for i in range(len(paths))]
-        rpkms = mergecolumns(dumppaths)
+        rpkms = mergecolumns(dumppaths, dtype=dtype)
 
     return rpkms
 
