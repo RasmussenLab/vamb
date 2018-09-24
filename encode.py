@@ -93,8 +93,8 @@ class VAE(_nn.Module):
         nsamples: Number of samples in abundance matrix
         nhiddens: List of n_neurons in the hidden layers [[325, 325]]
         nlatent: Number of neurons in the latent layer [40]
-        mseratio: (α) Approximate TNF/(CE+TNF) ratio in loss. [0.05]
-        capacity: (β) Inverse of KL-divergence weight term in loss [200]
+        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [0.05]
+        beta: Multiply KLD by the inverse of this value [200]
         cuda: Use CUDA (GPU accelerated training) [False]
 
     Useful methods:
@@ -105,27 +105,27 @@ class VAE(_nn.Module):
         Encodes the data in the data loader and returns the encoded matrix.
     """
 
-    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, mseratio=0.05,
-                 capacity=200, cuda=False):
+    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=0.05,
+                 beta=200, cuda=False):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
 
-        if capacity <= 0:
-            raise ValueError('capacity must be > 0')
+        if beta <= 0:
+            raise ValueError('beta must be > 0')
 
-        if not (0 < mseratio < 1):
-            raise ValueError('mseratio must be 0 < mseratio < 1')
+        if not (0 < alpha < 1):
+            raise ValueError('alpha must be 0 < alpha < 1')
 
         super(VAE, self).__init__()
 
         # Initialize simple attributes
         self.usecuda = cuda
         self.nsamples = nsamples
-        self.mseratio = mseratio
-        self.capacity = capacity
+        self.alpha = alpha
+        self.beta = beta
         self.nhiddens = nhiddens
         self.nlatent = nlatent
 
@@ -211,23 +211,22 @@ class VAE(_nn.Module):
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
-        mse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
 
-        # mseratio and capacity is α and β in our paper, respectively
-        ce_weight = (1 - self.mseratio) / _log(self.nsamples)
-        mse_weight = self.mseratio / 136
-        kld_weight = 1 / (self.nsamples * self.capacity)
-        loss = ce * ce_weight + mse * mse_weight + kld * kld_weight
+        ce_weight = (1 - self.alpha) / _log(self.nsamples)
+        sse_weight = self.alpha / 136
+        kld_weight = 1 / (self.nlatent * self.beta)
+        loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
 
-        return loss, ce, mse, kld
+        return loss, ce, sse, kld
 
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         self.train()
 
         epoch_loss = 0
         epoch_kldloss = 0
-        epoch_mseloss = 0
+        epoch_sseloss = 0
         epoch_celoss = 0
 
         if epoch in batchsteps:
@@ -249,7 +248,7 @@ class VAE(_nn.Module):
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
-            loss, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
+            loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, mu, logsigma)
 
             loss.backward()
@@ -257,15 +256,15 @@ class VAE(_nn.Module):
 
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
-            epoch_mseloss += mse.data.item()
+            epoch_sseloss += sse.data.item()
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
-            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tMSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
+            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
-                  epoch_mseloss / len(data_loader),
+                  epoch_sseloss / len(data_loader),
                   epoch_kldloss / len(data_loader),
                   data_loader.batch_size,
                   ), file=logfile)
@@ -320,8 +319,8 @@ class VAE(_nn.Module):
 
     def save(self, filehandle):
         state = {'nsamples': self.nsamples,
-                 'mseratio': self.mseratio,
-                 'capacity': self.capacity,
+                 'alpha': self.alpha,
+                 'beta': self.beta,
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
                  'state': self.state_dict(),
@@ -346,13 +345,13 @@ class VAE(_nn.Module):
         dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
 
         nsamples = dictionary['nsamples']
-        mseratio = dictionary['mseratio']
-        capacity = dictionary['capacity']
+        alpha = dictionary['alpha']
+        beta = dictionary['beta']
         nhiddens = dictionary['nhiddens']
         nlatent = dictionary['nlatent']
         state = dictionary['state']
 
-        vae = cls(nsamples, nhiddens, nlatent, mseratio, capacity, cuda)
+        vae = cls(nsamples, nhiddens, nlatent, alpha, beta, cuda)
         vae.load_state_dict(state)
 
         if cuda:
@@ -396,8 +395,8 @@ class VAE(_nn.Module):
 
         if logfile is not None:
             print('\tCUDA:', self.usecuda, file=logfile)
-            print('\tCapacity:', self.capacity, file=logfile)
-            print('\tMSE ratio:', self.mseratio, file=logfile)
+            print('\tAlpha:', self.alpha, file=logfile)
+            print('\tBeta:', self.beta, file=logfile)
             print('\tN latent:', self.nlatent, file=logfile)
             print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
