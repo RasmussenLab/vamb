@@ -41,7 +41,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, cuda=False):
     Inputs:
         rpkm: RPKM matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x 136)
-        batchsize: Size of minibatches for dataloader
+        batchsize: Starting size of minibatches for dataloader
         cuda: Pagelock memory of dataloader (use when using CUDA)
 
     Outputs:
@@ -106,7 +106,7 @@ class VAE(_nn.Module):
     """
 
     def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, mseratio=0.05,
-                 capacity=200, dropout=0.0, cuda=False):
+                 capacity=200, cuda=False):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
@@ -128,7 +128,6 @@ class VAE(_nn.Module):
         self.capacity = capacity
         self.nhiddens = nhiddens
         self.nlatent = nlatent
-        self.dropoutrate = dropout
 
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -156,7 +155,6 @@ class VAE(_nn.Module):
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.softplus = _nn.Softplus()
-        self.dropout = _nn.Dropout(p=dropout)
 
         if cuda:
             self.cuda()
@@ -166,7 +164,7 @@ class VAE(_nn.Module):
 
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
-            tensor = encodernorm(self.dropout(self.relu(encoderlayer(tensor))))
+            tensor = encodernorm(self.relu(encoderlayer(tensor)))
             tensors.append(tensor)
 
         # Latent layers
@@ -192,7 +190,7 @@ class VAE(_nn.Module):
         tensors = list()
 
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
-            tensor = decodernorm(self.dropout(self.relu(decoderlayer(tensor))))
+            tensor = decodernorm(self.relu(decoderlayer(tensor)))
             tensors.append(tensor)
 
         reconstruction = self.outputlayer(tensor)
@@ -211,7 +209,7 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out, mu, logsigma
 
-    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma, kld_weight):
+    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
         mse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
@@ -219,11 +217,12 @@ class VAE(_nn.Module):
         # mseratio and capacity is α and β in our paper, respectively
         ce_weight = (1 - self.mseratio) / _log(self.nsamples)
         mse_weight = self.mseratio / 136
+        kld_weight = 1 / (self.nsamples * self.capacity)
         loss = ce * ce_weight + mse * mse_weight + kld * kld_weight
 
         return loss, ce, mse, kld
 
-    def trainepoch(self, data_loader, epoch, optimizer, warmup, batchsteps, logfile):
+    def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         self.train()
 
         epoch_loss = 0
@@ -238,13 +237,6 @@ class VAE(_nn.Module):
                                       num_workers=data_loader.num_workers,
                                       pin_memory=data_loader.pin_memory)
 
-        if warmup == 0 or epoch >= warmup:
-            warmup_factor = 1.0
-        else:
-            warmup_factor = (1+epoch) / (1+warmup)
-
-        kld_weight = warmup_factor / (self.nsamples * self.capacity)
-
         for depths_in, tnf_in in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
@@ -258,7 +250,7 @@ class VAE(_nn.Module):
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
             loss, ce, mse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
-                                                  tnf_out, mu, logsigma, kld_weight)
+                                                  tnf_out, mu, logsigma)
 
             loss.backward()
             optimizer.step()
@@ -269,14 +261,13 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
-            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tMSE: {:.6f}\tKLD: {:.6f}\tBatchsize: {}\tHeat: {:.3f}'.format(
+            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tMSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
                   epoch_mseloss / len(data_loader),
                   epoch_kldloss / len(data_loader),
                   data_loader.batch_size,
-                  warmup_factor
                   ), file=logfile)
 
             logfile.flush()
@@ -308,9 +299,6 @@ class VAE(_nn.Module):
         row = 0
         with _torch.no_grad():
             for depths, tnf in new_data_loader:
-                depths.requires_grad = True
-                tnf.requires_grad = True
-
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
@@ -376,7 +364,7 @@ class VAE(_nn.Module):
         return vae
 
     def trainmodel(self, dataloader, nepochs=200, lrate=1e-3,
-                   warmup=0, batchsteps=[25, 75, 150], logfile=None, modelfile=None):
+                   batchsteps=[25, 75, 150], logfile=None, modelfile=None):
 
         """Train the autoencoder from depths array and tnf array.
 
@@ -384,6 +372,7 @@ class VAE(_nn.Module):
             dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [200]
             lrate: Starting learning rate for the optimizer [0.001]
+            batchsteps: Double batchsize at these epochs [25, 75, 150]
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
@@ -413,15 +402,12 @@ class VAE(_nn.Module):
             print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
-            print('\tDropout:', self.dropoutrate, file=logfile)
-            print('\tWarmup:', warmup, file=logfile)
             print('\tN contigs:', ncontigs, file=logfile)
             print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
         for epoch in range(nepochs):
-            dataloader = self.trainepoch(dataloader, epoch, optimizer, warmup,
-                                         batchsteps, logfile)
+            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps, logfile)
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:
