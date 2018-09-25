@@ -95,6 +95,7 @@ class VAE(_nn.Module):
         nlatent: Number of neurons in the latent layer [40]
         alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [0.05]
         beta: Multiply KLD by the inverse of this value [200]
+        dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
     Useful methods:
@@ -106,7 +107,7 @@ class VAE(_nn.Module):
     """
 
     def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=0.05,
-                 beta=200, cuda=False):
+                 beta=200, dropout=0.2, cuda=False):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
@@ -119,6 +120,9 @@ class VAE(_nn.Module):
         if not (0 < alpha < 1):
             raise ValueError('alpha must be 0 < alpha < 1')
 
+        if not (0 < dropout < 1):
+            raise ValueError('dropout must be 0 < dropout < 1')
+
         super(VAE, self).__init__()
 
         # Initialize simple attributes
@@ -128,6 +132,7 @@ class VAE(_nn.Module):
         self.beta = beta
         self.nhiddens = nhiddens
         self.nlatent = nlatent
+        self.dropout = dropout
 
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -155,6 +160,7 @@ class VAE(_nn.Module):
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.softplus = _nn.Softplus()
+        self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         if cuda:
             self.cuda()
@@ -164,7 +170,7 @@ class VAE(_nn.Module):
 
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
-            tensor = encodernorm(self.relu(encoderlayer(tensor)))
+            tensor = encodernorm(self.dropoutlayer(self.relu(encoderlayer(tensor))))
             tensors.append(tensor)
 
         # Latent layers
@@ -190,7 +196,7 @@ class VAE(_nn.Module):
         tensors = list()
 
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
-            tensor = decodernorm(self.relu(decoderlayer(tensor)))
+            tensor = decodernorm(self.dropoutlayer(self.relu(decoderlayer(tensor))))
             tensors.append(tensor)
 
         reconstruction = self.outputlayer(tensor)
@@ -321,6 +327,7 @@ class VAE(_nn.Module):
         state = {'nsamples': self.nsamples,
                  'alpha': self.alpha,
                  'beta': self.beta,
+                 'dropout': self.dropout,
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
                  'state': self.state_dict(),
@@ -347,11 +354,12 @@ class VAE(_nn.Module):
         nsamples = dictionary['nsamples']
         alpha = dictionary['alpha']
         beta = dictionary['beta']
+        dropout = dictionary['dropout']
         nhiddens = dictionary['nhiddens']
         nlatent = dictionary['nlatent']
         state = dictionary['state']
 
-        vae = cls(nsamples, nhiddens, nlatent, alpha, beta, cuda)
+        vae = cls(nsamples, nhiddens, nlatent, alpha, beta, dropout, cuda)
         vae.load_state_dict(state)
 
         if cuda:
@@ -362,8 +370,8 @@ class VAE(_nn.Module):
 
         return vae
 
-    def trainmodel(self, dataloader, nepochs=200, lrate=1e-3,
-                   batchsteps=[25, 75, 150], logfile=None, modelfile=None):
+    def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
+                   batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
 
         """Train the autoencoder from depths array and tnf array.
 
@@ -375,7 +383,7 @@ class VAE(_nn.Module):
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
-        Outputs: The DataLoader object used to train the VAE
+        Output: None
         """
 
         if lrate < 0:
@@ -394,11 +402,14 @@ class VAE(_nn.Module):
         optimizer = _optim.Adam(self.parameters(), lr=lrate)
 
         if logfile is not None:
+            print('\tNetwork properties:', file=logfile)
             print('\tCUDA:', self.usecuda, file=logfile)
             print('\tAlpha:', self.alpha, file=logfile)
             print('\tBeta:', self.beta, file=logfile)
-            print('\tN latent:', self.nlatent, file=logfile)
+            print('\tDropout:', self.dropout, file=logfile)
             print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
+            print('\tN latent:', self.nlatent, file=logfile)
+            print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN contigs:', ncontigs, file=logfile)
