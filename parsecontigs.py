@@ -20,8 +20,8 @@ def read_contigs(byte_iterator, minlength=100, dtype=_np.float32):
         minlength[100]: Ignore any references shorter than N bases
 
     Outputs:
-        tnfs: A (n_FASTA_entries x 136) matrix of tetranucleotide freq.
-        contignames: A lNumpy array of contig headers
+        tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
+        contignames: A Numpy array of contig headers
         lengths: A Numpy array of contig lengths
     """
 

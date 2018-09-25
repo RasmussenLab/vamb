@@ -7,8 +7,8 @@ Usage:
 >>> cluster_iterator = cluster(rpkms, tnfs, labels=contignames)
 >>> clusters = dict(cluster_iterator)
 
-Implements two core functions: cluster and tandemcluster, along with the helper
-functions writeclusters and readclusters.
+Implements one core function, cluster, along with the helper
+functions write_clusters and read_clusters.
 For all functions in this module, a collection of clusters are represented as
 a {clustername, set(elements)} dict.
 
@@ -189,16 +189,16 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
     return labels, threshold
 
 def cluster(matrix, labels=None, threshold=None, maxsteps=25,
-            normalized=False, nsamples=2000, maxsize=2500, logfile=None):
+            normalized=False, nsamples=2500, maxsize=2500, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
         matrix: A (obs x features) Numpy matrix of values
-        labels: None or Numpy array with labels for matrix rows [None = ints]
+        labels: None or Numpy array with labels for matrix rows [None = indices]
         threshold: Optimal medoid search within this distance from medoid [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         normalized: Matrix is already zscore-normalized [False]
-        nsamples: Estimate threshold from N samples [1000]
+        nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
         logfile: Print threshold estimates and certainty to file [None]
 

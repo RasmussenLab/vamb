@@ -67,6 +67,11 @@ def mergecolumns(pathlist, dtype=_np.float32):
 
     All paths must be npz arrays with the array saved as name 'arr_0',
     and with the same length.
+
+    Inputs:
+        pathlist: List of paths to find .npz files to merge
+        dtype: Data type of resulting matrix [np.float32]
+    Output: Matrix with one column per npz file
     """
 
     if len(pathlist) == 0:

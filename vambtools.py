@@ -279,7 +279,7 @@ def write_bins(directory, bins, fastadict, maxbins=250):
 
     # Check that the directory is not a non-directory file,
     # and that its parent directory indeed exists
-    abspath = os.path.abspath(directory)
+    abspath = _os.path.abspath(directory)
     parentdir = _os.path.dirname(abspath)
 
     if parentdir != '' and not _os.path.isdir(parentdir):
