@@ -5,7 +5,8 @@ and tnf in the latent space under gaussian noise.
 
 Usage:
 >>> vae = VAE(nsamples=6)
->>> dataloader = vae.trainmodel(depths, tnf) # Train VAE on Numpy arrays
+>>> dataloader, mask = make_dataloader(depths, tnf)
+>>> vae.trainmodel(dataloader)
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
 (183882, 40)
@@ -98,11 +99,10 @@ class VAE(_nn.Module):
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
-    Useful methods:
-    VAE.trainmodel(rpkm, tnf, nepochs, batchsize, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
         Trains the model, returning None
 
-    VAE.encode(self, data_loader):
+    vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
     """
 
@@ -324,6 +324,11 @@ class VAE(_nn.Module):
         return latent_array
 
     def save(self, filehandle):
+        """Saves the VAE to a path or binary opened file. Load with VAE.load
+
+        Input: Path or binary opened filehandle
+        Output: None
+        """
         state = {'nsamples': self.nsamples,
                  'alpha': self.alpha,
                  'beta': self.beta,
@@ -341,7 +346,7 @@ class VAE(_nn.Module):
 
         Inputs:
             path: Path to model file as created by functions VAE.save or
-                  encode.trainvae.
+                  VAE.trainmodel.
             cuda: If network should work on GPU [False]
             evaluate: Return network in evaluation mode [True]
 
@@ -372,14 +377,13 @@ class VAE(_nn.Module):
 
     def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
                    batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
-
         """Train the autoencoder from depths array and tnf array.
 
         Inputs:
             dataloader: DataLoader made by make_dataloader
-            nepochs: Train for this many epochs before encoding [200]
+            nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
-            batchsteps: Double batchsize at these epochs [25, 75, 150]
+            batchsteps: Double batchsize at these epochs [25, 75, 150, 300]
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
@@ -411,6 +415,8 @@ class VAE(_nn.Module):
             print('\tN latent:', self.nlatent, file=logfile)
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
+            print('\tBatch size:', dataloader.batch_size, file=logfile)
+            print('\tBatchsteps:', ', '.join(map(str, batchsteps)), file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN contigs:', ncontigs, file=logfile)
             print('\tN samples:', nsamples, file=logfile, end='\n\n')

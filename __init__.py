@@ -30,7 +30,7 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-__version__ = (0, 3)
+__version__ = (0, 4)
 
 from . import vambtools
 from . import parsebam
