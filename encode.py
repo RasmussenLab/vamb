@@ -120,8 +120,8 @@ class VAE(_nn.Module):
         if not (0 < alpha < 1):
             raise ValueError('alpha must be 0 < alpha < 1')
 
-        if not (0 < dropout < 1):
-            raise ValueError('dropout must be 0 < dropout < 1')
+        if not (0 <= dropout < 1):
+            raise ValueError('dropout must be 0 <= dropout < 1')
 
         super(VAE, self).__init__()
 
