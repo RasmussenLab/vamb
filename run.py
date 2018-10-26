@@ -6,6 +6,7 @@ import argparse
 import datetime
 import time
 import shutil
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import vamb
@@ -77,6 +78,9 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('Created VAE', logfile, 1)
     dataloader, mask = vamb.encode.make_dataloader(rpkms, tnfs, batchsize, cuda)
     log('Created dataloader and mask', logfile, 1)
+    n_discarded = len(mask) - mask.sum()
+    log('Number of contigs unsuitable for encoding: {}'.format(n_discarded), logfile, 2)
+    log('Number of contigs remaining: {}'.format(len(mask) - n_discarded), logfile, 2)
 
     modelpath = os.path.join(outdir, 'model.pt')
     log('Training VAE\n', logfile, 1)
@@ -92,10 +96,15 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
+def cluster(outdir, latent, contignames, prevalence, maxclusters, minclustersize, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
+    log('Sorting latent and contignames by prevalence.', logfile, 1)
+    order = np.argsort(prevalence)[::-1]
+    latent, contignames = latent[order], contignames[order]
+
+    log('Clustering contigs', logfile, 1)
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames, logfile=logfile)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
@@ -130,11 +139,13 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
                            dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile)
 
+    prevalence = np.array([sum(i > 0.0) for i in rpkms])[mask]
     del tnfs, rpkms
     contignames = contignames[mask]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)
+    cluster(outdir, latent, contignames, prevalence, maxclusters, minclustersize, logfile)
+    del prevalence
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)

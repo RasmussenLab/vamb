@@ -137,7 +137,6 @@ def _cluster(matrix, labels, threshold, max_steps):
 
             # This is quicker than changing existing mask to True
             keepmask = _np.ones(len(matrix), dtype=_np.bool)
-
             seed = 0
 
 def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile):
