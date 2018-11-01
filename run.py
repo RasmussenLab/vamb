@@ -96,13 +96,18 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, prevalence, maxclusters, minclustersize, logfile):
+def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
-    log('Sorting latent and contignames by prevalence.', logfile, 1)
-    order = np.argsort(prevalence)[::-1]
+    # We shuffle to prevent bias in which contigs are picked as seeds
+    log('Shuffling latent encoding and contignames.', logfile, 1)
+    order = np.arange(len(contignames))
+    np.random.seed(4218525467)
+    np.random.shuffle(order)
+
     latent, contignames = latent[order], contignames[order]
+    del order
 
     log('Clustering contigs', logfile, 1)
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames, logfile=logfile)
@@ -139,12 +144,11 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
                            dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile)
 
-    prevalence = np.array([sum(i > 0.0) for i in rpkms])[mask]
     del tnfs, rpkms
     contignames = contignames[mask]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, prevalence, maxclusters, minclustersize, logfile)
+    cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)
     del prevalence
 
     elapsed = round(time.time() - begintime, 2)
