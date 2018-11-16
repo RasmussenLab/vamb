@@ -12,7 +12,7 @@ from cpython cimport array
 # E.g CCTA is the 92nd alphabetic 4mer, whose reverse complement, TAGG, is the 202nd.
 # So the 92th and 202th value in this array is the same.
 # Hence we can map 256 4mers to 136 normal OR reverse-complemented ones
-cdef unsigned char[:] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7, 
+cdef unsigned char[:] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7,
         8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
         18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 11, 31, 32,
         33, 34, 35, 36, 37, 38, 39, 40, 41, 23, 42, 43, 44, 7, 45, 46,
@@ -33,19 +33,47 @@ cdef unsigned char[:] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7,
 
 cpdef array.array zeros(typecode, int size):
     """Returns a zeroed-out array.array of size `size`"""
-    
+
     cpdef array.array arr = array.array(typecode)
     array.resize(arr, size)
     array.zero(arr)
-    
+
     return arr
+
+cpdef int _overwrite_matrix(float[:,:] matrix, unsigned char[:] mask):
+    """Given a float32 matrix and Uint8 mask, does the same as setting the first
+    rows of matrix to matrix[mask], but in-place.
+    This is only important to save on memory.
+    """
+
+    cdef int i, j, matrixindex
+    cdef int length = matrix.shape[1]
+    cdef int masklength = len(mask)
+
+    for i in range(masklength):
+        if mask[i] == 0:
+            break
+
+    if i == masklength:
+        return masklength
+
+    matrixindex = i
+
+    for i in range(matrixindex, masklength):
+        if mask[i] == 1:
+            for j in range(length):
+                matrix[matrixindex, j] = matrix[i, j]
+            matrixindex += 1
+
+    return matrixindex
 
 cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):
     """Count tetranucleotides of contig and put them in counts vector.
-    
+
     The bytearray is expected to be np.uint8 of bytevalues of the contig.
-    The counts is expected to be an array of 4^k 32-bit integers with value 0"""
-    
+    The counts is expected to be an array of 4^k 32-bit integers with value 0.
+    """
+
     cdef int kmer = 0
     cdef int character
     cdef int charvalue
@@ -53,7 +81,7 @@ cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):
     cdef int countdown = k - 1
     cdef int contiglength = len(bytesarray)
     cdef int mask = (1 << 2 * k - 2) - 1
-            
+
     for i in range(contiglength):
         character = bytesarray[i]
 
@@ -69,73 +97,73 @@ cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):
             kmer = 0
             countdown = k - 1
             continue
-        
+
         kmer += charvalue
-        
+
         # Countdown skips non-ACGT bases
         if countdown == 0:
             counts[kmer] += 1
-            kmer &= mask # Remove leftmost base 
-        
+            kmer &= mask # Remove leftmost base
+
         else:
             countdown -= 1
-            
+
         kmer <<= 2 # Shift to prepare for next base
-        
+
 cpdef _kmercounts(bytearray sequence, int k):
     """Returns a 32-bit integer array containing the count of all kmers
     in the given bytearray.
-    
+
     Only Kmers containing A, C, G, T (bytes 65, 67, 71, 84) are counted"""
-    
+
     if k > 10 or k < 1:
         return ValueError('k must be between 1 and 10, inclusive.')
-        
+
     counts = zeros('i', 4**k)
-        
+
     cdef unsigned char[:] sequenceview = sequence
     cdef int[:] countview = counts
-    
+
     c_kmercounts(sequenceview, k, countview)
-    
+
     return counts
 
 cdef void c_fourmer_freq(int[:] counts, float[:] result):
     """Puts kmercounts of k=4 in a nonredundant vector.
-    
+
     The result is expected to be a 136 32-bit float vector
     The counts is expected to be an array of 256 32-bit integers
     """
-    
+
     cdef int countsum = 0
     cdef int i
-    
+
     for i in range(256):
         countsum += counts[i]
-        
+
     if countsum == 0:
         return
-    
+
     cdef float floatsum = <float>countsum
 
     for i in range(256):
         result[complementer_fourmer[i]] += counts[i] / floatsum
-            
+
 # Assining these arrays for each sequence takes about 6% longer time than
 # having assigned them once in userspace. Worth it.
 cpdef _fourmerfreq(bytearray sequence):
-    """Returns float32 array of 136-length float32 representing the 
+    """Returns float32 array of 136-length float32 representing the
     tetranucleotide (fourmer) frequencies of the DNA.
     Only fourmers containing A, C, G, T (bytes 65, 67, 71, 84) are counted"""
-    
+
     counts = zeros('i', 256)
     frequencies = zeros('f', 136)
-        
+
     cdef unsigned char[:] sequenceview = sequence
     cdef int[:] fourmercountview = counts
     cdef float[:] frequencyview = frequencies
-    
+
     c_kmercounts(sequenceview, 4, fourmercountview)
     c_fourmer_freq(fourmercountview, frequencyview)
-    
+
     return frequencies

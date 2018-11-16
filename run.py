@@ -110,7 +110,8 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     del order
 
     log('Clustering contigs', logfile, 1)
-    clusteriterator = vamb.cluster.cluster(latent, labels=contignames, logfile=logfile)
+    clusteriterator = vamb.cluster.cluster(latent, labels=contignames,
+                                           logfile=logfile, destroy=True)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
         clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile,

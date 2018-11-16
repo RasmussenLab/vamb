@@ -2,9 +2,7 @@
 import os as _os
 import gzip as _gzip
 import numpy as _np
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros
-
-
+from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
 'AAAA/TTTT', 'AAAC/GTTT', 'AAAG/CTTT', 'AAAT/ATTT',
@@ -41,8 +39,6 @@ TNF_HEADER = '#contigheader\t' + '\t'.join([
 'GTGA/TCAC', 'GTTA/TAAC', 'TAAA/TTTA', 'TACA/TGTA',
 'TAGA/TCTA', 'TATA',      'TCAA/TTGA', 'TCCA/TGGA',
 'TCGA',      'TGAA/TTCA', 'TGCA', 'TTAA']) + '\n'
-
-
 
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -81,7 +77,22 @@ def zscore(array, axis=None, inplace=False):
     else:
         return (array - mean) / std
 
+def inplace_maskarray(array, mask):
+    """In-place masking of an array, i.e. if `mask` is a boolean mask of same
+    length as `array`, then array[mask] == inplace_maskarray(array, mask),
+    but does not allocate a new array.
+    """
 
+    if len(mask) != len(array):
+        raise ValueError('Lengths must match')
+    elif array.ndim != 2:
+        raise ValueError('Can only take 2 dimensional-arrays and mask.')
+
+    # Cython doesn't support bool arrays, so this does a no-copy type casting.
+    uints = _np.frombuffer(mask, dtype=_np.uint8)
+    index = _overwrite_matrix(array, uints)
+    array.resize((index, array.shape[1]), refcheck=False)
+    return array
 
 class Reader:
     "Use this instead of `open` for files which may be gzipped or not."
