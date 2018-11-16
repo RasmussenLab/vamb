@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 __doc__ = """Iterative medoid clustering.
@@ -107,7 +106,6 @@ def _sample_clusters(matrix, point, max_attempts, threshold, randomstate):
 
 def _cluster(matrix, labels, threshold, max_steps):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
-
     randomstate = _np.random.RandomState(324645)
 
     # The seed keeps track of which point we initialize clusters from.
@@ -132,7 +130,7 @@ def _cluster(matrix, labels, threshold, max_steps):
 
         # Only remove cluster if we have more than 1 point in cluster
         if len(cluster) > 1 or seed == len(matrix):
-            matrix = matrix[keepmask]
+            _vambtools.inplace_maskarray(matrix, keepmask)
             labels = labels[keepmask]
 
             # This is quicker than changing existing mask to True
@@ -187,7 +185,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
 
     return labels, threshold
 
-def cluster(matrix, labels=None, threshold=None, maxsteps=25,
+def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
             normalized=False, nsamples=2500, maxsize=2500, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
@@ -196,6 +194,7 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
         labels: None or Numpy array with labels for matrix rows [None = indices]
         threshold: Optimal medoid search within this distance from medoid [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
+        destroy: Destroy input matrix, saving memory. [False]
         normalized: Matrix is already zscore-normalized [False]
         nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
@@ -204,8 +203,14 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
 
-    if not normalized is True:
-        matrix = _vambtools.zscore(matrix, axis=1)
+    if destroy is True:
+        if normalized is False:
+            _vambtools.zscore(matrix, axis=1, inplace=True)
+    else:
+        if normalized is False:
+            matrix = _vambtools.zscore(matrix, axis=1)
+        else:
+            matrix = _np.copy(matrix)
 
     labels, threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
 

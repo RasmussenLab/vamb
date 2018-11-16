@@ -11778,12 +11778,12 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Walkthough-of-Vamb-from-the-Python-interpreter">Walkthough of Vamb from the Python interpreter<a class="anchor-link" href="#Walkthough-of-Vamb-from-the-Python-interpreter">&#182;</a></h1><p>The Vamb pipeline consist of a series of tasks each which have a dedicated module:</p>
+<h1 id="Walkthough-of-Vamb-from-the-Python-interpreter">Walkthough of Vamb from the Python interpreter<a class="anchor-link" href="#Walkthough-of-Vamb-from-the-Python-interpreter">&#182;</a></h1><p>The VAMB pipeline consist of a series of tasks each which have a dedicated module:</p>
 <p>1) Parse fasta file and get TNF of each sequence, as well as sequence length and names (module <code>parsecontigs</code>)</p>
 <p>2) Parse the BAM files and get abundance estimate for each sequence in the fasta file (module <code>parsebam</code>)</p>
-<p>3) Train a VAE witthe depths and TNF matrices, and encode it to a latent representation (module <code>encode</code>)</p>
+<p>3) Train a VAE wit the depths and TNF matrices, and encode it to a latent representation (module <code>encode</code>)</p>
 <p>4) Cluster the encoded inputs to metagenomic bins (modules <code>threshold</code> and <code>cluster</code>)</p>
-<p>Additionally, for developing and testing Vamb, we use:</p>
+<p>Additionally, for developing and testing VAMB, we use:</p>
 <p>5) Benchmark the resulting bins against a gold standard using <code>benchmark</code></p>
 <p>In the following chapters of this walkthrough, we will go through each step in more detail from within the Python interpreter. We will show how to use Vamb by example, and what each step does, some of the theory behind the actions, and the different parameters that can be set. With this knowledge, you should be able to extend or alter the behaviour of Vamb more easily.</p>
 <p>For the examples, we will assume the following relevant prerequisite files exists in the directory <code>/home/jakni/Downloads/example/</code>:</p>
@@ -11791,7 +11791,7 @@ div#notebook {
 <li><code>contigs.fna</code> - The filtered FASTA contigs which were mapped against, and</li>
 <li><code>bamfiles/*.bam</code> - The 6 .bam files from mapping the reads to the contigs above.</li>
 </ul>
-<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Parse-the-FASTA-file">2. <a href="#parsecontigs">Parse the FASTA file</a><a class="anchor-link" href="#2.-Parse-the-FASTA-file">&#182;</a></h3><h3 id="3.-Parse-the-BAM-files">3. <a href="#parsebam">Parse the BAM files</a><a class="anchor-link" href="#3.-Parse-the-BAM-files">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Postprocessing-the-bins">6. <a href="#postprocessing">Postprocessing the bins</a><a class="anchor-link" href="#6.-Postprocessing-the-bins">&#182;</a></h3><h3 id="7.-Summary-of-full-workflow">7. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#7.-Summary-of-full-workflow">&#182;</a></h3><h3 id="8.-Optional:-Benchmarking-your-bins">8. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#8.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="9.-Potential-improvements-to-Vamb">9. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#9.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
+<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Calculate-the-sequence-tetranucleotide-frequencies">2. <a href="#parsecontigs">Calculate the sequence tetranucleotide frequencies</a><a class="anchor-link" href="#2.-Calculate-the-sequence-tetranucleotide-frequencies">&#182;</a></h3><h3 id="3.-Calculate-the-abundance-matrix">3. <a href="#parsebam">Calculate the abundance matrix</a><a class="anchor-link" href="#3.-Calculate-the-abundance-matrix">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Postprocessing-the-bins">6. <a href="#postprocessing">Postprocessing the bins</a><a class="anchor-link" href="#6.-Postprocessing-the-bins">&#182;</a></h3><h3 id="7.-Summary-of-full-workflow">7. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#7.-Summary-of-full-workflow">&#182;</a></h3><h3 id="8.-Optional:-Benchmarking-your-bins">8. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#8.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="9.-Potential-improvements-to-Vamb">9. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#9.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
 <h2 id="Importing-Vamb-and-getting-help">Importing Vamb and getting help<a class="anchor-link" href="#Importing-Vamb-and-getting-help">&#182;</a></h2><p>First step is to get Vamb imported</p>
 
 <pre><code>[jakni@nissen:~]$ python
@@ -11904,7 +11904,7 @@ cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsam
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">sys</span>
@@ -11922,7 +11922,7 @@ cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsam
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="parsecontigs"></a></p>
-<h2 id="Parse-the-FASTA-file">Parse the FASTA file<a class="anchor-link" href="#Parse-the-FASTA-file">&#182;</a></h2><p>If you forget what to do at each step, remember that <code>help(vamb)</code> said:</p>
+<h2 id="Calculate-the-sequence-tetranucleotide-frequencies">Calculate the sequence tetranucleotide frequencies<a class="anchor-link" href="#Calculate-the-sequence-tetranucleotide-frequencies">&#182;</a></h2><p>If you forget what to do at each step, remember that <code>help(vamb)</code> said:</p>
 
 <pre><code>General workflow:
 1) Filter contigs by size using vamb.vambtools.filtercontigs
@@ -11939,7 +11939,7 @@ cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsam
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">vamb</span><span class="o">.</span><span class="n">parsecontigs</span><span class="p">)</span>
@@ -12112,13 +12112,13 @@ First 5 elements of lengths:
 <p><strong>The memory consumption of Vamb can be an issue</strong>, so at this point, you should probably consider whether you have enough RAM. If not, all the relevant modules have reading and writing functions so you can dump the results to disk and delete them from memory. This is a small dataset, so there's no problem. With hundreds of samples and millions of contigs however, this becomes a problem, even though Vamb is fairly memory-friendly.</p>
 <p>As a rule of thumb, the memory consumption for the most memory intensive step of Vamb is approximately 8 × (n_samples + 136) × n_contigs bytes plus a little bit of overhead. If this is significantly lower than your RAM, don't worry about it. If it's within a factor 2 of your available RAM, you'll need to delete objects you don't need anymore.</p>
 <p><a id="parsebam"></a></p>
-<h2 id="Parse-the-BAM-files">Parse the BAM files<a class="anchor-link" href="#Parse-the-BAM-files">&#182;</a></h2>
+<h2 id="Calculate-the-abundance-matrix">Calculate the abundance matrix<a class="anchor-link" href="#Calculate-the-abundance-matrix">&#182;</a></h2>
 </div>
 </div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Again, we can use the help function to see what we need to do</span>
@@ -12351,7 +12351,7 @@ DESCRIPTION
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="p">(</span><span class="n">nsamples</span><span class="o">=</span><span class="n">rpkms</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
@@ -12376,26 +12376,32 @@ DESCRIPTION
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>	CUDA: False
+<pre>	Network properties:
+	CUDA: False
 	Alpha: 0.05
 	Beta: 200
-	N latent: 40
+	Dropout: 0.2
 	N hidden: 325, 325
+	N latent: 40
+
+	Training properties:
 	N epochs: 10
+	Batch size: 64
+	Batchsteps: 
 	Learning rate: 0.001
 	N contigs: 36485
 	N samples: 6
 
-	Epoch: 1	Loss: 0.449182	CE: 0.7732327	SSE: 80.998048	KLD: 75.4473	Batchsize: 64
-	Epoch: 2	Loss: 0.356430	CE: 0.6119545	SSE: 59.000493	KLD: 82.2167	Batchsize: 64
-	Epoch: 3	Loss: 0.350143	CE: 0.6030206	SSE: 54.632175	KLD: 82.6616	Batchsize: 64
-	Epoch: 4	Loss: 0.343607	CE: 0.5938860	SSE: 51.161123	KLD: 79.3334	Batchsize: 64
-	Epoch: 5	Loss: 0.339985	CE: 0.5884925	SSE: 49.478187	KLD: 78.1822	Batchsize: 64
-	Epoch: 6	Loss: 0.338637	CE: 0.5864830	SSE: 48.663315	KLD: 78.3220	Batchsize: 64
-	Epoch: 7	Loss: 0.335901	CE: 0.5825439	SSE: 47.688125	KLD: 76.0060	Batchsize: 64
-	Epoch: 8	Loss: 0.334554	CE: 0.5808797	SSE: 46.763725	KLD: 75.0125	Batchsize: 64
-	Epoch: 9	Loss: 0.334223	CE: 0.5802540	SSE: 46.651411	KLD: 75.3481	Batchsize: 64
-	Epoch: 10	Loss: 0.333245	CE: 0.5789841	SSE: 46.390305	KLD: 73.6791	Batchsize: 64
+	Epoch: 1	Loss: 0.504008	CE: 0.8628989	SSE: 101.492145	KLD: 73.4477	Batchsize: 64
+	Epoch: 2	Loss: 0.384317	CE: 0.6494841	SSE: 80.319708	KLD: 83.4247	Batchsize: 64
+	Epoch: 3	Loss: 0.372233	CE: 0.6310668	SSE: 75.122917	KLD: 80.1526	Batchsize: 64
+	Epoch: 4	Loss: 0.368125	CE: 0.6255740	SSE: 72.012893	KLD: 79.7395	Batchsize: 64
+	Epoch: 5	Loss: 0.364856	CE: 0.6213139	SSE: 68.929846	KLD: 80.7270	Batchsize: 64
+	Epoch: 6	Loss: 0.357779	CE: 0.6104303	SSE: 66.704271	KLD: 76.8185	Batchsize: 64
+	Epoch: 7	Loss: 0.356901	CE: 0.6094470	SSE: 65.717067	KLD: 76.8697	Batchsize: 64
+	Epoch: 8	Loss: 0.353869	CE: 0.6050889	SSE: 64.110056	KLD: 75.8230	Batchsize: 64
+	Epoch: 9	Loss: 0.353931	CE: 0.6056626	SSE: 63.610067	KLD: 75.3544	Batchsize: 64
+	Epoch: 10	Loss: 0.350525	CE: 0.5998114	SSE: 62.974663	KLD: 74.7991	Batchsize: 64
 </pre>
 </div>
 </div>
@@ -12424,16 +12430,17 @@ DESCRIPTION
 <p>In <code>encode.py</code>, the loss function is written as:</p>
 <p>$L = \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE + \frac{1}{N_{L}\beta} \cdot KLD$</p>
 <p>where $N_{L}$ is number of latent neurons and S is number of samples. It is hardly obvious where the scaling factors come from, so let me try to explain it.</p>
-<p>As the learning rate is fixed and optimized for a specific gradient, this means the total reconstruction loss $\frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ should sum to a constant, lest the training become ustable. To make things simpler, we want it to sum to 1. It would probably be more precise if L = 1, but since $\frac{1}{N_{L}\beta} \cdot KLD &lt;&lt;  \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ for any values of $\alpha$ and $\beta$ that seem to work, it's a fair assumption.</p>
+<p>As the learning rate is fixed and optimized for a specific gradient, this means the total reconstruction loss $\frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ should sum to a constant, lest the training become ustable. To make things simpler, we want it to sum to 1. It would probably be more precise if L = 1, but since $\frac{1}{N_{L}\beta} \cdot KLD &lt;&lt;  \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ for any values of $\alpha$ and $\beta$ that seem to work, setting the reconstruction loss to 1 is basically the same.</p>
 <p>When optimizing the network, we want a single variable to control the ratio between SSE and CE - we call this $\alpha$. This scales CE and SSE so that $\alpha = \frac{SSE}{SSE + CE}$</p>
 <p>But here comes a problem. While we want to scale SSE and CE so that the two constrains above are true, we can't know <em>beforehand</em> what the CE, KLD or MSE is. And, in any rate, these values changes across the training run (that's the point of training!).</p>
-<p>What we <em>can</em> reason about it the values of CE and SSE in a totally <em>naive</em>, network which had <em>no knowledge</em> of the input dataset. This represents the state of the network before <em>any</em> learning is done. What would such a network predict? Well, since we normalize the reconstructed depths to be between 0 and 1 and sum to 1, the outputs would be close to $[S^{-1}, S^{-1} ... S^{-1}]^{T}$, which would yield a CE of ln(S). We normalize both TNF inputs and outputs to follow an approximately normal distribution with mean around 0, which means the expected SSE for TNF is 1 per neuron = 136.</p>
-<p>Importantly, if we actually check the CE and SSE values for untrained networks, they are quite close to this value. Since neither CE nor SSE is reduced by more than an order of magnitude from their starting values during training on realistic datasets, these expected values work as stand-ins for what we can expect the CE and SSE to be.</p>
-<p>So the scaling factors of CE and SSE is to scale CE from ln(S) to (1-$\alpha$) and SSE from 136 to $\alpha$.</p>
-<p>For KLD, we want the user to be able to control the ratio $\frac{C+S}{K}$, where C, S and K are the roles of CE, SSE and KLD in the loss, respectively. Since KLD is defined as a sum of individual KLD for each of latent neurons, its value is proportional to $N_{L}$. So we let the user set a ratio</p>
+<p>What we <em>can</em> reason about it the values of CE and SSE in a totally <em>naive</em>, network which had <em>no knowledge</em> of the input dataset. This represents the state of the network before <em>any</em> learning is done. What would such a network predict? Well, since we normalize the reconstructed depths to be between 0 and 1 and sum to 1, the outputs would be close to $[S^{-1}, S^{-1} ... S^{-1}]^{T}$, which would yield a CE of ln(S). We normalize both TNF inputs and outputs to follow an approximately normal distribution with mean around 0, which means the expected SSE for TNF is 1 per input TNF neuron, which is 136.</p>
+<p>Importantly, if we actually check the CE and SSE values for untrained networks, they are quite close to these expected value. Since neither CE nor SSE is reduced by more than an order of magnitude from their starting values during training on realistic datasets, these expected values work as stand-ins for what we can expect the CE and SSE to be.</p>
+<p>So the purpose of the scaling factors in front of CE and SEE is to scale CE from the expected value of ln(S) to the target value of (1-$\alpha$) and SSE from 136 to $\alpha$. Hence the scaling factors $\frac{(1 - \alpha)}{ln(S)}$ and $\frac{\alpha}{136}$.</p>
+<p>For KLD, we want the user to be able to control the ratio $\frac{C+S}{K}$, where C, S and K are the loss from CE, SSE and KLD in the loss, respectively. Since KLD is defined as a sum of individual KLD for each of latent neurons, its value is proportional to $N_{L}$. So we let the user set a ratio</p>
 <p>$\beta = \frac{KLD}{N_{L}K} \cdot \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$,</p>
 <p>Where again, K is the weighed KLD in the loss. In other words, we allow the user to weigh KLD relative to the total reconstruction loss. However, as we just scaled CE and SSE to make sure they sum to one, this simplifies to:</p>
-<p>$\beta = \frac{KLD}{N_{L}K} \Leftrightarrow K = \frac{1}{N_{L}\beta} \cdot KLD$</p>
+<p>$\beta = \frac{KLD}{N_{L}K} \Leftrightarrow K = \frac{1}{N_{L}\beta} \cdot KLD$.</p>
+<p>Hence the scaling factor $\frac{1}{N_{L}\beta}$ in front of KLD.</p>
 <p>If you look at the outputs from the 10 epochs, you can see the KL-divergence rises the first epoch as it learns the dataset and the latent layer drifts away from its prior. At epoch 2, the penalty associated with KL-divergence outweighs the CE and SSE losses. At this point, the KL will stall, and then fall. This point depends on $\beta$ and the complexity of the dataset.</p>
 <p>Okay, so now we have the trained <code>vae</code> and gotten the <code>dataloader</code>. Let's feed the dataloader to the VAE in order to get the latent representation.</p>
 <hr>
@@ -12482,7 +12489,6 @@ DESCRIPTION
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
 <p>That's 36485 contigs each represented by the (non-noisy) value of 40 latent neurons.</p>
-<hr>
 <p>Sometimes, you'll want to reuse a VAE you have already trained. For this, I've added the <code>VAE.save</code> method of the VAE class, as well as a <code>VAE.load</code> method. You will have noticed in the example above that I defined a <code>modelfile</code>, a file the VAE will create and save its parameters to. We can always use that file to recreate the VAE and have a pretrained model. But remember - a trained VAE only works on the dataset it's been trained on, and not necessarily on any other!</p>
 <p>I want to <strong>show</strong> that we get the exact same network back that we trained, so here I encode the first contig, delete the VAE, reload the VAE and encode the first contig again. The two encodings should be identical.</p>
 <hr>
@@ -12739,7 +12745,7 @@ getthreshold(latent, distfunction, samples, maxsize)
 </ul>
 <hr>
 <p>The <code>vamb.threshold.getthreshold</code> function samples a number of random contigs (1000 by default) and returns the median threshold, support and separation. Of course, if the support is too low (&lt; 50%) or the separation too low (&lt; 25%), you can't really trust the threshold.</p>
-<p>Okay, let's give it a spin</p>
+<p>This function is kind of hand-wavey heuristic, but seem to work well in practice. This is one of the areas I'd like to see improved in the future. Anyway, let's give it a spin:</p>
 <hr>
 
 </div>
@@ -13103,6 +13109,8 @@ Number of bins after filtering: 311
 <span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="p">(</span><span class="n">nsamples</span><span class="o">=</span><span class="n">rpkms</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 <span class="n">dataloader</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">make_dataloader</span><span class="p">(</span><span class="n">rpkms</span><span class="p">,</span> <span class="n">tnfs</span><span class="p">)</span>
 <span class="n">vae</span><span class="o">.</span><span class="n">trainmodel</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
+
+<span class="c1"># Here, the default workflow shuffles </span>
 
 <span class="n">latent</span> <span class="o">=</span> <span class="n">vae</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
 <span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">contignames</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
