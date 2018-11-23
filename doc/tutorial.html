@@ -11867,15 +11867,16 @@ DESCRIPTION
 
 <pre><code>Help on function cluster in module vamb.cluster:
 
-cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsamples=2500, maxsize=2500, logfile=None)
+cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False, normalized=False, nsamples=2500, maxsize=2500, logfile=None)
     Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
-        matrix: A (obs x features) Numpy matrix of values
+        matrix: A (obs x features) Numpy matrix of data type numpy.float32
         labels: None or Numpy array with labels for matrix rows [None = indices]
-        threshold: Optimal medoid search within this distance from medoid [None = auto]
+        threshold: Optimal medoid search in this distance from medoid [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
-        normalized: Matrix is already zscore-normalized [False]
+        destroy: Destroy input matrix, saving memory. [False]
+        normalized: Matrix is already zscore-normalized across axis 1 [False]
         nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
         logfile: Print threshold estimates and certainty to file [None]
@@ -11913,6 +11914,25 @@ cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsam
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+<div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>/home/jakni/miniconda3/envs/dev/lib/python3.6/importlib/_bootstrap.py:219: RuntimeWarning: compiletime version 3.7 of module &#39;_vambtools&#39; does not match runtime version 3.6
+  return f(*args, **kwds)
+</pre>
+</div>
+</div>
+
 </div>
 </div>
 
@@ -12191,7 +12211,7 @@ FILE
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bamfiles</span> <span class="o">=</span> <span class="o">!</span>ls /home/jakni/Downloads/example/bamfiles
@@ -12209,7 +12229,7 @@ FILE
 
 <div class="output_area">
 
-<div class="prompt output_prompt">Out[7]:</div>
+<div class="prompt output_prompt">Out[8]:</div>
 
 
 
@@ -12231,7 +12251,7 @@ FILE
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># That looks right.</span>
@@ -12293,7 +12313,7 @@ Shape of rpkms (39551, 6)
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/contignames.npz&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
@@ -12351,7 +12371,7 @@ DESCRIPTION
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="p">(</span><span class="n">nsamples</span><span class="o">=</span><span class="n">rpkms</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
@@ -12392,16 +12412,16 @@ DESCRIPTION
 	N contigs: 36485
 	N samples: 6
 
-	Epoch: 1	Loss: 0.504008	CE: 0.8628989	SSE: 101.492145	KLD: 73.4477	Batchsize: 64
-	Epoch: 2	Loss: 0.384317	CE: 0.6494841	SSE: 80.319708	KLD: 83.4247	Batchsize: 64
-	Epoch: 3	Loss: 0.372233	CE: 0.6310668	SSE: 75.122917	KLD: 80.1526	Batchsize: 64
-	Epoch: 4	Loss: 0.368125	CE: 0.6255740	SSE: 72.012893	KLD: 79.7395	Batchsize: 64
-	Epoch: 5	Loss: 0.364856	CE: 0.6213139	SSE: 68.929846	KLD: 80.7270	Batchsize: 64
-	Epoch: 6	Loss: 0.357779	CE: 0.6104303	SSE: 66.704271	KLD: 76.8185	Batchsize: 64
-	Epoch: 7	Loss: 0.356901	CE: 0.6094470	SSE: 65.717067	KLD: 76.8697	Batchsize: 64
-	Epoch: 8	Loss: 0.353869	CE: 0.6050889	SSE: 64.110056	KLD: 75.8230	Batchsize: 64
-	Epoch: 9	Loss: 0.353931	CE: 0.6056626	SSE: 63.610067	KLD: 75.3544	Batchsize: 64
-	Epoch: 10	Loss: 0.350525	CE: 0.5998114	SSE: 62.974663	KLD: 74.7991	Batchsize: 64
+	Epoch: 1	Loss: 0.499102	CE: 0.8547889	SSE: 100.466443	KLD: 71.6220	Batchsize: 64
+	Epoch: 2	Loss: 0.380093	CE: 0.6428401	SSE: 78.999723	KLD: 81.6965	Batchsize: 64
+	Epoch: 3	Loss: 0.368721	CE: 0.6261277	SSE: 73.015417	KLD: 79.2091	Batchsize: 64
+	Epoch: 4	Loss: 0.364871	CE: 0.6215807	SSE: 69.185406	KLD: 78.9593	Batchsize: 64
+	Epoch: 5	Loss: 0.359700	CE: 0.6140050	SSE: 66.896961	KLD: 76.4523	Batchsize: 64
+	Epoch: 6	Loss: 0.355736	CE: 0.6076157	SSE: 65.347443	KLD: 76.4062	Batchsize: 64
+	Epoch: 7	Loss: 0.354049	CE: 0.6057719	SSE: 63.884844	KLD: 75.0282	Batchsize: 64
+	Epoch: 8	Loss: 0.355972	CE: 0.6090102	SSE: 63.909774	KLD: 76.6060	Batchsize: 64
+	Epoch: 9	Loss: 0.355157	CE: 0.6074744	SSE: 63.732379	KLD: 77.1226	Batchsize: 64
+	Epoch: 10	Loss: 0.352413	CE: 0.6032763	SSE: 62.787649	KLD: 75.7513	Batchsize: 64
 </pre>
 </div>
 </div>
@@ -12450,7 +12470,7 @@ DESCRIPTION
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># No need to pass gpu=True to the encode function to encode on GPU</span>
@@ -12498,7 +12518,7 @@ DESCRIPTION
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
@@ -12543,20 +12563,20 @@ DESCRIPTION
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>tensor([ 243.0712, -206.0485,   82.4800,   18.9203,  -12.0889, -130.3540,
-           9.4346,   67.8482,  -47.7770,  -98.1530,  254.0377, -172.0081,
-          74.0951, -101.5727, -126.1938,  101.8437,   50.6515,   73.8031,
-          20.2025,   65.4090, -333.4952, -125.8586,  100.5626, -202.0157,
-          50.8054,  -21.1592,  215.1380,  -73.5656,   38.4948, -119.7856,
-          47.8780, -132.0815,  106.7252,  -21.9128,  -34.6635, -111.8321,
-        -137.7839,  -25.1571,  -84.9008,  175.2703], grad_fn=&lt;SelectBackward&gt;)
-tensor([ 243.0712, -206.0485,   82.4800,   18.9203,  -12.0889, -130.3540,
-           9.4346,   67.8482,  -47.7770,  -98.1530,  254.0377, -172.0081,
-          74.0951, -101.5727, -126.1938,  101.8437,   50.6515,   73.8031,
-          20.2025,   65.4090, -333.4952, -125.8586,  100.5626, -202.0157,
-          50.8054,  -21.1592,  215.1380,  -73.5656,   38.4948, -119.7856,
-          47.8780, -132.0815,  106.7252,  -21.9128,  -34.6635, -111.8321,
-        -137.7839,  -25.1571,  -84.9008,  175.2703], grad_fn=&lt;SelectBackward&gt;)
+<pre>tensor([-171.8445,  -96.8983,   -6.8158,  -73.5384,  -71.0334,  -27.8429,
+         -72.4447,   30.9859,  -43.8762,   40.1399,   41.7609,   35.1290,
+          85.0739,   -8.6031,   16.7071,    7.9585,  -27.0029,   40.3033,
+         217.5143,   -6.1118,   69.5113,  -51.6988, -135.3372,   35.4136,
+         -97.7175,   42.1647,  -52.9830, -213.6664,  -46.9387,    7.3212,
+        -149.0643,  -54.5403,   19.7099,   -3.8475,  139.4180,   17.9481,
+          55.0733,  -18.8191, -158.3228, -150.3040], grad_fn=&lt;SelectBackward&gt;)
+tensor([-171.8445,  -96.8983,   -6.8158,  -73.5384,  -71.0334,  -27.8429,
+         -72.4447,   30.9859,  -43.8762,   40.1399,   41.7609,   35.1290,
+          85.0739,   -8.6031,   16.7071,    7.9585,  -27.0029,   40.3033,
+         217.5143,   -6.1118,   69.5113,  -51.6988, -135.3372,   35.4136,
+         -97.7175,   42.1647,  -52.9830, -213.6664,  -46.9387,    7.3212,
+        -149.0643,  -54.5403,   19.7099,   -3.8475,  139.4180,   17.9481,
+          55.0733,  -18.8191, -158.3228, -150.3040], grad_fn=&lt;SelectBackward&gt;)
 </pre>
 </div>
 </div>
@@ -12629,7 +12649,7 @@ tensor([ 243.0712, -206.0485,   82.4800,   18.9203,  -12.0889, -130.3540,
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">vamb</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">getthreshold</span><span class="p">)</span>
@@ -12753,7 +12773,7 @@ getthreshold(latent, distfunction, samples, maxsize)
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[17]:</div>
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># We need to normalize the array first across axis 1</span>
@@ -12783,9 +12803,9 @@ getthreshold(latent, distfunction, samples, maxsize)
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>Estimated threshold: 0.069
-Support: 66.7 %
-Separation: 9.8 %
+<pre>Estimated threshold: 0.039
+Support: 69.4 %
+Separation: 6.5 %
 </pre>
 </div>
 </div>
@@ -12806,7 +12826,7 @@ Separation: 9.8 %
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[8]:</div>
+<div class="prompt input_prompt">In&nbsp;[16]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">help</span><span class="p">(</span><span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">)</span>
@@ -12828,15 +12848,16 @@ Separation: 9.8 %
 <div class="output_subarea output_stream output_stdout output_text">
 <pre>Help on function cluster in module vamb.cluster:
 
-cluster(matrix, labels=None, threshold=None, maxsteps=25, normalized=False, nsamples=2500, maxsize=2500, logfile=None)
+cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False, normalized=False, nsamples=2500, maxsize=2500, logfile=None)
     Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
     
     Inputs:
-        matrix: A (obs x features) Numpy matrix of values
+        matrix: A (obs x features) Numpy matrix of data type numpy.float32
         labels: None or Numpy array with labels for matrix rows [None = indices]
-        threshold: Optimal medoid search within this distance from medoid [None = auto]
+        threshold: Optimal medoid search in this distance from medoid [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
-        normalized: Matrix is already zscore-normalized [False]
+        destroy: Destroy input matrix, saving memory. [False]
+        normalized: Matrix is already zscore-normalized across axis 1 [False]
         nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
         logfile: Print threshold estimates and certainty to file [None]
@@ -12891,7 +12912,7 @@ with open('clusters.tsv', 'w') as clusterfile:
 <div class="prompt input_prompt">In&nbsp;[21]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">contignames</span><span class="p">,</span> <span class="n">threshold</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">contignames</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
 <span class="n">clusters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">cluster_iterator</span><span class="p">)</span>
 
 <span class="n">medoid</span><span class="p">,</span> <span class="n">contigs</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">clusters</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
@@ -12914,9 +12935,9 @@ with open('clusters.tsv', 'w') as clusterfile:
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>First key: gi|224815741|ref|NZ_ACGB01000007.1|_[Acidaminococcus_D21_uid55871]_67156-76863 (of type: &lt;class &#39;numpy.str_&#39;&gt; )
+<pre>First key: s30_NODE_968_length_16368_cov_5.42885 (of type: &lt;class &#39;numpy.str_&#39;&gt; )
 Type of values: &lt;class &#39;set&#39;&gt;
-First element of value: gi|352683411|ref|NC_016077.1|_[Acidaminococcus_intestini_RyC_MR95_uid74445]_479614-482113 of type: &lt;class &#39;numpy.str_&#39;&gt;
+First element of value: s30_NODE_2419_length_8239_cov_4.01278 of type: &lt;class &#39;numpy.str_&#39;&gt;
 </pre>
 </div>
 </div>
@@ -12935,7 +12956,8 @@ First element of value: gi|352683411|ref|NC_016077.1|_[Acidaminococcus_intestini
 <p>You already know what <code>matrix</code> and <code>labels</code> does. If you pass <code>None</code> to <code>labels</code>, it will use the numbers 1 to <code>len(matrix)</code> as labels.</p>
 <p><code>threshold</code> correspond to $threshold$ in the algorithm above. If <code>None</code> is passed as <code>threshold</code>, the clustering functions automatically normalizes the input and runs <code>vamb.threshold.getthreshold</code>, then sets threshold to the median returned by <code>vamb.threshold.getthreshold</code>.</p>
 <p><code>max_steps</code> is the $N_{samples}$ in the algorithm. In short, it determines how long time the algorithm will search for the optimal medoid. It is not necessary to tweak this, just leave it to the default.</p>
-<p>If <code>normalized</code> is <code>True</code>, it will assume the input is already zscore-normalized across axis 1 and skip this. Else, it will create a normalized copy of the data and work on that. The Pearson distance calculation only works for normalized data, so if <code>normalized</code> is set to <code>True</code> and the input is in fact not normalized, results will definitely be bad.</p>
+<p><code>destroy</code> is rather interesting. The clustering process iteratively removes rows from the input <code>matrix</code>, eventually destroying (i.e. rendering it a $0\times N_{latent}$ matrix). Because the user probably won't expect the input to the function to be mutated, the default behaviour is to copy the matrix and cluster the copy, leaving the original untouched. However, for large matrices, this extra RAM consumption might be unacceptable. Setting <code>destroy</code>=True suppresses this copying, saving memory.</p>
+<p>If <code>normalized</code> is <code>True</code>, it will assume the input is already zscore-normalized across axis 1 and skip this. Else, it will normalize the array first. The Pearson distance calculation only works for normalized data, so if <code>normalized</code> is set to <code>True</code> and the input is in fact not normalized, results will definitely be bad.</p>
 <p><code>nsamples</code> and <code>maxsize</code> determines the behaviour of <code>getthreshold</code> if <code>threshold</code> is <code>None</code>. It controls the number of sampled contigs to get the median threshold for, and the upper limit for any reported single threshold.</p>
 <p>If <code>logfile</code> is not <code>None</code> and <code>threshold</code> is <code>None</code>, the function will print the outputs of <code>vamb.threshold.getthreshold</code> to the logfile, and print a warning if the support and separation is too low. If <code>logfile</code> is <code>None</code> it will print to stderr only if the support and separation is too low.</p>
 <hr>
@@ -12959,15 +12981,10 @@ First element of value: gi|352683411|ref|NC_016077.1|_[Acidaminococcus_intestini
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[22]:</div>
+<div class="prompt input_prompt">In&nbsp;[26]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># First let&#39;s make a contignames: length dict</span>
-<span class="c1"># Remember, we get these lengths from vamb.parsecontigs.read_contigs</span>
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/metabat_lengths.npz&#39;</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-    <span class="n">lengths</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">read_npz</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-
-<span class="n">lengthof</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">contignames</span><span class="p">,</span> <span class="n">lengths</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">lengthof</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">contignames</span><span class="p">,</span> <span class="n">lengths</span><span class="p">))</span>
 
 <span class="c1"># Now filter away the small bins</span>
 <span class="n">filtered_bins</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
@@ -12995,8 +13012,8 @@ First element of value: gi|352683411|ref|NC_016077.1|_[Acidaminococcus_intestini
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>Number of bins before filtering: 28375
-Number of bins after filtering: 311
+<pre>Number of bins before filtering: 1895
+Number of bins after filtering: 136
 </pre>
 </div>
 </div>
@@ -13010,7 +13027,7 @@ Number of bins after filtering: 311
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p>That was almost 99% of the bins we filtered away! Now, let's save the clusters to disk. For this we will use two writer functions:</p>
+<p>That was almost 93% of the bins we filtered away! Now, let's save the clusters to disk. For this we will use two writer functions:</p>
 <p>1) <code>vamb.cluster.writeclusters</code>, that writes which clusters contains which contigs to a simple tab-separated file, and</p>
 <p>2) <code>vamb.vambtools.writebins</code>, that writes FASTA files corresponding to each of the bins to a directory. This might be useful for some types of analysis you want to do down the road.</p>
 <p>We will need to load all the contigs belonging to any bin into memory to use <code>vamb.vambtools.writebins</code>. If the contigs in your bins don't fit in memory, sorry, you gotta find another way to make those FASTA bins.</p>
@@ -13022,7 +13039,7 @@ Number of bins after filtering: 311
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[23]:</div>
+<div class="prompt input_prompt">In&nbsp;[28]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Rename bin keys to something less horrible as a file name</span>
@@ -13042,38 +13059,6 @@ Number of bins after filtering: 311
 </pre></div>
 
 </div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-
-<div class="output_area">
-
-<div class="prompt"></div>
-
-
-<div class="output_subarea output_text output_error">
-<pre>
-<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
-<span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
-<span class="ansi-green-fg">&lt;ipython-input-23-1ac0aa852a9a&gt;</span> in <span class="ansi-cyan-fg">&lt;module&gt;</span><span class="ansi-blue-fg">()</span>
-<span class="ansi-green-intense-fg ansi-bold">     12</span> 
-<span class="ansi-green-intense-fg ansi-bold">     13</span> bindir <span class="ansi-blue-fg">=</span> <span class="ansi-blue-fg">&#39;/home/jakni/Downloads/example/bins&#39;</span>
-<span class="ansi-green-fg">---&gt; 14</span><span class="ansi-red-fg"> </span>vamb<span class="ansi-blue-fg">.</span>vambtools<span class="ansi-blue-fg">.</span>write_bins<span class="ansi-blue-fg">(</span>bindir<span class="ansi-blue-fg">,</span> filtered_bins<span class="ansi-blue-fg">,</span> fastadict<span class="ansi-blue-fg">,</span> maxbins<span class="ansi-blue-fg">=</span><span class="ansi-cyan-fg">500</span><span class="ansi-blue-fg">)</span>
-
-<span class="ansi-green-fg">~/Documents/scripts/vamb/vambtools.py</span> in <span class="ansi-cyan-fg">write_bins</span><span class="ansi-blue-fg">(directory, bins, fastadict, maxbins)</span>
-<span class="ansi-green-intense-fg ansi-bold">    279</span>     <span class="ansi-red-fg"># Check that the directory is not a non-directory file,</span>
-<span class="ansi-green-intense-fg ansi-bold">    280</span>     <span class="ansi-red-fg"># and that its parent directory indeed exists</span>
-<span class="ansi-green-fg">--&gt; 281</span><span class="ansi-red-fg">     </span>abspath <span class="ansi-blue-fg">=</span> os<span class="ansi-blue-fg">.</span>path<span class="ansi-blue-fg">.</span>abspath<span class="ansi-blue-fg">(</span>directory<span class="ansi-blue-fg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    282</span>     parentdir <span class="ansi-blue-fg">=</span> _os<span class="ansi-blue-fg">.</span>path<span class="ansi-blue-fg">.</span>dirname<span class="ansi-blue-fg">(</span>abspath<span class="ansi-blue-fg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    283</span> 
-
-<span class="ansi-red-fg">NameError</span>: name &#39;os&#39; is not defined</pre>
-</div>
-</div>
-
 </div>
 </div>
 
@@ -13110,9 +13095,11 @@ Number of bins after filtering: 311
 <span class="n">dataloader</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">make_dataloader</span><span class="p">(</span><span class="n">rpkms</span><span class="p">,</span> <span class="n">tnfs</span><span class="p">)</span>
 <span class="n">vae</span><span class="o">.</span><span class="n">trainmodel</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
 
-<span class="c1"># Here, the default workflow shuffles </span>
-
 <span class="n">latent</span> <span class="o">=</span> <span class="n">vae</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
+
+<span class="c1"># Here, the default workflow shuffles the latent matrix and the contignames</span>
+<span class="c1"># in unison to prevent bias in which sequences are picked as clustering seeds</span>
+
 <span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">contignames</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
 
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/bins.tsv&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">binfile</span><span class="p">:</span>
@@ -13132,7 +13119,7 @@ Number of bins after filtering: 311
 <h2 id="Optional:-Benchmarking-your-bins">Optional: Benchmarking your bins<a class="anchor-link" href="#Optional:-Benchmarking-your-bins">&#182;</a></h2><p>If you want to tweak or enchance Vamb, you'll want to know how well it performs. For this to make any sense, you need to have a <em>reference</em>, that is, a list of bins that are deemed true and complete. Otherwise, what do you benchmark against?</p>
 <p>Figuring out a proper way to benchmark binning tools is actually really hard because it requires taking a lot of subjective choices. When is a bin properly predicted? If we only accept perfectly binned bins, basically all binners have a 0 % accuracy. For any one bin we can calculate the fraction of the true genome present and the fraction of contaminating DNA - but if e.g. transposons are harder to bin but have no significant phenotypical effect, should they really count? And if a true bin is split across 25 % in four different observed bins, does that mean 25 % of the true genome is present in those bins, or is it in fact 0 %, because each of those bins will be predicted to be something different? If contigs are present in multiple bins, how do you prevent a bin from having more than 100 % presence? If your reference contains a broad selection of similar strains, surely it's not as bad to mix strains of the same species as to mix genomes from different phyla? And should you be benchmarked on the number of good bins you construct, or the fraction of good bins out of all the bins you make?</p>
 <p>These choices have a significant impact on how you asses performance of your binner. For example, early on in the development of Vamb, we <em>did</em> allow the same contig present in multiple bins to both count towards completeness of bins. This led to a bias towards creating a huge number of overlapping bins until we changed the benchmarking.</p>
-<p>Vambs benchmarking works in the following way: You count the number of reference bins for which <em>any</em> observed bin has a competeness (recall) above a certain level and a contamination below a certain level (precision above a certain level). Recall and precision is calculated with each contig weighed by its length, i.e. on a nucleotide level. An observed bin <em>can</em> count towards multiple reference bins given a low enough recall threshold.</p>
+<p>Vamb's benchmarking works in the following way: You count the number of reference bins for which <em>any</em> observed bin has a competeness (recall) above a certain level and a contamination below a certain level (precision above a certain level). Recall and precision is calculated with each contig weighed by its length, i.e. on a nucleotide level. An observed bin <em>can</em> count towards multiple reference bins given a low enough recall threshold.</p>
 <hr>
 <p>The reference you need to benchmark Vamb must be either:</p>
 <ul>
@@ -13368,19 +13355,19 @@ bin2     contig3      108716
 <h2 id="Potential-improvements-to-Vamb">Potential improvements to Vamb<a class="anchor-link" href="#Potential-improvements-to-Vamb">&#182;</a></h2><p>Vamb is under an MIT licence, so please feel free to fork, extend, or copy Vamb however you see fit. If you do, feel free to write us an email.</p>
 <p>Here's a short wish list for improvements to Vamb we haven't had time for:</p>
 <p><strong>Add more training datasets and do a more throrough hyperparameter search</strong></p>
-<p>This is probably the easiest (if time consuming) way to improve Vamb, and possibly may have the biggest impact. The problem is that clusters are not independent of the dataset they're in - what works for one dataset might not work for another. So get a collection of datasets, e.g. 5-10 training datasets and test more hyperparameters. In parcitular, these hyperparameters might be interesting to look at:</p>
+<p>This is probably the easiest (if time consuming) way to improve Vamb, and possibly may have the biggest impact. The problem is that clusters are not independent of the dataset they're in - what works for one dataset might not work for another. So get a collection of datasets, like the toy datasets from CAMI2, e.g. 5-10 training datasets and test more hyperparameters. In parcitular, these hyperparameters might be interesting to look at:</p>
 <p>$\alpha$</p>
 <p>This controls the relationship between CE and SSE, which has turned out to be critically important and unfortunately highly sensitive in our testing. But what controls the optimal value of $\alpha$? Number of samples? Sparsity of the abundance matrix? Length of contigs? Failing to answer this, even just getting the optimal $\alpha$ for more different datasets would be nice.</p>
 <p>$\beta$</p>
 <p>This controls the relationship between KLD and the reconstruction loss. I think it's unrealistic to expect to find an explanation for why this needs to be as it is, but optimizing it across more datasets would certainly help.</p>
 <p><em>Sinusoidal increase of batchsize</em></p>
 <p>When batchsize increases during training, we see an abrupt drop in loss. I suspect that this immediate drop has very little to do with the intention of increasing batchsize (finding more "flat" minima, e.g. robust minima, as well as simply decreasing stochastic movement similarly to simulated annealing). Rather, it seems that when changing the batch size, the network suddenly find that its local minima is no longer a minima, and jerks in a more favorable direction. Interestingly, this is <em>not</em> accompanied by an initial increase in loss, so it's an all-round win. In fact, in our tests, it seems to be an amazingly effective way to kick your network out of a local minima.</p>
-<p>Cyclical changes in learning rate have been used widely in the literature. Perhaps we can alter batch size cyclically, such that it varies between e.g. 64 and 4096 (with more epochs at the larger batch sizes), perhaps with the minimal batch size decreasing over time. It could also be interesting to look at what with a cyclical batch size with single epochs of very low batch sizes, like 32 or 16 - does this give even bigger kicks to the network, allowing it to explore even lower minima?</p>
+<p>Cyclical changes in learning rate have been used widely in the literature. Perhaps we can alter batch size cyclically, such that it varies between e.g. 64 and 4096 (with more epochs at the larger batch sizes), perhaps with the minimal batch size increasing over time. It could also be interesting to look at what with a cyclical batch size with single epochs of very low batch sizes, like 32 or 16 - does this give even bigger kicks to the network, allowing it to explore even lower minima?</p>
 <p><em>The relationship between number of epochs, $\beta$ and batchsize</em></p>
 <p>The best number of epochs might not be exactly 500 - but this number surely depends on a lot of other factors. It's probably best to explore the other hyperparameters with a fixed number of epochs (say 500, or even 1000), then later optimize number of epochs.</p>
 <p><strong>Better exploitation of TNF information in clustering</strong></p>
 <p>There's quite a lot of information in the TNF of contigs, and Vamb is fairly bad at exploiting it.</p>
-<p>The expected TNF distance between two contigs follows approximately a chi distribution (there's some theoretical argument for this, but more importantly, it really empirically does). Similarly, the empirical probability of two contigs belonging to different species as a function of the TNF is well modeled by the cumulative density function of a chi distribution.</p>
+<p>The expected TNF distance between two contigs follows approximately a chi distribution (exercise left for reader: assuming all tetranucleotides have an independent probability of being observed, show that you can model the <em>euclidian</em> TNF distance using a chi square distribution). More importantly, in <em>practice</em>, it follows a chi square distibution. Similarly, the empirical probability of two contigs belonging to different species as a function of the TNF is well modeled by the cumulative density function of a chi distribution.</p>
 <p>However, the exact shape of the chi distribution depends on the phylogenetic distance between the genomes of the contigs, and also the the lengths of the two contigs. Hence, a clustering algorithm which simply looks at the raw TNF value without taking in to account contig lengths is not as effective as it could be.</p>
 <p>When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heurisitcally estimate the parameters of the estimated chi distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a <code>scipy.stats.chi</code> object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.</p>
 <p>A possible future approach could be to encode the depths and TNF independently with the VAE (although it could still train using both depths and TNF at the same time), and, when calculating the contig-contig distances during clustering, using a heuristic approximation of the chi distribution which can be computed quickly. Alternatively, one could cluster exclusively on depths, then afterwards identify contigs in bins with divergent TNF and/or recruit unbinned contigs to bins with similar TNF.</p>
@@ -13403,9 +13390,9 @@ bin2     contig3      108716
 <p><strong>Use PyTorch to implement GPU-based clustering</strong></p>
 <p>Clustering right now is implemented in Numpy. The speed bottleneck is the calculation of Pearson distances from one contig to the others, and this is dominated by a single multiplication of a matrix with a vector. While fast when implemented in Numpy with a proper BLAS library underneath, GPUs excel at operations on large, dense matrices. Using PyTorch, it should be possible to implement a device-agnostic clustering, enabling GPU acceleration. In the <code>src</code> directory, there is my attempt at doing it, but on our datasets, it yielded no speed improvements. There must be some speed bottlenecks that could be optimized away, but I didn't want to spend days doing that.</p>
 <p><strong>Switch to a true distance measure for tandem clustering</strong></p>
-<p>There is a current problem in the implementation of tandem clustering. To explain it, let me begin at the beginning:</p>
-<p>There is a problem with the regular clustering algorithm in that it scales O(n<sup>2</sup>), and so becomes painfully slow with larger datasets. We can get around this by splitting the dataset in several partitions, and clustering each partition.</p>
-<p>But this creates another problem: When splitting the dataset, it's highly likely that the contigs of a true bin will end up in different partitions. If that happens, it's impossible for the bin to be reconstructed. And we can't easily partition in a manner which preserves the bins' integrity, because that would require us to know the bins beforehand which is the entire point of clustering!</p>
+<p>So our clustering scales quadratically. That's alright for normally sized datasets, but at some point, someone is going to want to cluster 5000 samples. How can we circumvent this?</p>
+<p>Well, if we look at Canopy clustering (not to be confused with the binning method referred to as Canopy), that prevents the issue by creating intersecting (i.e. non-disjoint) sets of contigs which I call partitions, and then clustering those partitions independently. In an earlier version of VAMB, I implemented this and called it <code>tandemclustering</code>. However, because I couldn't solve the following problem, I ended up deleting that code.</p>
+<p>The problem is this: When splitting the dataset, it's highly likely that the contigs of a true bin will end up in different partitions. If that happens, it's impossible for the bin to be reconstructed. And we can't easily partition in a manner which preserves the bins' integrity, because that would require us to know the bins beforehand which is the entire point of clustering!</p>
 <p>We can solve it with the following splitting function:</p>
 
 <pre><code>function split(set contigset, float INNER, float OUTER):

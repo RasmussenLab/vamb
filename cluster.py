@@ -155,6 +155,9 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
     if len(set(labels)) != len(matrix):
         raise ValueError('Labels must be unique')
 
+    if matrix.dtype != _np.float32:
+        raise ValueError('Matrix must be of data type np.float32')
+
     if threshold is None:
         if len(matrix) < 1000 and threshold is None:
             raise ValueError('Cannot estimate from less than 1000 contigs')
@@ -190,12 +193,12 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
-        matrix: A (obs x features) Numpy matrix of values
+        matrix: A (obs x features) Numpy matrix of data type numpy.float32
         labels: None or Numpy array with labels for matrix rows [None = indices]
-        threshold: Optimal medoid search within this distance from medoid [None = auto]
+        threshold: Optimal medoid search in this distance from medoid [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         destroy: Destroy input matrix, saving memory. [False]
-        normalized: Matrix is already zscore-normalized [False]
+        normalized: Matrix is already zscore-normalized across axis 1 [False]
         nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
         logfile: Print threshold estimates and certainty to file [None]
@@ -203,14 +206,11 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
 
-    if destroy is True:
-        if normalized is False:
-            _vambtools.zscore(matrix, axis=1, inplace=True)
-    else:
-        if normalized is False:
-            matrix = _vambtools.zscore(matrix, axis=1)
-        else:
-            matrix = _np.copy(matrix)
+    if not destroy:
+        matrix = _np.copy(matrix)
+
+    if not normalized:
+        _vambtools.zscore(matrix, axis=1, inplace=True)
 
     labels, threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
 
