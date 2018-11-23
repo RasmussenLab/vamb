@@ -65,12 +65,15 @@ Then just do:
 
     [jakni@nissen:scripts]$ python vamb/runvamb.py outdir contigs.fna path/to/bamfiles/*.bam
 
-
 # Advanced usage
 
 If you want to extend Vamb, run only a part of the pipeline or run with altered inputs, you'll need to import it as Python module and run it from within the Python interpreter. Read through the tutorial in the `doc` directory.
 
 # Troubleshooting
+
+__Importing VAMB raises a RuntimeWarning that the compiletime version is wrong__
+
+Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as VAMB can run just fine despite it.
 
 ### Parsing the fasta file
 

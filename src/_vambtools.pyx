@@ -6,7 +6,6 @@ from cpython cimport array
 # Notes/assumptions for nucleotide counters:
 # 1) Contigs ONLY consists of values 64, 67, 71, 84, NOTHING ELSE
 # 2) They are at least 4 bp long
-# 3) A pseudocount of 1 is added to all unseen Kmers for Markov normalization
 
 # Lookup in this array gives the index of the canonical tetranucleotide.
 # E.g CCTA is the 92nd alphabetic 4mer, whose reverse complement, TAGG, is the 202nd.

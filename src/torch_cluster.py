@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+# This file is an aborted attempt to implement GPU clustering in VAMB.
+# When tested, it turned out to be slightly slower than CPU clustering, probably
+# due to an inefficient implementation requiring moving lots of data to and from
+# the GPU. In the future, it could be nice to implement, but it's not worth it
+# at the moment.
+
 __doc__ = """Iterative medoid clustering of Numpy arrays.
 
 Implements two core functions: cluster and tandemcluster, along with the helper

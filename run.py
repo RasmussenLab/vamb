@@ -102,12 +102,13 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     log('\nClustering', logfile)
     # We shuffle to prevent bias in which contigs are picked as seeds
     log('Shuffling latent encoding and contignames.', logfile, 1)
-    order = np.arange(len(contignames))
-    np.random.seed(4218525467)
-    np.random.shuffle(order)
+    rng = np.random.RandomState(9082374)
 
-    latent, contignames = latent[order], contignames[order]
-    del order
+    state = rng.get_state()
+    rng.shuffle(latent)
+
+    rng.set_state(state)
+    rng.shuffle(contignames)
 
     log('Clustering contigs', logfile, 1)
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames,
@@ -150,7 +151,6 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
 
     # Cluster, save tsv file
     cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)
-    del prevalence
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
@@ -195,9 +195,9 @@ vaeos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
 vaeos.add_argument('-l', dest='nlatent', metavar='', type=int,
                     default=40, help='latent neurons [40]')
 vaeos.add_argument('-a', dest='alpha',  metavar='',type=float,
-                    default=0.05, help='Weight of TNF versus depth [0.05]')
+                    default=0.05, help='alpha, weight of TNF versus depth loss [0.05]')
 vaeos.add_argument('-b', dest='beta',  metavar='',type=float,
-                    default=200.0, help='Capacity to learn [200.0]')
+                    default=200.0, help='beta, capacity to learn [200.0]')
 vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
                     default=0.2, help='Dropout [0.2]')
 vaeos.add_argument('--cuda', help='use GPU [False]', action='store_true')
@@ -207,17 +207,17 @@ trainos = parser.add_argument_group(title='Training options', description=None)
 trainos.add_argument('-e', dest='nepochs', metavar='', type=int,
                     default=500, help='epochs [500]')
 trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
-                    default=64, help='batch size [64]')
+                    default=64, help='starting batch size [64]')
 trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='+',
-                    default=[25, 75, 150, 300], help='increase batchsize at epochs [25 75 150 300]')
+                    default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
 trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
-                    default=1e-3, help='Learning rate [0.001]')
+                    default=1e-3, help='learning rate [0.001]')
 
 clusto = parser.add_argument_group(title='Clustering options', description=None)
 clusto.add_argument('-i', dest='minsize', metavar='', type=int,
-                    default=1, help='Minimum cluster size [1]')
+                    default=1, help='minimum cluster size [1]')
 clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
-                    default=-1, help='Stop after c clusters [-1 = inf]')
+                    default=-1, help='stop after c clusters [-1 = infinite]')
 
 ######################### PRINT HELP IF NO ARGUMENTS ###################
 if len(sys.argv) == 1:
