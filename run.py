@@ -23,7 +23,9 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
     log('\nCalculating TNF', logfile, 0)
 
     with open(fastapath, 'rb') as tnffile:
-        ret = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
+        ret = vamb.parsecontigs.read_contigs(tnffile,
+                                             minlength=mincontiglength,
+                                             preallocate=True)
     tnfs, contignames, contiglengths = ret
 
     vamb.vambtools.write_npz(os.path.join(outdir, 'tnf.npz'), tnfs)
@@ -76,19 +78,21 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
                             alpha=alpha, beta=beta, dropout=dropout, cuda=cuda)
 
     log('Created VAE', logfile, 1)
-    dataloader, mask = vamb.encode.make_dataloader(rpkms, tnfs, batchsize, cuda)
+    dataloader, mask = vamb.encode.make_dataloader(rpkms, tnfs, batchsize,
+                                                   destroy=True, cuda=cuda)
     log('Created dataloader and mask', logfile, 1)
     n_discarded = len(mask) - mask.sum()
-    log('Number of contigs unsuitable for encoding: {}'.format(n_discarded), logfile, 2)
-    log('Number of contigs remaining: {}'.format(len(mask) - n_discarded), logfile, 2)
+    log('Number of contigs unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
+    log('Number of contigs remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
 
     modelpath = os.path.join(outdir, 'model.pt')
-    log('Training VAE\n', logfile, 1)
+    log('\nTraining VAE\n', logfile, 1)
     vae.trainmodel(dataloader, nepochs=nepochs, lrate=lrate, batchsteps=batchsteps,
                   logfile=logfile, modelfile=modelpath)
 
     latent = vae.encode(dataloader)
     vamb.vambtools.write_npz(os.path.join(outdir, 'latent.npz'), latent)
+    del vae # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
     print('', file=logfile)
@@ -100,17 +104,6 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
-    # We shuffle to prevent bias in which contigs are picked as seeds
-    log('Shuffling latent encoding and contignames.', logfile, 1)
-    rng = np.random.RandomState(9082374)
-
-    state = rng.get_state()
-    rng.shuffle(latent)
-
-    rng.set_state(state)
-    rng.shuffle(contignames)
-
-    log('Clustering contigs', logfile, 1)
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames,
                                            logfile=logfile, destroy=True)
 
@@ -147,7 +140,7 @@ def main(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocess
                            dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile)
 
     del tnfs, rpkms
-    contignames = contignames[mask]
+    contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
     cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)

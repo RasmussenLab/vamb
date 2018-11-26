@@ -31,11 +31,11 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def make_dataloader(rpkm, tnf, batchsize=64, cuda=False):
+def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
-    The data are normalized versions of the input datasets, with "zero" contigs,
+    The data are normalized versions of the input datasets, with zero-contigs,
     i.e. contigs where a row in either TNF or RPKM are all zeros, removed.
     The mask is a boolean mask designating which contigs have been kept.
 
@@ -43,7 +43,8 @@ def make_dataloader(rpkm, tnf, batchsize=64, cuda=False):
         rpkm: RPKM matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x 136)
         batchsize: Starting size of minibatches for dataloader
-        cuda: Pagelock memory of dataloader (use when using CUDA)
+        destroy: Mutate rpkm and tnf array in-place instead of making a copy.
+        cuda: Pagelock memory of dataloader (use when using GPU acceleration)
 
     Outputs:
         DataLoader: An object feeding data to the VAE
@@ -62,23 +63,26 @@ def make_dataloader(rpkm, tnf, batchsize=64, cuda=False):
     if tnf.shape[1] != 136:
         raise ValueError('TNF must be 136 long along axis 1')
 
-    depthssum = rpkm.sum(axis=1)
     tnfsum = tnf.sum(axis=1)
-    mask = depthssum != 0
-    mask &= tnfsum != 0
+    mask = tnfsum != 0
+    del tnfsum
+    depthssum = rpkm.sum(axis=1)
+    mask &= depthssum != 0
 
-    # Remove zero-observations Unfortunately, a copy is necessary.
-    # It doesn't matter much, as cluster.py will create a copy anyway when.
-    # removing observations during clustering. This cannot easily prevented.
-    rpkm_copy = rpkm[mask].astype(_np.float32)
-    tnf_copy = tnf[mask].astype(_np.float32)
+    if destroy:
+        rpkm = _vambtools.inplace_maskarray(rpkm, mask)
+        tnf = _vambtools.inplace_maskarray(tnf, mask)
+    else:
+        rpkm = rpkm[mask].astype(_np.float32)
+        tnf = tnf[mask].astype(_np.float32)
+
     depthssum = depthssum[mask]
 
     # Normalize arrays and create the Tensors
-    rpkm_copy /= depthssum.reshape((-1, 1))
-    _vambtools.zscore(tnf_copy, axis=0, inplace=True)
-    depthstensor = _torch.from_numpy(rpkm_copy)
-    tnftensor = _torch.from_numpy(tnf_copy)
+    rpkm /= depthssum.reshape((-1, 1))
+    _vambtools.zscore(tnf, axis=0, inplace=True)
+    depthstensor = _torch.from_numpy(rpkm)
+    tnftensor = _torch.from_numpy(tnf)
 
     # Create dataloader
     dataset = _TensorDataset(depthstensor, tnftensor)
@@ -298,8 +302,10 @@ class VAE(_nn.Module):
         depths_array, tnf_array = data_loader.dataset.tensors
         length = len(depths_array)
 
-        latent = _torch.zeros((length, self.nlatent), dtype=data_loader.dataset.tensors[0].dtype)
-        assert not latent.is_cuda # Should be on CPU, not GPU
+        # We make a Numpy array instead of a Torch array because, if we create
+        # a Torch array, then convert it to Numpy, Numpy will believe it doesn't
+        # own the memory block, and array resizes will not be permitted.
+        latent = _np.empty((length, self.nlatent), dtype=_np.float32)
 
         row = 0
         with _torch.no_grad():
@@ -319,9 +325,7 @@ class VAE(_nn.Module):
                 row += len(mu)
 
         assert row == length
-        latent_array = latent.detach().numpy()
-
-        return latent_array
+        return latent
 
     def save(self, filehandle):
         """Saves the VAE to a path or binary opened file. Load with VAE.load

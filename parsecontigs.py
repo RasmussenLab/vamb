@@ -12,40 +12,70 @@ import numpy as _np
 import gzip as _gzip
 import vamb.vambtools as _vambtools
 
-def read_contigs(byte_iterator, minlength=100, dtype=_np.float32):
-    """Parses a FASTA file open in binary reading mode.
-
-    Input:
-        byte_iterator: Iterator of binary lines of a FASTA file
-        minlength[100]: Ignore any references shorter than N bases
-
-    Outputs:
-        tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
-        contignames: A Numpy array of contig headers
-        lengths: A Numpy array of contig lengths
-    """
-
-    tnf_list = list()
+def _read_contigs_online(filehandle, minlength, dtype):
+    tnfs = list()
     contignames = list()
     lengths = list()
 
-    if byte_iterator is not iter(byte_iterator):
-        raise ValueError('byte_iterator is not an iterator')
-
-    entries = _vambtools.byte_iterfasta(byte_iterator)
+    entries = _vambtools.byte_iterfasta(filehandle)
 
     for entry in entries:
         if len(entry) < minlength:
             continue
 
-        tnf_list.append(entry.fourmer_freq())
+        tnfs.append(entry.fourmer_freq())
         contignames.append(entry.header)
         lengths.append(len(entry))
 
-    tnfs = _np.array(tnf_list, dtype=dtype)
-    del tnf_list
-
     lengths = _np.array(lengths, dtype=_np.int)
-    contignames = _np.array(contignames)
+    tnfs = _np.array(tnfs, dtype=dtype)
 
     return tnfs, contignames, lengths
+
+def _read_contigs_preallocated(filehandle, minlength, dtype):
+    n_entries = 0
+    entries = _vambtools.byte_iterfasta(filehandle)
+
+    for entry in entries:
+         if len(entry) >= minlength:
+             n_entries += 1
+
+    tnfs = _np.empty((n_entries, 136), dtype=dtype)
+    contignames = [None] * n_entries
+    lengths = _np.empty(n_entries, dtype=_np.int)
+
+    filehandle.seek(0) # Go back to beginning of file
+    entries = _vambtools.byte_iterfasta(filehandle)
+    entrynumber = 0
+    for entry in entries:
+        if len(entry) < minlength:
+            continue
+
+        tnfs[entrynumber] = entry.fourmer_freq()
+        contignames[entrynumber] = entry.header
+        lengths[entrynumber] = len(entry)
+
+        entrynumber += 1
+
+    return tnfs, contignames, lengths
+
+def read_contigs(filehandle, minlength=100, preallocate=True, dtype=_np.float32):
+    """Parses a FASTA file open in binary reading mode.
+
+    Input:
+        filehandle: Filehandle open in binary mode of a FASTA file
+        minlength[100]: Ignore any references shorter than N bases
+
+    Outputs:
+        tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
+        contignames: A list of contig headers
+        lengths: A Numpy array of contig lengths
+    """
+
+    if minlength < 4:
+        raise ValueError('Minlength must be at least 4')
+
+    if preallocate:
+        return _read_contigs_preallocated(filehandle, minlength, dtype)
+    else:
+        return _read_contigs_online(filehandle, minlength, dtype)

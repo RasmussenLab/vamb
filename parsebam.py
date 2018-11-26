@@ -221,6 +221,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
         def _callback(result):
             path, rpkms, length = result
             print('\tProcessed ', path, file=logfile)
+            logfile.flush()
 
         def _error_callback(result):
             print('\tERROR WHEN PROCESSING ', path, file=logfile)

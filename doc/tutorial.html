@@ -11791,7 +11791,7 @@ div#notebook {
 <li><code>contigs.fna</code> - The filtered FASTA contigs which were mapped against, and</li>
 <li><code>bamfiles/*.bam</code> - The 6 .bam files from mapping the reads to the contigs above.</li>
 </ul>
-<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Calculate-the-sequence-tetranucleotide-frequencies">2. <a href="#parsecontigs">Calculate the sequence tetranucleotide frequencies</a><a class="anchor-link" href="#2.-Calculate-the-sequence-tetranucleotide-frequencies">&#182;</a></h3><h3 id="3.-Calculate-the-abundance-matrix">3. <a href="#parsebam">Calculate the abundance matrix</a><a class="anchor-link" href="#3.-Calculate-the-abundance-matrix">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Postprocessing-the-bins">6. <a href="#postprocessing">Postprocessing the bins</a><a class="anchor-link" href="#6.-Postprocessing-the-bins">&#182;</a></h3><h3 id="7.-Summary-of-full-workflow">7. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#7.-Summary-of-full-workflow">&#182;</a></h3><h3 id="8.-Optional:-Benchmarking-your-bins">8. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#8.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="9.-Potential-improvements-to-Vamb">9. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#9.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
+<h2 id="Table-of-contents:">Table of contents:<a class="anchor-link" href="#Table-of-contents:">&#182;</a></h2><h3 id="1.-Importing-Vamb-and-getting-help">1. <a href="#importing">Importing Vamb and getting help</a><a class="anchor-link" href="#1.-Importing-Vamb-and-getting-help">&#182;</a></h3><h3 id="2.-Calculate-the-sequence-tetranucleotide-frequencies">2. <a href="#parsecontigs">Calculate the sequence tetranucleotide frequencies</a><a class="anchor-link" href="#2.-Calculate-the-sequence-tetranucleotide-frequencies">&#182;</a></h3><h3 id="3.-Calculate-the-abundance-matrix">3. <a href="#parsebam">Calculate the abundance matrix</a><a class="anchor-link" href="#3.-Calculate-the-abundance-matrix">&#182;</a></h3><h3 id="4.-Train-the-autoencoder-and-encode-input-data">4. <a href="#encode">Train the autoencoder and encode input data</a><a class="anchor-link" href="#4.-Train-the-autoencoder-and-encode-input-data">&#182;</a></h3><h3 id="5.-Binning-the-encoding">5. <a href="#cluster">Binning the encoding</a><a class="anchor-link" href="#5.-Binning-the-encoding">&#182;</a></h3><h3 id="6.-Postprocessing-the-bins">6. <a href="#postprocessing">Postprocessing the bins</a><a class="anchor-link" href="#6.-Postprocessing-the-bins">&#182;</a></h3><h3 id="7.-Summary-of-full-workflow">7. <a href="#summary">Summary of full workflow</a><a class="anchor-link" href="#7.-Summary-of-full-workflow">&#182;</a></h3><h3 id="8.-Running-VAMB-with-low-memory-(RAM)">8. <a href="#memory">Running VAMB with low memory (RAM)</a><a class="anchor-link" href="#8.-Running-VAMB-with-low-memory-(RAM)">&#182;</a></h3><h3 id="9.-Optional:-Benchmarking-your-bins">9. <a href="#benchmark">Optional: Benchmarking your bins</a><a class="anchor-link" href="#9.-Optional:-Benchmarking-your-bins">&#182;</a></h3><h3 id="10.-Potential-improvements-to-Vamb">10. <a href="#improvements">Potential improvements to Vamb</a><a class="anchor-link" href="#10.-Potential-improvements-to-Vamb">&#182;</a></h3><p><a id="importing"></a></p>
 <h2 id="Importing-Vamb-and-getting-help">Importing Vamb and getting help<a class="anchor-link" href="#Importing-Vamb-and-getting-help">&#182;</a></h2><p>First step is to get Vamb imported</p>
 
 <pre><code>[jakni@nissen:~]$ python
@@ -11990,16 +11990,16 @@ DESCRIPTION
     ...     tnfs, contignames, lengths = read_contigs(filehandle)
 
 FUNCTIONS
-    read_contigs(byte_iterator, minlength=100, dtype=&lt;class &#39;numpy.float32&#39;&gt;)
+    read_contigs(filehandle, minlength=100, preallocate=True, dtype=&lt;class &#39;numpy.float32&#39;&gt;)
         Parses a FASTA file open in binary reading mode.
         
         Input:
-            byte_iterator: Iterator of binary lines of a FASTA file
+            filehandle: Filehandle open in binary mode of a FASTA file
             minlength[100]: Ignore any references shorter than N bases
         
         Outputs:
             tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
-            contignames: A Numpy array of contig headers
+            contignames: A list of contig headers
             lengths: A Numpy array of contig lengths
 
 FILE
@@ -12129,6 +12129,7 @@ First 5 elements of lengths:
 <p>The <code>tnfs</code> is the tetranucleotide frequency - it's the frequency of the canonical kmer of each 4mer in the contig. We use 4-mers because there are 136 canonical 4-mers, which is an appropriate number of features to cluster - not so few that there's no signal and not so many it becomes unwieldy and the estimates of the frequencies become uncertain. We could also have used 3-mers. In tests we have made, 3-mers are <em>almost</em>, but not quite as good as 4-mers for separating different species. You could probably switch tetranucleotide frequency to trinucleotide frequency in Vamb without any significant drop of accuracy. However, there are 512 canonical 5-mers, that would be too many features to handle comfortably, and it could easily cause memory issues.</p>
 <p><strong>The argument <code>minlength</code></strong> sets the filter removing any contigs shorter than this. Short contigs in general do not work well with Vamb since neither TNF nor the abundance (shown in next section) can be estimated reliably for short contigs. When choosing the correct theshold, there is some sweet spot between on one hand not allowing small contigs to act as a source of noise in the binning, and on the other hand to not throw away more contigs than you absolutely have to. We don't know what the sweet spot is, but it's probably somewhere around ~2000 bp.</p>
 <p>The problem with filtering contigs using <code>minlength</code> is that the smaller contigs which are thrown away will still recruit reads during the mapping that creates the BAM files, thus removing information from those reads. For that reason, we recommend filtering the contigs <em>before</em> mapping by using the function <code>vamb.vambtools.filtercontigs</code>.</p>
+<p><strong>With the argument <code>preallocate</code></strong> set to true (as is default), the function will read the file <em>twice</em>, one time to count the number of sequences, then it will preallocate the arrays, and then it will read it a second time to fill the arrays. Having this set to <code>True</code> approximately doubles the reading time, but cuts down on memory.</p>
 <p><strong>The memory consumption of Vamb can be an issue</strong>, so at this point, you should probably consider whether you have enough RAM. If not, all the relevant modules have reading and writing functions so you can dump the results to disk and delete them from memory. This is a small dataset, so there's no problem. With hundreds of samples and millions of contigs however, this becomes a problem, even though Vamb is fairly memory-friendly.</p>
 <p>As a rule of thumb, the memory consumption for the most memory intensive step of Vamb is approximately 8 × (n_samples + 136) × n_contigs bytes plus a little bit of overhead. If this is significantly lower than your RAM, don't worry about it. If it's within a factor 2 of your available RAM, you'll need to delete objects you don't need anymore.</p>
 <p><a id="parsebam"></a></p>
@@ -13110,6 +13111,25 @@ Number of bins after filtering: 136
 </div>
 </div>
 
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><a id="memory"></a></p>
+<h2 id="Running-VAMB-with-low-memory-(RAM)">Running VAMB with low memory (RAM)<a class="anchor-link" href="#Running-VAMB-with-low-memory-(RAM)">&#182;</a></h2><p>In the VAMB software, a series of tradeoffs can be taken to decrease RAM consumption, usually to the detriment of some other property like speed or convenience. With all of those tradeoffs taken, VAMB is relatively memory efficient. By default, several of these tradeoffs are are not taken when running from a Python interpreter, however they are all enabled when running VAMB with the <code>run.py</code> script.</p>
+<p>With all memory-saving options enabled, the memory consumption is on the order of $4*N_{contigs}*(136+N_{samples})$ bytes plus the memory required to keep all the sequence labels in memory, plus a little bit of overhead. As a rule of thumb, you should probably have $8*N_{contigs}*(160+N_{samples})$ bytes available.</p>
+<p>Here's a short list of all the available memory saving options:</p>
+<ul>
+<li>When using <code>vamb.parsecontigs.read_contigs</code>, set the <code>preallocate</code> keyword to <code>True</code>. This doubles the time spent in the function, but significantly reduces RAM usage.</li>
+<li>Pass a path to the <code>dumpdirectory</code> in the <code>vamb.parsecontigs.read_bamfiles</code> function. Temporary files will be written to files in this directory to avoid keeping them in memory. This takes a little bit of disk space, but saves lots of RAM)</li>
+<li>In the <code>encode.make_dataloader</code> function, set <code>destroy</code> to True. This will in-place modify your RPKM and TNF array, deleting unusable rows and normalizing them. This prevents the creation of a copy of the data.</li>
+<li>Similarly, set <code>destroy=True</code> when using the <code>cluster.cluster</code> function. Again, the input (latent) datasets are modified in-place, saving a copy of the data. This function will completely consume the input array.</li>
+<li>When clustering, instead of generating clusters in memory, instantiate the cluster iterator and pass it directly to <code>cluster.write_clusters</code>. This way, each cluster will be written to disk after creation and not accumulate in memory. This obviously requires disk space, and you will have to reload the clusters if you are planning on using them.</li>
+</ul>
+
+</div>
+</div>
 </div>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
