@@ -1,7 +1,7 @@
 
 __doc__ = """Merge clusters according to overlap in contigs.
 
-This module is obsolete in the current version of Vamb, as it now only creates
+This module is obsolete in the current version of Vamb, as VAMB now creates
 disjoint clusters. We have retained it here because in the future, it might be
 of interest to return to producing overlapping clusters to improve accuracy
 and/or speed up clustering.

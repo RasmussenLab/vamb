@@ -74,14 +74,14 @@ class TooLittleData(Exception):
 
 def countdists(matrix, index, distfunction, bins=FENCEPOSTS):
     """Return number of distances in each of 400 bins from 0 to 1."""
-    
+
     if index >= len(matrix):
         raise IndexError('Array out of range')
-    
+
     distances = distfunction(matrix, index)
     histogram, _ = np.histogram(distances, bins=bins)
     histogram[0] -= 1 # compensate for self-correlation of chosen contig
-    
+
     return histogram
 
 
@@ -91,26 +91,26 @@ def densityof(histogram, pdf=NORMALPDF):
     gaussian kernel density estimation.
     This prevents the differentiation for being all over the place.
     """
-    
+
     density = np.zeros(600)
     for i, number in enumerate(histogram):
         density[i:i+200] += pdf * number
-        
+
     normalized = density[100:-100]
-    
+
     normalized /= np.sum(normalized)
     normalized *= NBINS
-    
+
     return normalized
 
 
 
 def differentiate(kde, deltax=1/NBINS):
     """Simple numerial differentiation of array of values."""
-    
+
     if len(kde) < 2:
         raise ValueError('Must have at least two elements')
-    
+
     return (kde[1:] - kde[:-1]) / deltax
 
 
@@ -119,101 +119,100 @@ def findvalley(kde, nobs, maxsize=2500, xs=DIFFXS, nbins=NBINS):
     """Returns a distance values that separates close and far observations,
     and whether or not the separation was good.
     """
-    
+
     if len(kde) != len(xs) + 1:
         raise ValueError('length of kde must be length of xs + 1')
-    
+
     diffs = differentiate(kde)
     trios = zip(diffs, kde[1:], xs)
     withins = 0
     separated = False
-    
+
     # Get first negative slope from a non-neglible peak
     for diff, kde, x in trios:
-        
+
         # Stop if we see more than maxsize contigs on the way
         withins += kde * nobs / nbins
         if withins > maxsize:
             return 0, False
-        
+
         # Find first a negative slope on a significant peak
         if diff < 0 and kde > 52.4584976 * 3 / nobs: # 3 contigs has this density
             peakkde = kde
             break
-            
-    # Then continue until you go below 80% of that peak 
+
+    # Then continue until you go below 80% of that peak
     for diff, kde, x in trios:
         withins += kde * nobs / nbins
-        
+
         # Stop if we see more than maxsize contigs on the way
         if withins > maxsize:
             return 0, False
-        
+
         # If we're below 80% of peak, the peak is over.
         if kde < 0.80 * peakkde:
             valley = x
             break
-    
+
     # Find the next local minima: If the kde is sufficiently low enough,
     # the close and far observations are well separated, and this means we
     # can use a higher threshold, and so we use the bottom of the valley
     for diff, kde, x in trios:
         withins += kde * nobs / nbins
-        
+
         if diff > 0:
             if kde <= 0.025 and withins <= maxsize:
                 valley = x
                 separated = True
-                
+
             break
-            
+
     if valley > 0.45:
         valley = 0
         separated = False
-        
+
     return valley, separated
 
 
 
 def getthreshold(latent, distfunction, samples, maxsize):
     """Estimate the clustering threshold from random sampling.
-    
+
     Inputs:
         latent: An (n_contigs x n_latent) Numpy array
         distfunction: f such that f(latent, index) returns Numpy array with
                       distances to each corresponding contig in latent.
-        samples: Number of random contigs to sample [1000]
+        samples: Number of random contigs to sample
         maxsize: Discard sample if more than N contigs are within estimated
-                 sample threshold [2500]
-        
+                 sample threshold
+
     Output:
         median: Median of estimated clustering threshold
         support: Fraction of contigs with any estimated threshold
         separation: Fraction of contigs well separated
     """
-        
+
     valleys = list()
     nseparated = 0
-    
+
     indices = random.sample(range(len(latent)), k=samples)
     for index in indices:
         disthistogram = countdists(latent, index, distfunction)
         kde = densityof(disthistogram)
         valley, separated = findvalley(kde, len(latent), maxsize=maxsize)
-        
+
         if valley == 0:
             continue
-            
+
         if separated:
             nseparated += 1
-        
+
         valleys.append(valley)
-    
+
     if len(valleys) < 5:
         raise TooLittleData('Less than 5 samples returned valleys')
-    
+
     valleys.sort()
     median = valleys[len(valleys) // 2]
-        
-    return median, len(valleys) / samples, nseparated / samples
 
+    return median, len(valleys) / samples, nseparated / samples

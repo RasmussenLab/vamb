@@ -45,13 +45,13 @@ If no error occurs, like above, you successfully installed Vamb.
 
 __If you can't import Vamb to Python__
 
-This can happen if you miss any of the dependencies. If it raises an error that you can't import `vambtools`, you probably need to compile the \_vambtools.pyx file yourself:
+This can happen if you miss any of the dependencies. If it raises an error that you can't import `vambtools`, you probably need to compile the vambtools source file yourself. Either compile the `src/_vambtools.c` source file using whatever C compiler you want to, or compile the `src/_vambtools.pyx`. To do the latter:
 
 * Make sure you have the Python package Cython installed.
-* Go to the src/ directory in the vamb directory
+* Go to the `src/` directory in the vamb directory
 * run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
 * This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
-* You can now import Vamb.
+* You should now be able to import Vamb.
 
 # Quickstart
 
@@ -75,7 +75,7 @@ __Importing VAMB raises a RuntimeWarning that the compiletime version is wrong__
 
 Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as VAMB can run just fine despite it.
 
-### Parsing the fasta file
+### Parsing the FASTA file
 
 No trouble seen so far.
 

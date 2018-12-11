@@ -64,7 +64,9 @@ def read_contigs(filehandle, minlength=100, preallocate=True, dtype=_np.float32)
 
     Input:
         filehandle: Filehandle open in binary mode of a FASTA file
-        minlength[100]: Ignore any references shorter than N bases
+        minlength: Ignore any references shorter than N bases [100]
+        preallocate: Read contigs twice, saving memory [True]
+        dtype: Numpy data type of resulting TNF matrix.
 
     Outputs:
         tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.

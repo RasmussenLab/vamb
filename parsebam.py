@@ -62,7 +62,7 @@ import gzip as _gzip
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
-def mergecolumns(pathlist, dtype=_np.float32):
+def mergecolumns(pathlist):
     """Merges multiple npz or npy files with columns to a matrix.
 
     All paths must be npz arrays with the array saved as name 'arr_0',
@@ -70,12 +70,11 @@ def mergecolumns(pathlist, dtype=_np.float32):
 
     Inputs:
         pathlist: List of paths to find .npz files to merge
-        dtype: Data type of resulting matrix [np.float32]
     Output: Matrix with one column per npz file
     """
 
     if len(pathlist) == 0:
-        return _np.array([], dtype=dtype)
+        return _np.array([], dtype=_np.float32)
 
     for path in pathlist:
         if not _os.path.exists(path):
@@ -85,7 +84,7 @@ def mergecolumns(pathlist, dtype=_np.float32):
     length = len(first)
     ncolumns = len(pathlist)
 
-    result = _np.zeros((length, ncolumns), dtype=dtype)
+    result = _np.zeros((length, ncolumns), dtype=_np.float32)
     result[:,0] = first
 
     for columnno, path in enumerate(pathlist[1:]):
@@ -149,7 +148,7 @@ def _filter_segments(segmentiterator, minscore):
 
 
 
-def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000, dtype=_np.float32):
+def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
 
@@ -189,7 +188,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000, dtype=_
     bamfile.close()
     del idof
 
-    rpkms = _np.zeros(len(contiglengths), dtype=dtype)
+    rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
 
     millionmappedreads = nhalfreads / 1e6
 
@@ -213,7 +212,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000, dtype=_
 
 
 def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
-                  subprocesses=DEFAULT_SUBPROCESSES, dtype=_np.float32, logfile=None):
+                  subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
 
     # Define callback function depending on whether a logfile exists or not
@@ -296,7 +295,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
     # one big matrix...
     if dumpdirectory is None:
         columnof = {p:i for i, p in enumerate(paths)}
-        rpkms = _np.zeros((ncontigs, len(paths)), dtype=dtype)
+        rpkms = _np.zeros((ncontigs, len(paths)), dtype=_np.float32)
 
         for processresult in processresults:
             path, rpkm, length = processresult.get()
@@ -305,7 +304,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
     # If we did, instead merge them from the disk
     else:
         dumppaths = [_os.path.join(dumpdirectory, str(i) + '.npz') for i in range(len(paths))]
-        rpkms = mergecolumns(dumppaths, dtype=dtype)
+        rpkms = mergecolumns(dumppaths)
 
     return rpkms
 
