@@ -70,11 +70,14 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     mask &= depthssum != 0
 
     if destroy:
+        if not (rpkm.dtype == tnf.dtype == _np.float32):
+            raise ValueError('Arrays must be of data type np.float32 if destroy is True')
+
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
     else:
-        rpkm = rpkm[mask].astype(_np.float32)
-        tnf = tnf[mask].astype(_np.float32)
+        rpkm = rpkm[mask].astype(_np.float32, copy=False)
+        tnf = tnf[mask].astype(_np.float32, copy=False)
 
     depthssum = depthssum[mask]
 

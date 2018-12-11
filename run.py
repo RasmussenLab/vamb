@@ -86,7 +86,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('Number of contigs remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
 
     modelpath = os.path.join(outdir, 'model.pt')
-    log('\nTraining VAE\n', logfile, 1)
+    log('\nTraining VAE', logfile, 1)
     vae.trainmodel(dataloader, nepochs=nepochs, lrate=lrate, batchsteps=batchsteps,
                   logfile=logfile, modelfile=modelpath)
 
@@ -210,7 +210,7 @@ clusto = parser.add_argument_group(title='Clustering options', description=None)
 clusto.add_argument('-i', dest='minsize', metavar='', type=int,
                     default=1, help='minimum cluster size [1]')
 clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
-                    default=-1, help='stop after c clusters [-1 = infinite]')
+                    default=None, help='stop after c clusters [None = infinite]')
 
 ######################### PRINT HELP IF NO ARGUMENTS ###################
 if len(sys.argv) == 1:

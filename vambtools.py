@@ -86,7 +86,7 @@ def inplace_maskarray(array, mask):
     if len(mask) != len(array):
         raise ValueError('Lengths must match')
     elif array.ndim != 2:
-        raise ValueError('Can only take 2 dimensional-arrays and mask.')
+        raise ValueError('Can only take a 2 dimensional-array.')
 
     # Cython doesn't support bool arrays, so this does a no-copy type casting.
     uints = _np.frombuffer(mask, dtype=_np.uint8)

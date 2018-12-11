@@ -146,7 +146,7 @@ def _cluster(matrix, labels, threshold, max_steps):
         # because masking takes time
         if len(cluster) > 1 or seed == len(matrix):
             _vambtools.inplace_maskarray(matrix, keepmask)
-            indices = indices[keepmask] # no need to inplace mask
+            indices = indices[keepmask] # no need to inplace mask small array
             keepmask.resize(len(matrix), refcheck=False)
             keepmask[:] = True
             seed = 0
@@ -251,6 +251,9 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
     if iter(clusters) is not clusters: # Is True if clusters is not iterator
         clusters = clusters.items()
 
+    if max_clusters is not None and max_clusters < 1:
+        raise ValueError('max_clusters must be at least 1.')
+
     if header is not None and len(header) > 0:
         if '\n' in header:
             raise ValueError('Header cannot contain newline')
@@ -271,6 +274,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
 
         for contig in contigs:
             print(clustername, contig, sep='\t', file=filehandle)
+        filehandle.flush()
 
         clusternumber += 1
         ncontigs += len(contigs)
