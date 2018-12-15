@@ -32,10 +32,13 @@ __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
 __version__ = (0, 4)
 
+import sys as _sys
+if _sys.version_info[:2] < (3, 5):
+    raise ImportError('Python version must be >= 3.5')
+
 from . import vambtools
 from . import parsebam
 from . import parsecontigs
 from . import cluster
 from . import benchmark
 from . import encode
-

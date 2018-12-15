@@ -8,7 +8,7 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 # Installation
 
-Vamb requires the following Python packages to run:
+Vamb requires Python v. >= 3.5 and the following packages to run:
 
 * PyTorch
 * Numpy
@@ -34,7 +34,7 @@ __Check if you can import Vamb to Python__
 
 Open Python, append the parent directory of the vamb directory to your `sys.path`, then import Vamb. For example, if the Vamb directory is placed at `/home/jakni/scripts/vamb`, I would append `'/home/jakni/scripts'`:
 
-    [jakni@nissen:scripts]$ python3
+    [jakni@nissen:scripts]$ python3 # must be version 3!
     Python 3.7.1 (default, Oct 22 2018, 10:41:28)
     [GCC 8.2.1 20180831] on linux
     Type "help", "copyright", "credits" or "license" for more information.

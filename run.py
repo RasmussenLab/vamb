@@ -263,8 +263,8 @@ if args.alpha <= 0 or args.alpha >= 1:
 if args.beta <= 0:
     raise argparse.ArgumentTypeError('beta cannot be negative or zero')
 
-if args.dropout <= 0 or args.dropout >= 1:
-    raise argparse.ArgumentTypeError('dropout must be above 0 and below 1')
+if args.dropout < 0 or args.dropout >= 1:
+    raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1.')
 
 if args.cuda and not torch.cuda.is_available():
     raise ModuleNotFoundError('Cuda is not available for PyTorch')
