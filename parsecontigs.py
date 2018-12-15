@@ -12,7 +12,7 @@ import numpy as _np
 import gzip as _gzip
 import vamb.vambtools as _vambtools
 
-def _read_contigs_online(filehandle, minlength, dtype):
+def _read_contigs_online(filehandle, minlength):
     tnfs = list()
     contignames = list()
     lengths = list()
@@ -28,11 +28,11 @@ def _read_contigs_online(filehandle, minlength, dtype):
         lengths.append(len(entry))
 
     lengths = _np.array(lengths, dtype=_np.int)
-    tnfs = _np.array(tnfs, dtype=dtype)
+    tnfs = _np.array(tnfs, dtype=_np.float32)
 
     return tnfs, contignames, lengths
 
-def _read_contigs_preallocated(filehandle, minlength, dtype):
+def _read_contigs_preallocated(filehandle, minlength):
     n_entries = 0
     entries = _vambtools.byte_iterfasta(filehandle)
 
@@ -40,7 +40,7 @@ def _read_contigs_preallocated(filehandle, minlength, dtype):
          if len(entry) >= minlength:
              n_entries += 1
 
-    tnfs = _np.empty((n_entries, 136), dtype=dtype)
+    tnfs = _np.empty((n_entries, 136), dtype=_np.float32)
     contignames = [None] * n_entries
     lengths = _np.empty(n_entries, dtype=_np.int)
 
@@ -59,14 +59,13 @@ def _read_contigs_preallocated(filehandle, minlength, dtype):
 
     return tnfs, contignames, lengths
 
-def read_contigs(filehandle, minlength=100, preallocate=True, dtype=_np.float32):
+def read_contigs(filehandle, minlength=100, preallocate=True):
     """Parses a FASTA file open in binary reading mode.
 
     Input:
         filehandle: Filehandle open in binary mode of a FASTA file
         minlength: Ignore any references shorter than N bases [100]
         preallocate: Read contigs twice, saving memory [True]
-        dtype: Numpy data type of resulting TNF matrix.
 
     Outputs:
         tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
@@ -78,6 +77,6 @@ def read_contigs(filehandle, minlength=100, preallocate=True, dtype=_np.float32)
         raise ValueError('Minlength must be at least 4')
 
     if preallocate:
-        return _read_contigs_preallocated(filehandle, minlength, dtype)
+        return _read_contigs_preallocated(filehandle, minlength)
     else:
-        return _read_contigs_online(filehandle, minlength, dtype)
+        return _read_contigs_online(filehandle, minlength)

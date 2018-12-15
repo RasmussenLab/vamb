@@ -228,6 +228,9 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     # Iterate over lines
     for line in filehandle:
+        if line.startswith(comment):
+            continue
+
         linenumber += 1
 
         if line.startswith(b'>'):
@@ -237,10 +240,11 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
         else:
             # Check for un-parsable characters in the sequence
-            stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHV \t\n')
+            stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
-                raise ValueError("Non-ACGTN in line {}: '{}'".format(linenumber + 1, bad_character))
+                raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
+                                                                         bad_character))
 
             masked = line[:-1].translate(linemask)
             buffer.append(masked)
