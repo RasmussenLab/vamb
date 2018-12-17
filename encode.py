@@ -89,7 +89,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
 
     # Create dataloader
     dataset = _TensorDataset(depthstensor, tnftensor)
-    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
+    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=1, pin_memory=cuda)
 
     return dataloader, mask
@@ -246,6 +246,7 @@ class VAE(_nn.Module):
             data_loader = _DataLoader(dataset=data_loader.dataset,
                                       batch_size=data_loader.batch_size * 2,
                                       shuffle=True,
+                                      drop_last=True,
                                       num_workers=data_loader.num_workers,
                                       pin_memory=data_loader.pin_memory)
 
@@ -299,6 +300,7 @@ class VAE(_nn.Module):
         new_data_loader = _DataLoader(dataset=data_loader.dataset,
                                       batch_size=data_loader.batch_size,
                                       shuffle=False,
+                                      drop_last=False,
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
