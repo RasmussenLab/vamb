@@ -281,7 +281,8 @@ def write_bins(directory, bins, fastadict, maxbins=250):
 
     Inputs:
         directory: Directory to create or put files in
-        bins: {'name': {set of contignames}} dictionary
+        bins: {'name': {set of contignames}} dictionary (can be loaded from
+        clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
         maxbins: Raise an error if trying to make more bins than this
 

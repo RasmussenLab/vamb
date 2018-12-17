@@ -2,8 +2,8 @@ import sys
 import os
 import numpy as np
 
-#parentdir = sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-parentdir = '/home/jakni/Documents/scripts/'
+
+parentdir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(parentdir)
 import vamb
 
@@ -61,7 +61,9 @@ with open(badfasta_path, 'rb') as file:
     try:
         entries = list(vamb.vambtools.byte_iterfasta(file))
     except ValueError as error:
-        assert error.args == ("Non-DNA in line 7: 'P'",)
+        assert error.args == ("Non-IUPAC DNA in line 7: 'P'",)
+    else:
+        raise AssertionError("Didn't fail at opening fad FASTA file")
 
 # Reader works well
 gzip_path = os.path.join(parentdir, 'vamb', 'test', 'data', 'fasta.fna.gz')

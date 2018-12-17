@@ -61,9 +61,9 @@ Take a brief look on the options with:
 
 Do the defaults look alright? They probably do, but you might want to check number of processes to launch and the option for GPU acceleration.
 
-Then just do:
+Then, in order to run it, just do:
 
-    [jakni@nissen:scripts]$ python vamb/runvamb.py outdir contigs.fna path/to/bamfiles/*.bam
+    [jakni@nissen:scripts]$ python vamb/run.py outdir contigs.fna path/to/bamfiles/*.bam
 
 # Advanced usage
 
@@ -105,11 +105,12 @@ There is not much to do about it. We do not know at what percentage of well-sepa
 
 __It warns: Too little data: [ERROR]. Setting threshold to 0.08__
 
-This happens if less than 5 of the samples (default of 1000 samples) return any threshold. If this happens for a reasonable number of samples, e.g. > 100, I would not trust Vamb to deliver good results,
-and would use another binner instead.
+This happens if less than 5 of the Pearson samples (default of 1000 samples) return any threshold. If this happens for a reasonable number of Pearson samples, e.g. > 100, I would not trust Vamb to deliver good results, and would use another binner instead.
 
 
-# Prerequisites
+# Inputs and outputs
+
+### Inputs
 
 Like other metagenomic binners, Vamb relies on two properties of the DNA sequences to be binned:
 
@@ -123,12 +124,18 @@ So before you can run Vamb, you need to have files from which Vamb can calculate
 
 The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on contigs is better.
 
-With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming.
-The better approach is to split the dataset up into smaller chuncks and bin them independently.
+With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. The better approach is to split the dataset up into smaller chuncks and bin them independently.
 
-There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask.
+There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask. In those situations, you can still pass the argument `minlength` (`-m` on command line) if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads during mapping which are then not mapped to the larger contigs, but it can work alright.
 
-In those situations, you can still pass the argument `minlength` if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads during mapping which are then not mapped to the larger contigs, but it can work alright.
+### Outputs
+
+Vamb produces the following six output files:
+
+- `log.txt` - a text file with information about the Vamb run.
+- `tnf.npz`, `rpkm.npz`, and `latent.npz` - Numpy .npz files with TNFs, abundances, and the latent encoding of these two.
+- `model.pt` - a PyTorch model object of the trained VAE. You can load the VAE using `vamb.VAE.load` in Python.
+- `clusters.tsv` - a text file with two columns and one row per sequence: Left column for the cluster name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins`.
 
 ### Recommended preparation
 
@@ -150,4 +157,4 @@ There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs 
 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
-We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` and multiple secondary hits tagged `XA:Z` can work.
+We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file with an alignment score tagged `AS:i` can work.

@@ -63,13 +63,12 @@ import gzip as _gzip
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
 def mergecolumns(pathlist):
-    """Merges multiple npz or npy files with columns to a matrix.
+    """Merges multiple npz files with columns to a matrix.
 
     All paths must be npz arrays with the array saved as name 'arr_0',
     and with the same length.
 
-    Inputs:
-        pathlist: List of paths to find .npz files to merge
+    Input: pathlist: List of paths to find .npz files to merge
     Output: Matrix with one column per npz file
     """
 
@@ -132,7 +131,7 @@ def _filter_segments(segmentiterator, minscore):
     lastwasforward = alignedsegment.flag & 64 == 64
 
     for alignedsegment in segmentiterator:
-        if alignedsegment.get_tag('AS') < minscore:
+        if minscore > 0 and alignedsegment.get_tag('AS') < minscore:
             continue
 
         # Depressingly, BWA somtimes outputs the same read multiple times.
@@ -145,8 +144,6 @@ def _filter_segments(segmentiterator, minscore):
 
             lastname = thisname
             lastwasforward = thisisforward
-
-
 
 def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     """Returns  RPKM (reads per kilobase per million mapped reads)
@@ -255,6 +252,13 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
     # Might as well do it before spawning all those processes.
     firstfile = _pysam.AlignmentFile(paths[0], "rb")
     ncontigs = sum(1 for length in firstfile.lengths if length >= minlength)
+
+    # Probe to check that the "AS" aux field is present (BWA makes this)
+    if minscore > 0:
+        segments = [i for i, j in zip(range(25), firstfile)]
+        if not all(segment.has_tag("AS") for segment in segments):
+            raise ValueError("If minscore > 0, 'AS' field must be present in BAM file.")
+
     firstfile.close()
     del firstfile
 
