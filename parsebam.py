@@ -255,7 +255,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
 
     # Probe to check that the "AS" aux field is present (BWA makes this)
     if minscore > 0:
-        segments = [i for i, j in zip(range(25), firstfile)]
+        segments = [j for i, j in zip(range(25), firstfile)]
         if not all(segment.has_tag("AS") for segment in segments):
             raise ValueError("If minscore > 0, 'AS' field must be present in BAM file.")
 
