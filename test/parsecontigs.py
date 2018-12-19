@@ -94,3 +94,10 @@ for preallocate in True, False:
      'Sequence6 150 nt, same as seq4 but mixed case']
 
     assert np.all(contiglengths == np.array([len(i) for i in contigs if len(i) >= 100]))
+
+bigpath = os.path.join(parentdir, 'vamb', 'test', 'data', 'bigfasta.fna.gz')
+with vamb.vambtools.Reader(bigpath, 'rb') as f:
+    tnf, _, __ = vamb.parsecontigs.read_contigs(f)
+
+target_tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_tnf.npz'))
+assert np.all(abs(tnf - target_tnf) < 1e-8)
