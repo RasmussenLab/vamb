@@ -1,8 +1,3 @@
-# Metagenomic RPKM estimator
-
-# Author: Jakob Nybo Nissen, DTU Bioinformatics, jakni@bioinformatics.dtu.dk
-# Date: 2018-04-24
-
 # This script calculates RPKM, when paired end reads are mapped to a contig
 # catalogue with BWA MEM. It will not be accurate with single end reads or
 # any other mapper than BWA MEM.
@@ -43,8 +38,6 @@
 # to different contigs. If a read has their mate unmapped, we count it twice
 # to compensate (one single read corresponds to two paired reads).
 
-
-
 __doc__ = """Estimate RPKM (depths) from BAM files of reads mapped to contigs.
 
 Usage:
@@ -58,7 +51,6 @@ import sys as _sys
 import os as _os
 import multiprocessing as _multiprocessing
 import numpy as _np
-import gzip as _gzip
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
@@ -115,7 +107,6 @@ def _get_all_references(alignedsegment):
     return references
 
 
-
 def _filter_segments(segmentiterator, minscore):
     """Returns an iterator of AlignedSegment filtered for reads with low
     alignment score, and for any segments identical to the previous segment.
@@ -123,9 +114,11 @@ def _filter_segments(segmentiterator, minscore):
     """
 
     # First get the first segment, so we in the loop can compare to the previous
-    alignedsegment = next(segmentiterator)
-
-    yield alignedsegment
+    for alignedsegment in segmentiterator:
+        if minscore > 0 and alignedsegment.get_tag('AS') < minscore:
+            continue
+        yield alignedsegment
+        break
 
     lastname = alignedsegment.query_name
     lastwasforward = alignedsegment.flag & 64 == 64
@@ -158,7 +151,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     Outputs:
         path: Same as input path
         rpkms:
-            If outpath is None: None
+            If outpath is not None: None
             Else: A float32-array with RPKM for each contig in BAM header
         length: Length of rpkms array
     """
@@ -205,7 +198,6 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
         arrayresult = rpkms
 
     return inpath, arrayresult, len(rpkms)
-
 
 
 def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
@@ -255,7 +247,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
 
     # Probe to check that the "AS" aux field is present (BWA makes this)
     if minscore > 0:
-        segments = [i for i, j in zip(range(25), firstfile)]
+        segments = [j for i, j in zip(range(25), firstfile)]
         if not all(segment.has_tag("AS") for segment in segments):
             raise ValueError("If minscore > 0, 'AS' field must be present in BAM file.")
 
@@ -311,8 +303,6 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
         rpkms = mergecolumns(dumppaths)
 
     return rpkms
-
-
 
 read_bamfiles.__doc__ = """Spawns processes to parse BAM files and get contig rpkms.
 

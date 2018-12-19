@@ -69,6 +69,9 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     depthssum = rpkm.sum(axis=1)
     mask &= depthssum != 0
 
+    if mask.sum() < batchsize:
+        raise ValueError('Fewer sequences left after filtering than the batch size.')
+
     if destroy:
         if not (rpkm.dtype == tnf.dtype == _np.float32):
             raise ValueError('Arrays must be of data type np.float32 if destroy is True')
@@ -89,7 +92,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
 
     # Create dataloader
     dataset = _TensorDataset(depthstensor, tnftensor)
-    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize,
+    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=1, pin_memory=cuda)
 
     return dataloader, mask
@@ -246,6 +249,7 @@ class VAE(_nn.Module):
             data_loader = _DataLoader(dataset=data_loader.dataset,
                                       batch_size=data_loader.batch_size * 2,
                                       shuffle=True,
+                                      drop_last=True,
                                       num_workers=data_loader.num_workers,
                                       pin_memory=data_loader.pin_memory)
 
@@ -299,6 +303,7 @@ class VAE(_nn.Module):
         new_data_loader = _DataLoader(dataset=data_loader.dataset,
                                       batch_size=data_loader.batch_size,
                                       shuffle=False,
+                                      drop_last=False,
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
@@ -405,8 +410,13 @@ class VAE(_nn.Module):
 
         if batchsteps is None:
             batchsteps = list()
-        elif max(batchsteps, default=0) >= nepochs:
-            raise ValueError('Max batchsteps must not equal or exceed nepochs')
+        else:
+            if max(batchsteps, default=0) >= nepochs:
+                raise ValueError('Max batchsteps must not equal or exceed nepochs')
+            last_batchsize = dataloader.batch_size * 2**len(batchsteps)
+            if len(dataloader.dataset) < last_batchsize:
+                raise ValueError('Last batch size exceeds dataset length')
+
 
         # Get number of features
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape
