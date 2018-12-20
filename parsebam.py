@@ -1,8 +1,3 @@
-# Metagenomic RPKM estimator
-
-# Author: Jakob Nybo Nissen, DTU Bioinformatics, jakni@bioinformatics.dtu.dk
-# Date: 2018-04-24
-
 # This script calculates RPKM, when paired end reads are mapped to a contig
 # catalogue with BWA MEM. It will not be accurate with single end reads or
 # any other mapper than BWA MEM.
@@ -43,8 +38,6 @@
 # to different contigs. If a read has their mate unmapped, we count it twice
 # to compensate (one single read corresponds to two paired reads).
 
-
-
 __doc__ = """Estimate RPKM (depths) from BAM files of reads mapped to contigs.
 
 Usage:
@@ -58,7 +51,6 @@ import sys as _sys
 import os as _os
 import multiprocessing as _multiprocessing
 import numpy as _np
-import gzip as _gzip
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
@@ -94,12 +86,12 @@ def mergecolumns(pathlist):
 
     return result
 
-def _get_all_references(alignedsegment):
+def _get_alternate_references(alignedsegment):
     """Given a pysam aligned segment, returns a list with the names of all
     references the read maps to, both primary and secondary hits.
     """
 
-    references = [alignedsegment.reference_name]
+    references = list()
 
     # Some reads don't have secondary hits
     if not alignedsegment.has_tag('XA'):
@@ -115,7 +107,6 @@ def _get_all_references(alignedsegment):
     return references
 
 
-
 def _filter_segments(segmentiterator, minscore):
     """Returns an iterator of AlignedSegment filtered for reads with low
     alignment score, and for any segments identical to the previous segment.
@@ -123,9 +114,11 @@ def _filter_segments(segmentiterator, minscore):
     """
 
     # First get the first segment, so we in the loop can compare to the previous
-    alignedsegment = next(segmentiterator)
-
-    yield alignedsegment
+    for alignedsegment in segmentiterator:
+        if minscore > 0 and alignedsegment.get_tag('AS') < minscore:
+            continue
+        yield alignedsegment
+        break
 
     lastname = alignedsegment.query_name
     lastwasforward = alignedsegment.flag & 64 == 64
@@ -158,7 +151,7 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
     Outputs:
         path: Same as input path
         rpkms:
-            If outpath is None: None
+            If outpath is not None: None
             Else: A float32-array with RPKM for each contig in BAM header
         length: Length of rpkms array
     """
@@ -178,7 +171,8 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
         # Read w. unmapped mates count twice as they represent a whole read
         value = 2 if segment.mate_is_unmapped else 1
 
-        for reference in _get_all_references(segment):
+        halfreads[segment.reference_id] += value
+        for reference in _get_alternate_references(segment):
             id = idof[reference]
             halfreads[id] += value
 
@@ -205,7 +199,6 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
         arrayresult = rpkms
 
     return inpath, arrayresult, len(rpkms)
-
 
 
 def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
@@ -311,8 +304,6 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100,
         rpkms = mergecolumns(dumppaths)
 
     return rpkms
-
-
 
 read_bamfiles.__doc__ = """Spawns processes to parse BAM files and get contig rpkms.
 
