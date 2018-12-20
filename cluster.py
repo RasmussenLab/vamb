@@ -171,8 +171,8 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
         raise ValueError('Matrix must be of data type np.float32')
 
     if threshold is None:
-        if len(matrix) < 1000 and threshold is None:
-            raise ValueError('Cannot estimate from less than 1000 contigs')
+        if len(matrix) < nsamples and threshold is None:
+            raise ValueError('Cannot estimate from less than nsamples contigs')
 
         if len(matrix) < nsamples:
             raise ValueError('Specified more samples than available contigs')
@@ -182,7 +182,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
 
         try:
             if logfile is not None:
-                print('\tEstimating threshold with {} samples'.format(nsamples), file=logfile)
+                print('\tEstimating threshold with {} sampled sequences'.format(nsamples), file=logfile)
 
             _gt = _threshold.getthreshold(matrix, _pearson_distances, nsamples, maxsize)
             threshold, support, separation = _gt
@@ -302,7 +302,6 @@ def read_clusters(filehandle, min_size=1):
             continue
 
         clustername, contigname = stripped.split('\t')
-
         contigsof[clustername].add(contigname)
 
     contigsof = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}

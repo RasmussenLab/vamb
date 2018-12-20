@@ -1,9 +1,7 @@
-
 import sys
 import os
 import numpy as np
 import random
-from math import sqrt
 
 # Constants:
 
@@ -70,8 +68,6 @@ DIFFXS = np.linspace(1.5*(1/NBINS), 1-0.5*(1/NBINS), NBINS - 1)
 class TooLittleData(Exception):
     pass
 
-
-
 def countdists(matrix, index, distfunction, bins=FENCEPOSTS):
     """Return number of distances in each of 400 bins from 0 to 1."""
 
@@ -83,8 +79,6 @@ def countdists(matrix, index, distfunction, bins=FENCEPOSTS):
     histogram[0] -= 1 # compensate for self-correlation of chosen contig
 
     return histogram
-
-
 
 def densityof(histogram, pdf=NORMALPDF):
     """Converts the output of countdists to a smooth density using a poor man's
@@ -103,8 +97,6 @@ def densityof(histogram, pdf=NORMALPDF):
 
     return normalized
 
-
-
 def differentiate(kde, deltax=1/NBINS):
     """Simple numerial differentiation of array of values."""
 
@@ -112,8 +104,6 @@ def differentiate(kde, deltax=1/NBINS):
         raise ValueError('Must have at least two elements')
 
     return (kde[1:] - kde[:-1]) / deltax
-
-
 
 def findvalley(kde, nobs, maxsize=2500, xs=DIFFXS, nbins=NBINS):
     """Returns a distance values that separates close and far observations,
@@ -195,7 +185,8 @@ def getthreshold(latent, distfunction, samples, maxsize):
     valleys = list()
     nseparated = 0
 
-    indices = random.sample(range(len(latent)), k=samples)
+    rng = random.Random(0)
+    indices = rng.sample(range(len(latent)), k=samples)
     for index in indices:
         disthistogram = countdists(latent, index, distfunction)
         kde = densityof(disthistogram)
@@ -210,7 +201,7 @@ def getthreshold(latent, distfunction, samples, maxsize):
         valleys.append(valley)
 
     if len(valleys) < 5:
-        raise TooLittleData('Less than 5 samples returned valleys')
+        raise TooLittleData('Less than 5 samples returned a threshold')
 
     valleys.sort()
     median = valleys[len(valleys) // 2]

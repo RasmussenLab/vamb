@@ -69,6 +69,9 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     depthssum = rpkm.sum(axis=1)
     mask &= depthssum != 0
 
+    if mask.sum() < batchsize:
+        raise ValueError('Fewer sequences left after filtering than the batch size.')
+
     if destroy:
         if not (rpkm.dtype == tnf.dtype == _np.float32):
             raise ValueError('Arrays must be of data type np.float32 if destroy is True')
@@ -407,8 +410,13 @@ class VAE(_nn.Module):
 
         if batchsteps is None:
             batchsteps = list()
-        elif max(batchsteps, default=0) >= nepochs:
-            raise ValueError('Max batchsteps must not equal or exceed nepochs')
+        else:
+            if max(batchsteps, default=0) >= nepochs:
+                raise ValueError('Max batchsteps must not equal or exceed nepochs')
+            last_batchsize = dataloader.batch_size * 2**len(batchsteps)
+            if len(dataloader.dataset) < last_batchsize:
+                raise ValueError('Last batch size exceeds dataset length')
+
 
         # Get number of features
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape
@@ -424,10 +432,10 @@ class VAE(_nn.Module):
             print('\tN latent:', self.nlatent, file=logfile)
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
-            print('\tBatch size:', dataloader.batch_size, file=logfile)
+            print('\tStarting batch size:', dataloader.batch_size, file=logfile)
             print('\tBatchsteps:', ', '.join(map(str, batchsteps)), file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
-            print('\tN contigs:', ncontigs, file=logfile)
+            print('\tN sequences:', ncontigs, file=logfile)
             print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
