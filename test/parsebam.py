@@ -19,11 +19,10 @@ file.close()
 assert [records[i].get_tag('AS') for i in range(10)] == [84, 93, 145, 151, 149, 151, 121, 151, 50, 130]
 
 # Check get_all_references work
-assert vamb.parsebam._get_all_references(records[0]) == ['s30_NODE_1779_length_10476_cov_694.871']
-assert vamb.parsebam._get_all_references(records[8]) == ['s30_NODE_1779_length_10476_cov_694.871',
-                                                         's101_NODE_2230_length_4552_cov_5.17673',
+assert vamb.parsebam._get_alternate_references(records[0]) == list()
+assert vamb.parsebam._get_alternate_references(records[8]) == ['s101_NODE_2230_length_4552_cov_5.17673',
                                                          's178_NODE_2230_length_4552_cov_5.17673']
-assert vamb.parsebam._get_all_references(records[-1]) == ['s179_NODE_95_length_77775_cov_33.3836']
+assert vamb.parsebam._get_alternate_references(records[-1]) == list()
 
 # Check _filter_segments work
 file = pysam.AlignmentFile(inpaths[0])

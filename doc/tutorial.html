@@ -11851,8 +11851,8 @@ DESCRIPTION
     &gt;&gt;&gt; cluster_iterator = cluster(rpkms, tnfs, labels=contignames)
     &gt;&gt;&gt; clusters = dict(cluster_iterator)
 
-    Implements two core functions: cluster and tandemcluster, along with the helper
-    functions writeclusters and readclusters.
+    Implements one core function, cluster, along with the helper
+    functions write_clusters and read_clusters.
     For all functions in this module, a collection of clusters are represented as
     a {clustername, set(elements)} dict.
 
@@ -11910,7 +11910,7 @@ cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False, normali
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">sys</span>
 <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Documents/scripts/&#39;</span><span class="p">)</span>
-<span class="kn">import</span> <span class="nn">vamb</span>
+<span class="kn">import</span> <span class="nn">vamb</span> <span class="c1"># Don&#39;t worry if it raises a warning about compiletime version.</span>
 </pre></div>
 
 </div>
@@ -11995,7 +11995,9 @@ FUNCTIONS
         
         Input:
             filehandle: Filehandle open in binary mode of a FASTA file
-            minlength[100]: Ignore any references shorter than N bases
+            minlength: Ignore any references shorter than N bases [100]
+            preallocate: Read contigs twice, saving memory [True]
+            dtype: Numpy data type of resulting TNF matrix.
         
         Outputs:
             tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
@@ -12059,7 +12061,7 @@ FILE
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Type of tnfs:&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">tnfs</span><span class="p">),</span> <span class="s1">&#39;of dtype&#39;</span><span class="p">,</span> <span class="n">tnfs</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Shape of tnfs:&#39;</span><span class="p">,</span> <span class="n">tnfs</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Type of contignames:&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">contignames</span><span class="p">),</span> <span class="s1">&#39;of dtype&#39;</span><span class="p">,</span> <span class="n">contignames</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Type of contignames:&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">contignames</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Length of contignames:&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">contignames</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;First 5 elements of contignames:&#39;</span><span class="p">)</span>
@@ -12091,7 +12093,7 @@ FILE
 <pre>Type of tnfs: &lt;class &#39;numpy.ndarray&#39;&gt; of dtype float32
 Shape of tnfs: (39551, 136)
 
-Type of contignames: &lt;class &#39;numpy.ndarray&#39;&gt; of dtype &lt;U39
+Type of contignames: &lt;class &#39;list&#39;&gt;
 Length of contignames: 39551
 
 First 5 elements of contignames:
@@ -12123,15 +12125,14 @@ First 5 elements of lengths:
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p><strong>For a gzipped FASTA file</strong>, simply <code>import gzip</code> and open the file with <code>gzip.open('/path/to/contigs.fna', 'rb')</code>. Alternatively, you can use <code>with open vamb.vambtools.Reader('/path/to/contigs.fna' ,'rb')</code>, which will automatically detect whether the file is gzipped or not.</p>
+<p><strong>For a gzipped FASTA file</strong>, simply <code>import gzip</code> and open the file with <code>gzip.open('/path/to/contigs.fna', 'rb')</code>. Alternatively, you can use <code>with open vamb.vambtools.Reader('/path/to/contigs.fna' ,'rb')</code>, which will automatically detect whether the file is gzipped or not and return a corresponding opened file object.</p>
 <p>Note that reading gzipped files will slow down the FASTA parsing quite a bit. But the time spent parsing the FASTA file will likely still be insignificant compared to the other steps of Vamb.</p>
 <p><strong>The rationale for parsing the contigs</strong> is that it turns out that related organisms tend to share a similar kmer-distribution across most of their genome. The reason for that is not understood, even though it's believed that common functional motifs, GC-content and presence/absence of endonucleases explains some of the observed similary.</p>
 <p>The <code>tnfs</code> is the tetranucleotide frequency - it's the frequency of the canonical kmer of each 4mer in the contig. We use 4-mers because there are 136 canonical 4-mers, which is an appropriate number of features to cluster - not so few that there's no signal and not so many it becomes unwieldy and the estimates of the frequencies become uncertain. We could also have used 3-mers. In tests we have made, 3-mers are <em>almost</em>, but not quite as good as 4-mers for separating different species. You could probably switch tetranucleotide frequency to trinucleotide frequency in Vamb without any significant drop of accuracy. However, there are 512 canonical 5-mers, that would be too many features to handle comfortably, and it could easily cause memory issues.</p>
 <p><strong>The argument <code>minlength</code></strong> sets the filter removing any contigs shorter than this. Short contigs in general do not work well with Vamb since neither TNF nor the abundance (shown in next section) can be estimated reliably for short contigs. When choosing the correct theshold, there is some sweet spot between on one hand not allowing small contigs to act as a source of noise in the binning, and on the other hand to not throw away more contigs than you absolutely have to. We don't know what the sweet spot is, but it's probably somewhere around ~2000 bp.</p>
 <p>The problem with filtering contigs using <code>minlength</code> is that the smaller contigs which are thrown away will still recruit reads during the mapping that creates the BAM files, thus removing information from those reads. For that reason, we recommend filtering the contigs <em>before</em> mapping by using the function <code>vamb.vambtools.filtercontigs</code>.</p>
-<p><strong>With the argument <code>preallocate</code></strong> set to true (as is default), the function will read the file <em>twice</em>, one time to count the number of sequences, then it will preallocate the arrays, and then it will read it a second time to fill the arrays. Having this set to <code>True</code> approximately doubles the reading time, but cuts down on memory.</p>
-<p><strong>The memory consumption of Vamb can be an issue</strong>, so at this point, you should probably consider whether you have enough RAM. If not, all the relevant modules have reading and writing functions so you can dump the results to disk and delete them from memory. This is a small dataset, so there's no problem. With hundreds of samples and millions of contigs however, this becomes a problem, even though Vamb is fairly memory-friendly.</p>
-<p>As a rule of thumb, the memory consumption for the most memory intensive step of Vamb is approximately 8 × (n_samples + 136) × n_contigs bytes plus a little bit of overhead. If this is significantly lower than your RAM, don't worry about it. If it's within a factor 2 of your available RAM, you'll need to delete objects you don't need anymore.</p>
+<p><strong>With the argument <code>preallocate</code></strong> set to <code>True</code> (as is default), the function will read the file <em>twice</em>, one time to count the number of sequences, then it will preallocate the arrays, and then it will read it a second time to fill the arrays. Having this set to <code>True</code> approximately doubles the reading time, but cuts down on memory.</p>
+<p><strong>The memory consumption of Vamb can be an issue</strong>, so at this point, you should probably consider whether you have enough RAM. This is a small dataset, so there's no problem. With hundreds of samples and millions of contigs however, this becomes a problem, even though Vamb is fairly memory-friendly. If you think memory might be an issue, see the <a href="#memory">Running VAMB with low memory (RAM)</a> section.</p>
 <p><a id="parsebam"></a></p>
 <h2 id="Calculate-the-abundance-matrix">Calculate the abundance matrix<a class="anchor-link" href="#Calculate-the-abundance-matrix">&#182;</a></h2>
 </div>
@@ -12139,7 +12140,7 @@ First 5 elements of lengths:
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[6]:</div>
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Again, we can use the help function to see what we need to do</span>
@@ -12171,7 +12172,7 @@ DESCRIPTION
     &gt;&gt;&gt; rpkms = read_bamfiles(bampaths)
 
 FUNCTIONS
-    mergecolumns(pathlist, dtype=&lt;class &#39;numpy.float32&#39;&gt;)
+    mergecolumns(pathlist)
         Merges multiple npz or npy files with columns to a matrix.
         
         All paths must be npz arrays with the array saved as name &#39;arr_0&#39;,
@@ -12179,10 +12180,9 @@ FUNCTIONS
         
         Inputs:
             pathlist: List of paths to find .npz files to merge
-            dtype: Data type of resulting matrix [np.float32]
         Output: Matrix with one column per npz file
     
-    read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100, subprocesses=4, dtype=&lt;class &#39;numpy.float32&#39;&gt;, logfile=None)
+    read_bamfiles(paths, dumpdirectory=None, minscore=50, minlength=100, subprocesses=4, logfile=None)
         Spawns processes to parse BAM files and get contig rpkms.
         
         Input:
@@ -12255,7 +12255,7 @@ FILE
 <div class="prompt input_prompt">In&nbsp;[9]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># That looks right.</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Yep, those file paths look right.</span>
 
 <span class="n">rpkms</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">parsebam</span><span class="o">.</span><span class="n">read_bamfiles</span><span class="p">(</span><span class="n">bamfiles</span><span class="p">)</span> <span class="c1"># This takes some time.</span>
 <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Type of rpkms:&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">rpkms</span><span class="p">),</span> <span class="s1">&#39;of dtype&#39;</span><span class="p">,</span> <span class="n">rpkms</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
@@ -12291,19 +12291,19 @@ Shape of rpkms (39551, 6)
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p>The idea here is that two contigs from the same genome will always be physically present together, and so they should have a similar abundance across all samples. Some contigs represent repeats like duplicated segments - these contigs should have a fixed ratio of abundance to other contigs. Thus, even when considering repeated contigs, there should be a tight Pearson correlation between abundances of contigs from the same genome.</p>
+<p>The idea here is that two contigs from the same genome will always be physically present together, and so they should have a similar abundance in all samples. Some contigs represent repeats like duplicated segments - these contigs should have a fixed ratio of abundance to other contigs. Thus, even when considering repeated contigs, there should be a tight Pearson correlation between abundances of contigs from the same genome.</p>
 <p>The <code>vamb.parsebam</code> module takes a rather crude approach to estimating abundance, namely by simply counting the number of mapped reads to each contig, normalized by total number of reads and the contig's length. This measure is in trancriptomics often called RPKM, <em>reads per kilobase per million mapped reads</em>. Other metagenomic binners like Metabat and Canopy uses an average of per-nucleotide depth of coverage instead. We do not believe there is any theoretical or practical advantage of using depth over RPKM. Because BWA handles redundant databases rather poorly, there is not even any advantage of using the technically more accurate FPKM over RPKM. We will use the terms <em>abundance</em>,  <em>depth</em> and <em>rpkm</em> interchangably.</p>
 <hr>
 <p>We can see (in the default value for the <code>subprocesses</code> argument) that the default number of parallel BAM-reading processes it will spawn is 4. This is because Python detected 4 threads on my laptop. In general, Vamb's default here is to use the number of availble threads, or 8 threads if more than 8 is detected, as the BAM-reading function will almost certainly become IO bound at more than 8 threads.</p>
 <p>As with the <code>vamb.parsecontigs.read_contigs</code> function, I don't care about the <code>minlength</code> argument, since our fasta file is already filtered. Again, I will re-iterate that filtering the FASTA file <em>before</em> mapping leads to the best results.</p>
-<p>Lastly, the function ignores all alignments with alignment score less than <code>minscore</code> (as determined by the <code>AS:i</code> field in the BAM file, which Vamb assumes is present). That threshold seems reasonable here.</p>
+<p>The function ignores all alignments with alignment score less than <code>minscore</code> (as determined by the auxiliary <code>AS:i</code> field in the BAM file, which Vamb assumes is present if <code>minscore</code> is &gt; 0). Ideally, the user should construct the BAM files so that they only contain alignments that the user believes are true (i.e. set reasonable alignment and filtering criteria), however, in practice, many users will not know the importance of this, so by default, Vamb filters away any reads with an alignment score of less than 50 in order to mitigate the worst alignments.</p>
 <p>Lastly, the argument <code>logfile</code> should be <code>None</code> or the filehandle of an opened, writeable file. If the latter, it will print status updates to the logfile.</p>
 <hr>
 <p>Now, I tend to be a bit <del>paranoid</del><sup>careful</sup>, so if I loaded in 500 GB of BAM files, I'd want to save the work I have now in case something goes wrong - and we're about to fire up the VAE so lots of things can go wrong.</p>
 <p>What importants objects do I have in memory right now?</p>
 <ul>
 <li><code>tnfs</code>: A Numpy array of tnfs</li>
-<li><code>contignames</code>: A Numpy of contignames</li>
+<li><code>contignames</code>: A list of contignames</li>
 <li><code>lengths</code>: A Numpy array of contig lengths</li>
 <li><code>rpkms</code>: A Numpy array of rpkms</li>
 </ul>
@@ -12317,8 +12317,10 @@ Shape of rpkms (39551, 6)
 <div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/contignames.npz&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-    <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">write_npz</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">contignames</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/contignames.npz&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+    <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">write_npz</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">contignames</span><span class="p">))</span>
 
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/lengths.npz&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
     <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">write_npz</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">lengths</span><span class="p">)</span>
@@ -12365,7 +12367,7 @@ DESCRIPTION
 </code></pre>
 <hr>
 <p>Aha, so we need to create the VAE, create the dataloader (and the mask), then use the <code>trainmodel</code> method first, then the <code>VAE.encode</code> method. You can call the <code>help</code> functions on those, but I'm not showing that here.</p>
-<p>Training networks always take some time. If you have a GPU and CUDA installed, you can pass <code>cuda=True</code> to the VAE to train on your GPU for increased speed. With a beefy GPU, this can make quite a difference. I run this on my laptop, so I'll just use my CPU. And I'll run just 10 epochs rather than the more suitable 200:</p>
+<p>Training networks always take some time. If you have a GPU and CUDA installed, you can pass <code>cuda=True</code> to the VAE to train on your GPU for increased speed. With a beefy GPU, this can make quite a difference. I run this on my laptop (with a puny GTX 860m GPU), so I'll just use my CPU. And I'll run just 10 epochs rather than the more suitable 200:</p>
 
 </div>
 </div>
@@ -12435,9 +12437,10 @@ DESCRIPTION
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<hr>
-<p>First we create the VAE, then we train it and get a dataloader. The dataloader normalizes the TNF such that the mean and standard for each tetranucleotide across all contigs is 0 and 1, respectively, and normalizes the rpkm such that each contig sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
+<p>KLD---
+First we create the VAE, then we create the dataloader and the mask. The dataloader normalizes the TNF such that the mean and standard deviation for each tetranucleotide across all contigs is 0 and 1, respectively, and normalizes the rpkm such that each contig sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
 <p>The dataloader also discards all contigs where either the TNF vector or the depths vector is all zeros - we call these contigs <em>zero contigs</em>. The <code>mask</code> it returns is a boolean vector with <code>True</code> if a contig was kept, and <code>False</code> if it was discarded. We began with 39551 contigs, and the log above states that it was trained with 36485 contigs, implying that 39551 - 36485 = 3066 contigs were discarded.</p>
+<p>Here, we passed the default value <code>False</code> to the <code>destroy</code> keyword of <code>make_dataloader</code>. If this is set to <code>True</code>, the input arrays are normalized and masked in-place, modifying them. This saves one or two copies of the data, which can be critical for large array sizes.</p>
 <p>The VAE encodes the high-dimensional (n_samples + 136 features) input data in a lower dimensional space (nlatent features). When training, it learns an encoding scheme, with which it encodes the input data to a series of normal distributions, and a decoding scheme, in which it uses one value sampled from each normal distribution to reconstruct the input data.</p>
 <p>The theory here is that if the VAE learns to reconstruct the input, the distributions must be a more efficient encoding of the input data, since the same information is contained in fewer neurons. If the input data for the contigs indeed do fall into bins, an efficient encoding would be to simply encode the bin they belong to, then use the "bin identity" to reconstruct the data. We force it to encode to <em>distributions</em> rather than single values because this makes it more robust - it will not as easily overfit to interpret slightly different values as being very distinct if there is an intrinsic noise in each encoding.</p>
 <h3 id="The-loss-function">The loss function<a class="anchor-link" href="#The-loss-function">&#182;</a></h3><p>The loss of the VAE consists of three major terms:</p>
@@ -12451,15 +12454,15 @@ DESCRIPTION
 <p>In <code>encode.py</code>, the loss function is written as:</p>
 <p>$L = \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE + \frac{1}{N_{L}\beta} \cdot KLD$</p>
 <p>where $N_{L}$ is number of latent neurons and S is number of samples. It is hardly obvious where the scaling factors come from, so let me try to explain it.</p>
-<p>As the learning rate is fixed and optimized for a specific gradient, this means the total reconstruction loss $\frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ should sum to a constant, lest the training become ustable. To make things simpler, we want it to sum to 1. It would probably be more precise if L = 1, but since $\frac{1}{N_{L}\beta} \cdot KLD &lt;&lt;  \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ for any values of $\alpha$ and $\beta$ that seem to work, setting the reconstruction loss to 1 is basically the same.</p>
-<p>When optimizing the network, we want a single variable to control the ratio between SSE and CE - we call this $\alpha$. This scales CE and SSE so that $\alpha = \frac{SSE}{SSE + CE}$</p>
-<p>But here comes a problem. While we want to scale SSE and CE so that the two constrains above are true, we can't know <em>beforehand</em> what the CE, KLD or MSE is. And, in any rate, these values changes across the training run (that's the point of training!).</p>
-<p>What we <em>can</em> reason about it the values of CE and SSE in a totally <em>naive</em>, network which had <em>no knowledge</em> of the input dataset. This represents the state of the network before <em>any</em> learning is done. What would such a network predict? Well, since we normalize the reconstructed depths to be between 0 and 1 and sum to 1, the outputs would be close to $[S^{-1}, S^{-1} ... S^{-1}]^{T}$, which would yield a CE of ln(S). We normalize both TNF inputs and outputs to follow an approximately normal distribution with mean around 0, which means the expected SSE for TNF is 1 per input TNF neuron, which is 136.</p>
-<p>Importantly, if we actually check the CE and SSE values for untrained networks, they are quite close to these expected value. Since neither CE nor SSE is reduced by more than an order of magnitude from their starting values during training on realistic datasets, these expected values work as stand-ins for what we can expect the CE and SSE to be.</p>
-<p>So the purpose of the scaling factors in front of CE and SEE is to scale CE from the expected value of ln(S) to the target value of (1-$\alpha$) and SSE from 136 to $\alpha$. Hence the scaling factors $\frac{(1 - \alpha)}{ln(S)}$ and $\frac{\alpha}{136}$.</p>
-<p>For KLD, we want the user to be able to control the ratio $\frac{C+S}{K}$, where C, S and K are the loss from CE, SSE and KLD in the loss, respectively. Since KLD is defined as a sum of individual KLD for each of latent neurons, its value is proportional to $N_{L}$. So we let the user set a ratio</p>
+<p>As the learning rate is fixed and optimized for a specific gradient, this means the total reconstruction loss $\frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ should sum to a constant, lest the training become ustable. To make things simpler, we want it to sum to 1. It would probably be more precise to say that L should be 1, but since $\frac{1}{N_{L}\beta} \cdot KLD &lt;&lt;  \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$ for any values of $\alpha$ and $\beta$ that seem to work, setting the reconstruction loss to 1 is basically the same.</p>
+<p>When optimizing the network, we want a single variable to control the ratio between $SSE$ and $CE$ - we call this $\alpha$. This scales CE and SSE so that $\alpha = \frac{SSE}{SSE + CE}$</p>
+<p>But here comes a problem. While we want to scale SSE and CE so that the two constrains above (namely $CE+SSE=1$ and  $\alpha = \frac{SSE}{SSE + CE}$) are true, we can't know <em>beforehand</em> what CE, KLD or SSE is. And, in any rate, these values changes across the training run (that's the point of training!).</p>
+<p>What we <em>can</em> reason about is the values of CE and SSE in a totally <em>naive</em>, network which had <em>no knowledge</em> of the input dataset. This represents the state of the network before <em>any</em> learning is done. What would such a network predict? Well, since we normalize the reconstructed depths across $S$ samples to be between 0 and 1 and sum to 1, the outputs would be close to $[S^{-1}, S^{-1} ... S^{-1}]^{T}$, which, by the definition of cross entropy, would yield a CE of $ln(S)$. We normalize both TNF inputs and outputs to follow an approximately normal distribution with mean around 0, which means the expected SSE for TNF is 1 per input TNF neuron, for a total of $SSE = 136$.</p>
+<p>Importantly, if we actually check the CE and SSE values for untrained networks, they are quite close to these expected values of $ln(S)$ and 136. Since neither CE nor SSE is reduced by more than an order of magnitude from their starting values during training on realistic datasets (usually much less), these expected values work as stand-ins for what we can expect CE and SSE to be across training.</p>
+<p>So the purpose of the scaling factors in front of the CE and SEE terms is to scale CE from the expected value of $ln(S)$ to the target value of (1-$\alpha$) and SSE from 136 to $\alpha$. Hence the scaling factors $\frac{(1 - \alpha)}{ln(S)}$ and $\frac{\alpha}{136}$.</p>
+<p>For KLD, we want the user to be able to control the ratio $\frac{C+S}{K}$, where C, S and K are each of the terms from CE, SSE and KLD in the loss, respectively. Since KLD is defined as a sum of individual KLD for each of latent neurons, its value is proportional to $N_{L}$. So we let the user set a ratio</p>
 <p>$\beta = \frac{KLD}{N_{L}K} \cdot \frac{(1 - \alpha)}{ln(S)} \cdot CE + \frac{\alpha}{136} \cdot SSE$,</p>
-<p>Where again, K is the weighed KLD in the loss. In other words, we allow the user to weigh KLD relative to the total reconstruction loss. However, as we just scaled CE and SSE to make sure they sum to one, this simplifies to:</p>
+<p>Where again, K is the weighed KLD in the loss. In other words, we allow the user to weigh the KLD-related loss relative to the reconstruction loss. However, as we just scaled the CE and SSE terms to make sure they sum to one, this simplifies to:</p>
 <p>$\beta = \frac{KLD}{N_{L}K} \Leftrightarrow K = \frac{1}{N_{L}\beta} \cdot KLD$.</p>
 <p>Hence the scaling factor $\frac{1}{N_{L}\beta}$ in front of KLD.</p>
 <p>If you look at the outputs from the 10 epochs, you can see the KL-divergence rises the first epoch as it learns the dataset and the latent layer drifts away from its prior. At epoch 2, the penalty associated with KL-divergence outweighs the CE and SSE losses. At this point, the KL will stall, and then fall. This point depends on $\beta$ and the complexity of the dataset.</p>
@@ -12509,8 +12512,8 @@ DESCRIPTION
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
-<p>That's 36485 contigs each represented by the (non-noisy) value of 40 latent neurons.</p>
-<p>Sometimes, you'll want to reuse a VAE you have already trained. For this, I've added the <code>VAE.save</code> method of the VAE class, as well as a <code>VAE.load</code> method. You will have noticed in the example above that I defined a <code>modelfile</code>, a file the VAE will create and save its parameters to. We can always use that file to recreate the VAE and have a pretrained model. But remember - a trained VAE only works on the dataset it's been trained on, and not necessarily on any other!</p>
+<p>That's 36485 contigs each represented by the mean of their latent distribution.</p>
+<p>Sometimes, you'll want to reuse a VAE you have already trained. For this, I've added the <code>VAE.save</code> method of the VAE class, as well as a <code>VAE.load</code> method. You will have noticed in the training example above that I defined a <code>modelfile</code>, a file the VAE will create and save its parameters to. We can always use that file to recreate the VAE and have a pretrained model. But remember - a trained VAE only works on the dataset it's been trained on, and not necessarily on any other!</p>
 <p>I want to <strong>show</strong> that we get the exact same network back that we trained, so here I encode the first contig, delete the VAE, reload the VAE and encode the first contig again. The two encodings should be identical.</p>
 <hr>
 
@@ -12544,7 +12547,8 @@ DESCRIPTION
 
 <span class="c1"># And reload it:</span>
 <span class="c1"># Here we can specify whether to put it on GPU and whether it should start</span>
-<span class="c1"># in training or testing mode. By default, it&#39;s not on GPU and in testing mode</span>
+<span class="c1"># in training or evaluation (encoding) mode. By default, it&#39;s not on GPU and </span>
+<span class="c1"># in testing mode</span>
 <span class="n">vae</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">encode</span><span class="o">.</span><span class="n">VAE</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s1">&#39;/tmp/model.pt&#39;</span><span class="p">)</span>
 <span class="n">depths_out</span><span class="p">,</span> <span class="n">tnf_out</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">logsigma</span> <span class="o">=</span> <span class="n">vae</span><span class="p">(</span><span class="n">rpkms_in</span><span class="p">,</span> <span class="n">tnfs_in</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">mu</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
@@ -12596,7 +12600,7 @@ tensor([-171.8445,  -96.8983,   -6.8158,  -73.5384,  -71.0334,  -27.8429,
 <h2 id="Binning-the-encoding">Binning the encoding<a class="anchor-link" href="#Binning-the-encoding">&#182;</a></h2><p><strong>The role of clustering in Vamb</strong></p>
 <p>Fundamentally, the process of binning is just clustering sequences based on some of their properties. The purpose of encoding the contigs to a lossy latent representation is to ease the process of clustering because contigs with similar properties are placed close together in latent space, and the latent space is smaller than the input feature space. We believe clustering is thus eased, as the lossy latent representation prerefably loses noise over signal, and because a lower dimensional representation is simply easier to cluster.</p>
 <p>With the latent representation conveniently represented by an (n_contigs x n_features) matrix, you could use any clustering algorithm to cluster them (such as the ones in <code>sklearn.cluster</code>). In practice though, you have perhaps a million contigs and prior constrains on the diameter, shape and size of the clusters, so non-custom clustering algorithms will probably be slow and inaccurate.</p>
-<p>The module <code>vamb.cluster</code> implements a simple and fast iterative medoid clustering algorithm. It is well suited for spherical clusters with a maximum size and for many samples. The algorithm is similar, but subtly different from that used in the metagenomic binner Canopy:</p>
+<p>The module <code>vamb.cluster</code> implements a simple and fast iterative medoid clustering algorithm. It is well suited for spherical clusters (whatever that means in Pearson space) with a maximum size and for many samples. The algorithm is similar, but subtly different from that used in the metagenomic binner Canopy:</p>
 
 </div>
 </div>
@@ -12747,7 +12751,7 @@ getthreshold(latent, distfunction, samples, maxsize)
 <div class="text_cell_render border-box-sizing rendered_html">
 <hr>
 <p>This curve is with faked data just for demonstration purposes - in reality, it's a <em>lot</em> more noisy.</p>
-<p>Anyway, the basic idea here is that the distances relative to any contig sometimes separate neatly into a small group of close contigs and all the other contigs. The close contigs can then be assumed to be the within-bin and the far contigs the ones outside the bin.</p>
+<p>Anyway, the basic idea here is that the distances relative to a randomly sampled contig sometimes separate neatly into a small group of close contigs and all the other contigs. The close contigs can then be assumed to be the within-bin and the far contigs the ones outside the bin.</p>
 <p>When sampling, we typically see one of three patterns:</p>
 <ul>
 <li><p>The well-separating, here plotted in <strong>green</strong>. For these samples, the smaller peak of close contigs is clearly separated from the further contigs, and the optimal threshold distance is clearly somewhere in the range 0.1 - 0.15. Formally, we define the distances as well-separated as if the density falls to 0.025 or below between the two peaks. The threshold for this sample is then defined as the distance where the density falls to 0.025.</p>
@@ -12765,7 +12769,7 @@ getthreshold(latent, distfunction, samples, maxsize)
 </li>
 </ul>
 <hr>
-<p>The <code>vamb.threshold.getthreshold</code> function samples a number of random contigs (1000 by default) and returns the median threshold, support and separation. Of course, if the support is too low (&lt; 50%) or the separation too low (&lt; 25%), you can't really trust the threshold.</p>
+<p>The <code>vamb.threshold.getthreshold</code> function samples a number of random contigs (2500 by default) and returns the median threshold, support and separation. Of course, if the support is too low, you can't really trust the threshold.</p>
 <p>This function is kind of hand-wavey heuristic, but seem to work well in practice. This is one of the areas I'd like to see improved in the future. Anyway, let's give it a spin:</p>
 <hr>
 
@@ -12778,11 +12782,11 @@ getthreshold(latent, distfunction, samples, maxsize)
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># We need to normalize the array first across axis 1</span>
-<span class="c1"># otherwise thePearson distance function will not work.</span>
+<span class="c1"># otherwise the Pearson distance function will not work.</span>
 <span class="n">normalized</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="n">_</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">getthreshold</span><span class="p">(</span><span class="n">normalized</span><span class="p">,</span> <span class="n">distfunction</span><span class="o">=</span><span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">_pearson_distances</span><span class="p">,</span>
-                                <span class="n">maxsize</span><span class="o">=</span><span class="mi">2500</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+                                <span class="n">maxsize</span><span class="o">=</span><span class="mi">2500</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="mi">2500</span><span class="p">)</span>
 <span class="n">threshold</span><span class="p">,</span> <span class="n">support</span><span class="p">,</span> <span class="n">separation</span> <span class="o">=</span> <span class="n">_</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Estimated threshold:&#39;</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">threshold</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
@@ -12819,7 +12823,9 @@ Separation: 6.5 %
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Now with a threshold, we can cluster. To do this, we need to use <code>vamb.cluster.cluster</code>:</p>
+<p>The interface for determining the threshold may look a little awkward. The reason is that the next step, clustering using <code>vamb.cluster.cluster</code>, automatically determines the clustering threshold by calling the functions we've just manually done, unless explicitly passed a threshold parameter. Thus, manually callong the <code>getthreshold</code> function 
+is only for more advanced usage (for example, quickly initializing multiple independent cluster iterators).</p>
+<p>Anyway, now we can cluster. To do this, we need to use <code>vamb.cluster.cluster</code>:</p>
 <hr>
 
 </div>
@@ -12913,7 +12919,8 @@ with open('clusters.tsv', 'w') as clusterfile:
 <div class="prompt input_prompt">In&nbsp;[21]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">contignames</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Notice we mask the contignames, since the dataloader filtered some contigs away</span>
+<span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">contignames</span><span class="p">)[</span><span class="n">mask</span><span class="p">],</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
 <span class="n">clusters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">cluster_iterator</span><span class="p">)</span>
 
 <span class="n">medoid</span><span class="p">,</span> <span class="n">contigs</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">clusters</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
@@ -12959,7 +12966,7 @@ First element of value: s30_NODE_2419_length_8239_cov_4.01278 of type: &lt;class
 <p><code>max_steps</code> is the $N_{samples}$ in the algorithm. In short, it determines how long time the algorithm will search for the optimal medoid. It is not necessary to tweak this, just leave it to the default.</p>
 <p><code>destroy</code> is rather interesting. The clustering process iteratively removes rows from the input <code>matrix</code>, eventually destroying (i.e. rendering it a $0\times N_{latent}$ matrix). Because the user probably won't expect the input to the function to be mutated, the default behaviour is to copy the matrix and cluster the copy, leaving the original untouched. However, for large matrices, this extra RAM consumption might be unacceptable. Setting <code>destroy</code>=True suppresses this copying, saving memory.</p>
 <p>If <code>normalized</code> is <code>True</code>, it will assume the input is already zscore-normalized across axis 1 and skip this. Else, it will normalize the array first. The Pearson distance calculation only works for normalized data, so if <code>normalized</code> is set to <code>True</code> and the input is in fact not normalized, results will definitely be bad.</p>
-<p><code>nsamples</code> and <code>maxsize</code> determines the behaviour of <code>getthreshold</code> if <code>threshold</code> is <code>None</code>. It controls the number of sampled contigs to get the median threshold for, and the upper limit for any reported single threshold.</p>
+<p><code>nsamples</code> and <code>maxsize</code> determines the behaviour of <code>getthreshold</code> if <code>threshold</code> is <code>None</code>. It controls the number of sampled contigs to get the median threshold for, and the maximum number of contigs within the estimated threshold.</p>
 <p>If <code>logfile</code> is not <code>None</code> and <code>threshold</code> is <code>None</code>, the function will print the outputs of <code>vamb.threshold.getthreshold</code> to the logfile, and print a warning if the support and separation is too low. If <code>logfile</code> is <code>None</code> it will print to stderr only if the support and separation is too low.</p>
 <hr>
 
@@ -13046,14 +13053,15 @@ Number of bins after filtering: 136
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Rename bin keys to something less horrible as a file name</span>
 <span class="n">filtered_bins</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;cluster_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">filtered_bins</span><span class="o">.</span><span class="n">values</span><span class="p">())}</span>
 
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/bins.tsv&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+<span class="c1"># This writes a .tsv file with the clusters and corresponding sequences</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/clusters.tsv&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
     <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">write_clusters</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">filtered_bins</span><span class="p">)</span>
 
 <span class="c1"># Only keep contigs in any filtered bin in memory</span>
-<span class="n">allcontigs</span> <span class="o">=</span> <span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="n">filtered_bins</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="n">keptcontigs</span> <span class="o">=</span> <span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="n">filtered_bins</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/contigs.fna&#39;</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-    <span class="n">fastadict</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">loadfasta</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">keep</span><span class="o">=</span><span class="n">allcontigs</span><span class="p">)</span>
+    <span class="n">fastadict</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">loadfasta</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">keep</span><span class="o">=</span><span class="n">keptcontigs</span><span class="p">)</span>
     
 <span class="n">bindir</span> <span class="o">=</span> <span class="s1">&#39;/home/jakni/Downloads/example/bins&#39;</span>
 <span class="n">vamb</span><span class="o">.</span><span class="n">vambtools</span><span class="o">.</span><span class="n">write_bins</span><span class="p">(</span><span class="n">bindir</span><span class="p">,</span> <span class="n">filtered_bins</span><span class="p">,</span> <span class="n">fastadict</span><span class="p">,</span> <span class="n">maxbins</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
@@ -13069,7 +13077,7 @@ Number of bins after filtering: 136
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="summary"></a></p>
-<h2 id="Summary-of-full-workflow">Summary of full workflow<a class="anchor-link" href="#Summary-of-full-workflow">&#182;</a></h2><p>This is the full default workflow from beginning to end. The script <code>run.py</code> does essentially this, except with some logging and deleting &amp; saving intermediate results to files.</p>
+<h2 id="Summary-of-full-workflow">Summary of full workflow<a class="anchor-link" href="#Summary-of-full-workflow">&#182;</a></h2><p>This is the full default workflow from beginning to end. The script <code>run.py</code> does essentially this, except with some logging &amp; deleting &amp; saving intermediate results to files.</p>
 
 </div>
 </div>
@@ -13098,10 +13106,7 @@ Number of bins after filtering: 136
 
 <span class="n">latent</span> <span class="o">=</span> <span class="n">vae</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
 
-<span class="c1"># Here, the default workflow shuffles the latent matrix and the contignames</span>
-<span class="c1"># in unison to prevent bias in which sequences are picked as clustering seeds</span>
-
-<span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">contignames</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
+<span class="n">cluster_iterator</span> <span class="o">=</span> <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">cluster</span><span class="p">(</span><span class="n">latent</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">contignames</span><span class="p">)[</span><span class="n">mask</span><span class="p">])</span>
 
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/home/jakni/Downloads/example/bins.tsv&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">binfile</span><span class="p">:</span>
     <span class="n">vamb</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">write_clusters</span><span class="p">(</span><span class="n">binfile</span><span class="p">,</span> <span class="n">cluster_iterator</span><span class="p">)</span>
@@ -13118,11 +13123,11 @@ Number of bins after filtering: 136
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="memory"></a></p>
 <h2 id="Running-VAMB-with-low-memory-(RAM)">Running VAMB with low memory (RAM)<a class="anchor-link" href="#Running-VAMB-with-low-memory-(RAM)">&#182;</a></h2><p>In the VAMB software, a series of tradeoffs can be taken to decrease RAM consumption, usually to the detriment of some other property like speed or convenience. With all of those tradeoffs taken, VAMB is relatively memory efficient. By default, several of these tradeoffs are are not taken when running from a Python interpreter, however they are all enabled when running VAMB with the <code>run.py</code> script.</p>
-<p>With all memory-saving options enabled, the memory consumption is on the order of $4*N_{contigs}*(136+N_{samples})$ bytes plus the memory required to keep all the sequence labels in memory, plus a little bit of overhead. As a rule of thumb, you should probably have $8*N_{contigs}*(160+N_{samples})$ bytes available.</p>
+<p>The memory consumption of the encoding step is usually the bottleneck. With all memory-saving options enabled, this uses approximately $5*N_{contigs}*(136+N_{latent}+N_{samples})$ bytes, including overhead. As a rule of thumb, if you don't have at least two times that amount of memory, you might want to enable some or all of these memory optimizations.</p>
 <p>Here's a short list of all the available memory saving options:</p>
 <ul>
-<li>When using <code>vamb.parsecontigs.read_contigs</code>, set the <code>preallocate</code> keyword to <code>True</code>. This doubles the time spent in the function, but significantly reduces RAM usage.</li>
-<li>Pass a path to the <code>dumpdirectory</code> in the <code>vamb.parsecontigs.read_bamfiles</code> function. Temporary files will be written to files in this directory to avoid keeping them in memory. This takes a little bit of disk space, but saves lots of RAM)</li>
+<li>When using <code>vamb.parsecontigs.read_contigs</code>, set the <code>preallocate</code> keyword to <code>True</code>. This doubles the time spent in the function, but significantly reduces RAM usage during this step.</li>
+<li>Pass a path to the <code>dumpdirectory</code> in the <code>vamb.parsecontigs.read_bamfiles</code> function. Temporary files will be written to files in this directory to avoid keeping them in memory. This takes a little bit of disk space, but saves lots of RAM</li>
 <li>In the <code>encode.make_dataloader</code> function, set <code>destroy</code> to True. This will in-place modify your RPKM and TNF array, deleting unusable rows and normalizing them. This prevents the creation of a copy of the data.</li>
 <li>Similarly, set <code>destroy=True</code> when using the <code>cluster.cluster</code> function. Again, the input (latent) datasets are modified in-place, saving a copy of the data. This function will completely consume the input array.</li>
 <li>When clustering, instead of generating clusters in memory, instantiate the cluster iterator and pass it directly to <code>cluster.write_clusters</code>. This way, each cluster will be written to disk after creation and not accumulate in memory. This obviously requires disk space, and you will have to reload the clusters if you are planning on using them.</li>
