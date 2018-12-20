@@ -86,12 +86,12 @@ def mergecolumns(pathlist):
 
     return result
 
-def _get_all_references(alignedsegment):
+def _get_alternate_references(alignedsegment):
     """Given a pysam aligned segment, returns a list with the names of all
     references the read maps to, both primary and secondary hits.
     """
 
-    references = [alignedsegment.reference_name]
+    references = list()
 
     # Some reads don't have secondary hits
     if not alignedsegment.has_tag('XA'):
@@ -171,7 +171,8 @@ def _get_contig_rpkms(inpath, outpath=None, minscore=50, minlength=2000):
         # Read w. unmapped mates count twice as they represent a whole read
         value = 2 if segment.mate_is_unmapped else 1
 
-        for reference in _get_all_references(segment):
+        halfreads[segment.reference_id] += value
+        for reference in _get_alternate_references(segment):
             id = idof[reference]
             halfreads[id] += value
 

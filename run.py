@@ -35,7 +35,7 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
     ncontigs = len(contiglengths)
     nbases = contiglengths.sum()
 
-    log('Processed {} bases in {} contigs.'.format(nbases, ncontigs), logfile, 1)
+    log('Processed {} bases in {} sequences.'.format(nbases, ncontigs), logfile, 1)
     log('Calculated TNF in {} seconds.'.format(elapsed), logfile, 1)
 
     return tnfs, contignames
@@ -83,20 +83,19 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
                                                    destroy=True, cuda=cuda)
     log('Created dataloader and mask', logfile, 1)
     n_discarded = len(mask) - mask.sum()
-    log('Number of contigs unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
-    log('Number of contigs remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
+    log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
+    log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
 
     modelpath = os.path.join(outdir, 'model.pt')
-    log('\nTraining VAE', logfile, 1)
     vae.trainmodel(dataloader, nepochs=nepochs, lrate=lrate, batchsteps=batchsteps,
                   logfile=logfile, modelfile=modelpath)
 
+    log('\nEncoding to latent representation', logfile, 1)
     latent = vae.encode(dataloader)
     vamb.vambtools.write_npz(os.path.join(outdir, 'latent.npz'), latent)
     del vae # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    print('', file=logfile)
     log('Trained VAE and encoded in {} seconds.'.format(elapsed), logfile, 1)
 
     return mask, latent

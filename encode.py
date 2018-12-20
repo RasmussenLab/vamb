@@ -435,7 +435,7 @@ class VAE(_nn.Module):
             print('\tBatch size:', dataloader.batch_size, file=logfile)
             print('\tBatchsteps:', ', '.join(map(str, batchsteps)), file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
-            print('\tN contigs:', ncontigs, file=logfile)
+            print('\tN sequences:', ncontigs, file=logfile)
             print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
