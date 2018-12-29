@@ -160,7 +160,7 @@ at https://github.com/jakobnissen/vamb.
 """
     usage = "python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]"
     parser = argparse.ArgumentParser(
-        description=__cmd_doc__,
+        description=main.__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage=usage, add_help=False)
 
