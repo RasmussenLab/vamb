@@ -5,7 +5,6 @@
 import sys
 import os
 import argparse
-import vamb
 
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
