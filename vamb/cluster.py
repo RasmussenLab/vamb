@@ -3,7 +3,7 @@
 __doc__ = """Iterative medoid clustering.
 
 Usage:
->>> cluster_iterator = cluster(rpkms, tnfs, labels=contignames)
+>>> cluster_iterator = cluster(matrix, labels=contignames)
 >>> clusters = dict(cluster_iterator)
 
 Implements one core function, cluster, along with the helper
