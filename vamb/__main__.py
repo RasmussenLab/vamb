@@ -296,7 +296,6 @@ def main():
     import shutil
     import numpy as np
 
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import vamb
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
@@ -324,3 +323,7 @@ def main():
              minclustersize=args.minsize,
              maxclusters=args.maxclusters,
              logfile=logfile)
+
+
+if __name__ == '__main__':
+    main()
