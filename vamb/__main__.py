@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
+# More imports below, but the user's choice of processors must be parsed before
+# numpy can be imported.
 import sys
 import os
-import torch
 import argparse
-import datetime
-import time
-import shutil
-import numpy as np
 import vamb
 
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
+
+################################# DEFINE FUNCTIONS ##########################
 
 def log(string, logfile, indent=0):
     print(('\t' * indent) + string, file=logfile)
@@ -118,7 +117,7 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
     elapsed = round(time.time() - begintime, 2)
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
-def runner(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
+def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
          batchsteps, minclustersize, maxclusters, logfile):
 
@@ -147,15 +146,13 @@ def runner(outdir, fastapath, bampaths, mincontiglength, minalignscore, subproce
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
 
-    return 0
-
 
 def main():
     """Run the Vamb pipeline.
 
-For advanced use and extensions of Vamb, check documentation of the package
-at https://github.com/jakobnissen/vamb.
-"""
+    For advanced use and extensions of Vamb, check documentation of the package
+    at https://github.com/jakobnissen/vamb.
+    """
     usage = "python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]"
     parser = argparse.ArgumentParser(
         description=main.__doc__,
@@ -177,10 +174,10 @@ at https://github.com/jakobnissen/vamb.
 
     inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
                          help='ignore contigs shorter than this [100]')
-    inputos.add_argument('-s', dest='minascore', metavar='', type=int, default=50,
-                         help='ignore reads with alignment score below this [50]')
+    inputos.add_argument('-s', dest='minascore', metavar='', type=int,
+                         help='ignore reads with alignment score below this [None]')
     inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
-                         help=('reading subprocesses to spawn '
+                         help=('Number of processes/threads to use '
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
 
     # VAE arguments
@@ -250,9 +247,6 @@ at https://github.com/jakobnissen/vamb.
     if args.subprocesses < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
 
-    if args.minascore < 0:
-        raise argparse.ArgumentTypeError('Minimum alignment score cannot be negative')
-
     ####################### CHECK VAE OPTIONS ################################
     if any(i < 1 for i in args.nhiddens):
         raise argparse.ArgumentTypeError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
@@ -290,12 +284,31 @@ at https://github.com/jakobnissen/vamb.
     if args.minsize < 1:
         raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
 
+    ###################### DO REST OF IMPORTS ############################
+
+    # These MUST be set before importing numpy
+    os.environ["MKL_NUM_THREADS"] = str(args.subprocesses)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(args.subprocesses)
+    os.environ["OMP_NUM_THREADS"] = str(args.subprocesses)
+
+    import torch
+    import datetime
+    import time
+    import shutil
+    import numpy as np
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import vamb
+
+    # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
+    torch.set_num_threads(args.subprocesses)
+
     ################### RUN PROGRAM #########################
     os.mkdir(args.outdir)
     logpath = os.path.join(args.outdir, 'log.txt')
 
     with open(logpath, 'w') as logfile:
-        return runner(args.outdir, args.fasta, args.bamfiles,
+        run(args.outdir, args.fasta, args.bamfiles,
              mincontiglength=args.minlength,
              minalignscore=args.minascore,
              subprocesses=args.subprocesses,
@@ -312,7 +325,3 @@ at https://github.com/jakobnissen/vamb.
              minclustersize=args.minsize,
              maxclusters=args.maxclusters,
              logfile=logfile)
-
-
-if __name__ == '__main__':
-    sys.exit(main())

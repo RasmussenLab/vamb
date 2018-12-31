@@ -4,7 +4,6 @@ Vamb does what it says on the tin - bins metagenomes using a variational autoenc
 
 Vamb contains the following modules:
 vamb.vambtools
-vamb.filtercontigs
 vamb.parsecontigs
 vamb.parsebam
 vamb.encode
@@ -14,7 +13,7 @@ vamb.benchmark
 To get it running, you need:
 - A FASTA file of contigs or genes (contigs are better)
 - BAM files of reads mapped to the FASTA file
-- Python v >= 3.5 with some modules installed:
+- Python v >= 3.5 with some packages installed:
     pytorch
     numpy
     pysam
