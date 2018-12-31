@@ -5,6 +5,10 @@
 import sys
 import os
 import argparse
+import torch
+import datetime
+import time
+import shutil
 
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
@@ -15,6 +19,7 @@ def log(string, logfile, indent=0):
     logfile.flush()
 
 def calc_tnf(outdir, fastapath, mincontiglength, logfile):
+    import vamb
     begintime = time.time()
 
     log('\nCalculating TNF', logfile, 0)
@@ -38,6 +43,7 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
 
 def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
               ncontigs, logfile):
+    import vamb
     begintime = time.time()
 
     log('\nCalculating RPKM', logfile)
@@ -66,6 +72,7 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
 
 def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
             batchsize, nepochs, lrate, batchsteps, logfile):
+    import vamb
 
     begintime = time.time()
     log('\nCreating and training VAE', logfile)
@@ -98,6 +105,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     return mask, latent
 
 def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
+    import vamb
     begintime = time.time()
 
     log('\nClustering', logfile)
@@ -119,6 +127,8 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
 def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
          batchsteps, minclustersize, maxclusters, logfile):
+    import vamb
+    print('vamb imported')
 
     # Print starting vamb version ...
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
@@ -290,12 +300,7 @@ def main():
     os.environ["NUMEXPR_NUM_THREADS"] = str(args.subprocesses)
     os.environ["OMP_NUM_THREADS"] = str(args.subprocesses)
 
-    import torch
-    import datetime
-    import time
-    import shutil
     import numpy as np
-
     import vamb
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
