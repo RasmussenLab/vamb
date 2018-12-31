@@ -8,6 +8,7 @@ import datetime
 import time
 import shutil
 import numpy as np
+import vamb
 
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
