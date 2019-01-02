@@ -1,0 +1,7 @@
+*.so
+__pycache__
+*.o
+src/_vambtools.cpp
+.eggs
+*~
+vamb.egg-info
