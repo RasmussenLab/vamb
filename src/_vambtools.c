@@ -2498,28 +2498,55 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
   Py_ssize_t __pyx_t_14;
   __Pyx_RefNannySetupContext("_overwrite_matrix", 0);
 
+  /* "_vambtools.pyx":48
+ *     """
+ * 
+ *     cdef int i = 0             # <<<<<<<<<<<<<<
+ *     cdef int j = 0
+ *     cdef int matrixindex = 0
+ */
+  __pyx_v_i = 0;
+
   /* "_vambtools.pyx":49
  * 
- *     cdef int i, j, matrixindex
+ *     cdef int i = 0
+ *     cdef int j = 0             # <<<<<<<<<<<<<<
+ *     cdef int matrixindex = 0
+ *     cdef int length = matrix.shape[1]
+ */
+  __pyx_v_j = 0;
+
+  /* "_vambtools.pyx":50
+ *     cdef int i = 0
+ *     cdef int j = 0
+ *     cdef int matrixindex = 0             # <<<<<<<<<<<<<<
+ *     cdef int length = matrix.shape[1]
+ *     cdef int masklength = len(mask)
+ */
+  __pyx_v_matrixindex = 0;
+
+  /* "_vambtools.pyx":51
+ *     cdef int j = 0
+ *     cdef int matrixindex = 0
  *     cdef int length = matrix.shape[1]             # <<<<<<<<<<<<<<
  *     cdef int masklength = len(mask)
  * 
  */
   __pyx_v_length = (__pyx_v_matrix.shape[1]);
 
-  /* "_vambtools.pyx":50
- *     cdef int i, j, matrixindex
+  /* "_vambtools.pyx":52
+ *     cdef int matrixindex = 0
  *     cdef int length = matrix.shape[1]
  *     cdef int masklength = len(mask)             # <<<<<<<<<<<<<<
  * 
- *     for i in range(masklength):
+ *     # First skip to the first zero in the mask, since the matrix at smaller
  */
   __pyx_t_1 = __Pyx_MemoryView_Len(__pyx_v_mask); 
   __pyx_v_masklength = __pyx_t_1;
 
-  /* "_vambtools.pyx":52
- *     cdef int masklength = len(mask)
- * 
+  /* "_vambtools.pyx":56
+ *     # First skip to the first zero in the mask, since the matrix at smaller
+ *     # indices than this should remain untouched.
  *     for i in range(masklength):             # <<<<<<<<<<<<<<
  *         if mask[i] == 0:
  *             break
@@ -2529,8 +2556,8 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
   for (__pyx_t_4 = 0; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
     __pyx_v_i = __pyx_t_4;
 
-    /* "_vambtools.pyx":53
- * 
+    /* "_vambtools.pyx":57
+ *     # indices than this should remain untouched.
  *     for i in range(masklength):
  *         if mask[i] == 0:             # <<<<<<<<<<<<<<
  *             break
@@ -2540,17 +2567,17 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
     __pyx_t_6 = (((*((unsigned char *) ( /* dim=0 */ (__pyx_v_mask.data + __pyx_t_5 * __pyx_v_mask.strides[0]) ))) == 0) != 0);
     if (__pyx_t_6) {
 
-      /* "_vambtools.pyx":54
+      /* "_vambtools.pyx":58
  *     for i in range(masklength):
  *         if mask[i] == 0:
  *             break             # <<<<<<<<<<<<<<
  * 
- *     if i == masklength:
+ *     # If the mask is all true, don't touch array.
  */
       goto __pyx_L4_break;
 
-      /* "_vambtools.pyx":53
- * 
+      /* "_vambtools.pyx":57
+ *     # indices than this should remain untouched.
  *     for i in range(masklength):
  *         if mask[i] == 0:             # <<<<<<<<<<<<<<
  *             break
@@ -2560,9 +2587,9 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
   }
   __pyx_L4_break:;
 
-  /* "_vambtools.pyx":56
- *             break
+  /* "_vambtools.pyx":61
  * 
+ *     # If the mask is all true, don't touch array.
  *     if i == masklength:             # <<<<<<<<<<<<<<
  *         return masklength
  * 
@@ -2570,8 +2597,8 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
   __pyx_t_6 = ((__pyx_v_i == __pyx_v_masklength) != 0);
   if (__pyx_t_6) {
 
-    /* "_vambtools.pyx":57
- * 
+    /* "_vambtools.pyx":62
+ *     # If the mask is all true, don't touch array.
  *     if i == masklength:
  *         return masklength             # <<<<<<<<<<<<<<
  * 
@@ -2580,16 +2607,16 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
     __pyx_r = __pyx_v_masklength;
     goto __pyx_L0;
 
-    /* "_vambtools.pyx":56
- *             break
+    /* "_vambtools.pyx":61
  * 
+ *     # If the mask is all true, don't touch array.
  *     if i == masklength:             # <<<<<<<<<<<<<<
  *         return masklength
  * 
  */
   }
 
-  /* "_vambtools.pyx":59
+  /* "_vambtools.pyx":64
  *         return masklength
  * 
  *     matrixindex = i             # <<<<<<<<<<<<<<
@@ -2598,7 +2625,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
  */
   __pyx_v_matrixindex = __pyx_v_i;
 
-  /* "_vambtools.pyx":61
+  /* "_vambtools.pyx":66
  *     matrixindex = i
  * 
  *     for i in range(matrixindex, masklength):             # <<<<<<<<<<<<<<
@@ -2610,7 +2637,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
   for (__pyx_t_4 = __pyx_v_matrixindex; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
     __pyx_v_i = __pyx_t_4;
 
-    /* "_vambtools.pyx":62
+    /* "_vambtools.pyx":67
  * 
  *     for i in range(matrixindex, masklength):
  *         if mask[i] == 1:             # <<<<<<<<<<<<<<
@@ -2621,7 +2648,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
     __pyx_t_6 = (((*((unsigned char *) ( /* dim=0 */ (__pyx_v_mask.data + __pyx_t_7 * __pyx_v_mask.strides[0]) ))) == 1) != 0);
     if (__pyx_t_6) {
 
-      /* "_vambtools.pyx":63
+      /* "_vambtools.pyx":68
  *     for i in range(matrixindex, masklength):
  *         if mask[i] == 1:
  *             for j in range(length):             # <<<<<<<<<<<<<<
@@ -2633,7 +2660,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
       for (__pyx_t_10 = 0; __pyx_t_10 < __pyx_t_9; __pyx_t_10+=1) {
         __pyx_v_j = __pyx_t_10;
 
-        /* "_vambtools.pyx":64
+        /* "_vambtools.pyx":69
  *         if mask[i] == 1:
  *             for j in range(length):
  *                 matrix[matrixindex, j] = matrix[i, j]             # <<<<<<<<<<<<<<
@@ -2647,7 +2674,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
         *((float *) ( /* dim=1 */ (( /* dim=0 */ (__pyx_v_matrix.data + __pyx_t_13 * __pyx_v_matrix.strides[0]) ) + __pyx_t_14 * __pyx_v_matrix.strides[1]) )) = (*((float *) ( /* dim=1 */ (( /* dim=0 */ (__pyx_v_matrix.data + __pyx_t_11 * __pyx_v_matrix.strides[0]) ) + __pyx_t_12 * __pyx_v_matrix.strides[1]) )));
       }
 
-      /* "_vambtools.pyx":65
+      /* "_vambtools.pyx":70
  *             for j in range(length):
  *                 matrix[matrixindex, j] = matrix[i, j]
  *             matrixindex += 1             # <<<<<<<<<<<<<<
@@ -2656,7 +2683,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
  */
       __pyx_v_matrixindex = (__pyx_v_matrixindex + 1);
 
-      /* "_vambtools.pyx":62
+      /* "_vambtools.pyx":67
  * 
  *     for i in range(matrixindex, masklength):
  *         if mask[i] == 1:             # <<<<<<<<<<<<<<
@@ -2666,7 +2693,7 @@ static int __pyx_f_10_vambtools__overwrite_matrix(__Pyx_memviewslice __pyx_v_mat
     }
   }
 
-  /* "_vambtools.pyx":67
+  /* "_vambtools.pyx":72
  *             matrixindex += 1
  * 
  *     return matrixindex             # <<<<<<<<<<<<<<
@@ -2777,7 +2804,7 @@ static PyObject *__pyx_pf_10_vambtools_2_overwrite_matrix(CYTHON_UNUSED PyObject
   return __pyx_r;
 }
 
-/* "_vambtools.pyx":69
+/* "_vambtools.pyx":74
  *     return matrixindex
  * 
  * cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):             # <<<<<<<<<<<<<<
@@ -2803,7 +2830,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
   Py_ssize_t __pyx_t_7;
   __Pyx_RefNannySetupContext("c_kmercounts", 0);
 
-  /* "_vambtools.pyx":76
+  /* "_vambtools.pyx":81
  *     """
  * 
  *     cdef int kmer = 0             # <<<<<<<<<<<<<<
@@ -2812,7 +2839,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
   __pyx_v_kmer = 0;
 
-  /* "_vambtools.pyx":80
+  /* "_vambtools.pyx":85
  *     cdef int charvalue
  *     cdef int i
  *     cdef int countdown = k - 1             # <<<<<<<<<<<<<<
@@ -2821,7 +2848,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
   __pyx_v_countdown = (__pyx_v_k - 1);
 
-  /* "_vambtools.pyx":81
+  /* "_vambtools.pyx":86
  *     cdef int i
  *     cdef int countdown = k - 1
  *     cdef int contiglength = len(bytesarray)             # <<<<<<<<<<<<<<
@@ -2831,7 +2858,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
   __pyx_t_1 = __Pyx_MemoryView_Len(__pyx_v_bytesarray); 
   __pyx_v_contiglength = __pyx_t_1;
 
-  /* "_vambtools.pyx":82
+  /* "_vambtools.pyx":87
  *     cdef int countdown = k - 1
  *     cdef int contiglength = len(bytesarray)
  *     cdef int mask = (1 << 2 * k - 2) - 1             # <<<<<<<<<<<<<<
@@ -2840,7 +2867,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
   __pyx_v_mask = ((1 << ((2 * __pyx_v_k) - 2)) - 1);
 
-  /* "_vambtools.pyx":84
+  /* "_vambtools.pyx":89
  *     cdef int mask = (1 << 2 * k - 2) - 1
  * 
  *     for i in range(contiglength):             # <<<<<<<<<<<<<<
@@ -2852,7 +2879,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
   for (__pyx_t_4 = 0; __pyx_t_4 < __pyx_t_3; __pyx_t_4+=1) {
     __pyx_v_i = __pyx_t_4;
 
-    /* "_vambtools.pyx":85
+    /* "_vambtools.pyx":90
  * 
  *     for i in range(contiglength):
  *         character = bytesarray[i]             # <<<<<<<<<<<<<<
@@ -2862,7 +2889,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
     __pyx_t_5 = __pyx_v_i;
     __pyx_v_character = (*((unsigned char *) ( /* dim=0 */ (__pyx_v_bytesarray.data + __pyx_t_5 * __pyx_v_bytesarray.strides[0]) )));
 
-    /* "_vambtools.pyx":87
+    /* "_vambtools.pyx":92
  *         character = bytesarray[i]
  * 
  *         if character == 65: # A = 0b00 = 0             # <<<<<<<<<<<<<<
@@ -2872,7 +2899,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
     switch (__pyx_v_character) {
       case 65:
 
-      /* "_vambtools.pyx":88
+      /* "_vambtools.pyx":93
  * 
  *         if character == 65: # A = 0b00 = 0
  *             charvalue = 0             # <<<<<<<<<<<<<<
@@ -2881,7 +2908,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_charvalue = 0;
 
-      /* "_vambtools.pyx":87
+      /* "_vambtools.pyx":92
  *         character = bytesarray[i]
  * 
  *         if character == 65: # A = 0b00 = 0             # <<<<<<<<<<<<<<
@@ -2890,7 +2917,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       break;
 
-      /* "_vambtools.pyx":89
+      /* "_vambtools.pyx":94
  *         if character == 65: # A = 0b00 = 0
  *             charvalue = 0
  *         elif character == 67: # C = 0b01 = 1             # <<<<<<<<<<<<<<
@@ -2899,7 +2926,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       case 67:
 
-      /* "_vambtools.pyx":90
+      /* "_vambtools.pyx":95
  *             charvalue = 0
  *         elif character == 67: # C = 0b01 = 1
  *             charvalue = 1             # <<<<<<<<<<<<<<
@@ -2908,7 +2935,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_charvalue = 1;
 
-      /* "_vambtools.pyx":89
+      /* "_vambtools.pyx":94
  *         if character == 65: # A = 0b00 = 0
  *             charvalue = 0
  *         elif character == 67: # C = 0b01 = 1             # <<<<<<<<<<<<<<
@@ -2917,7 +2944,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       break;
 
-      /* "_vambtools.pyx":91
+      /* "_vambtools.pyx":96
  *         elif character == 67: # C = 0b01 = 1
  *             charvalue = 1
  *         elif character == 71: # G = 0b10 = 2             # <<<<<<<<<<<<<<
@@ -2926,7 +2953,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       case 71:
 
-      /* "_vambtools.pyx":92
+      /* "_vambtools.pyx":97
  *             charvalue = 1
  *         elif character == 71: # G = 0b10 = 2
  *             charvalue = 2             # <<<<<<<<<<<<<<
@@ -2935,7 +2962,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_charvalue = 2;
 
-      /* "_vambtools.pyx":91
+      /* "_vambtools.pyx":96
  *         elif character == 67: # C = 0b01 = 1
  *             charvalue = 1
  *         elif character == 71: # G = 0b10 = 2             # <<<<<<<<<<<<<<
@@ -2944,7 +2971,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       break;
 
-      /* "_vambtools.pyx":93
+      /* "_vambtools.pyx":98
  *         elif character == 71: # G = 0b10 = 2
  *             charvalue = 2
  *         elif character == 84: # T = 0b11 = 3             # <<<<<<<<<<<<<<
@@ -2953,7 +2980,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       case 84:
 
-      /* "_vambtools.pyx":94
+      /* "_vambtools.pyx":99
  *             charvalue = 2
  *         elif character == 84: # T = 0b11 = 3
  *             charvalue = 3             # <<<<<<<<<<<<<<
@@ -2962,7 +2989,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_charvalue = 3;
 
-      /* "_vambtools.pyx":93
+      /* "_vambtools.pyx":98
  *         elif character == 71: # G = 0b10 = 2
  *             charvalue = 2
  *         elif character == 84: # T = 0b11 = 3             # <<<<<<<<<<<<<<
@@ -2972,7 +2999,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
       break;
       default:
 
-      /* "_vambtools.pyx":96
+      /* "_vambtools.pyx":101
  *             charvalue = 3
  *         else:
  *             kmer = 0             # <<<<<<<<<<<<<<
@@ -2981,7 +3008,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_kmer = 0;
 
-      /* "_vambtools.pyx":97
+      /* "_vambtools.pyx":102
  *         else:
  *             kmer = 0
  *             countdown = k - 1             # <<<<<<<<<<<<<<
@@ -2990,7 +3017,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_countdown = (__pyx_v_k - 1);
 
-      /* "_vambtools.pyx":98
+      /* "_vambtools.pyx":103
  *             kmer = 0
  *             countdown = k - 1
  *             continue             # <<<<<<<<<<<<<<
@@ -3001,7 +3028,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
       break;
     }
 
-    /* "_vambtools.pyx":100
+    /* "_vambtools.pyx":105
  *             continue
  * 
  *         kmer += charvalue             # <<<<<<<<<<<<<<
@@ -3010,7 +3037,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
     __pyx_v_kmer = (__pyx_v_kmer + __pyx_v_charvalue);
 
-    /* "_vambtools.pyx":103
+    /* "_vambtools.pyx":108
  * 
  *         # Countdown skips non-ACGT bases
  *         if countdown == 0:             # <<<<<<<<<<<<<<
@@ -3020,7 +3047,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
     __pyx_t_6 = ((__pyx_v_countdown == 0) != 0);
     if (__pyx_t_6) {
 
-      /* "_vambtools.pyx":104
+      /* "_vambtools.pyx":109
  *         # Countdown skips non-ACGT bases
  *         if countdown == 0:
  *             counts[kmer] += 1             # <<<<<<<<<<<<<<
@@ -3030,7 +3057,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
       __pyx_t_7 = __pyx_v_kmer;
       *((int *) ( /* dim=0 */ (__pyx_v_counts.data + __pyx_t_7 * __pyx_v_counts.strides[0]) )) += 1;
 
-      /* "_vambtools.pyx":105
+      /* "_vambtools.pyx":110
  *         if countdown == 0:
  *             counts[kmer] += 1
  *             kmer &= mask # Remove leftmost base             # <<<<<<<<<<<<<<
@@ -3039,7 +3066,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
  */
       __pyx_v_kmer = (__pyx_v_kmer & __pyx_v_mask);
 
-      /* "_vambtools.pyx":103
+      /* "_vambtools.pyx":108
  * 
  *         # Countdown skips non-ACGT bases
  *         if countdown == 0:             # <<<<<<<<<<<<<<
@@ -3049,7 +3076,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
       goto __pyx_L5;
     }
 
-    /* "_vambtools.pyx":108
+    /* "_vambtools.pyx":113
  * 
  *         else:
  *             countdown -= 1             # <<<<<<<<<<<<<<
@@ -3061,7 +3088,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
     }
     __pyx_L5:;
 
-    /* "_vambtools.pyx":110
+    /* "_vambtools.pyx":115
  *             countdown -= 1
  * 
  *         kmer <<= 2 # Shift to prepare for next base             # <<<<<<<<<<<<<<
@@ -3072,7 +3099,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
     __pyx_L3_continue:;
   }
 
-  /* "_vambtools.pyx":69
+  /* "_vambtools.pyx":74
  *     return matrixindex
  * 
  * cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):             # <<<<<<<<<<<<<<
@@ -3084,7 +3111,7 @@ static void __pyx_f_10_vambtools_c_kmercounts(__Pyx_memviewslice __pyx_v_bytesar
   __Pyx_RefNannyFinishContext();
 }
 
-/* "_vambtools.pyx":112
+/* "_vambtools.pyx":117
  *         kmer <<= 2 # Shift to prepare for next base
  * 
  * cpdef _kmercounts(bytearray sequence, int k):             # <<<<<<<<<<<<<<
@@ -3106,7 +3133,7 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
   __Pyx_memviewslice __pyx_t_5 = { 0, 0, { 0 }, { 0 }, { 0 } };
   __Pyx_RefNannySetupContext("_kmercounts", 0);
 
-  /* "_vambtools.pyx":118
+  /* "_vambtools.pyx":123
  *     Only Kmers containing A, C, G, T (bytes 65, 67, 71, 84) are counted"""
  * 
  *     if k > 10 or k < 1:             # <<<<<<<<<<<<<<
@@ -3124,7 +3151,7 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
   __pyx_L4_bool_binop_done:;
   if (__pyx_t_1) {
 
-    /* "_vambtools.pyx":119
+    /* "_vambtools.pyx":124
  * 
  *     if k > 10 or k < 1:
  *         return ValueError('k must be between 1 and 10, inclusive.')             # <<<<<<<<<<<<<<
@@ -3132,13 +3159,13 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
  *     counts = zeros('i', 4**k)
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_3 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple_, NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 119, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple_, NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 124, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __pyx_r = __pyx_t_3;
     __pyx_t_3 = 0;
     goto __pyx_L0;
 
-    /* "_vambtools.pyx":118
+    /* "_vambtools.pyx":123
  *     Only Kmers containing A, C, G, T (bytes 65, 67, 71, 84) are counted"""
  * 
  *     if k > 10 or k < 1:             # <<<<<<<<<<<<<<
@@ -3147,43 +3174,43 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
  */
   }
 
-  /* "_vambtools.pyx":121
+  /* "_vambtools.pyx":126
  *         return ValueError('k must be between 1 and 10, inclusive.')
  * 
  *     counts = zeros('i', 4**k)             # <<<<<<<<<<<<<<
  * 
  *     cdef unsigned char[:] sequenceview = sequence
  */
-  __pyx_t_3 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_i, __Pyx_pow_long(4, ((long)__pyx_v_k)), 0)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 121, __pyx_L1_error)
+  __pyx_t_3 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_i, __Pyx_pow_long(4, ((long)__pyx_v_k)), 0)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 126, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_counts = ((arrayobject *)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "_vambtools.pyx":123
+  /* "_vambtools.pyx":128
  *     counts = zeros('i', 4**k)
  * 
  *     cdef unsigned char[:] sequenceview = sequence             # <<<<<<<<<<<<<<
  *     cdef int[:] countview = counts
  * 
  */
-  __pyx_t_4 = __Pyx_PyObject_to_MemoryviewSlice_ds_unsigned_char(__pyx_v_sequence, PyBUF_WRITABLE); if (unlikely(!__pyx_t_4.memview)) __PYX_ERR(0, 123, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyObject_to_MemoryviewSlice_ds_unsigned_char(__pyx_v_sequence, PyBUF_WRITABLE); if (unlikely(!__pyx_t_4.memview)) __PYX_ERR(0, 128, __pyx_L1_error)
   __pyx_v_sequenceview = __pyx_t_4;
   __pyx_t_4.memview = NULL;
   __pyx_t_4.data = NULL;
 
-  /* "_vambtools.pyx":124
+  /* "_vambtools.pyx":129
  * 
  *     cdef unsigned char[:] sequenceview = sequence
  *     cdef int[:] countview = counts             # <<<<<<<<<<<<<<
  * 
  *     c_kmercounts(sequenceview, k, countview)
  */
-  __pyx_t_5 = __Pyx_PyObject_to_MemoryviewSlice_ds_int(((PyObject *)__pyx_v_counts), PyBUF_WRITABLE); if (unlikely(!__pyx_t_5.memview)) __PYX_ERR(0, 124, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_to_MemoryviewSlice_ds_int(((PyObject *)__pyx_v_counts), PyBUF_WRITABLE); if (unlikely(!__pyx_t_5.memview)) __PYX_ERR(0, 129, __pyx_L1_error)
   __pyx_v_countview = __pyx_t_5;
   __pyx_t_5.memview = NULL;
   __pyx_t_5.data = NULL;
 
-  /* "_vambtools.pyx":126
+  /* "_vambtools.pyx":131
  *     cdef int[:] countview = counts
  * 
  *     c_kmercounts(sequenceview, k, countview)             # <<<<<<<<<<<<<<
@@ -3192,7 +3219,7 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
  */
   __pyx_f_10_vambtools_c_kmercounts(__pyx_v_sequenceview, __pyx_v_k, __pyx_v_countview);
 
-  /* "_vambtools.pyx":128
+  /* "_vambtools.pyx":133
  *     c_kmercounts(sequenceview, k, countview)
  * 
  *     return counts             # <<<<<<<<<<<<<<
@@ -3204,7 +3231,7 @@ static PyObject *__pyx_f_10_vambtools__kmercounts(PyObject *__pyx_v_sequence, in
   __pyx_r = ((PyObject *)__pyx_v_counts);
   goto __pyx_L0;
 
-  /* "_vambtools.pyx":112
+  /* "_vambtools.pyx":117
  *         kmer <<= 2 # Shift to prepare for next base
  * 
  * cpdef _kmercounts(bytearray sequence, int k):             # <<<<<<<<<<<<<<
@@ -3260,11 +3287,11 @@ static PyObject *__pyx_pw_10_vambtools_5_kmercounts(PyObject *__pyx_self, PyObje
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_k)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("_kmercounts", 1, 2, 2, 1); __PYX_ERR(0, 112, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("_kmercounts", 1, 2, 2, 1); __PYX_ERR(0, 117, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "_kmercounts") < 0)) __PYX_ERR(0, 112, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "_kmercounts") < 0)) __PYX_ERR(0, 117, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 2) {
       goto __pyx_L5_argtuple_error;
@@ -3273,17 +3300,17 @@ static PyObject *__pyx_pw_10_vambtools_5_kmercounts(PyObject *__pyx_self, PyObje
       values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
     }
     __pyx_v_sequence = ((PyObject*)values[0]);
-    __pyx_v_k = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_k == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 112, __pyx_L3_error)
+    __pyx_v_k = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_k == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 117, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("_kmercounts", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 112, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("_kmercounts", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 117, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("_vambtools._kmercounts", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_sequence), (&PyByteArray_Type), 1, "sequence", 1))) __PYX_ERR(0, 112, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_sequence), (&PyByteArray_Type), 1, "sequence", 1))) __PYX_ERR(0, 117, __pyx_L1_error)
   __pyx_r = __pyx_pf_10_vambtools_4_kmercounts(__pyx_self, __pyx_v_sequence, __pyx_v_k);
 
   /* function exit code */
@@ -3301,7 +3328,7 @@ static PyObject *__pyx_pf_10_vambtools_4_kmercounts(CYTHON_UNUSED PyObject *__py
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("_kmercounts", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_10_vambtools__kmercounts(__pyx_v_sequence, __pyx_v_k, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 112, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_10_vambtools__kmercounts(__pyx_v_sequence, __pyx_v_k, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 117, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -3318,7 +3345,7 @@ static PyObject *__pyx_pf_10_vambtools_4_kmercounts(CYTHON_UNUSED PyObject *__py
   return __pyx_r;
 }
 
-/* "_vambtools.pyx":130
+/* "_vambtools.pyx":135
  *     return counts
  * 
  * cdef void c_fourmer_freq(int[:] counts, float[:] result):             # <<<<<<<<<<<<<<
@@ -3339,7 +3366,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
   size_t __pyx_t_6;
   __Pyx_RefNannySetupContext("c_fourmer_freq", 0);
 
-  /* "_vambtools.pyx":137
+  /* "_vambtools.pyx":142
  *     """
  * 
  *     cdef int countsum = 0             # <<<<<<<<<<<<<<
@@ -3348,7 +3375,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
  */
   __pyx_v_countsum = 0;
 
-  /* "_vambtools.pyx":140
+  /* "_vambtools.pyx":145
  *     cdef int i
  * 
  *     for i in range(256):             # <<<<<<<<<<<<<<
@@ -3358,7 +3385,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
   for (__pyx_t_1 = 0; __pyx_t_1 < 0x100; __pyx_t_1+=1) {
     __pyx_v_i = __pyx_t_1;
 
-    /* "_vambtools.pyx":141
+    /* "_vambtools.pyx":146
  * 
  *     for i in range(256):
  *         countsum += counts[i]             # <<<<<<<<<<<<<<
@@ -3369,7 +3396,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
     __pyx_v_countsum = (__pyx_v_countsum + (*((int *) ( /* dim=0 */ (__pyx_v_counts.data + __pyx_t_2 * __pyx_v_counts.strides[0]) ))));
   }
 
-  /* "_vambtools.pyx":143
+  /* "_vambtools.pyx":148
  *         countsum += counts[i]
  * 
  *     if countsum == 0:             # <<<<<<<<<<<<<<
@@ -3379,7 +3406,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
   __pyx_t_3 = ((__pyx_v_countsum == 0) != 0);
   if (__pyx_t_3) {
 
-    /* "_vambtools.pyx":144
+    /* "_vambtools.pyx":149
  * 
  *     if countsum == 0:
  *         return             # <<<<<<<<<<<<<<
@@ -3388,7 +3415,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
  */
     goto __pyx_L0;
 
-    /* "_vambtools.pyx":143
+    /* "_vambtools.pyx":148
  *         countsum += counts[i]
  * 
  *     if countsum == 0:             # <<<<<<<<<<<<<<
@@ -3397,7 +3424,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
  */
   }
 
-  /* "_vambtools.pyx":146
+  /* "_vambtools.pyx":151
  *         return
  * 
  *     cdef float floatsum = <float>countsum             # <<<<<<<<<<<<<<
@@ -3406,7 +3433,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
  */
   __pyx_v_floatsum = ((float)__pyx_v_countsum);
 
-  /* "_vambtools.pyx":148
+  /* "_vambtools.pyx":153
  *     cdef float floatsum = <float>countsum
  * 
  *     for i in range(256):             # <<<<<<<<<<<<<<
@@ -3416,7 +3443,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
   for (__pyx_t_1 = 0; __pyx_t_1 < 0x100; __pyx_t_1+=1) {
     __pyx_v_i = __pyx_t_1;
 
-    /* "_vambtools.pyx":149
+    /* "_vambtools.pyx":154
  * 
  *     for i in range(256):
  *         result[complementer_fourmer[i]] += counts[i] / floatsum             # <<<<<<<<<<<<<<
@@ -3429,7 +3456,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
     *((float *) ( /* dim=0 */ (__pyx_v_result.data + __pyx_t_6 * __pyx_v_result.strides[0]) )) += (((float)(*((int *) ( /* dim=0 */ (__pyx_v_counts.data + __pyx_t_4 * __pyx_v_counts.strides[0]) )))) / __pyx_v_floatsum);
   }
 
-  /* "_vambtools.pyx":130
+  /* "_vambtools.pyx":135
  *     return counts
  * 
  * cdef void c_fourmer_freq(int[:] counts, float[:] result):             # <<<<<<<<<<<<<<
@@ -3442,7 +3469,7 @@ static void __pyx_f_10_vambtools_c_fourmer_freq(__Pyx_memviewslice __pyx_v_count
   __Pyx_RefNannyFinishContext();
 }
 
-/* "_vambtools.pyx":153
+/* "_vambtools.pyx":158
  * # Assining these arrays for each sequence takes about 6% longer time than
  * # having assigned them once in userspace. Worth it.
  * cpdef _fourmerfreq(bytearray sequence):             # <<<<<<<<<<<<<<
@@ -3465,67 +3492,67 @@ static PyObject *__pyx_f_10_vambtools__fourmerfreq(PyObject *__pyx_v_sequence, C
   __Pyx_memviewslice __pyx_t_4 = { 0, 0, { 0 }, { 0 }, { 0 } };
   __Pyx_RefNannySetupContext("_fourmerfreq", 0);
 
-  /* "_vambtools.pyx":158
+  /* "_vambtools.pyx":163
  *     Only fourmers containing A, C, G, T (bytes 65, 67, 71, 84) are counted"""
  * 
  *     counts = zeros('i', 256)             # <<<<<<<<<<<<<<
  *     frequencies = zeros('f', 136)
  * 
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_i, 0x100, 0)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 158, __pyx_L1_error)
+  __pyx_t_1 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_i, 0x100, 0)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 163, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_counts = ((arrayobject *)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "_vambtools.pyx":159
+  /* "_vambtools.pyx":164
  * 
  *     counts = zeros('i', 256)
  *     frequencies = zeros('f', 136)             # <<<<<<<<<<<<<<
  * 
  *     cdef unsigned char[:] sequenceview = sequence
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_f, 0x88, 0)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_1 = ((PyObject *)__pyx_f_10_vambtools_zeros(__pyx_n_u_f, 0x88, 0)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 164, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_frequencies = ((arrayobject *)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "_vambtools.pyx":161
+  /* "_vambtools.pyx":166
  *     frequencies = zeros('f', 136)
  * 
  *     cdef unsigned char[:] sequenceview = sequence             # <<<<<<<<<<<<<<
  *     cdef int[:] fourmercountview = counts
  *     cdef float[:] frequencyview = frequencies
  */
-  __pyx_t_2 = __Pyx_PyObject_to_MemoryviewSlice_ds_unsigned_char(__pyx_v_sequence, PyBUF_WRITABLE); if (unlikely(!__pyx_t_2.memview)) __PYX_ERR(0, 161, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_to_MemoryviewSlice_ds_unsigned_char(__pyx_v_sequence, PyBUF_WRITABLE); if (unlikely(!__pyx_t_2.memview)) __PYX_ERR(0, 166, __pyx_L1_error)
   __pyx_v_sequenceview = __pyx_t_2;
   __pyx_t_2.memview = NULL;
   __pyx_t_2.data = NULL;
 
-  /* "_vambtools.pyx":162
+  /* "_vambtools.pyx":167
  * 
  *     cdef unsigned char[:] sequenceview = sequence
  *     cdef int[:] fourmercountview = counts             # <<<<<<<<<<<<<<
  *     cdef float[:] frequencyview = frequencies
  * 
  */
-  __pyx_t_3 = __Pyx_PyObject_to_MemoryviewSlice_ds_int(((PyObject *)__pyx_v_counts), PyBUF_WRITABLE); if (unlikely(!__pyx_t_3.memview)) __PYX_ERR(0, 162, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyObject_to_MemoryviewSlice_ds_int(((PyObject *)__pyx_v_counts), PyBUF_WRITABLE); if (unlikely(!__pyx_t_3.memview)) __PYX_ERR(0, 167, __pyx_L1_error)
   __pyx_v_fourmercountview = __pyx_t_3;
   __pyx_t_3.memview = NULL;
   __pyx_t_3.data = NULL;
 
-  /* "_vambtools.pyx":163
+  /* "_vambtools.pyx":168
  *     cdef unsigned char[:] sequenceview = sequence
  *     cdef int[:] fourmercountview = counts
  *     cdef float[:] frequencyview = frequencies             # <<<<<<<<<<<<<<
  * 
  *     c_kmercounts(sequenceview, 4, fourmercountview)
  */
-  __pyx_t_4 = __Pyx_PyObject_to_MemoryviewSlice_ds_float(((PyObject *)__pyx_v_frequencies), PyBUF_WRITABLE); if (unlikely(!__pyx_t_4.memview)) __PYX_ERR(0, 163, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyObject_to_MemoryviewSlice_ds_float(((PyObject *)__pyx_v_frequencies), PyBUF_WRITABLE); if (unlikely(!__pyx_t_4.memview)) __PYX_ERR(0, 168, __pyx_L1_error)
   __pyx_v_frequencyview = __pyx_t_4;
   __pyx_t_4.memview = NULL;
   __pyx_t_4.data = NULL;
 
-  /* "_vambtools.pyx":165
+  /* "_vambtools.pyx":170
  *     cdef float[:] frequencyview = frequencies
  * 
  *     c_kmercounts(sequenceview, 4, fourmercountview)             # <<<<<<<<<<<<<<
@@ -3534,7 +3561,7 @@ static PyObject *__pyx_f_10_vambtools__fourmerfreq(PyObject *__pyx_v_sequence, C
  */
   __pyx_f_10_vambtools_c_kmercounts(__pyx_v_sequenceview, 4, __pyx_v_fourmercountview);
 
-  /* "_vambtools.pyx":166
+  /* "_vambtools.pyx":171
  * 
  *     c_kmercounts(sequenceview, 4, fourmercountview)
  *     c_fourmer_freq(fourmercountview, frequencyview)             # <<<<<<<<<<<<<<
@@ -3543,7 +3570,7 @@ static PyObject *__pyx_f_10_vambtools__fourmerfreq(PyObject *__pyx_v_sequence, C
  */
   __pyx_f_10_vambtools_c_fourmer_freq(__pyx_v_fourmercountview, __pyx_v_frequencyview);
 
-  /* "_vambtools.pyx":168
+  /* "_vambtools.pyx":173
  *     c_fourmer_freq(fourmercountview, frequencyview)
  * 
  *     return frequencies             # <<<<<<<<<<<<<<
@@ -3553,7 +3580,7 @@ static PyObject *__pyx_f_10_vambtools__fourmerfreq(PyObject *__pyx_v_sequence, C
   __pyx_r = ((PyObject *)__pyx_v_frequencies);
   goto __pyx_L0;
 
-  /* "_vambtools.pyx":153
+  /* "_vambtools.pyx":158
  * # Assining these arrays for each sequence takes about 6% longer time than
  * # having assigned them once in userspace. Worth it.
  * cpdef _fourmerfreq(bytearray sequence):             # <<<<<<<<<<<<<<
@@ -3587,7 +3614,7 @@ static PyObject *__pyx_pw_10_vambtools_7_fourmerfreq(PyObject *__pyx_self, PyObj
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("_fourmerfreq (wrapper)", 0);
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_sequence), (&PyByteArray_Type), 1, "sequence", 1))) __PYX_ERR(0, 153, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_sequence), (&PyByteArray_Type), 1, "sequence", 1))) __PYX_ERR(0, 158, __pyx_L1_error)
   __pyx_r = __pyx_pf_10_vambtools_6_fourmerfreq(__pyx_self, ((PyObject*)__pyx_v_sequence));
 
   /* function exit code */
@@ -3605,7 +3632,7 @@ static PyObject *__pyx_pf_10_vambtools_6_fourmerfreq(CYTHON_UNUSED PyObject *__p
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("_fourmerfreq", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_10_vambtools__fourmerfreq(__pyx_v_sequence, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 153, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_10_vambtools__fourmerfreq(__pyx_v_sequence, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 158, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -17984,8 +18011,8 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {0, 0, 0, 0, 0, 0, 0}
 };
 static int __Pyx_InitCachedBuiltins(void) {
-  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 52, __pyx_L1_error)
-  __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(0, 119, __pyx_L1_error)
+  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 56, __pyx_L1_error)
+  __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(0, 124, __pyx_L1_error)
   __pyx_builtin_MemoryError = __Pyx_GetBuiltinName(__pyx_n_s_MemoryError); if (!__pyx_builtin_MemoryError) __PYX_ERR(1, 109, __pyx_L1_error)
   __pyx_builtin_enumerate = __Pyx_GetBuiltinName(__pyx_n_s_enumerate); if (!__pyx_builtin_enumerate) __PYX_ERR(2, 150, __pyx_L1_error)
   __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(2, 2, __pyx_L1_error)
@@ -18001,14 +18028,14 @@ static int __Pyx_InitCachedConstants(void) {
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__Pyx_InitCachedConstants", 0);
 
-  /* "_vambtools.pyx":119
+  /* "_vambtools.pyx":124
  * 
  *     if k > 10 or k < 1:
  *         return ValueError('k must be between 1 and 10, inclusive.')             # <<<<<<<<<<<<<<
  * 
  *     counts = zeros('i', 4**k)
  */
-  __pyx_tuple_ = PyTuple_Pack(1, __pyx_kp_u_k_must_be_between_1_and_10_inclu); if (unlikely(!__pyx_tuple_)) __PYX_ERR(0, 119, __pyx_L1_error)
+  __pyx_tuple_ = PyTuple_Pack(1, __pyx_kp_u_k_must_be_between_1_and_10_inclu); if (unlikely(!__pyx_tuple_)) __PYX_ERR(0, 124, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple_);
   __Pyx_GIVEREF(__pyx_tuple_);
 

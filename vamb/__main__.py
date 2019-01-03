@@ -88,6 +88,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     n_discarded = len(mask) - mask.sum()
     log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
     log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
+    print('', file=logfile)
 
     modelpath = os.path.join(outdir, 'model.pt')
     vae.trainmodel(dataloader, nepochs=nepochs, lrate=lrate, batchsteps=batchsteps,
@@ -127,9 +128,6 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
 def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
          batchsteps, minclustersize, maxclusters, logfile):
-    import vamb
-    print('vamb imported')
-
     # Print starting vamb version ...
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
@@ -157,7 +155,7 @@ def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesse
 
 
 def main():
-    """Run the Vamb pipeline.
+    """Vamb: Variational autoencoders for metagenomic binning.
 
     For advanced use and extensions of Vamb, check documentation of the package
     at https://github.com/jakobnissen/vamb.
@@ -176,7 +174,7 @@ def main():
     reqos = parser.add_argument_group(title='Required arguments', description=None)
     reqos.add_argument('outdir', help='output directory to create')
     reqos.add_argument('fasta', help='path to fasta file')
-    reqos.add_argument('bamfiles', help='path to BAM files', nargs='+')
+    reqos.add_argument('bamfiles', help='paths to (multiple) BAM files', nargs='+')
 
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
@@ -186,7 +184,7 @@ def main():
     inputos.add_argument('-s', dest='minascore', metavar='', type=int,
                          help='ignore reads with alignment score below this [None]')
     inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
-                         help=('Number of processes/threads to use '
+                         help=('number of subprocesses to spawn '
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
 
     # VAE arguments
@@ -201,7 +199,7 @@ def main():
     vaeos.add_argument('-b', dest='beta',  metavar='',type=float,
                         default=200.0, help='beta, capacity to learn [200.0]')
     vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
-                        default=0.2, help='Dropout [0.2]')
+                        default=0.2, help='dropout [0.2]')
     vaeos.add_argument('--cuda', help='use GPU [False]', action='store_true')
 
     trainos = parser.add_argument_group(title='Training options', description=None)
@@ -328,7 +326,6 @@ def main():
              minclustersize=args.minsize,
              maxclusters=args.maxclusters,
              logfile=logfile)
-
 
 if __name__ == '__main__':
     main()
