@@ -2,12 +2,11 @@ import sys
 import os
 import numpy as np
 
-
-parentdir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 import vamb
 
-fasta_path = os.path.join(parentdir, 'vamb', 'test', 'data', 'fasta.fna')
+fasta_path = os.path.join(parentdir, 'test', 'data', 'fasta.fna')
 
 # Test it fails with non binary opened
 file = open(fasta_path)
@@ -56,7 +55,7 @@ assert contigs[2] == contigs[5]
 assert contigs[2].sequence == contigs[5].sequence
 
 # Correctly fails at opening bad fasta file
-badfasta_path = os.path.join(parentdir, 'vamb', 'test', 'data', 'badfasta.fna')
+badfasta_path = os.path.join(parentdir, 'test', 'data', 'badfasta.fna')
 with open(badfasta_path, 'rb') as file:
     try:
         entries = list(vamb.vambtools.byte_iterfasta(file))
@@ -66,7 +65,7 @@ with open(badfasta_path, 'rb') as file:
         raise AssertionError("Didn't fail at opening fad FASTA file")
 
 # Reader works well
-gzip_path = os.path.join(parentdir, 'vamb', 'test', 'data', 'fasta.fna.gz')
+gzip_path = os.path.join(parentdir, 'test', 'data', 'fasta.fna.gz')
 
 with vamb.vambtools.Reader(fasta_path, 'rb') as file:
     contigs2 = list(vamb.vambtools.byte_iterfasta(file))
@@ -95,9 +94,9 @@ for preallocate in True, False:
 
     assert np.all(contiglengths == np.array([len(i) for i in contigs if len(i) >= 100]))
 
-bigpath = os.path.join(parentdir, 'vamb', 'test', 'data', 'bigfasta.fna.gz')
+bigpath = os.path.join(parentdir, 'test', 'data', 'bigfasta.fna.gz')
 with vamb.vambtools.Reader(bigpath, 'rb') as f:
     tnf, _, __ = vamb.parsecontigs.read_contigs(f)
 
-target_tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_tnf.npz'))
+target_tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
 assert np.all(abs(tnf - target_tnf) < 1e-8)
