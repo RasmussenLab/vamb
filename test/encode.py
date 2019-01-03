@@ -3,13 +3,13 @@ import os
 import numpy as np
 import torch
 
-parentdir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 import vamb
 
 # Test making the dataloader
-tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_tnf.npz'))
-rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_rpkm.npz'))
+tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
+rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
 dataloader, mask = vamb.encode.make_dataloader(rpkm, tnf)
 
 assert np.all(mask == np.array([False, False, False, False,  True,  True, False,  True, False,
@@ -65,8 +65,8 @@ assert np.all(np.abs(np.sum(rpkm, axis=1) - 1) < 1e-5) # normalized
 vae = vamb.encode.VAE(nsamples=3)
 
 # Training model works in general
-tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_tnf.npz'))
-rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_rpkm.npz'))
+tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
+rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
 dataloader, mask = vamb.encode.make_dataloader(rpkm, tnf, batchsize=16)
 vae.trainmodel(dataloader, batchsteps=[5, 10], nepochs=15)
 vae.trainmodel(dataloader, batchsteps=None, nepochs=15)
@@ -87,12 +87,13 @@ else:
     raise AssertionError('Should have raised ArgumentError when having too high batchsteps')
 
 # Loading saved VAE and encoding
-modelpath = os.path.join(parentdir, 'vamb', 'test', 'data', 'model.pt')
+modelpath = os.path.join(parentdir, 'test', 'data', 'model.pt')
 vae = vamb.encode.VAE.load(modelpath)
 
-target_latent = vamb.vambtools.read_npz(os.path.join(parentdir, 'vamb', 'test', 'data', 'target_latent.npz'))
+target_latent = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_latent.npz'))
 
 latent = vae.encode(dataloader)
+
 assert np.all(np.abs(latent - target_latent) < 1e-4)
 
 # Encoding also withs with a minibatch of one
