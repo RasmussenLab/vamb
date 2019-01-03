@@ -15,57 +15,50 @@ Vamb requires Python v. >= 3.5 and the following packages to run:
 * PyTorch
 * Numpy
 * pysam
+* Cython
 
-So make sure you have those installed. When you have that:
+So make sure you have those installed before you install Vamb.
 
-### 1: Get Vamb on your computer
+### Install in user mode:
 
-__If you have `git` installed__
+This is for users who don't want to edit or view the source code:
 
-    [jakni@nissen:scripts]$ git clone https://github.com/jakobnissen/vamb
+```
+pip install -U https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
+```
 
-__If you don't__
+### Install in developer mode:
 
-You then presumably have access to the Vamb directory with this notebook, so just put it wherever:
+This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
-    [jakni@nissen:scripts]$ cp -r /path/to/vamb/directory vamb
+```
+# clone the desired branch from the repository
+git clone https://github.com/jakobnissen/vamb -b master
 
-### 2: Make sure you can use Vamb
+# dev install
+cd vamb
+pip install -e .
+```
 
-__Check if you can import Vamb to Python__
+# Running
 
-Open Python, append the parent directory of the vamb directory to your `sys.path`, then import Vamb. For example, if the Vamb directory is placed at `/home/jakni/scripts/vamb`, I would append `'/home/jakni/scripts'`:
+After installation, you can run with either:
 
-    [jakni@nissen:scripts]$ python3 # must be Python 3!
-    Python 3.7.1 (default, Oct 22 2018, 10:41:28)
-    [GCC 8.2.1 20180831] on linux
-    Type "help", "copyright", "credits" or "license" for more information.
-    >>> import sys; sys.path.append('/home/jakni/scripts'); import vamb
-    >>>
+```
+python3 -m vamb
+```
 
-If no error occurs, like above, you successfully installed Vamb.
+Which is useful if you want to specify which Python executable to use, or you can simply do:
 
-__If you can't import Vamb to Python__
+```
+vamb
+```
 
-This can happen if you miss any of the dependencies. If it raises an error that you can't import `vambtools`, you probably need to compile the vambtools source file yourself. Either compile the `src/_vambtools.c` source file using whatever C compiler you want to, or compile the `src/_vambtools.pyx`. To do the latter:
+To run Vamb with default parameters:
 
-* Make sure you have the Python package Cython installed.
-* Go to the `src/` directory in the vamb directory
-* run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
-* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
-* You should now be able to import Vamb.
-
-# Quickstart
-
-Take a brief look on the options with:
-
-    [jakni@nissen:scripts]$ python3 vamb/run.py --help
-
-Do the defaults look alright? They probably do, but you might want to check number of processes to launch and the option for GPU acceleration.
-
-Then, in order to run it, just do:
-
-    [jakni@nissen:scripts]$ python3 vamb/run.py outdir contigs.fna path/to/bamfiles/*.bam
+```
+vamb outdir contigs.fna path/to/bamfiles/*.bam
+```
 
 # Inputs and outputs
 
@@ -93,7 +86,7 @@ Vamb produces the following six output files:
 
 - `log.txt` - a text file with information about the Vamb run.
 - `tnf.npz`, `rpkm.npz`, and `latent.npz` - Numpy .npz files with TNFs, abundances, and the latent encoding of these two.
-- `model.pt` - a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` in Python.
+- `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` from Python.
 - `clusters.tsv` - a text file with two columns and one row per sequence: Left column for the cluster name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
 ### Recommended preparation
@@ -120,9 +113,9 @@ We have used BWA MEM for mapping, fully aware that it is not well suited for met
 
 # Troubleshooting
 
-__Importing VAMB raises a RuntimeWarning that the compiletime version is wrong__
+__Importing Vamb raises a RuntimeWarning that the compiletime version is wrong__
 
-Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as VAMB can run just fine despite it.
+Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as Vamb can run just fine despite it.
 
 ### Parsing the FASTA file
 

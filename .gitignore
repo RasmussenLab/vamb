@@ -5,3 +5,4 @@ src/_vambtools.cpp
 .eggs
 *~
 vamb.egg-info
+changelog
