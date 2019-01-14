@@ -298,7 +298,7 @@ def read_clusters(filehandle, min_size=1):
     for line in filehandle:
         stripped = line.strip()
 
-        if stripped[0] == '#':
+        if not stripped or stripped[0] == '#':
             continue
 
         clustername, contigname = stripped.split('\t')

@@ -26,15 +26,44 @@ NOTE: This version counts the number of reference bins detected at the
 different levents of recall and precision.
 """
 
-
-
 import sys
 import os
 
 from math import sqrt
 from collections import defaultdict, Counter
 
+import numpy as np
+from sklearn.metrics import adjusted_rand_score
 
+def get_adjusted_rand_score(clusters1, clusters2):
+    # First get an integer for each observation, which is the index in the
+    # label arrays
+    obs_number = dict()
+    n = 0
+    for d in clusters1, clusters2:
+        for cluster in d.values():
+            for obs in cluster:
+                if obs not in obs_number:
+                    obs_number[obs] = n
+                    n += 1
+
+    # Make label arrays. -1 represents unclustered observation
+    v1, v2 = np.full(n, fill_value=-1), np.full(n, fill_value=-1)
+
+    for d, v in ((clusters1, v1), (clusters2, v2)):
+        # Set label of all clustered observations
+        for label, cluster in enumerate(d.values()):
+            for obs in cluster:
+                v[obs_number[obs]] = label
+
+        # Set label all unclustered observations to unique label
+        label = len(d)
+        for i, arraylabel in enumerate(v):
+            if arraylabel == -1:
+                v[i] = label
+                label += 1
+
+    return adjusted_rand_score(v1, v2)
 
 class Reference:
     """Reference clusters.
@@ -105,8 +134,6 @@ class Reference:
         for binid in self.binlength:
             self.binlength[binid] = len(self.contigsof[binid])
 
-
-
 class Observed:
     """Observed clusters.
 
@@ -138,7 +165,6 @@ class Observed:
                     raise KeyError(message) from None
 
                 self.binlength[cluster] = self.binlength.get(cluster, 0) + contiglength
-
 
     @classmethod
     def fromfile(cls, filehandle, reference):
@@ -186,6 +212,7 @@ class BenchMarkResult:
         self.recall_weight: Weight of recall when computing Fn-score
         self.fscoreof: ref_bin_name: float dict of reference bin Fn-scores
         self.fmean: Mean fscore
+        self.adj_rand: Adjusted Rand index (not size normalized)
         self.mccof: ref_bin_name: float dict of MCC values
         self.mccmean: Mean Matthew's Correlation Coefficient (MCC)
         self._binsfound: (recall, prec): n_bins Counter
@@ -194,7 +221,8 @@ class BenchMarkResult:
     _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     _DEFAULTPRECISIONS = [0.7, 0.8, 0.9, 0.95, 0.99]
 
-    def _iterpairs(self, observed, reference, true_binid):
+    @staticmethod
+    def _iterpairs(observed, reference, true_binid):
         true_contigs = reference.contigsof[true_binid]
 
         ref_binsize = reference.binlength[true_binid]
@@ -210,7 +238,7 @@ class BenchMarkResult:
             false_pos = obs_binsize - true_pos
             false_neg = ref_binsize - true_pos
 
-            yield true_pos, true_neg, false_pos, false_neg
+            yield obs_bin, true_pos, true_neg, false_pos, false_neg
 
 
     @staticmethod
@@ -252,6 +280,7 @@ class BenchMarkResult:
         self.fscoreof = dict()
         self.mccof = dict()
         self._binsfound = Counter()
+        self.adj_rand = get_adjusted_rand_score(observed.contigsof, reference.contigsof)
 
         for true_binid, true_contigs in reference.contigsof.items():
             recalls_precisions = list()
@@ -263,7 +292,7 @@ class BenchMarkResult:
             ref_binsize = reference.binlength[true_binid]
 
             stats = self._iterpairs(observed, reference, true_binid)
-            for true_pos, true_neg, false_pos, false_neg in stats:
+            for obs_id, true_pos, true_neg, false_pos, false_neg in stats:
                 mcc = self._mcc(true_pos, true_neg, false_pos, false_neg)
                 recall = true_pos / (true_pos + false_neg)
                 precision = true_pos / (true_pos + false_pos)

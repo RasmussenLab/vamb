@@ -10,6 +10,9 @@ import datetime
 import time
 import shutil
 
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parentdir)
+
 DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
 ################################# DEFINE FUNCTIONS ##########################
@@ -19,7 +22,6 @@ def log(string, logfile, indent=0):
     logfile.flush()
 
 def calc_tnf(outdir, fastapath, mincontiglength, logfile):
-    import vamb
     begintime = time.time()
 
     log('\nCalculating TNF', logfile, 0)
@@ -43,7 +45,6 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
 
 def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
               ncontigs, logfile):
-    import vamb
     begintime = time.time()
 
     log('\nCalculating RPKM', logfile)
@@ -72,7 +73,6 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
 
 def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
             batchsize, nepochs, lrate, batchsteps, logfile):
-    import vamb
 
     begintime = time.time()
     log('\nCreating and training VAE', logfile)
@@ -106,7 +106,6 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     return mask, latent
 
 def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
-    import vamb
     begintime = time.time()
 
     log('\nClustering', logfile)
@@ -153,179 +152,175 @@ def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesse
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
 
-
-def main():
-    """Vamb: Variational autoencoders for metagenomic binning.
-
-    For advanced use and extensions of Vamb, check documentation of the package
-    at https://github.com/jakobnissen/vamb.
-    """
-    usage = "python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]"
-    parser = argparse.ArgumentParser(
-        description=main.__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage=usage, add_help=False)
-
-    # Help
-    helpos = parser.add_argument_group(title='Help', description=None)
-    helpos.add_argument('-h', '--help', help='print help and exit', action='help')
-
-    # Positional arguments
-    reqos = parser.add_argument_group(title='Required arguments', description=None)
-    reqos.add_argument('outdir', help='output directory to create')
-    reqos.add_argument('fasta', help='path to fasta file')
-    reqos.add_argument('bamfiles', help='paths to (multiple) BAM files', nargs='+')
-
-    # Optional arguments
-    inputos = parser.add_argument_group(title='IO options', description=None)
-
-    inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
-                         help='ignore contigs shorter than this [100]')
-    inputos.add_argument('-s', dest='minascore', metavar='', type=int,
-                         help='ignore reads with alignment score below this [None]')
-    inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
-                         help=('number of subprocesses to spawn '
-                              '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
-
-    # VAE arguments
-    vaeos = parser.add_argument_group(title='VAE hyperparameters', description=None)
-
-    vaeos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
-                        default=[325, 325], help='hidden neurons [325 325]')
-    vaeos.add_argument('-l', dest='nlatent', metavar='', type=int,
-                        default=40, help='latent neurons [40]')
-    vaeos.add_argument('-a', dest='alpha',  metavar='',type=float,
-                        default=0.05, help='alpha, weight of TNF versus depth loss [0.05]')
-    vaeos.add_argument('-b', dest='beta',  metavar='',type=float,
-                        default=200.0, help='beta, capacity to learn [200.0]')
-    vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
-                        default=0.2, help='dropout [0.2]')
-    vaeos.add_argument('--cuda', help='use GPU [False]', action='store_true')
-
-    trainos = parser.add_argument_group(title='Training options', description=None)
-
-    trainos.add_argument('-e', dest='nepochs', metavar='', type=int,
-                        default=500, help='epochs [500]')
-    trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
-                        default=64, help='starting batch size [64]')
-    trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='+',
-                        default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
-    trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
-                        default=1e-3, help='learning rate [0.001]')
-
-    clusto = parser.add_argument_group(title='Clustering options', description=None)
-    clusto.add_argument('-i', dest='minsize', metavar='', type=int,
-                        default=1, help='minimum cluster size [1]')
-    clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
-                        default=None, help='stop after c clusters [None = infinite]')
-
-    ######################### PRINT HELP IF NO ARGUMENTS ###################
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit()
-
-    args = parser.parse_args()
-
-    ######################### CHECK INPUT/OUTPUT FILES #####################
-
-    # Outdir does not exist
-    args.outdir = os.path.abspath(args.outdir)
-    if os.path.exists(args.outdir):
-        raise FileExistsError(args.outdir)
-
-    # Outdir is in an existing parent dir
-    parentdir = os.path.dirname(args.outdir)
-    if parentdir and not os.path.isdir(parentdir):
-        raise NotADirectoryError(parentdir)
-
-    # Contigs exists
-    if not os.path.isfile(args.fasta):
-        raise FileNotFoundError(args.fasta)
-
-    # All bamfiles exists
-    for bampath in args.bamfiles:
-        if not os.path.isfile(bampath):
-            raise FileNotFoundError(bampath)
-
-    ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
-    if args.minlength < 100:
-        raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
-
-    if args.subprocesses < 1:
-        raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
-
-    ####################### CHECK VAE OPTIONS ################################
-    if any(i < 1 for i in args.nhiddens):
-        raise argparse.ArgumentTypeError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
-
-    if args.nlatent < 1:
-        raise argparse.ArgumentTypeError('Minimum 1 latent neuron, not {}'.format(args.latent))
-
-    if args.alpha <= 0 or args.alpha >= 1:
-        raise argparse.ArgumentTypeError('alpha must be above 0 and below 1')
-
-    if args.beta <= 0:
-        raise argparse.ArgumentTypeError('beta cannot be negative or zero')
-
-    if args.dropout < 0 or args.dropout >= 1:
-        raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1.')
-
-    if args.cuda and not torch.cuda.is_available():
-        raise ModuleNotFoundError('Cuda is not available for PyTorch')
-
-    ###################### CHECK TRAINING OPTIONS ####################
-    if args.nepochs < 1:
-        raise argparse.ArgumentTypeError('Minimum 1 epoch, not {}'.format(args.nepochs))
-
-    if args.batchsize < 1:
-        raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
-
-    args.batchsteps = sorted(set(args.batchsteps))
-    if max(args.batchsteps) >= args.nepochs:
-        raise argparse.ArgumentTypeError('All batchsteps must be less than nepochs')
-
-    if args.lrate <= 0:
-        raise argparse.ArgumentTypeError('Learning rate must be positive')
-
-    ###################### CHECK CLUSTERING OPTIONS ####################
-    if args.minsize < 1:
-        raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
-
-    ###################### DO REST OF IMPORTS ############################
-
-    # These MUST be set before importing numpy
-    os.environ["MKL_NUM_THREADS"] = str(args.subprocesses)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(args.subprocesses)
-    os.environ["OMP_NUM_THREADS"] = str(args.subprocesses)
-
-    import numpy as np
-    import vamb
-
-    # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
-    torch.set_num_threads(args.subprocesses)
-
-    ################### RUN PROGRAM #########################
-    os.mkdir(args.outdir)
-    logpath = os.path.join(args.outdir, 'log.txt')
-
-    with open(logpath, 'w') as logfile:
-        run(args.outdir, args.fasta, args.bamfiles,
-             mincontiglength=args.minlength,
-             minalignscore=args.minascore,
-             subprocesses=args.subprocesses,
-             nhiddens=args.nhiddens,
-             nlatent=args.nlatent,
-             nepochs=args.nepochs,
-             batchsize=args.batchsize,
-             cuda=args.cuda,
-             alpha=args.alpha,
-             beta=args.beta,
-             dropout=args.dropout,
-             lrate=args.lrate,
-             batchsteps=args.batchsteps,
-             minclustersize=args.minsize,
-             maxclusters=args.maxclusters,
-             logfile=logfile)
-
 if __name__ == '__main__':
-    main()
+        doc = """Vamb: Variational autoencoders for metagenomic binning.
+
+        For advanced use and extensions of Vamb, check documentation of the package
+        at https://github.com/jakobnissen/vamb.
+        """
+        usage = "python runvamb.py OUTPATH FASTA BAMPATHS [OPTIONS ...]"
+        parser = argparse.ArgumentParser(
+            description=doc,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            usage=usage, add_help=False)
+
+        # Help
+        helpos = parser.add_argument_group(title='Help', description=None)
+        helpos.add_argument('-h', '--help', help='print help and exit', action='help')
+
+        # Positional arguments
+        reqos = parser.add_argument_group(title='Required arguments', description=None)
+        reqos.add_argument('outdir', help='output directory to create')
+        reqos.add_argument('fasta', help='path to fasta file')
+        reqos.add_argument('bamfiles', help='paths to (multiple) BAM files', nargs='+')
+
+        # Optional arguments
+        inputos = parser.add_argument_group(title='IO options', description=None)
+
+        inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
+                             help='ignore contigs shorter than this [100]')
+        inputos.add_argument('-s', dest='minascore', metavar='', type=int,
+                             help='ignore reads with alignment score below this [None]')
+        inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
+                             help=('number of subprocesses to spawn '
+                                  '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
+
+        # VAE arguments
+        vaeos = parser.add_argument_group(title='VAE hyperparameters', description=None)
+
+        vaeos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
+                            default=[325, 325], help='hidden neurons [325 325]')
+        vaeos.add_argument('-l', dest='nlatent', metavar='', type=int,
+                            default=40, help='latent neurons [40]')
+        vaeos.add_argument('-a', dest='alpha',  metavar='',type=float,
+                            default=0.05, help='alpha, weight of TNF versus depth loss [0.05]')
+        vaeos.add_argument('-b', dest='beta',  metavar='',type=float,
+                            default=200.0, help='beta, capacity to learn [200.0]')
+        vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
+                            default=0.2, help='dropout [0.2]')
+        vaeos.add_argument('--cuda', help='use GPU [False]', action='store_true')
+
+        trainos = parser.add_argument_group(title='Training options', description=None)
+
+        trainos.add_argument('-e', dest='nepochs', metavar='', type=int,
+                            default=500, help='epochs [500]')
+        trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
+                            default=64, help='starting batch size [64]')
+        trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='+',
+                            default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
+        trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
+                            default=1e-3, help='learning rate [0.001]')
+
+        clusto = parser.add_argument_group(title='Clustering options', description=None)
+        clusto.add_argument('-i', dest='minsize', metavar='', type=int,
+                            default=1, help='minimum cluster size [1]')
+        clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
+                            default=None, help='stop after c clusters [None = infinite]')
+
+        ######################### PRINT HELP IF NO ARGUMENTS ###################
+        if len(sys.argv) == 1:
+            parser.print_help()
+            sys.exit()
+
+        args = parser.parse_args()
+
+        ######################### CHECK INPUT/OUTPUT FILES #####################
+
+        # Outdir does not exist
+        args.outdir = os.path.abspath(args.outdir)
+        if os.path.exists(args.outdir):
+            raise FileExistsError(args.outdir)
+
+        # Outdir is in an existing parent dir
+        parentdir = os.path.dirname(args.outdir)
+        if parentdir and not os.path.isdir(parentdir):
+            raise NotADirectoryError(parentdir)
+
+        # Contigs exists
+        if not os.path.isfile(args.fasta):
+            raise FileNotFoundError(args.fasta)
+
+        # All bamfiles exists
+        for bampath in args.bamfiles:
+            if not os.path.isfile(bampath):
+                raise FileNotFoundError(bampath)
+
+        ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
+        if args.minlength < 100:
+            raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
+
+        if args.subprocesses < 1:
+            raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
+
+        ####################### CHECK VAE OPTIONS ################################
+        if any(i < 1 for i in args.nhiddens):
+            raise argparse.ArgumentTypeError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
+
+        if args.nlatent < 1:
+            raise argparse.ArgumentTypeError('Minimum 1 latent neuron, not {}'.format(args.latent))
+
+        if args.alpha <= 0 or args.alpha >= 1:
+            raise argparse.ArgumentTypeError('alpha must be above 0 and below 1')
+
+        if args.beta <= 0:
+            raise argparse.ArgumentTypeError('beta cannot be negative or zero')
+
+        if args.dropout < 0 or args.dropout >= 1:
+            raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1.')
+
+        if args.cuda and not torch.cuda.is_available():
+            raise ModuleNotFoundError('Cuda is not available for PyTorch')
+
+        ###################### CHECK TRAINING OPTIONS ####################
+        if args.nepochs < 1:
+            raise argparse.ArgumentTypeError('Minimum 1 epoch, not {}'.format(args.nepochs))
+
+        if args.batchsize < 1:
+            raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
+
+        args.batchsteps = sorted(set(args.batchsteps))
+        if max(args.batchsteps) >= args.nepochs:
+            raise argparse.ArgumentTypeError('All batchsteps must be less than nepochs')
+
+        if args.lrate <= 0:
+            raise argparse.ArgumentTypeError('Learning rate must be positive')
+
+        ###################### CHECK CLUSTERING OPTIONS ####################
+        if args.minsize < 1:
+            raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
+
+        ###################### DO REST OF IMPORTS ############################
+
+        # These MUST be set before importing numpy
+        os.environ["MKL_NUM_THREADS"] = str(args.subprocesses)
+        os.environ["NUMEXPR_NUM_THREADS"] = str(args.subprocesses)
+        os.environ["OMP_NUM_THREADS"] = str(args.subprocesses)
+
+        import numpy as np
+        import vamb
+
+        # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
+        torch.set_num_threads(args.subprocesses)
+
+        ################### RUN PROGRAM #########################
+        os.mkdir(args.outdir)
+        logpath = os.path.join(args.outdir, 'log.txt')
+
+        with open(logpath, 'w') as logfile:
+            run(args.outdir, args.fasta, args.bamfiles,
+                 mincontiglength=args.minlength,
+                 minalignscore=args.minascore,
+                 subprocesses=args.subprocesses,
+                 nhiddens=args.nhiddens,
+                 nlatent=args.nlatent,
+                 nepochs=args.nepochs,
+                 batchsize=args.batchsize,
+                 cuda=args.cuda,
+                 alpha=args.alpha,
+                 beta=args.beta,
+                 dropout=args.dropout,
+                 lrate=args.lrate,
+                 batchsteps=args.batchsteps,
+                 minclustersize=args.minsize,
+                 maxclusters=args.maxclusters,
+                 logfile=logfile)

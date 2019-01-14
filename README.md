@@ -19,7 +19,7 @@ Vamb requires Python v. >= 3.5 and the following packages to run:
 
 So make sure you have those installed before you install Vamb.
 
-### Install in user mode:
+### Installation for casual users:
 
 This is for users who don't want to edit or view the source code:
 
@@ -27,7 +27,7 @@ This is for users who don't want to edit or view the source code:
 pip install -U https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
 ```
 
-### Install in developer mode:
+### Installation for advanced users:
 
 This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
@@ -39,6 +39,8 @@ git clone https://github.com/jakobnissen/vamb -b master
 cd vamb
 pip install -e .
 ```
+
+If you can't/don't want to use pip, you can also
 
 # Running
 
