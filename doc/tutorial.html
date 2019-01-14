@@ -11784,7 +11784,7 @@ div#notebook {
 <p>3) Train a VAE wit the depths and TNF matrices, and encode it to a latent representation (module <code>encode</code>)</p>
 <p>4) Cluster the encoded inputs to metagenomic bins (modules <code>threshold</code> and <code>cluster</code>)</p>
 <p>Additionally, for developing and testing VAMB, we use:</p>
-<p>5) Benchmark the resulting bins against a gold standard using <code>benchmark</code></p>
+<p>5) Benchmark the resulting bins against a gold standard (module <code>benchmark</code>)</p>
 <p>In the following chapters of this walkthrough, we will go through each step in more detail from within the Python interpreter. We will show how to use Vamb by example, and what each step does, some of the theory behind the actions, and the different parameters that can be set. With this knowledge, you should be able to extend or alter the behaviour of Vamb more easily.</p>
 <p>For the examples, we will assume the following relevant prerequisite files exists in the directory <code>/home/jakni/Downloads/example/</code>:</p>
 <ul>
@@ -12296,7 +12296,7 @@ Shape of rpkms (39551, 6)
 <hr>
 <p>We can see (in the default value for the <code>subprocesses</code> argument) that the default number of parallel BAM-reading processes it will spawn is 4. This is because Python detected 4 threads on my laptop. In general, Vamb's default here is to use the number of availble threads, or 8 threads if more than 8 is detected, as the BAM-reading function will almost certainly become IO bound at more than 8 threads.</p>
 <p>As with the <code>vamb.parsecontigs.read_contigs</code> function, I don't care about the <code>minlength</code> argument, since our fasta file is already filtered. Again, I will re-iterate that filtering the FASTA file <em>before</em> mapping leads to the best results.</p>
-<p>The function ignores all alignments with alignment score less than <code>minscore</code> (as determined by the auxiliary <code>AS:i</code> field in the BAM file, which Vamb assumes is present if <code>minscore</code> is &gt; 0). Ideally, the user should construct the BAM files so that they only contain alignments that the user believes are true (i.e. set reasonable alignment and filtering criteria), however, in practice, many users will not know the importance of this, so by default, Vamb filters away any reads with an alignment score of less than 50 in order to mitigate the worst alignments.</p>
+<p>The function ignores all alignments with alignment score less than <code>minscore</code> (as determined by the auxiliary <code>AS:i</code> field in the BAM file, which Vamb assumes is present if <code>minscore</code> is not <code>None</code>). Ideally, the user should construct the BAM files so that they only contain alignments that the user believes are true (i.e. set reasonable alignment and filtering criteria), however, in practice, many users will not know the importance of this, so by default, Vamb filters away any reads with an alignment score of less than 50 in order to mitigate the worst alignments.</p>
 <p>Lastly, the argument <code>logfile</code> should be <code>None</code> or the filehandle of an opened, writeable file. If the latter, it will print status updates to the logfile.</p>
 <hr>
 <p>Now, I tend to be a bit <del>paranoid</del><sup>careful</sup>, so if I loaded in 500 GB of BAM files, I'd want to save the work I have now in case something goes wrong - and we're about to fire up the VAE so lots of things can go wrong.</p>
@@ -12437,8 +12437,7 @@ DESCRIPTION
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>KLD---
-First we create the VAE, then we create the dataloader and the mask. The dataloader normalizes the TNF such that the mean and standard deviation for each tetranucleotide across all contigs is 0 and 1, respectively, and normalizes the rpkm such that each contig sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
+<p>First we create the VAE, then we create the dataloader and the mask. The dataloader normalizes the TNF such that the mean and standard deviation for each tetranucleotide across all contigs (i.e. a column) is 0 and 1, respectively, and normalizes the rpkm such that each contig (i.e. a row) sums to 1. Furthermore, the dataloader shuffles the contigs at each epoch.</p>
 <p>The dataloader also discards all contigs where either the TNF vector or the depths vector is all zeros - we call these contigs <em>zero contigs</em>. The <code>mask</code> it returns is a boolean vector with <code>True</code> if a contig was kept, and <code>False</code> if it was discarded. We began with 39551 contigs, and the log above states that it was trained with 36485 contigs, implying that 39551 - 36485 = 3066 contigs were discarded.</p>
 <p>Here, we passed the default value <code>False</code> to the <code>destroy</code> keyword of <code>make_dataloader</code>. If this is set to <code>True</code>, the input arrays are normalized and masked in-place, modifying them. This saves one or two copies of the data, which can be critical for large array sizes.</p>
 <p>The VAE encodes the high-dimensional (n_samples + 136 features) input data in a lower dimensional space (nlatent features). When training, it learns an encoding scheme, with which it encodes the input data to a series of normal distributions, and a decoding scheme, in which it uses one value sampled from each normal distribution to reconstruct the input data.</p>
@@ -13077,7 +13076,7 @@ Number of bins after filtering: 136
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="summary"></a></p>
-<h2 id="Summary-of-full-workflow">Summary of full workflow<a class="anchor-link" href="#Summary-of-full-workflow">&#182;</a></h2><p>This is the full default workflow from beginning to end. The script <code>run.py</code> does essentially this, except with some logging &amp; deleting &amp; saving intermediate results to files.</p>
+<h2 id="Summary-of-full-workflow">Summary of full workflow<a class="anchor-link" href="#Summary-of-full-workflow">&#182;</a></h2><p>This is the full default workflow from beginning to end. Calling Vamb from command line does essentially this, except with some logging &amp; deleting &amp; saving intermediate results to files.</p>
 
 </div>
 </div>
@@ -13122,8 +13121,8 @@ Number of bins after filtering: 136
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><a id="memory"></a></p>
-<h2 id="Running-VAMB-with-low-memory-(RAM)">Running VAMB with low memory (RAM)<a class="anchor-link" href="#Running-VAMB-with-low-memory-(RAM)">&#182;</a></h2><p>In the VAMB software, a series of tradeoffs can be taken to decrease RAM consumption, usually to the detriment of some other property like speed or convenience. With all of those tradeoffs taken, VAMB is relatively memory efficient. By default, several of these tradeoffs are are not taken when running from a Python interpreter, however they are all enabled when running VAMB with the <code>run.py</code> script.</p>
-<p>The memory consumption of the encoding step is usually the bottleneck. With all memory-saving options enabled, this uses approximately $5*N_{contigs}*(136+N_{latent}+N_{samples})$ bytes, including overhead. As a rule of thumb, if you don't have at least two times that amount of memory, you might want to enable some or all of these memory optimizations.</p>
+<h2 id="Running-VAMB-with-low-memory-(RAM)">Running VAMB with low memory (RAM)<a class="anchor-link" href="#Running-VAMB-with-low-memory-(RAM)">&#182;</a></h2><p>In the VAMB software, a series of tradeoffs can be taken to decrease RAM consumption, usually to the detriment of some other property like speed or convenience. With all of those tradeoffs taken, VAMB is relatively memory efficient. By default, several of these tradeoffs are are not taken when running from a Python interpreter, however they are all enabled when running VAMB from command line.</p>
+<p>The memory consumption of the encoding step is usually the bottleneck. With all memory-saving options enabled, this uses approximately $5*N_{contigs}*(136+N_{latent}+N_{samples})$ bytes, including overhead. As a rule of thumb, if you don't have at least three times that amount of memory, you might want to enable some or all of these memory optimizations.</p>
 <p>Here's a short list of all the available memory saving options:</p>
 <ul>
 <li>When using <code>vamb.parsecontigs.read_contigs</code>, set the <code>preallocate</code> keyword to <code>True</code>. This doubles the time spent in the function, but significantly reduces RAM usage during this step.</li>
