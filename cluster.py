@@ -116,15 +116,11 @@ def _cluster(matrix, labels, threshold, max_steps):
     # will never be present in any other cluster anyway.
     seed = 0
     keepmask = _np.ones(len(matrix), dtype=_np.bool)
-    indices = _np.arange(len(matrix), dtype=_np.uint32)
+    indices = _np.random.RandomState(0).permutation(len(matrix))
 
-    # Shuffle matrix and labels in unison. Not reproducible if using Numpy RNG
-    # when the two arrays have different dimensions.
-    rng = _random.Random(0)
-    state = rng.getstate()
-    rng.shuffle(matrix)
-    rng.setstate(state)
-    rng.shuffle(indices)
+    # Shuffle matrix in order to prevent seed bias. `indices` keep track of
+    # which row is which.
+    matrix = matrix[indices]
 
     while len(matrix) > 0:
         # Find medoid using iterative sampling function above
