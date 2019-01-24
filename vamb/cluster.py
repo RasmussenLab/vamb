@@ -295,7 +295,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
             print(wn.format(error.args[0]), file=warningfile)
             threshold = 0.08
 
-    return labels, threshold
+    return threshold
 
 def cluster(matrix, labels=None, threshold=None, maxsteps=25,
             normalized=False, nsamples=2500, maxsize=2500, cuda=False, logfile=None):
@@ -327,7 +327,7 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
     if not normalized:
         _vambtools.zscore(matrix, axis=1, inplace=True)
 
-    labels, threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
+    threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
 
     if cuda:
         tensor = _torch.from_numpy(matrix)

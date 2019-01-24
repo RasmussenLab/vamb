@@ -105,12 +105,16 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
+def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
-    clusteriterator = vamb.cluster.cluster(latent, labels=contignames,
-                                           logfile=logfile, destroy=True)
+    log('Max clusters: {}'.format(max_clusters), logfile, 1)
+    log('Min cluster size: {}'.format(minclustersize), logfile, 1)
+    log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
+    print('', file=logfile)
+
+    clusteriterator = vamb.cluster.cluster(latent, labels=contignames, cuda=cuda, logfile=logfile)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
         clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile,
@@ -118,6 +122,7 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile):
                                                               max_clusters=maxclusters,
                                                               min_size=minclustersize)
 
+    print('', file=logfile)
     log('Clustered {} contigs in {} bins.'.format(ncontigs, clusternumber), logfile, 1)
 
     clusterdonetime = time.time()
@@ -147,7 +152,7 @@ def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesse
     contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, maxclusters, minclustersize, logfile)
+    cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logfile)
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
