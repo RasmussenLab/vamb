@@ -319,10 +319,8 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
     # It would be nice if this could be done inplace, however Numpy.shuffle
     # does not produce same results for 1D and 2D arrays, and random.shuffle does
     # not work for 2D arrays.
-    randomindices = _np.random.RandomState(0).permutation(len(matrix))
+    indices = _np.random.RandomState(0).permutation(len(matrix))
     matrix = matrix[randomindices]
-    indices = _np.arange(len(matrix))[randomindices]
-    del randomindices
 
     if not normalized:
         _vambtools.zscore(matrix, axis=1, inplace=True)

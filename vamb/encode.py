@@ -63,11 +63,14 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     if tnf.shape[1] != 136:
         raise ValueError('TNF must be 136 long along axis 1')
 
-    tnfsum = tnf.sum(axis=1)
-    mask = tnfsum != 0
-    del tnfsum
-    depthssum = rpkm.sum(axis=1)
-    mask &= depthssum != 0
+    mask = tnf.sum(axis=1) != 0
+
+    # If multiple samples, also include nonzero depth as requirement for accept
+    # of sequences
+    if rpkm.shape[1] > 1:
+        depthssum = rpkm.sum(axis=1)
+        mask &= depthssum != 0
+        depthssum = depthssum[mask]
 
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
@@ -82,10 +85,13 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         rpkm = rpkm[mask].astype(_np.float32, copy=False)
         tnf = tnf[mask].astype(_np.float32, copy=False)
 
-    depthssum = depthssum[mask]
+    # If multiple samples, normalize to sum to 1, else zscore normalize
+    if rpkm.shape[1] > 1:
+        rpkm /= depthssum.reshape((-1, 1))
+    else:
+        _vambtools.zscore(rpkm, axis=0, inplace=True)
 
     # Normalize arrays and create the Tensors
-    rpkm /= depthssum.reshape((-1, 1))
     _vambtools.zscore(tnf, axis=0, inplace=True)
     depthstensor = _torch.from_numpy(rpkm)
     tnftensor = _torch.from_numpy(tnf)
@@ -212,8 +218,12 @@ class VAE(_nn.Module):
         reconstruction = self.outputlayer(tensor)
 
         # Decompose reconstruction to depths and tnf signal
-        depths_out = _F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
+        depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, 136)
+
+        # If multiple samples, apply softmax
+        if self.nsamples > 1:
+            depths_out = _F.softmax(depths_out, dim=1)
 
         return depths_out, tnf_out
 
@@ -226,11 +236,16 @@ class VAE(_nn.Module):
         return depths_out, tnf_out, mu, logsigma
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
-        ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
+        # If multiple samples, use cross entropy, else use SSE for abundance
+        if self.nsamples > 1:
+            ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
+            ce_weight = (1 - self.alpha) / _log(self.nsamples)
+        else:
+            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
+            ce_weight = 1 - self.alpha
+
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-
-        ce_weight = (1 - self.alpha) / _log(self.nsamples)
         sse_weight = self.alpha / 136
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
