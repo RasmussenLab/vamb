@@ -267,6 +267,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
     if matrix.dtype != _np.float32:
         raise ValueError('Matrix must be of data type np.float32')
 
+    # Automatically estimate threshold if None is given
     if threshold is None:
         if len(matrix) < nsamples and threshold is None:
             raise ValueError('Cannot estimate from less than nsamples contigs')
@@ -297,7 +298,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
 
     return threshold
 
-def cluster(matrix, labels=None, threshold=None, maxsteps=25,
+def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
             normalized=False, nsamples=2500, maxsize=2500, cuda=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
@@ -306,6 +307,7 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
         labels: None or Numpy array/list with labels for seqs [None = indices+1]
         threshold: Pearson distance "radius" of output clusters. [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
+        destroy: Save memory by destroying matrix while clustering [False]
         normalized: Matrix is already zscore-normalized across axis 1 [False]
         nsamples: Estimate threshold from N samples [2500]
         maxsize: Discard sample if more than N contigs are within threshold [2500]
@@ -314,13 +316,13 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25,
 
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
     """
+    if not destroy:
+        matrix = matrix.copy()
 
-    # Shuffle matrix and labels in unison to prevent seed sampling bias.
-    # It would be nice if this could be done inplace, however Numpy.shuffle
-    # does not produce same results for 1D and 2D arrays, and random.shuffle does
-    # not work for 2D arrays.
+    # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
+    # track of which points are which
+    _np.random.RandomState(0).shuffle(matrix)
     indices = _np.random.RandomState(0).permutation(len(matrix))
-    matrix = matrix[randomindices]
 
     if not normalized:
         _vambtools.zscore(matrix, axis=1, inplace=True)
@@ -353,11 +355,12 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
     if not hasattr(filehandle, 'writable') or not filehandle.writable():
         raise ValueError('Filehandle must be a writable file')
 
-    if iter(clusters) is not clusters: # Is True if clusters is not iterator
+    # If clusters is not iterator it must be a dict - transform it to iterator
+    if iter(clusters) is not clusters:
         clusters = clusters.items()
 
     if max_clusters is not None and max_clusters < 1:
-        raise ValueError('max_clusters must be at least 1.')
+        raise ValueError('max_clusters must None or at least 1.')
 
     if header is not None and len(header) > 0:
         if '\n' in header:
