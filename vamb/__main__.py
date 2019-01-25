@@ -109,7 +109,7 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logf
     begintime = time.time()
 
     log('\nClustering', logfile)
-    log('Max clusters: {}'.format(max_clusters), logfile, 1)
+    log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
     print('', file=logfile)
@@ -132,7 +132,6 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logf
 def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
          batchsteps, minclustersize, maxclusters, logfile):
-    # Print starting vamb version ...
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
