@@ -85,6 +85,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     dataloader, mask = vamb.encode.make_dataloader(rpkms, tnfs, batchsize,
                                                    destroy=True, cuda=cuda)
     log('Created dataloader and mask', logfile, 1)
+    vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
     n_discarded = len(mask) - mask.sum()
     log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
     log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
