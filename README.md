@@ -9,19 +9,9 @@ For more information on the background, context, and theory of Vamb, read [our p
 For more information about the implementation, methodological considerations, future directions, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
-
-Vamb requires Python v. >= 3.5 and the following packages to run:
-
-* PyTorch
-* Numpy
-* pysam
-* Cython
-
-So make sure you have those installed before you install Vamb.
+Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient version (v. < 9).
 
 ### Installation for casual users:
-
-This is for users who don't want to edit or view the source code:
 
 ```
 pip install -U https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
@@ -32,7 +22,7 @@ pip install -U https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
 This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
 ```
-# clone the desired branch from the repository
+# clone the desired branch from the repository, here master
 git clone https://github.com/jakobnissen/vamb -b master
 
 # dev install
@@ -40,33 +30,29 @@ cd vamb
 pip install -e .
 ```
 
-If you can't/don't want to use pip, you can also
+### Installing by compiling the Cython yourself
+
+If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` using Cython and move the resulting executable to the inner vamb directory. You can then run by invoking the Python interpreter shown below.
 
 # Running
 
-After installation, you can run with either:
+After installation, you can run by passing the package to the Python interpreter:
 
 ```
 python3 -m vamb
 ```
 
-Which is useful if you want to specify which Python executable to use, or you can simply do:
+Which is useful if you want to specify which Python executable to use. If you've installed with pip, you can start Vamb by simply typing:
 
 ```
 vamb
-```
-
-To run Vamb with default parameters:
-
-```
-vamb outdir contigs.fna path/to/bamfiles/*.bam
 ```
 
 # Inputs and outputs
 
 ### Inputs
 
-Like other metagenomic binners, Vamb relies on two properties of the DNA sequences to be binned:
+Vamb relies on two properties of the DNA sequences to be binned:
 
 * The kmer-composition of the sequence (here tetranucleotide frequency, *TNF*) and
 * The abundance of the contigs in each sample (the *depth* or the *RPKM*).
@@ -115,9 +101,9 @@ We have used BWA MEM for mapping, fully aware that it is not well suited for met
 
 # Troubleshooting
 
-__Importing Vamb raises a RuntimeWarning that the compiletime version is wrong__
+__Installation: Compilation fails on Arch Linux in a Conda environment__
 
-Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as Vamb can run just fine despite it.
+This is a known issue affecting multiple (all?) Cython-dependent packages at the moment of writing (2019-01-25). There is no easy fix. [Link to pacman issue](https://bbs.archlinux.org/viewtopic.php?id=242682).
 
 ### Parsing the FASTA file
 
