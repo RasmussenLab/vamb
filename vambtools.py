@@ -240,7 +240,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
         else:
             # Check for un-parsable characters in the sequence
-            stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
+            stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
