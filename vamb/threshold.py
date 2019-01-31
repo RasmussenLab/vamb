@@ -63,8 +63,6 @@ NBINS = 400
 FENCEPOSTS = np.linspace(0, 1, NBINS + 1)
 DIFFXS = np.linspace(1.5*(1/NBINS), 1-0.5*(1/NBINS), NBINS - 1)
 
-
-
 class TooLittleData(Exception):
     pass
 

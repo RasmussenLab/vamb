@@ -105,6 +105,12 @@ def _filter_segments(segmentiterator, minscore):
     """
 
     for alignedsegment in segmentiterator:
+        # Must be mapped, not secondary and not supplementary alignment.
+        # Why not secondary/suppl alignment? Because then I'd have to keep track
+        # of where each read aligned to and divide by total number of alignments
+        # for each individual read. Possible, but slow and RAM-hungry.
+        if alignedsegment.flag & 0x904 != 0:
+            continue
         if minscore is not None and alignedsegment.get_tag('AS') < minscore:
             continue
 
