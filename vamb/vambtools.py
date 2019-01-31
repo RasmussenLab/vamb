@@ -134,6 +134,8 @@ class FastaEntry:
     def __init__(self, header, sequence):
         if header[0] in ('>', '#') or header[0].isspace():
             raise ValueError('Header cannot begin with #, > or whitespace')
+        if '\t' in header:
+            raise ValueError('Header cannot contain a tab')
 
         self.header = header
         self.sequence = bytearray(sequence)
@@ -149,27 +151,6 @@ class FastaEntry:
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
         return '>{}\n{}'.format(self.header, spacedseq)
 
-    # Two entries with same header cannot co-exist in same set/dict!
-    def __hash__(self):
-        return hash(self.header)
-
-    def __contains__(self, other):
-        if isinstance(other, str):
-            return other.encode() in self.sequence
-
-        elif isinstance(other, bytes) or isinstance(other, bytearray):
-            return other in self.sequence
-
-        else:
-            raise TypeError('Can only compare to str, bytes or bytearray')
-
-    # Entries are compared equal by their sequence.
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.sequence == other.sequence
-        else:
-            raise TypeError('Cannot compare to object of other class')
-
     def __getitem__(self, index):
         return self.sequence[index]
 
@@ -183,8 +164,6 @@ class FastaEntry:
 
     def fourmer_freq(self):
         return _fourmerfreq(self.sequence)
-
-
 
 def byte_iterfasta(filehandle, comment=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
@@ -200,7 +179,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
     Output: Generator of FastaEntry-objects from file
     """
 
-    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvSWKMYRBDHVn',
+    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
                                b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
 
     # Skip to first header
@@ -216,7 +195,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
             else:
                 raise ValueError('First non-comment line is not a Fasta header')
 
-        else: # nobreak
+        else: # no break
             raise ValueError('Empty or outcommented file')
 
     except TypeError:
@@ -240,12 +219,11 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
         else:
             # Check for un-parsable characters in the sequence
-            stripped = line.translate(None, delete=b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
+            stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN\n')
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
                                                                          bad_character))
-
             masked = line[:-1].translate(linemask)
             buffer.append(masked)
 
@@ -274,8 +252,6 @@ def loadfasta(byte_iterator, keep=None, comment=b'#'):
 
     return entries
 
-
-
 def write_bins(directory, bins, fastadict, maxbins=250):
     """Writes bins as FASTA files in a directory, one file per bin.
 
@@ -289,7 +265,9 @@ def write_bins(directory, bins, fastadict, maxbins=250):
     Output: None
     """
 
-    # Safety measure so someone doesn't accidentally make 5000 tiny bins
+    # Safety measure so someone doesn't accidentally make 50000 tiny bins
+    # If you do this on a compute cluster it can grind the entire cluster to
+    # a halt and piss people off like you wouldn't believe.
     if len(bins) > maxbins:
         raise ValueError('Bins exceed maxbins')
 
