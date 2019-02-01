@@ -1,27 +1,38 @@
 """
 The approach to benchmarking is this:
 
-The reference is given as a list of contignames, each with a genome and a start
-and end position, for where the contig is located on the genome.
+Most fundamentally, we have a Contig. A contig is associated with a Genome, where
+it comes from and aligns to. It thus has a start and end position in that Genome.
+A set of contigs has a breadth. This is the number of basepairs covered by the
+contigs.
 
-For each genome, the length is calculated as the number of basepairs
-covered by at least one contig. Thus, any uncovered positions are not counted.
+A Genome has a length, and a set of contigs. These contigs need not cover the
+entire length of the genome.
 
-The observed is created with a set of bins, each bin being a set of contignames.
-The length of a bin is the number of basepairs covered by the contigs, given that
-their location is given by the Reference. Thus, a bin can contain contigs mapping
-to different genomes, in which case the length is the sum of the bases covered in
-each genome.
+A set of Genomes constitute a Reference.
 
-Each bin (in the observed) is then compared to each genome (in the reference).
-For a bin/genome pair, the "intersection" is the number of basepairs in the
-genome covered by both a reference contig and an observed contig.
-The recall is thus intersection/genome_length, and precision is
-intersection/bin_length.
+A Binning is a collection of sets of contigs, each set representing a bin. It is
+required that all contigs in a Binning comes from Genomes in the same Reference.
+A bin's breadth is the total basepairs covered by the contigs of a bin, but since
+the contigs of a bin may come from multiple Genomes, the bin breadth is the sum
+of these per-Genome breadths.
+The breadth of a Binning is the sum of breadths of each bin. This implies that the
+breadth of a Binning can exceed the total length of all the underlying Genomes.
 
-The benchmark consists of counting how many genomes have at least one observed
-bin which surpasses a given recall and threshold. Thus, an observed bin can be
-counted twice, but not a genome.
+A BenchMarkResult comes from applying an Binning to a Reference. When doing so,
+each bin is compared to each Genome. For each pair, the following base stats
+are calculated:
+* True positives (TP) is the breadth of the Genome covered by contigs in the bin
+* False positives (FP) is the bin breadth minus TP
+* False negatives (FN) is the Genome length minus TP
+* True negatives (TN) is the Binning breadth minus TP+FP+FN
+
+From these values, the recall, precision, Matthew's correlation coefficient (MCC)
+and F1 statistics are calculated.
+
+Since each genome has a set of statistics for each bin, the MCC or F1 of a genome
+is the maximal MCC or F1 among all bins.  The mean MCC or F1 is then the mean of
+these maximal MCCs or F1.
 """
 
 import collections as _collections
@@ -33,15 +44,15 @@ Contig = _collections.namedtuple('Contig', ['name', 'start', 'end'])
 
 class Genome:
     """A set of clusters known to come from the same organism.
-    >>> genome = Genome('E. coli')
+    >>> genome = Genome('E. coli', 4500000)
     >>> genome.add(Contig)
     """
-    __slots__ = ['name', 'contigs', 'length']
+    __slots__ = ['name', 'length', 'contigs']
 
-    def __init__(self, name):
+    def __init__(self, name, length):
         self.name = name
+        self.length = length
         self.contigs = set()
-        self.length = 0
 
     def add(self, contig):
         self.contigs.add(contig)
@@ -51,20 +62,16 @@ class Genome:
         return len(self.contigs)
 
     @staticmethod
-    def getlength(contigs):
+    def breadth(contigs):
         "This calculates the total number of bases covered at least 1x."
 
         sorted_contigs = sorted(contigs, key=lambda contig: contig.start)
         rightmost_end = float('-inf')
-        length = 0
+        breadth = 0
         for contig_name, start, end in sorted_contigs:
-            length += max(end, rightmost_end) - max(start, rightmost_end)
+            breadth += max(end, rightmost_end) - max(start, rightmost_end)
             rightmost_end = max(end, rightmost_end)
-        return length
-
-    def update(self):
-        "This updates the length attribute of a Genome"
-        self.length = self.getlength(self.contigs)
+        return breadth
 
     def __repr__(self):
         return 'Genome({}, ncontigs={}, length={})'.format(self.name, self.ncontigs, self.length)
@@ -81,7 +88,6 @@ class Reference:
     self.genome: {genome_name: genome} dict
     self.contigs: {contig_name: contig} dict
     self.genomeof: {contig_name: genome} dict
-    self.length: Total length of all genomes
     self.ngenomes
     self.ncontigs
     """
@@ -90,18 +96,16 @@ class Reference:
     def __init__(self, genomes):
         self.genomes = dict() # genome_name : genome dict
         self.contigs = dict() # contig_name : contig dict
-        self.genomeof = dict() # contig_name : genome dict
-        self.length = 0
+        self.genomeof = dict() # contig : genome dict
 
         for genome in genomes:
-            self.length += genome.length
             self.genomes[genome.name] = genome
             for contig in genome.contigs:
                 if contig.name in self.contigs:
                     raise KeyError("Contig name '{}' multiple times in Reference.".format(contig.name))
 
                 self.contigs[contig.name] = contig
-                self.genomeof[contig.name] = genome
+                self.genomeof[contig] = genome
 
     @property
     def ngenomes(self):
@@ -123,54 +127,47 @@ class Reference:
         """
 
         genomes = dict()
-        contig_names = set()
-
         for line in filehandle:
             # Skip comments
             if line.startswith('#'):
                 continue
 
-            contig_name, genome_name, start, end = line[:-1].split('\t')
-            contig_names.add(contig_name)
-
+            contig_name, genome_name, genome_size, start, end = line[:-1].split('\t')
             start = int(start)
             end = int(end) + 1 # semi-open interval used in internals, like range()
+            genome_size = int(genome_size)
             contig = Contig(contig_name, start, end)
-
             genome = genomes.get(genome_name)
             # Create a new Genome if we have not seen it before
             if genome is None:
-                genome = Genome(genome_name)
+                genome = Genome(genome_name, genome_size)
                 genomes[genome_name] = genome
             genome.add(contig)
-
-        # Update lengths of the genomes
-        for genome in genomes.values():
-            genome.update()
 
         # Construct instance
         return cls(genomes.values())
 
-class Observed:
+class Binning:
     """A set of bins, each being a set of contigs, as produced by a binner.
     This must be instantiated with a `contigsof` dict and a Reference.
     A `contigsof` dict is a {bin_name: {contig_names} ...} dict
 
     Properties:
+    self.reference: The Reference this is instantiated with
     self.contigsof: {bin_name: {contigs ... }} dict
     self.binof: {contig: bin_name} dict
-    self.bin_length = {bin_name: length} dict
-    self.length: length of all bins combined
+    self.breadthof: {bin_name: breadth} dict
+    self.breadth: Sum of breadths of each bin
     self.nbins
     self.ncontigs
     """
 
     # Instantiate with a {bin_name: {contig_names}} dict and Reference
     def __init__(self, contigsof, reference, checkpresence=True):
+        self.reference = reference
         self.contigsof = dict() # bin_name: {contigs} dict
         self.binof = dict() # contig: bin_name dict
-        self.bin_length = dict() # bin_name: int dict
-        self.length = 0
+        self.breadthof = dict() # bin_name: int dict
 
         for bin_name, contig_names in contigsof.items():
             contigset = set()
@@ -198,13 +195,14 @@ class Observed:
 
             self.contigsof[bin_name] = contigset
 
-            # Now calculate length of bin. This is the sum of the number of covered
+            # Now calculate breadth of bin. This is the sum of the number of covered
             # base pairs for all the genomes present in the bin.
-            bin_length = 0
+            breadth = 0
             for contigs in contigsof_genome.values():
-                bin_length += Genome.getlength(contigs)
-            self.bin_length[bin_name] = bin_length
-            self.length += bin_length
+                breadth += Genome.breadth(contigs)
+            self.breadthof[bin_name] = breadth
+
+        self.breadth = sum(self.breadthof.values())
 
     @property
     def nbins(self):
@@ -215,7 +213,7 @@ class Observed:
         return len(self.binof)
 
     def __repr__(self):
-        return 'Observed(nbins={}, ncontigs={})'.format(self.nbins, self.ncontigs)
+        return 'Binning(nbins={}, ncontigs={})'.format(self.nbins, self.ncontigs)
 
     @classmethod
     def from_file(cls, filehandle, reference):
@@ -235,17 +233,17 @@ class Observed:
         return cls(contigsof, reference)
 
 class BenchMarkResult:
-    """The result of an Observed applied to a Reference.
-    >>> ref, obs
-    (Reference(ngenomes=2, ncontigs=5), Observed(nbins=2, ncontigs=4))
-    >>> benchmark = BenchMarkResult(ref, obs)
-    BenchMarkResult(referenceID=0x7fe908180898, observedID=0x7fe908180be0)
+    """The result of an Binning applied to a Reference.
+    >>> ref, bins
+    (Reference(ngenomes=2, ncontigs=5), Binning(nbins=2, ncontigs=4))
+    >>> benchmark = BenchMarkResult(ref, bins)
+    BenchMarkResult(ReferenceID=0x7fe908180898, BinningID=0x7fe908180be0)
     >>> benchmark[0.6, 0.9] # 0.6 recall, 0.9 precision
     1
 
     Properties:
     self.reference: Reference object of this benchmark
-    self.observed: Observed object of this benchmark
+    self.binning: Binning object of this benchmark
     self.recalls: sorted tuple of recall thresholds
     self.precisions: sorted tuple of precision thresholds
     self.intersectionsof: {genome: {bin_name: intersection,  ...}} dict
@@ -255,27 +253,33 @@ class BenchMarkResult:
 
     def _iter_intersections(self, genome):
         """Given a genome, return a generator of (bin_name, intersection) for
-        all observed bins with a nonzero recall and precision.
+        all binning bins with a nonzero recall and precision.
         """
-        # Get set of all observed bin names with contigs from that genome
-        bin_names = {self.observed.binof.get(contig) for contig in genome.contigs}
+        # Get set of all binning bin names with contigs from that genome
+        bin_names = {self.binning.binof.get(contig) for contig in genome.contigs}
         bin_names.discard(None)
 
         for bin_name in bin_names:
-            intersecting_contigs = genome.contigs.intersection(self.observed.contigsof[bin_name])
-            intersection = Genome.getlength(intersecting_contigs)
+            intersecting_contigs = genome.contigs.intersection(self.binning.contigsof[bin_name])
+            intersection = Genome.breadth(intersecting_contigs)
             yield bin_name, intersection
+
+    def confusion_matrix(self, genome, bin_name):
+        true_positives = self.intersectionsof[genome][bin_name]
+        false_positives = self.binning.breadthof[bin_name] - true_positives
+        false_negatives = genome.length - true_positives
+        true_negatives = self.binning.breadth - true_positives - false_negatives - false_positives
+
+        return true_positives, true_negatives, false_positives, false_negatives
 
     def mcc(self, genome):
         "Get the best MCC for the given genome"
         maxmcc = 0 # default value of 0 for un-reconstructed genomes
-        for bin_name, true_pos in self.intersectionsof[genome].items():
-            false_pos = self.observed.bin_length[bin_name] - true_pos
-            false_neg = genome.length - true_pos
-            true_neg = self.reference.length - true_pos - false_neg - false_pos
-            mcc_num = true_pos * true_neg - false_pos * false_neg
-            mcc_den = (true_pos + false_pos) * (true_pos + false_neg)
-            mcc_den *= (true_neg + false_pos) * (true_neg + false_neg)
+        for bin_name in self.intersectionsof[genome]:
+            tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+            mcc_num = tp * tn - fp * fn
+            mcc_den = (tp + fp) * (tp + fn)
+            mcc_den *= (tn + fp) * (tn + fn)
             mcc = 0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
             maxmcc = max(mcc, maxmcc)
 
@@ -284,26 +288,24 @@ class BenchMarkResult:
     def f1(self, genome):
         "Get the best F1 score for the given genome"
         maxf1 = 0
-        for bin_name, true_pos in self.intersectionsof[genome].items():
-            false_pos = self.observed.bin_length[bin_name] - true_pos
-            false_neg = genome.length - true_pos
-            f1 = 2*true_pos / (2*true_pos + false_pos + false_neg)
+        for bin_name in self.intersectionsof[genome]:
+            tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+            f1 = 2*tp / (2*tp + fp + fn)
             maxf1 = max(f1, maxf1)
 
         return maxf1
 
-
-    def __init__(self, reference, observed, recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS):
+    def __init__(self, reference, binning, recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS):
         if not isinstance(reference, Reference):
             raise ValueError('reference must be a Reference')
 
-        if not isinstance(observed, Observed):
-            raise ValueError('observed must be a Observed')
+        if not isinstance(binning, Binning):
+            raise ValueError('binning must be a Binning')
 
         self.precisions = tuple(sorted(precisions))
         self.recalls = tuple(sorted(recalls))
         self.reference = reference
-        self.observed = observed
+        self.binning = binning
         # counts[r,p] is number of genomes w. recall >= r, precision >= p
         counts = _collections.Counter()
         # intersectionsof[genome_name] = [(bin_name, recall, precision) ... ]
@@ -317,16 +319,12 @@ class BenchMarkResult:
         self.intersectionsof = intersectionsof
 
         # Calculate MCC score
-        mccs = list()
-        for genome in reference.genomes.values():
-            mccs.append(self.mcc(genome))
+        mccs = [self.mcc(genome) for genome in reference.genomes.values()]
         self.mean_mcc = 0 if len(mccs) == 0 else sum(mccs) / len(mccs)
         del mccs
 
         # Calculate F1 scores
-        f1s = list()
-        for genome in reference.genomes.values():
-            f1s.append(self.f1(genome))
+        f1s = [self.f1(genome) for genome in reference.genomes.values()]
         self.mean_f1 = 0 if len(f1s) == 0 else sum(f1s) / len(f1s)
         del f1s
 
@@ -337,9 +335,10 @@ class BenchMarkResult:
             found = [False]*(len(self.recalls) * len(self.precisions))
 
             thresholds = list() # save to list to cache them for multiple iterations
-            for bin_name, intersection in self.intersectionsof[genome].items():
-                recall = intersection / genome.length
-                precision = intersection / observed.bin_length[bin_name]
+            for bin_name in self.intersectionsof[genome]:
+                tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+                recall = tp / (tp + fn)
+                precision = tp / (tp + fp)
                 thresholds.append((recall, precision))
 
             for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
@@ -365,8 +364,8 @@ class BenchMarkResult:
 
     def __repr__(self):
         refhex = hex(id(self.reference))
-        obshex = hex(id(self.observed))
-        return 'BenchMarkResult(referenceID={}, observedID={})'.format(refhex, obshex)
+        binhex = hex(id(self.binning))
+        return 'BenchMarkResult(ReferenceID={}, BinningID={})'.format(refhex, binhex)
 
     def __getitem__(self, key):
         recall, precision = key
