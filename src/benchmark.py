@@ -1,38 +1,59 @@
-"""
-The approach to benchmarking is this:
+# The approach to benchmarking is this:
+#
+# Most fundamentally, we have a Contig. A contig is associated with a subject, where
+# it comes from and aligns to. It thus has a start and end position in that subject.
+# A set of contigs has a breadth. This is the number of basepairs covered by the
+# contigs.
+#
+# A Genome is simply a collection of contigs. A set of Genomes constitute a Reference.
+#
+# A Binning is a collection of sets of contigs, each set representing a bin. It is
+# required that all contigs in a Binning comes from Genomes in the same Reference.
+# A bin's breadth is the total basepairs covered by the contigs of a bin, but since
+# the contigs of a bin may come from multiple Genomes, the bin breadth is the sum
+# of these per-Genome breadths.
+# The breadth of a Binning is the sum of breadths of each bin. This implies that the
+# breadth of a Binning can exceed the total length of all the underlying Genomes.
+#
+# When creating a Binning, for each genome/bin pair, the following base statistics
+# are calculated:
+# * True positives (TP) is the breadth of the Genome covered by contigs in the bin
+# * False positives (FP) is the bin breadth minus TP
+# * False negatives (FN) is the Genome length minus TP
+# * True negatives (TN) is the Binning breadth minus TP+FP+FN
+#
+# From these values, the recall, precision, Matthew's correlation coefficient (MCC)
+# and F1 statistics are calculated.
+#
+# Since each genome has a set of statistics for each bin, the MCC or F1 of a genome
+# is the maximal MCC or F1 among all bins.  The mean MCC or F1 is then the mean of
+# these maximal MCCs or F1.
 
-Most fundamentally, we have a Contig. A contig is associated with a Genome, where
-it comes from and aligns to. It thus has a start and end position in that Genome.
-A set of contigs has a breadth. This is the number of basepairs covered by the
-contigs.
+__doc__ = """Benchmark script
 
-A Genome has a length, and a set of contigs. These contigs need not cover the
-entire length of the genome.
+This benchmarks bins using number of covered sites.
 
-A set of Genomes constitute a Reference.
+First, a Reference is needed. This can be generated from a tab-separated file:
+contigname    genomename    subjectname    start    end
 
-A Binning is a collection of sets of contigs, each set representing a bin. It is
-required that all contigs in a Binning comes from Genomes in the same Reference.
-A bin's breadth is the total basepairs covered by the contigs of a bin, but since
-the contigs of a bin may come from multiple Genomes, the bin breadth is the sum
-of these per-Genome breadths.
-The breadth of a Binning is the sum of breadths of each bin. This implies that the
-breadth of a Binning can exceed the total length of all the underlying Genomes.
+Where "contigname" is the name of the binned contig, which belongs to genome
+"genomename", and aligns to the reference contig "subjectname" at positions
+"start"-"end", both inclusive.
 
-A BenchMarkResult comes from applying an Binning to a Reference. When doing so,
-each bin is compared to each Genome. For each pair, the following base stats
-are calculated:
-* True positives (TP) is the breadth of the Genome covered by contigs in the bin
-* False positives (FP) is the bin breadth minus TP
-* False negatives (FN) is the Genome length minus TP
-* True negatives (TN) is the Binning breadth minus TP+FP+FN
+You also need a file with the binning. This is simply the clusters.tsv file
+as produced by Vamb, i.e. first column is the name of the bin of a contig,
+second column the name of the contig.
 
-From these values, the recall, precision, Matthew's correlation coefficient (MCC)
-and F1 statistics are calculated.
+Recall of a genome/bin pair is defined as the number of bases in that genome
+covered by contigs in the bin divided by the number of bases covered in that
+genome from all bins total. Precision is the number of bases in that genome
+covered by contigs in the bin divided by the number of bases covered in any
+genome from that bin.
 
-Since each genome has a set of statistics for each bin, the MCC or F1 of a genome
-is the maximal MCC or F1 among all bins.  The mean MCC or F1 is then the mean of
-these maximal MCCs or F1.
+Usage:
+>>> ref = Reference.from_file(open_reference_file_hande)
+>>> bins = Binning.from_file(open_clusters_file_handle, ref)
+>>> bins.print_matrix()
 """
 
 import collections as _collections
@@ -40,18 +61,17 @@ from itertools import product as _product
 import sys as _sys
 from math import sqrt as _sqrt
 
-Contig = _collections.namedtuple('Contig', ['name', 'start', 'end'])
+Contig = _collections.namedtuple('Contig', ['name', 'subject', 'start', 'end'])
 
 class Genome:
     """A set of clusters known to come from the same organism.
-    >>> genome = Genome('E. coli', 4500000)
-    >>> genome.add(Contig)
+    >>> genome = Genome('E. coli')
+    >>> genome.add(contig)
     """
-    __slots__ = ['name', 'length', 'contigs']
+    __slots__ = ['name', 'breadth', 'contigs']
 
-    def __init__(self, name, length):
+    def __init__(self, name):
         self.name = name
-        self.length = length
         self.contigs = set()
 
     def add(self, contig):
@@ -62,19 +82,28 @@ class Genome:
         return len(self.contigs)
 
     @staticmethod
-    def breadth(contigs):
-        "This calculates the total number of bases covered at least 1x."
+    def getbreadth(contigs):
+        "This calculates the total number of bases covered at least 1x in ANY Genome."
+        bysubject = _collections.defaultdict(list)
+        for contig in contigs:
+            bysubject[contig.subject].append(contig)
 
-        sorted_contigs = sorted(contigs, key=lambda contig: contig.start)
-        rightmost_end = float('-inf')
         breadth = 0
-        for contig_name, start, end in sorted_contigs:
-            breadth += max(end, rightmost_end) - max(start, rightmost_end)
-            rightmost_end = max(end, rightmost_end)
+        for contiglist in bysubject.values():
+            contiglist.sort(key=lambda contig: contig.start)
+            rightmost_end = float('-inf')
+
+            for contig_name, subject, start, end in contiglist:
+                breadth += max(end, rightmost_end) - max(start, rightmost_end)
+                rightmost_end = max(end, rightmost_end)
+
         return breadth
 
+    def update(self):
+        self.breadth = self.getbreadth(self.contigs)
+
     def __repr__(self):
-        return 'Genome({}, ncontigs={}, length={})'.format(self.name, self.ncontigs, self.length)
+        return 'Genome({}, ncontigs={}, breadth={})'.format(self.name, self.ncontigs, self.breadth)
 
 class Reference:
     """A set of Genomes known to represent the ground truth for binning.
@@ -132,77 +161,45 @@ class Reference:
             if line.startswith('#'):
                 continue
 
-            contig_name, genome_name, genome_size, start, end = line[:-1].split('\t')
+            contig_name, genome_name, subject, start, end = line[:-1].split('\t')
             start = int(start)
             end = int(end) + 1 # semi-open interval used in internals, like range()
-            genome_size = int(genome_size)
-            contig = Contig(contig_name, start, end)
+            contig = Contig(contig_name, subject, start, end)
             genome = genomes.get(genome_name)
             # Create a new Genome if we have not seen it before
             if genome is None:
-                genome = Genome(genome_name, genome_size)
+                genome = Genome(genome_name)
                 genomes[genome_name] = genome
             genome.add(contig)
+
+        # Update all genomes
+        for genome in genomes.values():
+            genome.update()
 
         # Construct instance
         return cls(genomes.values())
 
 class Binning:
-    """A set of bins, each being a set of contigs, as produced by a binner.
-    This must be instantiated with a `contigsof` dict and a Reference.
-    A `contigsof` dict is a {bin_name: {contig_names} ...} dict
+    """The result of an Binning applied to a Reference.
+    >>> ref
+    (Reference(ngenomes=2, ncontigs=5)
+    >>> Binning({'bin1': {contig1, contig2}, 'bin2': {contig3, contig4}}, ref)
+    Binning(4/5 contigs, ReferenceID=0x7fe908180be0)
 
     Properties:
-    self.reference: The Reference this is instantiated with
-    self.contigsof: {bin_name: {contigs ... }} dict
-    self.binof: {contig: bin_name} dict
-    self.breadthof: {bin_name: breadth} dict
-    self.breadth: Sum of breadths of each bin
-    self.nbins
-    self.ncontigs
+    self.reference:       Reference object of this benchmark
+    self.recalls:         Sorted tuple of recall thresholds
+    self.precisions:      Sorted tuple of precision thresholds
+    self.nbins:           Number of bins
+    self.ncontigs:        Number of binned contigs
+    self.contigsof:       {bin_name: {contig set}}
+    self.binof:           {contig: bin_name}
+    self.breadthof:       {bin_name: breadth}
+    self.breadth:         Total breadth of all bins
+    self.intersectionsof: {genome: {bin:_name: intersection}}
     """
-
-    # Instantiate with a {bin_name: {contig_names}} dict and Reference
-    def __init__(self, contigsof, reference, checkpresence=True):
-        self.reference = reference
-        self.contigsof = dict() # bin_name: {contigs} dict
-        self.binof = dict() # contig: bin_name dict
-        self.breadthof = dict() # bin_name: int dict
-
-        for bin_name, contig_names in contigsof.items():
-            contigset = set()
-            # This stores each contig by their true genome name.
-            contigsof_genome = _collections.defaultdict(list)
-
-            for contig_name in contig_names:
-                contig = reference.contigs.get(contig_name)
-
-                # Check that the contig is in the reference
-                if contig is None:
-                    if checkpresence:
-                        raise KeyError('Contig {} not in reference.'.format(contig_name))
-                    else:
-                        continue
-
-                # Check that contig is only present one time in input
-                if contig in self.binof:
-                    raise KeyError('Contig {} more than once in contigsof'.format(contig))
-
-                contigset.add(contig)
-                self.binof[contig] = bin_name
-                genome = reference.genomeof[contig_name]
-                contigsof_genome[genome.name].append(contig)
-
-            self.contigsof[bin_name] = contigset
-
-            # Now calculate breadth of bin. This is the sum of the number of covered
-            # base pairs for all the genomes present in the bin.
-            breadth = 0
-            for contigs in contigsof_genome.values():
-                breadth += Genome.breadth(contigs)
-            self.breadthof[bin_name] = breadth
-
-        self.breadth = sum(self.breadthof.values())
+    _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
+    _DEFAULTPRECISIONS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
 
     @property
     def nbins(self):
@@ -212,63 +209,24 @@ class Binning:
     def ncontigs(self):
         return len(self.binof)
 
-    def __repr__(self):
-        return 'Binning(nbins={}, ncontigs={})'.format(self.nbins, self.ncontigs)
-
-    @classmethod
-    def from_file(cls, filehandle, reference):
-        contigsof = dict()
-        for line in filehandle:
-            if line.startswith('#'):
-                continue
-
-            line = line.rstrip()
-            bin_name, tab, contig_name = line.partition('\t')
-
-            if bin_name not in contigsof:
-                contigsof[bin_name] = [contig_name]
-            else:
-                contigsof[bin_name].append(contig_name)
-
-        return cls(contigsof, reference)
-
-class BenchMarkResult:
-    """The result of an Binning applied to a Reference.
-    >>> ref, bins
-    (Reference(ngenomes=2, ncontigs=5), Binning(nbins=2, ncontigs=4))
-    >>> benchmark = BenchMarkResult(ref, bins)
-    BenchMarkResult(ReferenceID=0x7fe908180898, BinningID=0x7fe908180be0)
-    >>> benchmark[0.6, 0.9] # 0.6 recall, 0.9 precision
-    1
-
-    Properties:
-    self.reference: Reference object of this benchmark
-    self.binning: Binning object of this benchmark
-    self.recalls: sorted tuple of recall thresholds
-    self.precisions: sorted tuple of precision thresholds
-    self.intersectionsof: {genome: {bin_name: intersection,  ...}} dict
-    """
-    _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
-    _DEFAULTPRECISIONS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
-
     def _iter_intersections(self, genome):
         """Given a genome, return a generator of (bin_name, intersection) for
         all binning bins with a nonzero recall and precision.
         """
         # Get set of all binning bin names with contigs from that genome
-        bin_names = {self.binning.binof.get(contig) for contig in genome.contigs}
+        bin_names = {self.binof.get(contig) for contig in genome.contigs}
         bin_names.discard(None)
 
         for bin_name in bin_names:
-            intersecting_contigs = genome.contigs.intersection(self.binning.contigsof[bin_name])
-            intersection = Genome.breadth(intersecting_contigs)
+            intersecting_contigs = genome.contigs.intersection(self.contigsof[bin_name])
+            intersection = Genome.getbreadth(intersecting_contigs)
             yield bin_name, intersection
 
     def confusion_matrix(self, genome, bin_name):
-        true_positives = self.intersectionsof[genome][bin_name]
-        false_positives = self.binning.breadthof[bin_name] - true_positives
-        false_negatives = genome.length - true_positives
-        true_negatives = self.binning.breadth - true_positives - false_negatives - false_positives
+        true_positives = self.intersectionsof[genome].get(bin_name, 0)
+        false_positives = self.breadthof[bin_name] - true_positives
+        false_negatives = genome.breadth - true_positives
+        true_negatives = self.breadth - true_positives - false_negatives - false_positives
 
         return true_positives, true_negatives, false_positives, false_negatives
 
@@ -295,25 +253,64 @@ class BenchMarkResult:
 
         return maxf1
 
-    def __init__(self, reference, binning, recalls=_DEFAULTRECALLS, precisions=_DEFAULTPRECISIONS):
+    def _parse_bins(self, contigsof, checkpresence):
+        for bin_name, contig_names in contigsof.items():
+            contigset = set()
+            # This stores each contig by their true genome name.
+            contigsof_genome = _collections.defaultdict(list)
+
+            for contig_name in contig_names:
+                contig = self.reference.contigs.get(contig_name)
+
+                # Check that the contig is in the reference
+                if contig is None:
+                    if checkpresence:
+                        raise KeyError('Contig {} not in reference.'.format(contig_name))
+                    else:
+                        continue
+
+                # Check that contig is only present one time in input
+                if contig in self.binof:
+                    raise KeyError('Contig {} more than once in contigsof'.format(contig))
+
+                contigset.add(contig)
+                self.binof[contig] = bin_name
+                genome = self.reference.genomeof[self.reference.contigs[contig_name]]
+                contigsof_genome[genome.name].append(contig)
+
+            self.contigsof[bin_name] = contigset
+
+            # Now calculate breadth of bin. This is the sum of the number of covered
+            # base pairs for all the genomes present in the bin.
+            breadth = 0
+            for contigs in contigsof_genome.values():
+                breadth += Genome.getbreadth(contigs)
+            self.breadthof[bin_name] = breadth
+
+    def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
+              precisions=_DEFAULTPRECISIONS, checkpresence=True):
         if not isinstance(reference, Reference):
             raise ValueError('reference must be a Reference')
-
-        if not isinstance(binning, Binning):
-            raise ValueError('binning must be a Binning')
 
         self.precisions = tuple(sorted(precisions))
         self.recalls = tuple(sorted(recalls))
         self.reference = reference
-        self.binning = binning
+
+        self.contigsof = dict() # bin_name: {contigs} dict
+        self.binof = dict() # contig: bin_name dict
+        self.breadthof = dict() # bin_name: int dict
+        self._parse_bins(contigsof, checkpresence)
+        self.breadth = sum(self.breadthof.values())
+
         # counts[r,p] is number of genomes w. recall >= r, precision >= p
         counts = _collections.Counter()
         # intersectionsof[genome_name] = [(bin_name, recall, precision) ... ]
         # for all bins with nonzero recall and precision
-        intersectionsof = _collections.defaultdict(dict)
+        intersectionsof = dict()
 
         # Calculate intersectionsof
         for genome in reference.genomes.values():
+            intersectionsof[genome] = dict()
             for bin_name, intersection in self._iter_intersections(genome):
                 intersectionsof[genome][bin_name] = intersection
         self.intersectionsof = intersectionsof
@@ -351,6 +348,24 @@ class BenchMarkResult:
 
         self._counts = counts
 
+    @classmethod
+    def from_file(cls, filehandle, reference, recalls=_DEFAULTRECALLS,
+                  precisions=_DEFAULTPRECISIONS, checkpresence=True):
+        contigsof = dict()
+        for line in filehandle:
+            if line.startswith('#'):
+                continue
+
+            line = line.rstrip()
+            bin_name, tab, contig_name = line.partition('\t')
+
+            if bin_name not in contigsof:
+                contigsof[bin_name] = [contig_name]
+            else:
+                contigsof[bin_name].append(contig_name)
+
+        return cls(contigsof, reference, recalls, precisions, checkpresence)
+
     def print_matrix(self, file=_sys.stdout):
         """Prints the recall/precision number of bins to STDOUT."""
 
@@ -363,9 +378,8 @@ class BenchMarkResult:
             print(min_precision, '\t'.join([str(i) for i in row]), sep='\t', file=file)
 
     def __repr__(self):
-        refhex = hex(id(self.reference))
-        binhex = hex(id(self.binning))
-        return 'BenchMarkResult(ReferenceID={}, BinningID={})'.format(refhex, binhex)
+        fields = (self.ncontigs, self.reference.ncontigs, hex(id(self.reference)))
+        return 'Binning({}/{} contigs, ReferenceID={})'.format(*fields)
 
     def __getitem__(self, key):
         recall, precision = key

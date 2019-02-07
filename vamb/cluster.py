@@ -269,7 +269,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
 
     # Automatically estimate threshold if None is given
     if threshold is None:
-        if len(matrix) < nsamples
+        if len(matrix) < nsamples:
             raise ValueError('Cannot estimate threshold from less than nsamples contigs')
 
         if maxsize < 1:
