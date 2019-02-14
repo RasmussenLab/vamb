@@ -9,12 +9,12 @@ For more information on the background, context, and theory of Vamb, read [our p
 For more information about the implementation, methodological considerations, future directions, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
-Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient version (v. < 9).
+Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
 
 ### Installation for casual users:
 
 ```
-pip install -U https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
+pip install https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
 ```
 
 ### Installation for advanced users:
@@ -32,7 +32,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` using Cython and move the resulting executable to the inner vamb directory. You can then run by invoking the Python interpreter shown below.
+If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` using Cython and move the resulting executable to the inner vamb directory. You can then run Vamb by invoking the Python interpreter as shown below.
 
 # Running
 
@@ -70,12 +70,12 @@ There are situations where you can't just filter the fasta file, maybe because y
 
 ### Outputs
 
-Vamb produces the following six output files:
+Vamb produces the following output files:
 
 - `log.txt` - a text file with information about the Vamb run.
-- `tnf.npz`, `rpkm.npz`, and `latent.npz` - Numpy .npz files with TNFs, abundances, and the latent encoding of these two.
+- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - Numpy .npz files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
 - `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` from Python.
-- `clusters.tsv` - a text file with two columns and one row per sequence: Left column for the cluster name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
+- `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
 ### Recommended preparation
 
@@ -103,7 +103,7 @@ We have used BWA MEM for mapping, fully aware that it is not well suited for met
 
 __Installation: Compilation fails on Arch Linux in a Conda environment__
 
-This is a known issue affecting multiple (all?) Cython-dependent packages at the moment of writing (2019-01-25). There is no easy fix. [Link to pacman issue](https://bbs.archlinux.org/viewtopic.php?id=242682).
+This is a known issue affecting multiple (all?) Cython-dependent packages at the moment of writing (2019-01-25). There is no easy fix to make the pip installation work, but you can compile the Cython file manually. [Link to pacman issue](https://bbs.archlinux.org/viewtopic.php?id=242682).
 
 ### Parsing the FASTA file
 
