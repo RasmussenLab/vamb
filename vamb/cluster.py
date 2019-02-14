@@ -44,34 +44,24 @@ from collections import defaultdict as _defaultdict
 import vamb.vambtools as _vambtools
 import vamb.threshold as _threshold
 
-    # Distance D = (P - 1) / -2, where P is Pearson correlation coefficient.
-    # For two vectors x and y with numbers xi and yi,
-    # P = sum((xi-x_mean)*(yi-y_mean)) / (std(y) * std(x) * len(x)).
-    # If we normalize matrix so x_mean = y_mean = 0 and std(x) = std(y) = 1,
-    # this reduces to sum(xi*yi) / len(x) = x @ y.T / len(x) =>
-    # D = ((x @ y.T) / len(x)) - 1) / -2 =>
-    # D = (x @ y.T - len(x)) * (-1 / 2len(x))
-def _numpy_pearson_distances(matrix, index):
-    """Calculates the Pearson distances from row `index` to all rows
-    in the matrix, including itself. Returns numpy array of distances.
-    Input matrix must have been zscore normalized across axis 1"""
+def _normalize(matrix, inplace=False):
+    if not inplace:
+        matrix = matrix.copy()
 
-    vectorlength = matrix.shape[1]
-    result = _np.dot(matrix, matrix[index].T) # 70% clustering time spent on this line
-    result -= vectorlength
-    result *= -1 / (2 * vectorlength)
-    return result
+    # If next line is commented out, result is cosine distance, else Pearson
+    matrix -= matrix.mean(axis=1).reshape((-1, 1))
+    denominator = _np.linalg.norm(matrix, axis=1).reshape((-1, 1)) * (2 ** 0.5)
+    denominator[denominator == 0] = 1
+    matrix /= denominator
+    return matrix
 
-def _torch_pearson_distances(tensor, index):
-    """Calculates the Pearson distances from row `index` to all rows
-        in the matrix, including itself. Returns torch array of distances.
-        Input matrix must have been zscore normalized across dim 1"""
+# These distance measures returns cosine distance when matrix is normalized
+# as above.
+def _numpy_distances(matrix, index):
+    return 0.5 - _np.dot(matrix, matrix[index].T)
 
-    vectorlength = tensor.shape[1]
-    result = _torch.matmul(tensor, tensor[index])
-    result -= vectorlength
-    result *= -1 / (2 * vectorlength)
-    return result
+def _torch_distances(tensor, index):
+    return 0.5 - _torch.matmul(tensor, tensor[index])
 
 def _numpy_getcluster(matrix, medoid, threshold):
     """
@@ -80,7 +70,7 @@ def _numpy_getcluster(matrix, medoid, threshold):
     - The mean distance from medoid to the other inner points
     """
 
-    distances = _numpy_pearson_distances(matrix, medoid)
+    distances = _numpy_distances(matrix, medoid)
     cluster = _np.where(distances <= threshold)[0]
 
     # This happens if std(matrix[points]) == 0, then all pearson distances
@@ -101,7 +91,7 @@ def _torch_getcluster(tensor, kept_mask, medoid, threshold):
     - The mean distance from medoid to all other points within threshold
     """
 
-    distances = _torch_pearson_distances(tensor, medoid)
+    distances = _torch_distances(tensor, medoid)
     mask = (distances <= threshold) & kept_mask
     inner_dists = distances[mask]
 
@@ -322,7 +312,7 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
     indices = _np.random.RandomState(0).permutation(len(matrix))
 
     if not normalized:
-        _vambtools.zscore(matrix, axis=1, inplace=True)
+        _normalize(matrix, inplace=True)
 
     threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
 
