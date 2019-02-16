@@ -10,19 +10,19 @@ import datetime
 import time
 import shutil
 
+DEFAULT_PROCESSES = min(os.cpu_count(), 8)
+
 # These MUST be set before importing numpy
 # I know this is a shitty hack, see https://github.com/numpy/numpy/issues/11826
-os.environ["MKL_NUM_THREADS"] = "8"
-os.environ["NUMEXPR_NUM_THREADS"] = "8"
-os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["MKL_NUM_THREADS"] = str(DEFAULT_PROCESSES)
+os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_PROCESSES)
+os.environ["OMP_NUM_THREADS"] = str(DEFAULT_PROCESSES)
 
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
 import numpy as np
 import vamb
-
-DEFAULT_PROCESSES = min(os.cpu_count(), 8)
 
 ################################# DEFINE FUNCTIONS ##########################
 
@@ -57,6 +57,11 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
     begintime = time.time()
 
     log('\nCalculating RPKM', logfile)
+
+    log('Order of columns are:', logfile, 1)
+    log('\n\t'.join(bampaths), logfile, 1)
+    print('', file=logfile)
+
     log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
        logfile, 1)
 
@@ -75,6 +80,8 @@ def calc_rpkm(outdir, bampaths, mincontiglength, minalignscore, subprocesses,
 
     vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
     elapsed = round(time.time() - begintime, 2)
+
+    print('', file=logfile)
     log('Calculated RPKM in {} seconds.'.format(elapsed), logfile, 1)
 
     shutil.rmtree(dumpdirectory)
