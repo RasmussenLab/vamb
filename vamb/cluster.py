@@ -26,10 +26,10 @@ a {clustername, set(elements)} dict.
 
 cluster algorithm:
 (1): Pick random seed observation S
-(2): Define cluster(S) = all observations with Pearson distance from S < THRESHOLD
+(2): Define cluster(S) = all observations with cosine distance from S < THRESHOLD
 (3): Sample MOVES observations I from cluster(S)
 (4): If any mean(cluster(i)) < mean(cluster(S)) for i in I: Let S be i, go to (2)
-     Else: cluster(S) = all observations with Pearson distance from S < THRESHOLD
+     Else: cluster(S) = all observations with cosine distance from S < THRESHOLD
 (5): Output cluster(S) as cluster, remove cluster(S) from observations
 (6): If no more observations or MAX_CLUSTERS have been reached: Stop
      Else: Go to (1)
@@ -45,27 +45,31 @@ import vamb.vambtools as _vambtools
 import vamb.threshold as _threshold
 
 def _normalize(matrix, inplace=False):
+    """Preprocess the matrix to make distance calculations faster.
+    The distance functions in this module assumes input has been normalized
+    and will not work otherwise.
+    """
     if not inplace:
         matrix = matrix.copy()
 
-    # If next line is commented out, result is cosine distance, else Pearson
-    matrix -= matrix.mean(axis=1).reshape((-1, 1))
+    # If next line is uncommented, result is Pearson distance, not cosine
+    # matrix -= matrix.mean(axis=1).reshape((-1, 1))
     denominator = _np.linalg.norm(matrix, axis=1).reshape((-1, 1)) * (2 ** 0.5)
     denominator[denominator == 0] = 1
     matrix /= denominator
     return matrix
 
-# These distance measures returns cosine distance when matrix is normalized
-# as above.
+# Returns cosine or Pearson distance when matrix is normalized as above.
 def _numpy_distances(matrix, index):
+    "Return vector of distances from rows of normalized matrix to given row."
     return 0.5 - _np.dot(matrix, matrix[index].T)
 
 def _torch_distances(tensor, index):
+    "Return vector of distances from rows of normalized matrix to given row."
     return 0.5 - _torch.matmul(tensor, tensor[index])
 
 def _numpy_getcluster(matrix, medoid, threshold):
-    """
-    Returns:
+    """Returns:
     - A vector of indices to each of these inner points
     - The mean distance from medoid to the other inner points
     """
@@ -73,7 +77,7 @@ def _numpy_getcluster(matrix, medoid, threshold):
     distances = _numpy_distances(matrix, medoid)
     cluster = _np.where(distances <= threshold)[0]
 
-    # This happens if std(matrix[points]) == 0, then all pearson distances
+    # This happens if std(matrix[points]) == 0, then all distances
     # become 0.5, even the distance to itself.
     if len(cluster) < 2:
         cluster = _np.array([medoid])
@@ -269,7 +273,7 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
             if logfile is not None:
                 print('\tEstimating threshold with {} sampled sequences'.format(nsamples), file=logfile)
 
-            _gt = _threshold.getthreshold(matrix, _numpy_pearson_distances, nsamples, maxsize)
+            _gt = _threshold.getthreshold(matrix, _numpy_distances, nsamples, maxsize)
             threshold, support, separation = _gt
 
             if logfile is not None:
@@ -292,7 +296,7 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
     Inputs:
         matrix: A (obs x features) Numpy matrix of data type numpy.float32
         labels: None or Numpy array/list with labels for seqs [None = indices+1]
-        threshold: Pearson distance "radius" of output clusters. [None = auto]
+        threshold: Distance "radius" of output clusters. [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         destroy: Save memory by destroying matrix while clustering [False]
         normalized: Matrix is already zscore-normalized across axis 1 [False]
