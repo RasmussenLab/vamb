@@ -8,9 +8,9 @@ __Implement better user control of multithreading__
 
 Vamb uses multiple threads/processes. Sadly, at the moment, there is no good way for the user to control the number of used threads - and this is harder to implement than one would think.
 
-For parsing BAM files, Vamb spawns a number of subprocesses using the *subprocess* module. This number can easily be controlled, so no problem there. Training the VAE, encoding and clustering, however, is done with Numpy and PyTorch, which themselves calls an underlying multithreaded BLAS library. By default, these libraries use all available threads.
+For parsing BAM files, Vamb spawns a number of subprocesses using the *subprocess* module. This number can easily be controlled, so no problem there. Training the VAE, encoding and clustering, however, is done with Numpy and PyTorch, which themselves call an underlying multithreaded BLAS library (which differ from computer to computer). By default, these libraries use all available threads.
 
-Numpy does not provide any good API to limit the number of used threads. If one sets a number of environmental variables *before* importing Numpy, then Numpy can limit the number of threads. But first, users could import Numpy before using Vamb, in which case Vamb would not be able to set the number of threads. And second, in order to be installed as a command-line tool, Vamb must parse the number of requested threads in a function call (`__main__.py`'s `main` function), where imports are not permitted.
+Numpy does not provide any good API to limit the number of used threads. If one sets an environmental variables pertaining to the correct BLAS library *before* importing Numpy, then Numpy can limit the number of threads. Having to specify the number of thread before importing Numpy is no good: Users could import Numpy before using Vamb, in which case Vamb *can't* set the number of threads. Also, in order to be installed as a command-line tool, Vamb must parse the number of requested threads in a function call (`__main__.py`'s `main` function) - and imports are not permitted inside a function call.
 
 PyTorch *does* provide `torch.set_num_threads`, but when I tested it, it simply didn't work and used all threads regardless. Vamb calls this function anyway, in case the torch folks fix it.
 

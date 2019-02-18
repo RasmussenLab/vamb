@@ -314,7 +314,7 @@ def main():
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
     torch.set_num_threads(args.subprocesses)
-    subprocesses = min(DEFAULT_PROCESSES, len(arg.bamfiles))
+    subprocesses = min(DEFAULT_PROCESSES, len(args.bamfiles))
 
     ################### RUN PROGRAM #########################
     os.mkdir(args.outdir)
