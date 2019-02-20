@@ -42,7 +42,89 @@ import numpy as _np
 import torch as _torch
 from collections import defaultdict as _defaultdict
 import vamb.vambtools as _vambtools
-import vamb.threshold as _threshold
+
+# This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
+# of DELTA_X, for a total of 31 values
+_DELTA_X = 0.005
+_NORMALPDF = _np.array([2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.07588285e-07,
+       1.07697600e-05, 1.48671951e-04, 1.59837411e-03, 1.33830226e-02,
+       8.72682695e-02, 4.43184841e-01, 1.75283005e+00, 5.39909665e+00,
+       1.29517596e+01, 2.41970725e+01, 3.52065327e+01, 3.98942280e+01,
+       3.52065327e+01, 2.41970725e+01, 1.29517596e+01, 5.39909665e+00,
+       1.75283005e+00, 4.43184841e-01, 8.72682695e-02, 1.33830226e-02,
+       1.59837411e-03, 1.48671951e-04, 1.07697600e-05, 6.07588285e-07,
+       2.66955661e-08, 9.13472041e-10, 2.43432053e-11])
+
+_NORMALPDF *= _DELTA_X # we do this so the sum is approx 1
+_FENCEPOSTS = _np.arange(0, 0.3, _DELTA_X)
+_SPOTLIGHT = 0.03
+
+def _calc_densities(distances, bins=_FENCEPOSTS, pdf=_NORMALPDF):
+    """Given a vector of densities, bins them and returns a smoothed version."""
+    histogram, _ = _np.histogram(distances, bins=bins)
+
+    # compensate for self-correlation of chosen contig. This is not always true
+    # due to floating point errors, yielding negative distance to self.
+    if histogram[0] > 0:
+        histogram[0] -= 1
+
+    pdf_len = len(pdf)
+    densities = _np.zeros(len(histogram) + pdf_len)
+    for i in range(len(densities) - pdf_len):
+        densities[i:i+pdf_len] += pdf * histogram[i]
+
+    densities = densities[15:-15]
+    #delta_densities = _np.copy(densities)
+    #delta_densities[1:] -= delta_densities[:-1]
+
+    return densities
+
+def _find_threshold(densities, peak_valley_ratio, xs=_FENCEPOSTS):
+    """Find a threshold distance, where where is a dip in point density
+    that separates an initial peak in densities from the larger bulk around 0.5.
+    """
+    peak_density = 0
+    peak_over = False
+    minimum_x = None
+    density_at_minimum = None
+    threshold = None
+
+    for x, density in zip(xs, densities):
+        # Define the first "peak" in point density. That's simply the max until
+        # the peak is defined as being over.
+        if not peak_over and density > peak_density:
+            # Do not accept first peak to be after x = 0.1
+            if x > 0.1:
+                break
+            peak_density = density
+
+        # Peak is over when density drops below 60% of peak density
+        if not peak_over and density < 0.6 * peak_density:
+            peak_over = True
+            density_at_minimum = density
+
+        # If another peak is detected, we stop
+        if peak_over and density > 1.5 * density_at_minimum:
+            break
+
+        # Now find the minimum after the peak
+        if peak_over and density < density_at_minimum:
+            minimum_x, density_at_minimum = x, density
+
+            # If this minimum is below ratio * peak, it's accepted as threshold
+            if density < peak_valley_ratio * peak_density:
+                threshold = minimum_x
+
+    # Don't allow a threshold over 0.2
+    if threshold is not None and threshold > 0.2:
+        threshold = None
+
+    # If ratio has been set to 0.6, we do not accept returning no threshold.
+    # 0.09 is a decent (conservative) default threshold, we have experienced.
+    if threshold is None and peak_valley_ratio > 0.55:
+        threshold = 0.09
+
+    return threshold
 
 def _normalize(matrix, inplace=False):
     """Preprocess the matrix to make distance calculations faster.
@@ -70,7 +152,8 @@ def _torch_distances(tensor, index):
 
 def _numpy_getcluster(matrix, medoid, threshold):
     """Returns:
-    - A vector of indices to each of these inner points
+    - A vector of indices to points within threshold
+    - A vector of distances to these points
     - The mean distance from medoid to the other inner points
     """
 
@@ -85,7 +168,7 @@ def _numpy_getcluster(matrix, medoid, threshold):
     else:
         average_distance = _np.sum(distances[cluster]) / (len(cluster) - 1)
 
-    return cluster, average_distance
+    return cluster, distances, average_distance
 
 def _torch_getcluster(tensor, kept_mask, medoid, threshold):
     """
@@ -118,7 +201,7 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, threshold, rng):
 
     futile_attempts = 0
     tried = {medoid} # keep track of already-tried medoids
-    cluster, average_distance = _numpy_getcluster(matrix, medoid, threshold)
+    cluster, distances, average_distance = _numpy_getcluster(matrix, medoid, threshold)
 
     while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
         sampled_medoid = rng.choice(cluster)
@@ -129,7 +212,8 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, threshold, rng):
 
         tried.add(sampled_medoid)
 
-        sample_cluster, sample_avg =  _numpy_getcluster(matrix, sampled_medoid, threshold)
+        sampling = _numpy_getcluster(matrix, sampled_medoid, threshold)
+        sample_cluster, sample_distances, sample_avg = sampling
 
         # If the mean distance of inner points of the sample is lower,
         # we move the medoid and reset the futile_attempts count
@@ -139,11 +223,12 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, threshold, rng):
             average_distance = sample_avg
             futile_attempts = 0
             tried = {medoid}
+            distances = sample_distances
 
         else:
             futile_attempts += 1
 
-    return medoid, cluster
+    return medoid, distances
 
 def _torch_wander_medoid(tensor, kept_mask, medoid, max_attempts, threshold, rng):
     """Keeps sampling new medoids within `threshold` distance to the medoid,
@@ -181,17 +266,38 @@ def _torch_wander_medoid(tensor, kept_mask, medoid, max_attempts, threshold, rng
 
     return medoid, mask
 
-def _numpy_cluster(matrix, labels, indices, threshold, max_steps):
+def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, rng):
+    """Finds a cluster to output.
+    """
+    futile_seeds = 0
+    threshold = None
+
+    while threshold is None:
+        seed = (seed + 1) % len(matrix)
+        medoid, distances = _numpy_wander_medoid(matrix, seed, max_steps, _SPOTLIGHT, rng)
+        densities = _calc_densities(distances)
+        threshold = _find_threshold(densities, peak_valley_ratio)
+
+        if threshold is None:
+            futile_seeds += 1
+            if futile_seeds == min(max_futile_seeds, len(matrix)):
+                futile_seeds = 0
+                peak_valley_ratio += 0.1
+        else:
+            cluster = _np.where(distances <= threshold)[0]
+
+    return cluster, medoid, seed, peak_valley_ratio
+
+def _numpy_cluster(matrix, labels, indices, max_steps, max_futile_seeds):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
-    seed = 0
+    seed = -1
     kept_mask = _np.ones(len(matrix), dtype=_np.bool)
     rng = _random.Random(0)
+    peak_valley_ratio = 0.1
 
     while len(matrix) > 0:
-        # Find medoid using iterative sampling function above
-        sampling = _numpy_wander_medoid(matrix, seed, max_steps, threshold, rng)
-        medoid, cluster = sampling
-        seed += 1
+        _ = _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, rng)
+        cluster, medoid, seed, peak_valley_ratio = _
 
         # Write data to output. We use indices instead of labels directly to
         # prevent masking and thereby duplicating large string arrays
@@ -203,14 +309,11 @@ def _numpy_cluster(matrix, labels, indices, threshold, max_steps):
         for point in cluster:
             kept_mask[point] = False
 
-        # Only remove cluster if we have more than 1 point in cluster
-        # because masking takes time
-        if len(cluster) > 1 or seed == len(matrix):
-            _vambtools.inplace_maskarray(matrix, kept_mask)
-            indices = indices[kept_mask] # no need to inplace mask small array
-            kept_mask.resize(len(matrix), refcheck=False)
-            kept_mask[:] = True
-            seed = 0
+        # To do: Can we sometimes skip doing this? It's CPU intensive.
+        _vambtools.inplace_maskarray(matrix, kept_mask)
+        indices = indices[kept_mask] # no need to inplace mask small array
+        kept_mask.resize(len(matrix), refcheck=False)
+        kept_mask[:] = True
 
 def _torch_cluster(tensor, labels, indices, threshold, max_steps):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
@@ -242,8 +345,11 @@ def _torch_cluster(tensor, labels, indices, threshold, max_steps):
 
         possible_seeds = kept_mask.nonzero().reshape(-1)
 
-def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile):
-    """Checks matrix, labels, nsamples, maxsize and estimates threshold if necessary."""
+def _check_params(matrix, labels, maxsteps, max_futile_seeds, logfile):
+    """Checks matrix, labels, and maxsteps."""
+
+    if max_futile_seeds < 1:
+        raise ValueError('max_futile_seeds must be an integer above 0')
 
     if maxsteps < 1:
         raise ValueError('maxsteps must be a positive integer')
@@ -261,47 +367,17 @@ def _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfil
     if matrix.dtype != _np.float32:
         raise ValueError('Matrix must be of data type np.float32')
 
-    # Automatically estimate threshold if None is given
-    if threshold is None:
-        if len(matrix) < nsamples:
-            raise ValueError('Cannot estimate threshold from less than nsamples contigs')
-
-        if maxsize < 1:
-            raise ValueError('maxsize must be positive number')
-
-        try:
-            if logfile is not None:
-                print('\tEstimating threshold with {} sampled sequences'.format(nsamples), file=logfile)
-
-            _gt = _threshold.getthreshold(matrix, _numpy_distances, nsamples, maxsize)
-            threshold, support, separation = _gt
-
-            if logfile is not None:
-                print('\tClustering threshold:', threshold, file=logfile)
-                print('\tThreshold support:', support, file=logfile)
-                print('\tThreshold separation:', separation, file=logfile)
-
-        except _threshold.TooLittleData as error:
-            warningfile = sys.stderr if logfile is None else logfile
-            wn = '\tWarning: Too little data: {}. Setting threshold to 0.08'
-            print(wn.format(error.args[0]), file=warningfile)
-            threshold = 0.08
-
-    return threshold
-
-def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
-            normalized=False, nsamples=2500, maxsize=2500, cuda=False, logfile=None):
+def cluster(matrix, labels=None, maxsteps=25, destroy=False, max_futile_seeds=100,
+            normalized=False, cuda=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
         matrix: A (obs x features) Numpy matrix of data type numpy.float32
         labels: None or Numpy array/list with labels for seqs [None = indices+1]
-        threshold: Distance "radius" of output clusters. [None = auto]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         destroy: Save memory by destroying matrix while clustering [False]
+        max_futile_seeds: Consecutive seed fails before decreasing quality [100]
         normalized: Matrix is already zscore-normalized across axis 1 [False]
-        nsamples: Estimate threshold from N samples [2500]
-        maxsize: Discard sample if more than N contigs are within threshold [2500]
         cuda: Use CUDA (GPU acceleration) based on PyTorch. [False]
         logfile: Print threshold estimates and certainty to file [None]
 
@@ -311,21 +387,21 @@ def cluster(matrix, labels=None, threshold=None, maxsteps=25, destroy=False,
         matrix = matrix.copy()
 
     # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
-    # track of which points are which
+    # track of which points are which.
     _np.random.RandomState(0).shuffle(matrix)
     indices = _np.random.RandomState(0).permutation(len(matrix))
 
     if not normalized:
         _normalize(matrix, inplace=True)
 
-    threshold = _check_params(matrix, threshold, labels, nsamples, maxsize, maxsteps, logfile)
+    _check_params(matrix, labels, maxsteps, max_futile_seeds, logfile)
 
     if cuda:
         tensor = _torch.from_numpy(matrix)
         indices = _torch.from_numpy(indices)
         return _torch_cluster(tensor, labels, indices, threshold, maxsteps)
     else:
-        return _numpy_cluster(matrix, labels, indices, threshold, maxsteps)
+        return _numpy_cluster(matrix, labels, indices, maxsteps, max_futile_seeds)
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):
