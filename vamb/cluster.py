@@ -43,10 +43,14 @@ import torch as _torch
 from collections import defaultdict as _defaultdict
 import vamb.vambtools as _vambtools
 
-# This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
-# of DELTA_X, for a total of 31 values
 _DELTA_X = 0.005
-_NORMALPDF = _np.array([2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.07588285e-07,
+_XS = _np.arange(0, 0.3, _DELTA_X)
+
+# This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
+# of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
+# of one point sums to approximately one
+_NORMALPDF = _DELTA_X * _np.array(
+      [2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.07588285e-07,
        1.07697600e-05, 1.48671951e-04, 1.59837411e-03, 1.33830226e-02,
        8.72682695e-02, 4.43184841e-01, 1.75283005e+00, 5.39909665e+00,
        1.29517596e+01, 2.41970725e+01, 3.52065327e+01, 3.98942280e+01,
@@ -55,11 +59,10 @@ _NORMALPDF = _np.array([2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.075882
        1.59837411e-03, 1.48671951e-04, 1.07697600e-05, 6.07588285e-07,
        2.66955661e-08, 9.13472041e-10, 2.43432053e-11])
 
-_NORMALPDF *= _DELTA_X # we do this so the sum is approx 1
-_FENCEPOSTS = _np.arange(0, 0.3, _DELTA_X)
-_SPOTLIGHT = 0.03
+# Distance within which to search for medoid point
+_MEDOID_RADIUS = 0.05
 
-def _calc_densities(distances, bins=_FENCEPOSTS, pdf=_NORMALPDF):
+def _calc_densities(distances, bins=_XS, pdf=_NORMALPDF):
     """Given a vector of densities, bins them and returns a smoothed version."""
     histogram, _ = _np.histogram(distances, bins=bins)
 
@@ -69,8 +72,8 @@ def _calc_densities(distances, bins=_FENCEPOSTS, pdf=_NORMALPDF):
         histogram[0] -= 1
 
     pdf_len = len(pdf)
-    densities = _np.zeros(len(histogram) + pdf_len)
-    for i in range(len(densities) - pdf_len):
+    densities = _np.zeros(len(histogram) + pdf_len - 1)
+    for i in range(len(densities) - pdf_len + 1):
         densities[i:i+pdf_len] += pdf * histogram[i]
 
     densities = densities[15:-15]
@@ -79,7 +82,7 @@ def _calc_densities(distances, bins=_FENCEPOSTS, pdf=_NORMALPDF):
 
     return densities
 
-def _find_threshold(densities, peak_valley_ratio, xs=_FENCEPOSTS):
+def _find_threshold(densities, peak_valley_ratio, default, xs=_XS[1:]):
     """Find a threshold distance, where where is a dip in point density
     that separates an initial peak in densities from the larger bulk around 0.5.
     """
@@ -115,14 +118,13 @@ def _find_threshold(densities, peak_valley_ratio, xs=_FENCEPOSTS):
             if density < peak_valley_ratio * peak_density:
                 threshold = minimum_x
 
-    # Don't allow a threshold over 0.2
-    if threshold is not None and threshold > 0.2:
+    # Don't allow a threshold too high - this is relaxed with p_v_ratio
+    if threshold is not None and threshold > 0.14 + 0.1 * peak_valley_ratio:
         threshold = None
 
     # If ratio has been set to 0.6, we do not accept returning no threshold.
-    # 0.09 is a decent (conservative) default threshold, we have experienced.
     if threshold is None and peak_valley_ratio > 0.55:
-        threshold = 0.09
+        threshold = default
 
     return threshold
 
@@ -266,7 +268,7 @@ def _torch_wander_medoid(tensor, kept_mask, medoid, max_attempts, threshold, rng
 
     return medoid, mask
 
-def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, rng):
+def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, default, rng):
     """Finds a cluster to output.
     """
     futile_seeds = 0
@@ -274,9 +276,9 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_se
 
     while threshold is None:
         seed = (seed + 1) % len(matrix)
-        medoid, distances = _numpy_wander_medoid(matrix, seed, max_steps, _SPOTLIGHT, rng)
+        medoid, distances = _numpy_wander_medoid(matrix, seed, max_steps, _MEDOID_RADIUS, rng)
         densities = _calc_densities(distances)
-        threshold = _find_threshold(densities, peak_valley_ratio)
+        threshold = _find_threshold(densities, peak_valley_ratio, default)
 
         if threshold is None:
             futile_seeds += 1
@@ -288,7 +290,7 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_se
 
     return cluster, medoid, seed, peak_valley_ratio
 
-def _numpy_cluster(matrix, labels, indices, max_steps, max_futile_seeds):
+def _numpy_cluster(matrix, labels, indices, max_steps, max_futile_seeds, default):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
     seed = -1
     kept_mask = _np.ones(len(matrix), dtype=_np.bool)
@@ -296,7 +298,7 @@ def _numpy_cluster(matrix, labels, indices, max_steps, max_futile_seeds):
     peak_valley_ratio = 0.1
 
     while len(matrix) > 0:
-        _ = _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, rng)
+        _ = _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, max_futile_seeds, default, rng)
         cluster, medoid, seed, peak_valley_ratio = _
 
         # Write data to output. We use indices instead of labels directly to
@@ -368,7 +370,7 @@ def _check_params(matrix, labels, maxsteps, max_futile_seeds, logfile):
         raise ValueError('Matrix must be of data type np.float32')
 
 def cluster(matrix, labels=None, maxsteps=25, destroy=False, max_futile_seeds=100,
-            normalized=False, cuda=False, logfile=None):
+            default=0.09, normalized=False, cuda=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
@@ -377,6 +379,7 @@ def cluster(matrix, labels=None, maxsteps=25, destroy=False, max_futile_seeds=10
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         destroy: Save memory by destroying matrix while clustering [False]
         max_futile_seeds: Consecutive seed fails before decreasing quality [100]
+        default: Fallback threshold if cannot be estimated [0.09]
         normalized: Matrix is already zscore-normalized across axis 1 [False]
         cuda: Use CUDA (GPU acceleration) based on PyTorch. [False]
         logfile: Print threshold estimates and certainty to file [None]
@@ -401,7 +404,7 @@ def cluster(matrix, labels=None, maxsteps=25, destroy=False, max_futile_seeds=10
         indices = _torch.from_numpy(indices)
         return _torch_cluster(tensor, labels, indices, threshold, maxsteps)
     else:
-        return _numpy_cluster(matrix, labels, indices, maxsteps, max_futile_seeds)
+        return _numpy_cluster(matrix, labels, indices, maxsteps, max_futile_seeds, default)
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):
