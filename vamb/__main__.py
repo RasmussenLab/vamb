@@ -129,7 +129,6 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logf
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
-    print('', file=logfile)
 
     clusteriterator = vamb.cluster.cluster(latent, labels=contignames, cuda=cuda, logfile=logfile)
 
