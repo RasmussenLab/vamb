@@ -122,16 +122,17 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logfile):
+def cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersize, cuda, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
+    log('Min successful thresholds detected: {}'.format(minsuccesses), logfile, 1)
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
-    print('', file=logfile)
 
-    clusteriterator = vamb.cluster.cluster(latent, labels=contignames, cuda=cuda, logfile=logfile)
+    clusteriterator = vamb.cluster.cluster(latent, destroy=True, minsuccesses=minsuccesses, labels=contignames,
+                                        cuda=cuda, logfile=logfile)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
         clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile,
@@ -148,7 +149,7 @@ def cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logf
 
 def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
-         batchsteps, minclustersize, maxclusters, logfile):
+         batchsteps, minsuccesses, minclustersize, maxclusters, logfile):
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
@@ -168,7 +169,7 @@ def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesse
     contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, maxclusters, minclustersize, cuda, logfile)
+    cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersize, cuda, logfile)
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
@@ -233,6 +234,8 @@ def main():
                         default=1e-3, help='learning rate [0.001]')
 
     clusto = parser.add_argument_group(title='Clustering options', description=None)
+    clusto.add_argument('-u', dest='minsuccesses', metavar='', type=int,
+                        default=15, help='minimum threshold detection success [15]')
     clusto.add_argument('-i', dest='minsize', metavar='', type=int,
                         default=1, help='minimum cluster size [1]')
     clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
@@ -310,6 +313,9 @@ def main():
     if args.minsize < 1:
         raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
 
+    if args.minsuccesses < 1 or args.minsuccesses > 200:
+        raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:200.')
+
     ###################### SET UP LAST PARAMS ############################
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
@@ -335,6 +341,7 @@ def main():
              dropout=args.dropout,
              lrate=args.lrate,
              batchsteps=args.batchsteps,
+             minsuccesses=args.minsuccesses,
              minclustersize=args.minsize,
              maxclusters=args.maxclusters,
              logfile=logfile)
