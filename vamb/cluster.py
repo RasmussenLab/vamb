@@ -316,13 +316,13 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
     cluster = _np.where(distances <= threshold)[0]
     return cluster, medoid, seed, peak_valley_ratio
 
-def _numpy_cluster(matrix, labels, indices, max_steps, windowlength, minsuccesses, default):
+def _numpy_cluster(matrix, labels, indices, max_steps, windowsize, minsuccesses, default):
     """Yields (medoid, points) pairs from a (obs x features) matrix"""
     seed = -1
     kept_mask = _np.ones(len(matrix), dtype=_np.bool)
     rng = _random.Random(0)
     peak_valley_ratio = 0.1
-    attempts = _deque(maxlen=windowlength)
+    attempts = _deque(maxlen=windowsize)
 
     while len(matrix) > 0:
         _ = _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses, default, rng, attempts)
@@ -374,17 +374,17 @@ def _torch_cluster(tensor, labels, indices, threshold, max_steps):
 
         possible_seeds = kept_mask.nonzero().reshape(-1)
 
-def _check_params(matrix, labels, maxsteps, windowlength, minsuccesses, default, logfile):
+def _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, logfile):
     """Checks matrix, labels, and maxsteps."""
 
     if maxsteps < 1:
         raise ValueError('maxsteps must be a positive integer')
 
-    if windowlength < 1:
-        raise ValueError('windowlength must be at least 1')
+    if windowsize < 1:
+        raise ValueError('windowsize must be at least 1')
 
-    if minsuccesses < 1 or minsuccesses > windowlength:
-        raise ValueError('minsuccesses must be between 1 and windowlength')
+    if minsuccesses < 1 or minsuccesses > windowsize:
+        raise ValueError('minsuccesses must be between 1 and windowsize')
 
     if default <= 0.0:
         raise ValueError('default threshold must be a positive float')
@@ -402,7 +402,7 @@ def _check_params(matrix, labels, maxsteps, windowlength, minsuccesses, default,
     if matrix.dtype != _np.float32:
         raise ValueError('Matrix must be of data type np.float32')
 
-def cluster(matrix, labels=None, maxsteps=25, windowlength=200, minsuccesses=15,
+def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=15,
             default=0.09, destroy=False, normalized=False, cuda=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
@@ -411,7 +411,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowlength=200, minsuccesses=15,
         labels: None or Numpy array/list with labels for seqs [None = indices+1]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         default: Fallback threshold if cannot be estimated [0.09]
-        windowlength: Length of window to count successes [200]
+        windowsize: Length of window to count successes [200]
         minsuccesses: Minimum acceptable number of successes [15]
         destroy: Save memory by destroying matrix while clustering [False]
         normalized: Matrix is already zscore-normalized across axis 1 [False]
@@ -431,7 +431,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowlength=200, minsuccesses=15,
     if not normalized:
         _normalize(matrix, inplace=True)
 
-    _check_params(matrix, labels, maxsteps, windowlength, minsuccesses, default, logfile)
+    _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, logfile)
 
     if cuda:
         tensor = _torch.from_numpy(matrix)
@@ -439,7 +439,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowlength=200, minsuccesses=15,
         raise NotImplementedError('CUDA clustering not yet implemented.')
         return _torch_cluster(tensor, labels, indices, threshold, maxsteps)
     else:
-        return _numpy_cluster(matrix, labels, indices, maxsteps, windowlength, minsuccesses, default)
+        return _numpy_cluster(matrix, labels, indices, maxsteps, windowsize, minsuccesses, default)
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):

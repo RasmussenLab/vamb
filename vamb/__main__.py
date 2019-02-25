@@ -122,7 +122,8 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersize, cuda, logfile):
+def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
+            minclustersize, cuda, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
@@ -131,12 +132,12 @@ def cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersi
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
 
-    clusteriterator = vamb.cluster.cluster(latent, destroy=True, minsuccesses=minsuccesses, labels=contignames,
-                                        cuda=cuda, logfile=logfile)
+    it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
+                              minsuccesses=minsuccesses, labels=contignames,
+                              cuda=cuda, logfile=logfile)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
-        clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile,
-                                                              clusteriterator,
+        clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile, it,
                                                               max_clusters=maxclusters,
                                                               min_size=minclustersize)
 
@@ -149,7 +150,7 @@ def cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersi
 
 def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesses,
          nhiddens, nlatent, nepochs, batchsize, cuda, alpha, beta, dropout, lrate,
-         batchsteps, minsuccesses, minclustersize, maxclusters, logfile):
+         batchsteps, windowsize, minsuccesses, minclustersize, maxclusters, logfile):
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
@@ -169,7 +170,8 @@ def run(outdir, fastapath, bampaths, mincontiglength, minalignscore, subprocesse
     contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, minsuccesses, maxclusters, minclustersize, cuda, logfile)
+    cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
+            minclustersize, cuda, logfile)
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
@@ -234,8 +236,10 @@ def main():
                         default=1e-3, help='learning rate [0.001]')
 
     clusto = parser.add_argument_group(title='Clustering options', description=None)
+    clusto.add_argument('-w', dest='windowsize', metavar='', type=int,
+                        default=200, help='size of window to count successes [200]')
     clusto.add_argument('-u', dest='minsuccesses', metavar='', type=int,
-                        default=15, help='minimum threshold detection success [15]')
+                        default=15, help='minimum success in window [15]')
     clusto.add_argument('-i', dest='minsize', metavar='', type=int,
                         default=1, help='minimum cluster size [1]')
     clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
@@ -313,8 +317,11 @@ def main():
     if args.minsize < 1:
         raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
 
-    if args.minsuccesses < 1 or args.minsuccesses > 200:
-        raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:200.')
+    if args.windowsize < 1:
+        raise argparse.ArgumentTypeError('Window size must be at least 1.')
+
+    if args.minsuccesses < 1 or args.minsuccesses > args.windowsize:
+        raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:windowsize.')
 
     ###################### SET UP LAST PARAMS ############################
 
@@ -341,6 +348,7 @@ def main():
              dropout=args.dropout,
              lrate=args.lrate,
              batchsteps=args.batchsteps,
+             windowsize=args.windowsize,
              minsuccesses=args.minsuccesses,
              minclustersize=args.minsize,
              maxclusters=args.maxclusters,
