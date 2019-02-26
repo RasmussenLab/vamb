@@ -414,7 +414,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=15,
         windowsize: Length of window to count successes [200]
         minsuccesses: Minimum acceptable number of successes [15]
         destroy: Save memory by destroying matrix while clustering [False]
-        normalized: Matrix is already zscore-normalized across axis 1 [False]
+        normalized: Matrix is already preprocessed [False]
         cuda: Use CUDA (GPU acceleration) based on PyTorch. [False]
         logfile: Print threshold estimates and certainty to file [None]
 

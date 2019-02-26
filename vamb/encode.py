@@ -110,9 +110,9 @@ class VAE(_nn.Module):
         nsamples: Number of samples in abundance matrix
         nhiddens: List of n_neurons in the hidden layers [[325, 325]]
         nlatent: Number of neurons in the latent layer [40]
-        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [0.05]
+        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = 0.05]
         beta: Multiply KLD by the inverse of this value [200]
-        dropout: Probability of dropout on forward pass [0.2]
+        dropout: Probability of dropout on forward pass [None = 0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
     vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
@@ -120,15 +120,28 @@ class VAE(_nn.Module):
 
     vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
+
+    If alpha or dropout is None and there is only one sample, they are set to
+    0.99 and 0.0, respectively
     """
 
-    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=0.05,
-                 beta=200, dropout=0.2, cuda=False):
+    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=None,
+                 beta=200, dropout=None, cuda=False):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
+
+        if nsamples < 1:
+            raise ValueError('nsamples must be > 0')
+
+        # If only 1 sample, we weigh alpha and dropout differently
+        if alpha is None:
+            alpha = 0.05 if nsamples > 1 else 0.99
+
+        if dropout is None:
+            dropout = 0.2 if nsamples > 1 else 0.0
 
         if beta <= 0:
             raise ValueError('beta must be > 0')
