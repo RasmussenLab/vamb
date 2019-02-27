@@ -48,6 +48,7 @@ import sys as _sys
 import os as _os
 import multiprocessing as _multiprocessing
 import numpy as _np
+import time as _time
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
@@ -191,17 +192,11 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
     if logfile is not None:
         def _callback(result):
             path, rpkms, length = result
-            print('\tProcessed ', path, file=logfile)
+            print('\tProcessed', path, file=logfile)
             logfile.flush()
 
-        def _error_callback(result):
-            print('\tERROR WHEN PROCESSING ', path, file=logfile)
-            raise _multiprocessing.ProcessError('ERROR WHEN PROCESSING ' + path)
     else:
         def _callback(result):
-            pass
-
-        def _error_callback(result):
             pass
 
     # Bam files must exist
@@ -249,26 +244,41 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
             if dumpdirectory is None:
                 outpath = None
             else:
-                outpath = dumpdirectory + '/' + str(pathnumber) + '.npz'
+                outpath = _os.path.join(dumpdirectory, str(pathnumber) + '.npz')
 
             arguments = (path, outpath, minscore, minlength)
             processresults.append(pool.apply_async(_get_contig_rpkms, arguments,
-                                                   callback=_callback, error_callback=_error_callback))
+                                                   callback=_callback))
 
-        # For some reason, this is needed.
-        pool.close()
+        all_done, any_fail = False, False
+        while not (all_done or any_fail):
+            _time.sleep(5)
+            all_done = all(process.ready() and process.successful() for process in processresults)
+            any_fail = any(process.ready() and not process.successful() for process in processresults)
+
+            if all_done:
+                pool.close() # exit gently
+            if any_fail:
+                pool.terminate() # exit less gently
+
+        # Wait for all processes to be cleaned up
         pool.join()
+
+    # Raise the error if one of them failed.
+    for path, process in zip(paths, processresults):
+        if process.ready() and not process.successful():
+            print('\tERROR WHEN PROCESSING:', path, file=logfile)
+            print('Vamb aborted. See stacktrace for source of exception in subprocess.')
+            logfile.flush()
+            process.get()
 
     # Verify we didn't get errors or wrong lengths
     for processresult in processresults:
-        if processresult.successful():
-            path, rpkm, length = processresult.get()
+        path, rpkm, length = processresult.get()
 
-            if length != ncontigs:
-                raise ValueError('Expected {} headers in {}, got {}.'.format(
-                                 ncontigs, path, length))
-        else:
-            processresult.get()
+        if length != ncontigs:
+            raise ValueError('Expected {} headers in {}, got {}.'.format(
+                             ncontigs, path, length))
 
     # If we did not dump to disk, load directly from process results to
     # one big matrix...
