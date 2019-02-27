@@ -51,7 +51,6 @@ assert all(i == 0 for i in contigs[3].kmercounts(4))
 assert all(i == 0 for i in contigs[3].fourmer_freq())
 
 # Correctly deals with lowercase
-assert contigs[2] == contigs[5]
 assert contigs[2].sequence == contigs[5].sequence
 
 # Correctly fails at opening bad fasta file
@@ -71,13 +70,13 @@ with vamb.vambtools.Reader(fasta_path, 'rb') as file:
     contigs2 = list(vamb.vambtools.byte_iterfasta(file))
 
 assert len(contigs) == len(contigs2)
-assert all(i == j for i,j in zip(contigs, contigs2))
+assert all(i.sequence == j.sequence for i,j in zip(contigs, contigs2))
 
 with vamb.vambtools.Reader(gzip_path, 'rb') as file:
     contigs2 = list(vamb.vambtools.byte_iterfasta(file))
 
 assert len(contigs) == len(contigs2)
-assert all(i == j for i,j in zip(contigs, contigs2))
+assert all(i.sequence == j.sequence for i,j in zip(contigs, contigs2))
 
 # Test read_contigs
 for preallocate in True, False:

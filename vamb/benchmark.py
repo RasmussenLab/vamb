@@ -234,28 +234,16 @@ class Binning:
 
         return true_positives, true_negatives, false_positives, false_negatives
 
-    def mcc(self, genome):
-        "Get the best MCC for the given genome"
-        maxmcc = 0 # default value of 0 for un-reconstructed genomes
-        for bin_name in self.intersectionsof[genome]:
-            tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
-            mcc_num = tp * tn - fp * fn
-            mcc_den = (tp + fp) * (tp + fn)
-            mcc_den *= (tn + fp) * (tn + fn)
-            mcc = 0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
-            maxmcc = max(mcc, maxmcc)
+    def mcc(self, genome, bin_name):
+        tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+        mcc_num = tp * tn - fp * fn
+        mcc_den = (tp + fp) * (tp + fn)
+        mcc_den *= (tn + fp) * (tn + fn)
+        return 0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
 
-        return maxmcc
-
-    def f1(self, genome):
-        "Get the best F1 score for the given genome"
-        maxf1 = 0
-        for bin_name in self.intersectionsof[genome]:
-            tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
-            f1 = 2*tp / (2*tp + fp + fn)
-            maxf1 = max(f1, maxf1)
-
-        return maxf1
+    def f1(self, genome, bin_name):
+        tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+        return 2*tp / (2*tp + fp + fn)
 
     def _parse_bins(self, contigsof, checkpresence):
         for bin_name, contig_names in contigsof.items():
@@ -320,12 +308,14 @@ class Binning:
         self.intersectionsof = intersectionsof
 
         # Calculate MCC score
-        mccs = [self.mcc(genome) for genome in reference.genomes.values()]
+        mccs = [max(self.mcc(genome, binname) for binname in self.intersectionsof[genome])
+                for genome in reference.genomes.values()]
         self.mean_mcc = 0 if len(mccs) == 0 else sum(mccs) / len(mccs)
         del mccs
 
         # Calculate F1 scores
-        f1s = [self.f1(genome) for genome in reference.genomes.values()]
+        f1s = [max(self.f1(genome, binname) for binname in self.intersectionsof[genome])
+                for genome in reference.genomes.values()]
         self.mean_f1 = 0 if len(f1s) == 0 else sum(f1s) / len(f1s)
         del f1s
 

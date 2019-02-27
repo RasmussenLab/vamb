@@ -54,7 +54,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         contiglengths = contiglengths[mask]
 
     else:
-        with open(fastapath, 'rb') as tnffile:
+        with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
             ret = vamb.parsecontigs.read_contigs(tnffile,
                                                  minlength=mincontiglength,
                                                  preallocate=True)
