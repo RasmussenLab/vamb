@@ -38,6 +38,12 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         contignames = vamb.vambtools.read_npz(namespath)
         contiglengths = vamb.vambtools.read_npz(lengthspath)
 
+        if not tnfs.dtype == np.float32:
+            raise ValueError('TNFs .npz array must be of float32 dtype')
+
+        if not np.issubdtype(contiglengths.dtype, np.integer):
+            raise ValueError('TNFs .npz array must be of an integer dtype')
+
         if not (len(tnfs) == len(contignames) == len(contiglengths)):
             raise ValueError('Not all of TNFs, names and lengths are same length')
 
@@ -70,6 +76,9 @@ def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subpro
     # If bampaths is None, we load RPKM directly from .npz file
     if bampaths is None:
         rpkms = vamb.vambtools.read_npz(rpkmpath)
+
+    if not rpkms.dtype == np.float32:
+        raise ValueError('RPKMs .npz array must be of float32 dtype')
 
     else:
         log('Order of columns are:', logfile, 1)
@@ -212,17 +221,17 @@ def main():
 
     # Positional arguments
     reqos = parser.add_argument_group(title='Output (required)', description=None)
-    reqos.add_argument('outdir', help='output directory to create')
+    reqos.add_argument('--outdir', metavar='', help='output directory to create')
 
     # TNF arguments
-    tnfos = parser.add_argument_group(title='TNF input (required)')
+    tnfos = parser.add_argument_group(title='TNF input (either fasta or all .npz files required)')
     tnfos.add_argument('--fasta', metavar='', help='path to fasta file')
     tnfos.add_argument('--tnfs', metavar='', help='path to .npz of TNF')
     tnfos.add_argument('--names', metavar='', help='path to .npz of names of sequences')
     tnfos.add_argument('--lengths', metavar='', help='path to .npz of seq lengths')
 
     # RPKM arguments
-    rpkmos = parser.add_argument_group(title='RPKM input (required)')
+    rpkmos = parser.add_argument_group(title='RPKM input (either BAMs or .npz required)')
     rpkmos.add_argument('--bamfiles', metavar='', help='paths to (multiple) BAM files', nargs='+')
     rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM')
 
@@ -303,20 +312,20 @@ def main():
             if path is not None:
                 raise argparse.ArgumentTypeError('Must specify either FASTA or the three .npz inputs')
         if not os.path.isfile(args.fasta):
-            raise FileNotFoundError(args.fasta)
+            raise FileNotFoundError('Not an existing file: ' + args.fasta)
 
     # Make sure only one RPKM input is there
     if args.bamfiles is None:
         if args.rpkm is None:
             raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
         if not os.path.isfile(args.rpkm):
-            raise FileNotFoundError(args.rpkm)
+            raise FileNotFoundError('Not an existing file: ' + args.rpkm)
     else:
         if args.rpkm is not None:
             raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
         for bampath in args.bamfiles:
             if not os.path.isfile(bampath):
-                raise FileNotFoundError(bampath)
+                raise FileNotFoundError('Not an existing file: ' + bampath)
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
     if args.minlength < 100:
