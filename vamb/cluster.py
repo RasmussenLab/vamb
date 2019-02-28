@@ -378,16 +378,16 @@ def _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, l
     """Checks matrix, labels, and maxsteps."""
 
     if maxsteps < 1:
-        raise ValueError('maxsteps must be a positive integer')
+        raise ValueError('maxsteps must be a positive integer, not {}'.format(maxsteps))
 
     if windowsize < 1:
-        raise ValueError('windowsize must be at least 1')
+        raise ValueError('windowsize must be at least 1, not {}'.format(windowsize))
 
     if minsuccesses < 1 or minsuccesses > windowsize:
-        raise ValueError('minsuccesses must be between 1 and windowsize')
+        raise ValueError('minsuccesses must be between 1 and windowsize, not {}'.format(minsuccesses))
 
     if default <= 0.0:
-        raise ValueError('default threshold must be a positive float')
+        raise ValueError('default threshold must be a positive float, not {}'.format(default))
 
     if len(matrix) < 1:
         raise ValueError('Matrix must have at least 1 observation.')
@@ -465,7 +465,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         clusters = clusters.items()
 
     if max_clusters is not None and max_clusters < 1:
-        raise ValueError('max_clusters must None or at least 1.')
+        raise ValueError('max_clusters must None or at least 1, not {}'.format(max_clusters))
 
     if header is not None and len(header) > 0:
         if '\n' in header:

@@ -79,7 +79,7 @@ def mergecolumns(pathlist):
     for columnno, path in enumerate(pathlist[1:]):
         column = _np.load(path)['arr_0']
         if len(column) != length:
-            raise ValueError("Length of data at {} is unlike other cols".format(path))
+            raise ValueError("Length of data at {} is unlike other RPKM data".format(path))
         result[:,columnno + 1] = column
 
     return result
@@ -233,7 +233,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
     del firstfile
 
     if ncontigs == 0:
-        raise ValueError('No headers in first bam file after filtering')
+        raise ValueError('No headers in first bam file after length filtering')
 
     # Spawn independent processes to calculate RPKM for each of the BAM files
     processresults = list()
@@ -268,7 +268,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
     for path, process in zip(paths, processresults):
         if process.ready() and not process.successful():
             print('\tERROR WHEN PROCESSING:', path, file=logfile)
-            print('Vamb aborted. See stacktrace for source of exception in subprocess.')
+            print('Vamb aborted due to error in subprocess. See stacktrace for source of exception.')
             logfile.flush()
             process.get()
 

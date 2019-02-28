@@ -263,7 +263,7 @@ class Binning:
 
                 # Check that contig is only present one time in input
                 if contig in self.binof:
-                    raise KeyError('Contig {} more than once in contigsof'.format(contig))
+                    raise KeyError('Contig {} found in multiple bins'.format(contig_name))
 
                 contigset.add(contig)
                 self.binof[contig] = bin_name
@@ -308,14 +308,14 @@ class Binning:
         self.intersectionsof = intersectionsof
 
         # Calculate MCC score
-        mccs = [max(self.mcc(genome, binname) for binname in self.intersectionsof[genome])
-                for genome in reference.genomes.values()]
+        mccs = [max((self.mcc(genome, binname) for binname in self.intersectionsof[genome]),
+                default=0.0) for genome in reference.genomes.values()]
         self.mean_mcc = 0 if len(mccs) == 0 else sum(mccs) / len(mccs)
         del mccs
 
         # Calculate F1 scores
-        f1s = [max(self.f1(genome, binname) for binname in self.intersectionsof[genome])
-                for genome in reference.genomes.values()]
+        f1s = [max((self.f1(genome, binname) for binname in self.intersectionsof[genome]),
+                default=0.0) for genome in reference.genomes.values()]
         self.mean_f1 = 0 if len(f1s) == 0 else sum(f1s) / len(f1s)
         del f1s
 
@@ -378,6 +378,6 @@ class Binning:
     def __getitem__(self, key):
         recall, precision = key
         if recall not in self.recalls or precision not in self.precisions:
-            raise KeyError('Not initialized with that recall, precision pair')
+            raise KeyError('Not initialized with recall={}, precision={}'.format(recall, precision))
 
         return self._counts.get(key, 0)

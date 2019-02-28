@@ -84,7 +84,7 @@ def inplace_maskarray(array, mask):
     """
 
     if len(mask) != len(array):
-        raise ValueError('Lengths must match')
+        raise ValueError('Lengths of array and mask must match')
     elif array.ndim != 2:
         raise ValueError('Can only take a 2 dimensional-array.')
 
@@ -99,7 +99,7 @@ class Reader:
 
     def __init__(self, filename, readmode='r'):
         if readmode not in ('r', 'rb'):
-            raise ValueError("the reader cannot write, set mode to 'r' or 'rb'")
+            raise ValueError("the Reader cannot write, set mode to 'r' or 'rb'")
 
         self.filename = filename
         self.readmode = readmode
@@ -269,7 +269,7 @@ def write_bins(directory, bins, fastadict, maxbins=250):
     # If you do this on a compute cluster it can grind the entire cluster to
     # a halt and piss people off like you wouldn't believe.
     if len(bins) > maxbins:
-        raise ValueError('Bins exceed maxbins')
+        raise ValueError('{} bins exceed maxbins of {}'.format(len(bins), maxbins))
 
     # Check that the directory is not a non-directory file,
     # and that its parent directory indeed exists

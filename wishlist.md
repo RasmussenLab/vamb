@@ -14,7 +14,7 @@ Numpy does not provide any good API to limit the number of used threads. If one 
 
 PyTorch *does* provide `torch.set_num_threads`, but when I tested it, it simply didn't work and used all threads regardless. Vamb calls this function anyway, in case the torch folks fix it.
 
-__Add more training datasets and do a more thorough hyperparameter search__
+__Do a more thorough hyperparameter search__
 
 This is probably the easiest (if time consuming) way to improve Vamb, and possibly may have the biggest impact. The problem is that clusters are not independent of the dataset they're in - what works for one dataset might not work for another. So get a collection of datasets, like the toy datasets from CAMI2, e.g. 5-10 training datasets and test more hyperparameters. In particular, these hyperparameters might be interesting to look at:
 
@@ -40,25 +40,15 @@ __Better exploitation of TNF information in clustering__
 
 There's quite a lot of information in the TNF of contigs, and Vamb is fairly bad at exploiting it.
 
-The expected TNF distance between two contigs follows approximately a chi distribution (exercise left for reader: assuming all tetranucleotides have an independent probability of being observed, show that you can model the *euclidian* TNF distance using a chi square distribution). More importantly, in *practice*, it follows a chi square distibution. Similarly, the empirical probability of two contigs belonging to different species as a function of the TNF is well modeled by the cumulative density function of a chi distribution.
+The expected TNF SSE distance between two contigs follows approximately a chi squared distribution (exercise left for reader: assuming all tetranucleotides have an independent probability of being observed, show that this is true). More importantly, in *practice*, it follows a chi square distibution. Similarly, the empirical probability of two contigs belonging to different species as a function of the TNF is well modeled by the cumulative density function of a chi square distribution.
 
-However, the exact shape of the chi distribution depends on the phylogenetic distance between the genomes of the contigs, and also the the lengths of the two contigs. Hence, a clustering algorithm which simply looks at the raw TNF value without taking in to account contig lengths is not as effective as it could be.
+However, the exact shape of the chi square distribution depends on the phylogenetic distance between the genomes of the contigs, and also the the lengths of the two contigs. Hence, a clustering algorithm which simply looks at the raw TNF value without taking in to account contig lengths is not as effective as it could be.
 
-When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heuristically estimate the parameters of the estimated chi distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a `scipy.stats.chi` object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.
+When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heuristically estimate the parameters of the estimated chi square distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a `scipy.stats.chi2` object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.
 
 A possible future approach could be to encode the depths and TNF independently with the VAE (although it could still train using both depths and TNF at the same time), and, when calculating the contig-contig distances during clustering, using a heuristic approximation of the chi distribution which can be computed quickly. Alternatively, one could cluster exclusively on depths, then afterwards identify contigs in bins with divergent TNF and/or recruit unbinned contigs to bins with similar TNF.
 
-__Determine clustering threshold for each cluster__
-
-This shouldn't be too hard to do, but at the moment I thought about it, we were too close to publication to mess everything up by changing the algorithm.
-
-The idea is that normally, VAMB estimates the clustering threshold by sampling some random contigs and looking for the threshold which separates a small group of close contigs from the rest. I have written the threshold estimation completely ad hoc. I suspect it's possible to create a more robust and accurate threshold detection method if one thinks some more about it. During clustering, the threshold can then be determined to be optimal for each seed cluster.
-
-More interestingly, it could even refuse to produce clusters for which no threshold can be determined (as this indicates it's not separated). When all the cluster-able clusters have been removed, it could resume training or otherwise change the encoding, then cluster the remaining clusters.
-
-In some very quick-and-dirty preliminary tests, I estimate that it would slow down clustering by 4x, but perhaps a more elegant and quicker solution to threshold estimation can be invented.
-
-__Implement an optional two-step clustering method for large dataset, if possible__
+__Implement an optional two-step clustering method for large datasets, if possible__
 
 So our clustering scales quadratically. That's alright for normally sized datasets, but at some point, someone is going to want to cluster 100 million sequences. Is there a way to evoid this scaling?
 
