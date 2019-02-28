@@ -74,7 +74,7 @@ def read_contigs(filehandle, minlength=100, preallocate=True):
     """
 
     if minlength < 4:
-        raise ValueError('Minlength must be at least 4')
+        raise ValueError('Minlength must be at least 4, not {}'.format(minlength))
 
     if preallocate:
         return _read_contigs_preallocated(filehandle, minlength)

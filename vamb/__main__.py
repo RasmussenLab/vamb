@@ -312,20 +312,20 @@ def main():
             if path is not None:
                 raise argparse.ArgumentTypeError('Must specify either FASTA or the three .npz inputs')
         if not os.path.isfile(args.fasta):
-            raise FileNotFoundError('Not an existing file: ' + args.fasta)
+            raise FileNotFoundError('Not an existing non-directory file: ' + args.fasta)
 
     # Make sure only one RPKM input is there
     if args.bamfiles is None:
         if args.rpkm is None:
             raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
         if not os.path.isfile(args.rpkm):
-            raise FileNotFoundError('Not an existing file: ' + args.rpkm)
+            raise FileNotFoundError('Not an existing non-directory file: ' + args.rpkm)
     else:
         if args.rpkm is not None:
             raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
         for bampath in args.bamfiles:
             if not os.path.isfile(bampath):
-                raise FileNotFoundError('Not an existing file: ' + bampath)
+                raise FileNotFoundError('Not an existing non-directory file: ' + bampath)
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
     if args.minlength < 100:

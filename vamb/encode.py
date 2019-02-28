@@ -431,7 +431,7 @@ class VAE(_nn.Module):
         """
 
         if lrate < 0:
-            raise ValueError('Learning rate cannot be negative')
+            raise ValueError('Learning rate must be positive, not {}'.format(lrate))
 
         if nepochs < 1:
             raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
