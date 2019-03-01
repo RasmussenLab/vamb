@@ -77,8 +77,8 @@ def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subpro
     if bampaths is None:
         rpkms = vamb.vambtools.read_npz(rpkmpath)
 
-    if not rpkms.dtype == np.float32:
-        raise ValueError('RPKMs .npz array must be of float32 dtype')
+        if not rpkms.dtype == np.float32:
+            raise ValueError('RPKMs .npz array must be of float32 dtype')
 
     else:
         log('Order of columns are:', logfile, 1)
@@ -151,6 +151,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     begintime = time.time()
 
     log('\nClustering', logfile)
+    log('Windowsize: {}'.format(windowsize), logfile, 1)
     log('Min successful thresholds detected: {}'.format(minsuccesses), logfile, 1)
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
@@ -221,7 +222,7 @@ def main():
 
     # Positional arguments
     reqos = parser.add_argument_group(title='Output (required)', description=None)
-    reqos.add_argument('--outdir', metavar='', help='output directory to create')
+    reqos.add_argument('--outdir', metavar='', required=True, help='output directory to create')
 
     # TNF arguments
     tnfos = parser.add_argument_group(title='TNF input (either fasta or all .npz files required)')
