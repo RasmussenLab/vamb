@@ -6,7 +6,7 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 For more information on the background, context, and theory of Vamb, read [our paper on bioRxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) (DOI: 10.1101/490078)
 
-For more information about the implementation, methodological considerations, future directions, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
+For more information about the implementation, methodological considerations, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
 Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
@@ -98,41 +98,3 @@ There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
 We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file.
-
-# Troubleshooting
-
-__Installation: Compilation fails on Arch Linux in a Conda environment__
-
-This is a known issue affecting multiple (all?) Cython-dependent packages at the moment of writing (2019-01-25). There is no easy fix to make the pip installation work, but you can compile the Cython file manually. [Link to pacman issue](https://bbs.archlinux.org/viewtopic.php?id=242682).
-
-### Parsing the FASTA file
-
-No trouble seen so far.
-
-### Parsing the BAM files
-
-No trouble seen so far.
-
-### Autoencoding
-
-No trouble seen so far.
-
-### Clustering
-
-__It warns: Only [N]% of contigs has well-separated threshold__
-
-See the issue below
-
-__It warns: Only [N]% of contigs has *any* observable threshold__
-
-This happens if the inter-contig distances do not neatly separate into close and far contigs, which can happen if:
-
-* There is little data, e.g. < 50k contigs
-* The VAE has not trained sufficiently
-* There is, for some reason, little signal in your data (low read abundances, similar bacterial strains etc.)
-
-Make sure the assembly and mapping went well. If it did, there is not much to do about it. We do not know at what percentage of well-separated or observable threshold Vamb becomes unusable. I would still use Vamb unless the following error is thrown:
-
-__It warns: Too little data: [ERROR]. Setting threshold to 0.08__
-
-This happens if less than 5 of the Pearson samples (default of 2500 samples) return any threshold. If this happens for a reasonable number of Pearson samples, e.g. > 100, I would not trust Vamb to deliver good results, and would use another binner instead.
