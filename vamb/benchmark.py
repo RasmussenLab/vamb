@@ -245,7 +245,7 @@ class Binning:
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         return 2*tp / (2*tp + fp + fn)
 
-    def _parse_bins(self, contigsof, checkpresence):
+    def _parse_bins(self, contigsof, checkpresence, disjoint):
         for bin_name, contig_names in contigsof.items():
             contigset = set()
             # This stores each contig by their true genome name.
@@ -262,7 +262,7 @@ class Binning:
                         continue
 
                 # Check that contig is only present one time in input
-                if contig in self.binof:
+                if disjoint and contig in self.binof:
                     raise KeyError('Contig {} found in multiple bins'.format(contig_name))
 
                 contigset.add(contig)
@@ -280,7 +280,9 @@ class Binning:
             self.breadthof[bin_name] = breadth
 
     def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
-              precisions=_DEFAULTPRECISIONS, checkpresence=True):
+              precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True):
+        # Checkpresence enforces that each contig in a bin is also in the reference,
+        # disjoint enforces that each contig is only present in one bin.
         if not isinstance(reference, Reference):
             raise ValueError('reference must be a Reference')
 
@@ -291,7 +293,7 @@ class Binning:
         self.contigsof = dict() # bin_name: {contigs} dict
         self.binof = dict() # contig: bin_name dict
         self.breadthof = dict() # bin_name: int dict
-        self._parse_bins(contigsof, checkpresence)
+        self._parse_bins(contigsof, checkpresence, disjoint)
         self.breadth = sum(self.breadthof.values())
 
         # counts[r,p] is number of genomes w. recall >= r, precision >= p

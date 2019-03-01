@@ -97,14 +97,14 @@ def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subpro
                                             logfile=logfile)
         print('', file=logfile)
 
-    if len(rpkms) != ncontigs:
-        raise ValueError('Number of TNF and RPKM sequences do not match. '
-                         'Are you sure the BAM files originate from same FASTA file '
-                         'and have headers?')
-
     if bampaths is not None:
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
+
+    if len(rpkms) != ncontigs:
+        raise ValueError('Number of TNF and RPKM sequences do not match. '
+                         'Are you sure the BAM files originate from same FASTA file? '
+                         'and have headers?')
 
     elapsed = round(time.time() - begintime, 2)
     log('Processed RPKM in {} seconds.'.format(elapsed), logfile, 1)
