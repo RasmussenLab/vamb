@@ -61,7 +61,10 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         raise ValueError('Lengths of RPKM and TNF must be the same')
 
     if tnf.shape[1] != 136:
-        raise ValueError('TNF must be 136 long along axis 1')
+        raise ValueError('TNF must be length 136 long along axis 1')
+
+    if not (rpkm.dtype == tnf.dtype == _np.float32):
+        raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
 
     mask = tnf.sum(axis=1) != 0
 
@@ -74,10 +77,6 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
 
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
-
-    if destroy:
-        if not (rpkm.dtype == tnf.dtype == _np.float32):
-            raise ValueError('Arrays must be of data type np.float32 if destroy is True')
 
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
@@ -134,7 +133,7 @@ class VAE(_nn.Module):
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
 
         if nsamples < 1:
-            raise ValueError('nsamples must be > 0')
+            raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
 
         # If only 1 sample, we weigh alpha and dropout differently
         if alpha is None:
@@ -144,13 +143,13 @@ class VAE(_nn.Module):
             dropout = 0.2 if nsamples > 1 else 0.0
 
         if beta <= 0:
-            raise ValueError('beta must be > 0')
+            raise ValueError('beta must be > 0, not {}'.format(beta))
 
         if not (0 < alpha < 1):
-            raise ValueError('alpha must be 0 < alpha < 1')
+            raise ValueError('alpha must be 0 < alpha < 1, not {}'.format(alpha))
 
         if not (0 <= dropout < 1):
-            raise ValueError('dropout must be 0 <= dropout < 1')
+            raise ValueError('dropout must be 0 <= dropout < 1, not {}'.format(dropout))
 
         super(VAE, self).__init__()
 
