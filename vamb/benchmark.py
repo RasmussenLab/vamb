@@ -272,13 +272,16 @@ class Binning:
                         continue
 
                 # Check that contig is only present one time in input
-                if contig in self.binof:
+                existing = self.binof.get(contig)
+                if existing is None:
+                    self.binof[contig] = bin_name
+                else:
                     if disjoint:
                         raise KeyError('Contig {} found in multiple bins'.format(contig_name))
+                    elif isinstance(existing, str):
+                        self.binof[contig] = {existing, bin_name}
                     else:
-                        self.binof[contig] = {self.binof[contig], bin_name}
-                else:
-                    self.binof[contig] = bin_name
+                        self.binof[contig].add(bin_name)
 
                 contigset.add(contig)
                 genome = self.reference.genomeof[self.reference.contigs[contig_name]]
