@@ -198,7 +198,7 @@ class Binning:
     self.nbins:           Number of bins
     self.ncontigs:        Number of binned contigs
     self.contigsof:       {bin_name: {contig set}}
-    self.binof:           {contig: bin_name}
+    self.binof:           {contig: bin_name(s)}, val is str or set
     self.breadthof:       {bin_name: breadth}
     self.intersectionsof: {genome: {bin:_name: intersection}}
     self.breadth:         Total breadth of all bins
@@ -221,8 +221,15 @@ class Binning:
         all binning bins with a nonzero recall and precision.
         """
         # Get set of all binning bin names with contigs from that genome
-        bin_names = {self.binof.get(contig) for contig in genome.contigs}
-        bin_names.discard(None)
+        bin_names = set()
+        for contig in genome.contigs:
+            bin_name = self.binof.get(contig)
+            if bin_name is None:
+                continue
+            elif isinstance(bin_name, str):
+                bin_names.add(bin_name)
+            else:
+                bin_names.update(bin_name)
 
         for bin_name in bin_names:
             intersecting_contigs = genome.contigs.intersection(self.contigsof[bin_name])
@@ -265,11 +272,15 @@ class Binning:
                         continue
 
                 # Check that contig is only present one time in input
-                if disjoint and contig in self.binof:
-                    raise KeyError('Contig {} found in multiple bins'.format(contig_name))
+                if contig in self.binof:
+                    if disjoint:
+                        raise KeyError('Contig {} found in multiple bins'.format(contig_name))
+                    else:
+                        self.binof[contig] = {self.binof[contig], bin_name}
+                else:
+                    self.binof[contig] = bin_name
 
                 contigset.add(contig)
-                self.binof[contig] = bin_name
                 genome = self.reference.genomeof[self.reference.contigs[contig_name]]
                 contigsof_genome[genome.name].append(contig)
 
@@ -294,7 +305,7 @@ class Binning:
         self.reference = reference
 
         self.contigsof = dict() # bin_name: {contigs} dict
-        self.binof = dict() # contig: bin_name dict
+        self.binof = dict() # contig: bin_name or {bin_names} dict
         self.breadthof = dict() # bin_name: int dict
         self._parse_bins(contigsof, checkpresence, disjoint)
         self.breadth = sum(self.breadthof.values())
