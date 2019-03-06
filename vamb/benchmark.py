@@ -117,6 +117,7 @@ class Reference:
     self.genome: {genome_name: genome} dict
     self.contigs: {contig_name: contig} dict
     self.genomeof: {contig_name: genome} dict
+    self.breadth: Total length of all genomes
     self.ngenomes
     self.ncontigs
     """
@@ -135,6 +136,8 @@ class Reference:
 
                 self.contigs[contig.name] = contig
                 self.genomeof[contig] = genome
+
+        self.breadth = sum(genome.breadth for genome in self.genomes.values())
 
     @property
     def ngenomes(self):
@@ -230,7 +233,7 @@ class Binning:
         true_positives = self.intersectionsof[genome].get(bin_name, 0)
         false_positives = self.breadthof[bin_name] - true_positives
         false_negatives = genome.breadth - true_positives
-        true_negatives = self.breadth - true_positives - false_negatives - false_positives
+        true_negatives = self.reference.breadth - false_negatives - false_positives + true_positives
 
         return true_positives, true_negatives, false_positives, false_negatives
 
@@ -346,7 +349,7 @@ class Binning:
 
     @classmethod
     def from_file(cls, filehandle, reference, recalls=_DEFAULTRECALLS,
-                  precisions=_DEFAULTPRECISIONS, checkpresence=True):
+                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=False):
         contigsof = dict()
         for line in filehandle:
             if line.startswith('#'):
@@ -360,7 +363,7 @@ class Binning:
             else:
                 contigsof[bin_name].append(contig_name)
 
-        return cls(contigsof, reference, recalls, precisions, checkpresence)
+        return cls(contigsof, reference, recalls, precisions, checkpresence, disjoint)
 
     def print_matrix(self, file=_sys.stdout):
         """Prints the recall/precision number of bins to STDOUT."""
