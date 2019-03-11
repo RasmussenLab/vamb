@@ -8,6 +8,7 @@ import datetime
 import time
 import shutil
 import numpy as np
+from xopen import xopen
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import vamb
@@ -23,7 +24,7 @@ def calc_tnf(outdir, fastapath, mincontiglength, logfile):
 
     log('\nCalculating TNF', logfile, 0)
 
-    with open(fastapath, 'rb') as tnffile:
+    with xopen(fastapath, 'rb') as tnffile:
         ret = vamb.parsecontigs.read_contigs(tnffile,
                                              minlength=mincontiglength,
                                              preallocate=True)
