@@ -302,9 +302,7 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
         # we relax the requirements for good clusters by increasing peak_valley_ratio
         if success is not None:
             if len(attempts) == attempts.maxlen:
-                successes -= 1
-                successes += attempts.popleft()
-
+                successes -= attempts.popleft()
                 if successes < minsuccesses:
                     peak_valley_ratio += 0.1
                     attempts.clear()
@@ -402,7 +400,7 @@ def _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, l
     if matrix.dtype != _np.float32:
         raise ValueError('Matrix must be of data type np.float32')
 
-def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=15,
+def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
             default=0.09, destroy=False, normalized=False, cuda=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
