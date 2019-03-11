@@ -69,8 +69,8 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     return tnfs, contignames
 
-def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subprocesses,
-              ncontigs, logfile):
+def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, minid,
+              subprocesses, ncontigs, logfile):
     begintime = time.time()
     log('\nLoading RPKM', logfile)
     # If bampaths is None, we load RPKM directly from .npz file
@@ -93,6 +93,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subpro
                                             dumpdirectory=dumpdirectory,
                                             minscore=minalignscore,
                                             minlength=mincontiglength,
+                                            minid=minid,
                                             subprocesses=subprocesses,
                                             logfile=logfile)
         print('', file=logfile)
@@ -174,7 +175,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, mincontiglength,
-        minalignscore, subprocesses, nhiddens, nlatent, nepochs, batchsize,
+        minalignscore, minid, subprocesses, nhiddens, nlatent, nepochs, batchsize,
         cuda, alpha, beta, dropout, lrate, batchsteps, windowsize, minsuccesses,
         minclustersize, maxclusters, logfile):
 
@@ -189,7 +190,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     # Parse BAMs, save as npz
     ncontigs = len(contignames)
     rpkms = calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore,
-                      subprocesses, ncontigs, logfile)
+                      minid, subprocesses, ncontigs, logfile)
 
     # Train, save model
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
@@ -241,8 +242,10 @@ def main():
 
     inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
                          help='ignore contigs shorter than this [100]')
-    inputos.add_argument('-s', dest='minascore', metavar='', type=int,
+    inputos.add_argument('-s', dest='minascore', metavar='', type=int, default=None,
                          help='ignore reads with alignment score below this [None]')
+    inputos.add_argument('-z', dest='minid', metavar='', type=float, default=None,
+                         help='ignore reads with nucleotide identity below this [None]')
     inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
                          help=('number of subprocesses to spawn '
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
@@ -268,7 +271,7 @@ def main():
                         default=500, help='epochs [500]')
     trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
                         default=64, help='starting batch size [64]')
-    trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='+',
+    trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='*',
                         default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
     trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
                         default=1e-3, help='learning rate [0.001]')
@@ -332,6 +335,9 @@ def main():
     if args.minlength < 100:
         raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
 
+    if args.minid is not None and args.minid >= 1.0:
+        raise argparse.ArgumentTypeError('Minimum nucleotide ID must be in [0:1)')
+
     if args.subprocesses < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
 
@@ -362,7 +368,7 @@ def main():
         raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
 
     args.batchsteps = sorted(set(args.batchsteps))
-    if max(args.batchsteps) >= args.nepochs:
+    if max(args.batchsteps, default=0) >= args.nepochs:
         raise argparse.ArgumentTypeError('All batchsteps must be less than nepochs')
 
     if args.lrate <= 0:
@@ -400,6 +406,7 @@ def main():
             args.rpkm,
             mincontiglength=args.minlength,
             minalignscore=args.minascore,
+            minid=args.minid,
             subprocesses=subprocesses,
             nhiddens=args.nhiddens,
             nlatent=args.nlatent,

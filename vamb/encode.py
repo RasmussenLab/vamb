@@ -422,7 +422,7 @@ class VAE(_nn.Module):
             dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
-            batchsteps: Double batchsize at these epochs [25, 75, 150, 300]
+            batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
