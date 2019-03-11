@@ -34,8 +34,11 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     log('\nLoading TNF', logfile, 0)
     # If no path to FASTA is given, we load TNF from .npz files
     if fastapath is None:
+        log('Loading TNF from npz array {}'.format(tnfpath), logfile, 1)
         tnfs = vamb.vambtools.read_npz(tnfpath)
+        log('Loading contignames from npz array {}'.format(namespath), logfile, 1)
         contignames = vamb.vambtools.read_npz(namespath)
+        log('Loading contiglengths from npz array {}'.format(lengthspath), logfile, 1)
         contiglengths = vamb.vambtools.read_npz(lengthspath)
 
         if not tnfs.dtype == np.float32:
@@ -54,6 +57,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         contiglengths = contiglengths[mask]
 
     else:
+        log('Loading data from FASTA file {}'.format(fastapath), logfile, 1)
         with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
             ret = vamb.parsecontigs.read_contigs(tnffile,
                                                  minlength=mincontiglength,
@@ -75,18 +79,18 @@ def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subpro
     log('\nLoading RPKM', logfile)
     # If bampaths is None, we load RPKM directly from .npz file
     if bampaths is None:
+        log('Loading RPKM from npz array {}'.format(rpkmpath), logfile, 1)
         rpkms = vamb.vambtools.read_npz(rpkmpath)
 
         if not rpkms.dtype == np.float32:
             raise ValueError('RPKMs .npz array must be of float32 dtype')
 
     else:
+        log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
+           logfile, 1)
         log('Order of columns are:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
-
-        log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
-           logfile, 1)
 
         dumpdirectory = os.path.join(outdir, 'tmp')
         rpkms = vamb.parsebam.read_bamfiles(bampaths,
@@ -268,7 +272,7 @@ def main():
                         default=500, help='epochs [500]')
     trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
                         default=64, help='starting batch size [64]')
-    trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='+',
+    trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='*',
                         default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
     trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
                         default=1e-3, help='learning rate [0.001]')
@@ -277,7 +281,7 @@ def main():
     clusto.add_argument('-w', dest='windowsize', metavar='', type=int,
                         default=200, help='size of window to count successes [200]')
     clusto.add_argument('-u', dest='minsuccesses', metavar='', type=int,
-                        default=15, help='minimum success in window [15]')
+                        default=20, help='minimum success in window [20]')
     clusto.add_argument('-i', dest='minsize', metavar='', type=int,
                         default=1, help='minimum cluster size [1]')
     clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
@@ -362,7 +366,7 @@ def main():
         raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
 
     args.batchsteps = sorted(set(args.batchsteps))
-    if max(args.batchsteps) >= args.nepochs:
+    if max(args.batchsteps, default=0) >= args.nepochs:
         raise argparse.ArgumentTypeError('All batchsteps must be less than nepochs')
 
     if args.lrate <= 0:

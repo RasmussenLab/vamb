@@ -4,6 +4,12 @@ Vamb is under an MIT licence, so please feel free to fork, extend, or copy Vamb 
 
 Here's a short wish list for improvements to Vamb we haven't had time for:
 
+__Implement importance sampling in the VAE__
+Idea from this paper: https://arxiv.org/abs/1509.00519
+The general idea is that the CE/SSE losses are only calculated from a single sample of the latent distribution. This creates unavoidable sampling error, which can be reduced by sampling multiple values and taking an average of the CE/SSE loss.
+
+Maybe try with 5 samples in the beginning, and see how it performs.
+
 __Implement better user control of multithreading__
 
 Vamb uses multiple threads/processes. Sadly, at the moment, there is no good way for the user to control the number of used threads - and this is harder to implement than one would think.

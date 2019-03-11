@@ -124,8 +124,6 @@ class Reader:
     def __exit__(self, type, value, traceback):
         self.filehandle.close()
 
-
-
 class FastaEntry:
     """One single FASTA entry"""
 
@@ -312,20 +310,6 @@ def write_bins(directory, bins, fastadict, maxbins=250):
                 entry = fastadict[contig]
                 print(entry.format(), file=file)
 
-
-
-def read_tsv(file, dtype=_np.float32):
-    """Loads array in TSV format
-
-    Input: Open file or path to file with tsv-formatted array
-
-    Output: A Numpy array
-    """
-
-    array = _np.loadtxt(file, delimiter='\t', comments='#', dtype=dtype)
-
-    return array
-
 def read_npz(file):
     """Loads array in .npz-format
 
@@ -339,19 +323,6 @@ def read_npz(file):
     npz.close()
 
     return array
-
-def write_tsv(file, array, header=''):
-    """Writes a Numpy array to an open file or path in .tsv format
-
-    Inputs:
-        file: Open file or path to file
-        array: Numpy array
-        headers: String to use as header (will be prepended by #)
-
-    Output: None
-    """
-
-    _np.savetxt(file, array, fmt='%.4f', delimiter='\t', header=header, comments='#')
 
 def write_npz(file, array):
     """Writes a Numpy array to an open file or path in .npz format
