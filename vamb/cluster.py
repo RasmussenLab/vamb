@@ -298,18 +298,21 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
         threshold, success = _find_threshold(distances, peak_valley_ratio, default)
 
         # If success is not None, either threshold detection failed or succeded.
-        # If less than minsuccesses out of the last windowsize attempts succeeded,
-        # we relax the requirements for good clusters by increasing peak_valley_ratio
         if success is not None:
+            # Keep accurately track of successes if we exceed maxlen
             if len(attempts) == attempts.maxlen:
                 successes -= attempts.popleft()
-                if successes < minsuccesses:
-                    peak_valley_ratio += 0.1
-                    attempts.clear()
-                    successes = 0
 
+            # Add the current success to count
             successes += success
             attempts.append(success)
+
+            # If less than minsuccesses of the last maxlen attempts were successful,
+            # we relax the clustering criteria and reset counting successes.
+            if len(attempts) == attempts.maxlen and successes < minsuccesses:
+                peak_valley_ratio += 0.1
+                attempts.clear()
+                successes = 0
 
     cluster = _np.where(distances <= threshold)[0]
     return cluster, medoid, seed, peak_valley_ratio
