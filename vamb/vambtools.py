@@ -1,6 +1,8 @@
 
 import os as _os
 import gzip as _gzip
+import bz2 as _bz2
+import lzma as _lzma
 import numpy as _np
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
 
@@ -95,7 +97,14 @@ def inplace_maskarray(array, mask):
     return array
 
 class Reader:
-    "Use this instead of `open` for files which may be gzipped or not."
+    """Use this instead of `open` to open files which are either plain text,
+    gzipped, bzip2'd or zipped with LZMA.
+
+    Usage:
+    >>> with Reader(file, readmode) as file: # by default textmode
+    >>>     print(next(file))
+    TEST LINE
+    """
 
     def __init__(self, filename, readmode='r'):
         if readmode not in ('r', 'rb'):
@@ -106,16 +115,27 @@ class Reader:
 
     def __enter__(self):
         with open(self.filename, 'rb') as f:
-            signature = f.peek(2)[:2]
+            signature = f.peek(8)[:8]
 
-        # Gzipped files begin with the two bytes 1F8B
-        if tuple(signature) == (31, 139):
+        # Gzipped files begin with the two bytes 0x1F8B
+        if tuple(signature[:2]) == (0x1F, 0x8B):
             if self.readmode == 'r':
                 self.filehandle = _gzip.open(self.filename, 'rt')
-
             else:
                 self.filehandle = _gzip.open(self.filename, self.readmode)
-
+        # bzip2 files begin with the signature BZ
+        elif signature[:2] == b'BZ':
+            if self.readmode == 'r':
+                self.filehandle = _bz2.open(self.filename, 'rt')
+            else:
+                self.filehandle = _bz2.open(self.filename, self.readmode)
+        # .XZ files begins with 0xFD377A585A0000
+        elif tuple(signature[:7]) == (0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00):
+            if self.readmode == 'r':
+                self.filehandle = _lzma.open(self.filename, 'rt')
+            else:
+                self.filehandle = _lzma.open(self.filename, self.readmode)
+        # Else we assume it's a text file.
         else:
             self.filehandle = open(self.filename, self.readmode)
 
