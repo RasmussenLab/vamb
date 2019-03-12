@@ -250,7 +250,8 @@ class VAE(_nn.Module):
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
-            ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
+            # Add 1e-9 to depths_out to avoid numerical instability.
+            ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
             ce_weight = (1 - self.alpha) / _log(self.nsamples)
         else:
             ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
