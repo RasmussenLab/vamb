@@ -163,7 +163,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
                               minsuccesses=minsuccesses, labels=contignames,
-                              cuda=cuda, logfile=logfile)
+                              logfile=logfile)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
         clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile, it,
