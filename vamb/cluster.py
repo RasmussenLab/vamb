@@ -39,7 +39,6 @@ import sys as _sys
 import os as _os
 import random as _random
 import numpy as _np
-import torch as _torch
 from collections import defaultdict as _defaultdict, deque as _deque
 import vamb.vambtools as _vambtools
 
@@ -166,11 +165,18 @@ def _numpy_distances(matrix, index):
     "Return vector of distances from rows of normalized matrix to given row."
     return 0.5 - _np.dot(matrix, matrix[index].T)
 
-def _torch_distances(tensor, index):
-    "Return vector of distances from rows of normalized matrix to given row."
-    return 0.5 - _torch.matmul(tensor, tensor[index])
+def _getcluster(distances, medoid, threshold):
+    """Returns the cluster given distances from a medoid"""
+    cluster = _np.where(distances <= threshold)[0]
 
-def _numpy_getcluster(matrix, medoid, threshold):
+    # This happens if std(matrix[points]) == 0, then all distances
+    # become 0.5, even the distance to itself.
+    if len(cluster) == 0:
+        return _np.array([medoid])
+    else:
+        return cluster
+
+def _sample_medoid(matrix, medoid, threshold):
     """Returns:
     - A vector of indices to points within threshold
     - A vector of distances to these points
@@ -178,41 +184,13 @@ def _numpy_getcluster(matrix, medoid, threshold):
     """
 
     distances = _numpy_distances(matrix, medoid)
-    cluster = _np.where(distances <= threshold)[0]
-
-    # This happens if std(matrix[points]) == 0, then all distances
-    # become 0.5, even the distance to itself.
-    if len(cluster) < 2:
-        cluster = _np.array([medoid])
+    cluster = _getcluster(distances, medoid, threshold)
+    if len(cluster) == 1:
         average_distance = 0
     else:
         average_distance = _np.sum(distances[cluster]) / (len(cluster) - 1)
 
     return cluster, distances, average_distance
-
-def _torch_getcluster(tensor, kept_mask, medoid, threshold):
-    """
-    Returns:
-    - A boolean mask of which points are within the threshold
-    - A vector of the indices of all points within threshold
-    - The mean distance from medoid to all other points within threshold
-    """
-
-    distances = _torch_distances(tensor, medoid)
-    mask = (distances <= threshold) & kept_mask
-    inner_dists = distances[mask]
-
-    # If the standard deviation of a row of the latent matrix is zero, all
-    # distances becomes 0.5 - even to itself, so we need to cover both special
-    # cases of len(inner_dists) being 0 and 1.
-    if len(inner_dists) < 2:
-        average_distance = 0
-        mask[medoid] = 1
-    else:
-        average_distance = inner_dists.sum().item() / (len(inner_dists) - 1)
-
-    cluster = mask.nonzero().reshape(-1)
-    return mask, cluster, average_distance
 
 def _numpy_wander_medoid(matrix, medoid, max_attempts, rng):
     """Keeps sampling new points within the cluster until it has sampled
@@ -221,7 +199,7 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, rng):
 
     futile_attempts = 0
     tried = {medoid} # keep track of already-tried medoids
-    cluster, distances, average_distance = _numpy_getcluster(matrix, medoid, _MEDOID_RADIUS)
+    cluster, distances, average_distance = _sample_medoid(matrix, medoid, _MEDOID_RADIUS)
 
     while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
         sampled_medoid = rng.choice(cluster)
@@ -232,7 +210,7 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, rng):
 
         tried.add(sampled_medoid)
 
-        sampling = _numpy_getcluster(matrix, sampled_medoid, _MEDOID_RADIUS)
+        sampling = _sample_medoid(matrix, sampled_medoid, _MEDOID_RADIUS)
         sample_cluster, sample_distances, sample_avg = sampling
 
         # If the mean distance of inner points of the sample is lower,
@@ -249,42 +227,6 @@ def _numpy_wander_medoid(matrix, medoid, max_attempts, rng):
             futile_attempts += 1
 
     return medoid, distances
-
-def _torch_wander_medoid(tensor, kept_mask, medoid, max_attempts, threshold, rng):
-    """Keeps sampling new medoids within `threshold` distance to the medoid,
-      until it has sampled `max_attempts` times without getting a new set of
-      inner points with lower average distance to medoid."""
-
-    futile_attempts = 0
-    tried = {medoid} # keep track of already-tried medoids
-    mask, cluster, average_distance = _torch_getcluster(tensor, kept_mask, medoid, threshold)
-
-    while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
-        sampled_medoid = rng.choice(cluster).item()
-
-         # Prevent sampling same medoid multiple times.
-        while sampled_medoid in tried:
-            sampled_medoid = rng.choice(cluster).item()
-
-        tried.add(sampled_medoid)
-
-        _ = _torch_getcluster(tensor, kept_mask, sampled_medoid, threshold)
-        sample_mask, sample_cluster, sample_average = _
-
-        # If the mean distance of cluster of the sample is lower,
-        # we move the medoid and reset the futile_attempts count
-        if sample_average < average_distance:
-            medoid = sampled_medoid
-            mask = sample_mask
-            cluster = sample_cluster
-            average_distance = sample_average
-            futile_attempts = 0
-            tried = {medoid}
-
-        else:
-            futile_attempts += 1
-
-    return medoid, mask
 
 def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses, default, rng, attempts):
     """Finds a cluster to output.
@@ -314,7 +256,7 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
                 attempts.clear()
                 successes = 0
 
-    cluster = _np.where(distances <= threshold)[0]
+    cluster = _getcluster(distances, medoid, threshold)
     return cluster, medoid, seed, peak_valley_ratio
 
 def _numpy_cluster(matrix, labels, indices, max_steps, windowsize, minsuccesses, default):
@@ -345,36 +287,6 @@ def _numpy_cluster(matrix, labels, indices, max_steps, windowsize, minsuccesses,
         kept_mask.resize(len(matrix), refcheck=False)
         kept_mask[:] = True
 
-def _torch_cluster(tensor, labels, indices, threshold, max_steps):
-    """Yields (medoid, points) pairs from a (obs x features) matrix"""
-    kept_mask = _torch.ones(len(tensor), dtype=_torch.uint8)
-    rng = _random.Random(0)
-
-    # Move tensors to GPU
-    tensor = tensor.cuda()
-    kept_mask = kept_mask.cuda()
-    indices = indices.cuda()
-
-    # The seed is the first index that has not yet been clustered
-    possible_seeds = kept_mask.nonzero().reshape(-1)
-    while len(possible_seeds) > 0:
-        seed = possible_seeds[0]
-
-        # Find the most optimal medoid by letting it wander around
-        medoid, mask = _torch_wander_medoid(tensor, kept_mask, seed, max_steps, threshold, rng)
-        kept_mask &= ~mask # And add these new points to the set of removed points
-        cluster = indices[mask]
-        cluster = cluster.cpu().numpy()
-
-        # Write data to output. We use indices instead of labels directly to
-        # prevent masking and thereby duplicating large string arrays
-        if labels is None:
-            yield indices[medoid].item() + 1, {i+1 for i in cluster}
-        else:
-            yield labels[indices[medoid].item()], {labels[i] for i in cluster}
-
-        possible_seeds = kept_mask.nonzero().reshape(-1)
-
 def _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, logfile):
     """Checks matrix, labels, and maxsteps."""
 
@@ -404,7 +316,7 @@ def _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, l
         raise ValueError('Matrix must be of data type np.float32')
 
 def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
-            default=0.09, destroy=False, normalized=False, cuda=False, logfile=None):
+            default=0.09, destroy=False, normalized=False, logfile=None):
     """Iterative medoid cluster generator. Yields (medoid), set(labels) pairs.
 
     Inputs:
@@ -416,7 +328,6 @@ def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
         minsuccesses: Minimum acceptable number of successes [15]
         destroy: Save memory by destroying matrix while clustering [False]
         normalized: Matrix is already preprocessed [False]
-        cuda: Use CUDA (GPU acceleration) based on PyTorch. [False]
         logfile: Print threshold estimates and certainty to file [None]
 
     Output: Generator of (medoid, set(labels_in_cluster)) tuples.
@@ -433,14 +344,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
         _normalize(matrix, inplace=True)
 
     _check_params(matrix, labels, maxsteps, windowsize, minsuccesses, default, logfile)
-
-    if cuda:
-        tensor = _torch.from_numpy(matrix)
-        indices = _torch.from_numpy(indices)
-        raise NotImplementedError('CUDA clustering not yet implemented.')
-        return _torch_cluster(tensor, labels, indices, threshold, maxsteps)
-    else:
-        return _numpy_cluster(matrix, labels, indices, maxsteps, windowsize, minsuccesses, default)
+    return _numpy_cluster(matrix, labels, indices, maxsteps, windowsize, minsuccesses, default)
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None):
