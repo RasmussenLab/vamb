@@ -114,9 +114,9 @@ class Reference:
     Reference(ngenomes=2, ncontigs=100)
 
     Properties:
-    self.genome: {genome_name: genome} dict
+    self.genomes: {genome_name: genome} dict
     self.contigs: {contig_name: contig} dict
-    self.genomeof: {contig_name: genome} dict
+    self.genomeof: {contig: genome} dict
     self.breadth: Total length of all genomes
     self.ngenomes
     self.ncontigs
