@@ -372,3 +372,24 @@ def filtercontigs(infile, outfile, minlength=2000):
     for entry in fasta_entries:
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
+
+def load_jgi(filehandle):
+    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
+    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
+
+    Usage:
+        with open('/path/to/jgi_depths.tsv') as file:
+            depths = load_jgi(file)
+    Input:
+        File handle of open output depth file
+    Output:
+        N_contigs x N_samples Numpy matrix of dtype float32
+    """
+
+    header = next(filehandle)
+    fields = header.split('\t')
+    if not fields[4].endswith('-var'):
+        raise ValueError('Input file format error: 5th column should contain variances.')
+
+    columns = tuple(range(3, len(fields), 2))
+    return _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
