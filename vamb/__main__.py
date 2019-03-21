@@ -73,17 +73,23 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     return tnfs, contignames
 
-def calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore, subprocesses,
+def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore, subprocesses,
               ncontigs, logfile):
     begintime = time.time()
     log('\nLoading RPKM', logfile)
-    # If bampaths is None, we load RPKM directly from .npz file
-    if bampaths is None:
+    # If rpkm is given, we load directly from .npz file
+    if rpkmpath is not None:
         log('Loading RPKM from npz array {}'.format(rpkmpath), logfile, 1)
         rpkms = vamb.vambtools.read_npz(rpkmpath)
 
         if not rpkms.dtype == np.float32:
             raise ValueError('RPKMs .npz array must be of float32 dtype')
+
+    # Else if JGI is given, we load from that
+    elif jgipath is not None:
+        log('Loading RPKM from JGI file {}'.format(jgipath), logfile, 1)
+        with open(jgipath) as file:
+            rpkms = vamb.vambtools.load_jgi(file)
 
     else:
         log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
@@ -177,8 +183,8 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     elapsed = round(time.time() - begintime, 2)
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
-def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, mincontiglength,
-        minalignscore, subprocesses, nhiddens, nlatent, nepochs, batchsize,
+def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
+        mincontiglength, minalignscore, subprocesses, nhiddens, nlatent, nepochs, batchsize,
         cuda, alpha, beta, dropout, lrate, batchsteps, windowsize, minsuccesses,
         minclustersize, maxclusters, logfile):
 
@@ -192,7 +198,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
 
     # Parse BAMs, save as npz
     ncontigs = len(contignames)
-    rpkms = calc_rpkm(outdir, bampaths, rpkmpath, mincontiglength, minalignscore,
+    rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore,
                       subprocesses, ncontigs, logfile)
 
     # Train, save model
@@ -236,9 +242,10 @@ def main():
     tnfos.add_argument('--lengths', metavar='', help='path to .npz of seq lengths')
 
     # RPKM arguments
-    rpkmos = parser.add_argument_group(title='RPKM input (either BAMs or .npz required)')
+    rpkmos = parser.add_argument_group(title='RPKM input (either BAMs, JGI or .npz required)')
     rpkmos.add_argument('--bamfiles', metavar='', help='paths to (multiple) BAM files', nargs='+')
     rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM')
+    rpkmos.add_argument('--jgi', metavar='', help='path to output of jgi_summarize_bam_contig_depths')
 
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
@@ -320,14 +327,14 @@ def main():
             raise FileNotFoundError('Not an existing non-directory file: ' + args.fasta)
 
     # Make sure only one RPKM input is there
-    if args.bamfiles is None:
-        if args.rpkm is None:
-            raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
-        if not os.path.isfile(args.rpkm):
+    if sum(i is not None for i in (args.bamfiles, args.rpkm, args.jgi)) != 1:
+        raise argparse.ArgumentTypeError('Must specify BAM files, JGI file or RPKM input')
+
+    for path in args.rpkm, args.jgi:
+        if path is not None and not os.path.isfile(path):
             raise FileNotFoundError('Not an existing non-directory file: ' + args.rpkm)
-    else:
-        if args.rpkm is not None:
-            raise argparse.ArgumentTypeError('Must specify either BAM files or RPKM input')
+
+    if args.bamfiles is not None:
         for bampath in args.bamfiles:
             if not os.path.isfile(bampath):
                 raise FileNotFoundError('Not an existing non-directory file: ' + bampath)
@@ -402,6 +409,7 @@ def main():
             args.lengths,
             args.bamfiles,
             args.rpkm,
+            args.jgi,
             mincontiglength=args.minlength,
             minalignscore=args.minascore,
             subprocesses=subprocesses,
