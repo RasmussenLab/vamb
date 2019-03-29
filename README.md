@@ -62,11 +62,13 @@ So before you can run Vamb, you need to have files from which Vamb can calculate
 * TNF is calculated from a regular fasta file of DNA sequences.
 * Depth is calculated from BAM-files of mapping reads to that same fasta file.
 
-The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on contigs is better.
+Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM file is constructed carelessly, for example by allowing too many mismatches when mapping, then closely related species will cross-map to each other, and the BAM file will contain to information with which Vamb can separate the crossmapping species.
+
+The observed values for both TNF and RPKM are statistically uncertain when the sequences is too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on (larger) contigs is better.
 
 With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. The better approach is to split the dataset up into smaller chuncks and bin them independently.
 
-There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask. In those situations, you can still pass the argument `minlength` (`-m` on command line) if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads during mapping which are then not mapped to the larger contigs, but it can work alright.
+There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask. In those situations, you can still pass the argument `minlength` (`-m` on command line) if you want to have Vamb ignore the smaller contigs.
 
 ### Outputs
 
@@ -97,4 +99,4 @@ There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs 
 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
-We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file.
+We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. Be careful to choose proper parameters for your aligner - in general, if a read from contig A will map to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use.
