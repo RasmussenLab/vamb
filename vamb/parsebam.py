@@ -199,6 +199,10 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
         def _callback(result):
             pass
 
+    # Bam files must be unique.
+    if len(paths) != len(set(paths)):
+        raise ValueError('All paths to BAM files must be unique.')
+
     # Bam files must exist
     for path in paths:
         if not _os.path.isfile(path):
