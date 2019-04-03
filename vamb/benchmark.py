@@ -1,25 +1,24 @@
 # The approach to benchmarking is this:
 #
-# Most fundamentally, we have a Contig. A contig is associated with a subject, where
+# Most fundamentally, we have a Contig. A Contig is associated with a subject, where
 # it comes from and aligns to. It thus has a start and end position in that subject.
 # A set of contigs has a breadth. This is the number of basepairs covered by the
-# contigs.
+# contigs in their respective subjects, where basepairs covered by multiple Contigs are
+# only counted once.
 #
 # A Genome is simply a collection of contigs. A set of Genomes constitute a Reference.
 #
 # A Binning is a collection of sets of contigs, each set representing a bin. It is
 # required that all contigs in a Binning comes from Genomes in the same Reference.
-# A bin's breadth is the total basepairs covered by the contigs of a bin, but since
-# the contigs of a bin may come from multiple Genomes, the bin breadth is the sum
-# of these per-Genome breadths.
-# The breadth of a Binning is the sum of breadths of each bin. This implies that the
-# breadth of a Binning can exceed the total length of all the underlying Genomes.
+# The breadth of a Binning is the sum of breadths of each bin. If the same subject are
+# covered by multiple different bins, these are counted multiple times. This implies that
+# the breadth of a Binning can exceed the total length of all the underlying Genomes.
 #
 # When creating a Binning, for each genome/bin pair, the following base statistics
 # are calculated:
-# * True positives (TP) is the breadth of the Genome covered by contigs in the bin
+# * True positives (TP) is the breadth of the intersection of the bin and the genome contigs
 # * False positives (FP) is the bin breadth minus TP
-# * False negatives (FN) is the Genome length minus TP
+# * False negatives (FN) is the Genome breadth minus TP
 # * True negatives (TN) is the Binning breadth minus TP+FP+FN
 #
 # From these values, the recall, precision, Matthew's correlation coefficient (MCC)
@@ -61,21 +60,62 @@ from itertools import product as _product
 import sys as _sys
 from math import sqrt as _sqrt
 
-Contig = _collections.namedtuple('Contig', ['name', 'subject', 'start', 'end'])
+class Contig:
+    """An object representing a contig mapping to a subject at position start:end.
+    Mapping positions use the half-open interval, like Python ranges and slices.
+
+    Instantiate either with name, subject and mapping start/end:
+        Contig('contig_41', 'subject_1', 11, 510)
+    Or with only name and length
+        Contig.subjectless('contig_41', 499)
+    A subjectless Contig uses itself as a subject (implying it only maps to itself).
+    """
+    __slots__ = ['name', 'subject', 'start', 'end']
+
+    def __init__(self, name, subject, start, end):
+        if end <= start:
+            raise ValueError('Contig end must be higher than start')
+
+        self.name = name
+        self.subject = subject
+        self.start = start
+        self.end = end
+
+    @classmethod
+    def subjectless(cls, name, length):
+        "Instantiate with only name and length"
+        return cls(name, name, 0, length)
+
+    def __repr__(self):
+        return 'Contig({}, subject={}, {}:{})'.format(self.name, self.subject, self.start, self.end)
+
+    @property
+    def __len__(self):
+        return self.end - self.start
 
 class Genome:
-    """A set of clusters known to come from the same organism.
+    """A set of contigs known to come from the same organism.
+    The breadth must be updated after adding/removing contigs with self.update_breadth(),
+    before it is accurate.
     >>> genome = Genome('E. coli')
     >>> genome.add(contig)
+    >>> genome.update_breadth()
     """
     __slots__ = ['name', 'breadth', 'contigs']
 
     def __init__(self, name):
         self.name = name
         self.contigs = set()
+        self.breadth = 0
 
     def add(self, contig):
         self.contigs.add(contig)
+
+    def remove(self, contig):
+        self.contigs.remove(contig)
+
+    def discard(self, contig):
+        self.contigs.discard(contig)
 
     @property
     def ncontigs(self):
@@ -93,13 +133,14 @@ class Genome:
             contiglist.sort(key=lambda contig: contig.start)
             rightmost_end = float('-inf')
 
-            for contig_name, subject, start, end in contiglist:
-                breadth += max(end, rightmost_end) - max(start, rightmost_end)
-                rightmost_end = max(end, rightmost_end)
+            for contig in contiglist:
+                breadth += max(contig.end, rightmost_end) - max(contig.start, rightmost_end)
+                rightmost_end = max(contig.end, rightmost_end)
 
         return breadth
 
-    def update(self):
+    def update_breadth(self):
+        "Updates the breadth of the genome"
         self.breadth = self.getbreadth(self.contigs)
 
     def __repr__(self):
@@ -107,6 +148,8 @@ class Genome:
 
 class Reference:
     """A set of Genomes known to represent the ground truth for binning.
+    Instantiate with any iterable of Genomes.
+
     >>> print(my_genomes)
     [Genome('E. coli'), ncontigs=95, breadth=5012521),
      Genome('Y. pestis'), ncontigs=5, breadth=46588721)]
@@ -128,7 +171,89 @@ class Reference:
         self.contigs = dict() # contig_name : contig dict
         self.genomeof = dict() # contig : genome dict
 
+        # Load genomes into list in case it's a one-time iterator
+        genomes_backup = list(genomes) if iter(genomes) is genomes else genomes
+
+        # Check that there are no genomes with same name
+        if len({genome.name for genome in genomes_backup}) != len(genomes_backup):
+            raise ValueError('Multiple genomes with same name not allowed in Reference.')
+
+        for genome in genomes_backup:
+            self.add(genome)
+
+        self.breadth = sum(genome.breadth for genome in genomes_backup)
+
+    @property
+    def ngenomes(self):
+        return len(self.genomes)
+
+    @property
+    def ncontigs(self):
+        return len(self.contigs)
+
+    def __repr__(self):
+        return 'Reference(ngenomes={}, ncontigs={})'.format(self.ngenomes, self.ncontigs)
+
+    @staticmethod
+    def _parse_subject_line(line):
+        "Returns contig, genome_name from a reference file line with subjects"
+        contig_name, genome_name, subject, start, end = line[:-1].split('\t')
+        start = int(start)
+        end = int(end) + 1 # semi-open interval used in internals, like range()
+        contig = Contig(contig_name, subject, start, end)
+        return contig, genome_name
+
+    @staticmethod
+    def _parse_subjectless_line(line):
+        "Returns contig, genome_name from a reference file line without subjects"
+        contig_name, genome_name, length = line[:-1].split('\t')
+        length = int(length)
+        contig = Contig.subjectless(contig_name, length)
+        return contig, genome_name
+
+    @classmethod
+    def _parse_file(cls, filehandle, subjectless=False):
+        "Returns a list of genomes from a reference file"
+        function =  cls._parse_subjectless_line if subjectless else cls._parse_subject_line
+
+        genomes = dict()
+        for line in filehandle:
+            # Skip comments
+            if line.startswith('#'):
+                continue
+
+            contig, genome_name = function(line)
+            genome = genomes.get(genome_name)
+            if genome is None:
+                genome = Genome(genome_name)
+                genomes[genome_name] = genome
+            genome.add(contig)
+
+        # Update all genomes
+        genomes = list(genomes.values())
         for genome in genomes:
+            genome.update_breadth()
+
+        return genomes
+
+    @classmethod
+    def from_file(cls, filehandle, subjectless=False):
+        """Instantiate a Reference from an open filehandle.
+        "subjectless" refers to the style of reference file: If true, assumes columns are
+        [contig_name, genome_name, contig_length]. If false, assume
+        [contig_name, genome_name, subject_name, mapping_start, mapping_end]
+
+        >>> with open('my_reference.tsv') as filehandle:
+            Reference.from_file(filehandle)
+        Reference(ngenomes=2, ncontigs=100)
+        """
+
+        genomes = cls._parse_file(filehandle, subjectless=subjectless)
+        return cls(genomes)
+
+    def add(self, genome):
+        "Adds a genome to this Reference. If already present, do nothing."
+        if genome.name not in self.genomes:
             self.genomes[genome.name] = genome
             for contig in genome.contigs:
                 if contig.name in self.contigs:
@@ -137,50 +262,26 @@ class Reference:
                 self.contigs[contig.name] = contig
                 self.genomeof[contig] = genome
 
-        self.breadth = sum(genome.breadth for genome in self.genomes.values())
+    def remove(self, genome):
+        "Removes a genome from this Reference, raising an error if it is not present."
+        del self.genomes[genome.name]
 
-    @property
-    def ngenomes(self):
-        return len(self.genomes)
+        for contig in genome.contigs:
+            del self.contigs[contig.name]
+            del self.genomeof[contig]
 
-    @property
-    def ncontigs(self):
-        return len(self.genomeof)
+    def discard(self, genome):
+        "Remove a genome if it is present, else do nothing."
+        if genome.name in self.genomes:
+            self.remove(genome)
 
-    def __repr__(self):
-        return 'Reference(ngenomes={}, ncontigs={})'.format(self.ngenomes, self.ncontigs)
-
-    @classmethod
-    def from_file(cls, filehandle):
-        """Instantiate a Reference from an open filehandle
-        >>> with open('my_reference.tsv') as filehandle:
-            Reference.from_file(filehandle)
-        Reference(ngenomes=2, ncontigs=100)
-        """
-
-        genomes = dict()
-        for line in filehandle:
-            # Skip comments
-            if line.startswith('#'):
-                continue
-
-            contig_name, genome_name, subject, start, end = line[:-1].split('\t')
-            start = int(start)
-            end = int(end) + 1 # semi-open interval used in internals, like range()
-            contig = Contig(contig_name, subject, start, end)
-            genome = genomes.get(genome_name)
-            # Create a new Genome if we have not seen it before
-            if genome is None:
-                genome = Genome(genome_name)
-                genomes[genome_name] = genome
-            genome.add(contig)
-
-        # Update all genomes
-        for genome in genomes.values():
-            genome.update()
-
-        # Construct instance
-        return cls(genomes.values())
+    def remove_small_genomes(self, *, minbreadth):
+        "Removes any genomes smaller than the minimum breadth"
+        # Copy this so we can iterate over the dict while removing values
+        genomes_copy = list(self.genomes.values())
+        for genome in genomes_copy:
+            if genome.breadth < minbreadth:
+                self.remove(genome)
 
 class Binning:
     """The result of an Binning applied to a Reference.
@@ -188,7 +289,7 @@ class Binning:
     (Reference(ngenomes=2, ncontigs=5)
     >>> b = Binning({'bin1': {contig1, contig2}, 'bin2': {contig3, contig4}}, ref)
     Binning(4/5 contigs, ReferenceID=0x7fe908180be0)
-    >>> b[(0.5, 0.9)] # num. genomes 0.5 recall, 0.9 precision
+    >>> b[0.5, 0.9] # num. genomes 0.5 recall, 0.9 precision
     1
 
     Properties:
@@ -237,6 +338,8 @@ class Binning:
             yield bin_name, intersection
 
     def confusion_matrix(self, genome, bin_name):
+        "Given a genome and a binname, returns TP, TN, FP, FN"
+
         true_positives = self.intersectionsof[genome].get(bin_name, 0)
         false_positives = self.breadthof[bin_name] - true_positives
         false_negatives = genome.breadth - true_positives
@@ -256,6 +359,8 @@ class Binning:
         return 2*tp / (2*tp + fp + fn)
 
     def _parse_bins(self, contigsof, checkpresence, disjoint):
+        "Fills self.binof, self.contigsof and self.breadthof during instantiation"
+
         for bin_name, contig_names in contigsof.items():
             contigset = set()
             # This stores each contig by their true genome name.
@@ -315,8 +420,8 @@ class Binning:
 
         # counts[r,p] is number of genomes w. recall >= r, precision >= p
         counts = _collections.Counter()
-        # intersectionsof[genome_name] = [(bin_name, recall, precision) ... ]
-        # for all bins with nonzero recall and precision
+        # intersectionsof[genome] = {genome: {binname: tp, binname: tp ... }}
+        # for all bins with nonzero true positives
         intersectionsof = dict()
 
         # Calculate intersectionsof
@@ -387,7 +492,6 @@ class Binning:
 
         for min_precision in self.precisions:
             row = [self._counts[(min_recall, min_precision)] for min_recall in self.recalls]
-            row.sort(reverse=True)
             print(min_precision, '\t'.join([str(i) for i in row]), sep='\t', file=file)
 
     def __repr__(self):
@@ -400,3 +504,22 @@ class Binning:
             raise KeyError('Not initialized with recall={}, precision={}'.format(recall, precision))
 
         return self._counts.get(key, 0)
+
+def filter_clusters(clusters, reference, minsize, checkpresence=True):
+    filtered = dict()
+    for binname, contignames in clusters.items():
+        size = 0
+        for contigname in contignames:
+            contig = reference.contigs.get(contigname)
+
+            if contig is not None:
+                size += len(contig)
+            elif checkpresence:
+                raise KeyError('Contig {} not in reference'.format(contigname))
+            else:
+                pass
+
+        if size >= minsize:
+            filtered[binname] = contignames
+
+    return filtered
