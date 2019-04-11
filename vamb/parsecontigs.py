@@ -13,6 +13,7 @@ import gzip as _gzip
 import vamb.vambtools as _vambtools
 
 def _read_contigs_online(filehandle, minlength):
+    "Reads file once saving time, but has to internally copy sequences wasting memory."
     tnfs = list()
     contignames = list()
     lengths = list()
@@ -33,6 +34,7 @@ def _read_contigs_online(filehandle, minlength):
     return tnfs, contignames, lengths
 
 def _read_contigs_preallocated(filehandle, minlength):
+    "Reads file twice wasting time, but does no copying, saving memory."
     n_entries = 0
     entries = _vambtools.byte_iterfasta(filehandle)
 

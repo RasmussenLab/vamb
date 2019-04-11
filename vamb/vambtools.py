@@ -225,10 +225,10 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     # Iterate over lines
     for line in filehandle:
+        linenumber += 1
+
         if line.startswith(comment):
             continue
-
-        linenumber += 1
 
         if line.startswith(b'>'):
             yield FastaEntry(header, b''.join(buffer))
@@ -304,14 +304,12 @@ def write_bins(directory, bins, fastadict, maxbins=250):
     allcontigs = set()
 
     for contigs in bins.values():
-        contigset = set(contigs)
-        allcontigs.update(contigset)
+        allcontigs.update(set(contigs))
 
-    for contig in allcontigs:
-        if contig not in fastadict:
-            raise IndexError('{} not in fastadict'.format(contig))
-
-    del allcontigs, contigset
+    allcontigs -= fastadict.keys()
+    if allcontigs:
+        nmissing = len(allcontigs)
+        raise IndexError('{} contigs in bins missing from fastadict'.format(nmissing))
 
     # Make the directory if it does not exist - if it does, do nothing
     try:
