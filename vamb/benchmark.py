@@ -61,7 +61,7 @@ import sys as _sys
 from math import sqrt as _sqrt
 
 class Contig:
-    """An object representing a contig mapping to a subject at position start:end.
+    """An immutable object representing a contig mapping to a subject at position start:end.
     Mapping positions use the half-open interval, like Python ranges and slices.
 
     Instantiate either with name, subject and mapping start/end:
@@ -76,10 +76,13 @@ class Contig:
         if end <= start:
             raise ValueError('Contig end must be higher than start')
 
-        self.name = name
-        self.subject = subject
-        self.start = start
-        self.end = end
+        super().__setattr__("name", name)
+        super().__setattr__("subject", subject)
+        super().__setattr__("start", start)
+        super().__setattr__("end", end)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("Contig is immutable")
 
     @classmethod
     def subjectless(cls, name, length):
@@ -214,7 +217,7 @@ class Reference:
     @classmethod
     def _parse_file(cls, filehandle, subjectless=False):
         "Returns a list of genomes from a reference file"
-        function =  cls._parse_subjectless_line if subjectless else cls._parse_subject_line
+        function = cls._parse_subjectless_line if subjectless else cls._parse_subject_line
 
         genomes = dict()
         for line in filehandle:
@@ -284,7 +287,7 @@ class Reference:
                 self.remove(genome)
 
 class Binning:
-    """The result of an Binning applied to a Reference.
+    """The result of a set of clusters applied to a Reference.
     >>> ref
     (Reference(ngenomes=2, ncontigs=5)
     >>> b = Binning({'bin1': {contig1, contig2}, 'bin2': {contig3, contig4}}, ref)
@@ -505,9 +508,18 @@ class Binning:
 
         return self._counts.get(key, 0)
 
-def filter_clusters(clusters, reference, minsize, checkpresence=True):
+def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True):
+    """Creates a shallow copy of clusters, but without any clusters with a total size
+    smaller than minsize, or fewer contigs than mincontigs.
+    If checkpresence is True, raise error if a contig is not present in reference, else
+    ignores it when counting cluster size.
+    """
+
     filtered = dict()
     for binname, contignames in clusters.items():
+        if len(contignames) < mincontigs:
+            continue
+
         size = 0
         for contigname in contignames:
             contig = reference.contigs.get(contigname)
@@ -520,6 +532,6 @@ def filter_clusters(clusters, reference, minsize, checkpresence=True):
                 pass
 
         if size >= minsize:
-            filtered[binname] = contignames
+            filtered[binname] = contignames.copy()
 
     return filtered
