@@ -9,7 +9,7 @@ Usage:
 >>> vae.trainmodel(dataloader)
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
-(183882, 40)
+(183882, 32)
 """
 
 __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
@@ -107,11 +107,11 @@ class VAE(_nn.Module):
 
     Instantiate with:
         nsamples: Number of samples in abundance matrix
-        nhiddens: List of n_neurons in the hidden layers [[325, 325]]
-        nlatent: Number of neurons in the latent layer [40]
-        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = 0.05]
+        nhiddens: List of n_neurons in the hidden layers [None=Auto]
+        nlatent: Number of neurons in the latent layer [32]
+        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
         beta: Multiply KLD by the inverse of this value [200]
-        dropout: Probability of dropout on forward pass [None = 0.2]
+        dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
     vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
@@ -124,8 +124,8 @@ class VAE(_nn.Module):
     0.99 and 0.0, respectively
     """
 
-    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=None,
-                 beta=200, dropout=None, cuda=False):
+    def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
+                 beta=200, dropout=0.2, cuda=False):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
@@ -135,12 +135,12 @@ class VAE(_nn.Module):
         if nsamples < 1:
             raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
 
-        # If only 1 sample, we weigh alpha and dropout differently
+        # If only 1 sample, we weigh alpha and nhiddens differently
         if alpha is None:
-            alpha = 0.05 if nsamples > 1 else 0.99
+            alpha = 0.15 if nsamples > 1 else 0.50
 
-        if dropout is None:
-            dropout = 0.2 if nsamples > 1 else 0.0
+        if nhiddens is None:
+            nhiddens = [512, 512] if nsamples > 1 else [256, 256]
 
         if beta <= 0:
             raise ValueError('beta must be > 0, not {}'.format(beta))

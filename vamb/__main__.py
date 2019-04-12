@@ -262,9 +262,9 @@ def main():
     vaeos = parser.add_argument_group(title='VAE hyperparameters', description=None)
 
     vaeos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
-                        default=[325, 325], help='hidden neurons [325 325]')
+                        default=None, help='hidden neurons [Auto]')
     vaeos.add_argument('-l', dest='nlatent', metavar='', type=int,
-                        default=40, help='latent neurons [40]')
+                        default=32, help='latent neurons [32]')
     vaeos.add_argument('-a', dest='alpha',  metavar='',type=float,
                         default=None, help='alpha, weight of TNF versus depth loss [Auto]')
     vaeos.add_argument('-b', dest='beta',  metavar='',type=float,
@@ -347,7 +347,7 @@ def main():
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
 
     ####################### CHECK VAE OPTIONS ################################
-    if any(i < 1 for i in args.nhiddens):
+    if args.nhiddens is not None and any(i < 1 for i in args.nhiddens):
         raise argparse.ArgumentTypeError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
 
     if args.nlatent < 1:
