@@ -51,11 +51,13 @@ genome from that bin.
 
 Usage:
 >>> ref = Reference.from_file(open_reference_file_hande)
+>>> ref.load_tax_file(open_tax_file_handle) # optional
 >>> bins = Binning.from_file(open_clusters_file_handle, ref)
->>> bins.print_matrix()
+>>> bins.print_matrix(rank=1)
 """
 
 import collections as _collections
+from operator import add as _add
 from itertools import product as _product
 import sys as _sys
 from math import sqrt as _sqrt
@@ -92,7 +94,6 @@ class Contig:
     def __repr__(self):
         return 'Contig({}, subject={}, {}:{})'.format(self.name, self.subject, self.start, self.end)
 
-    @property
     def __len__(self):
         return self.end - self.start
 
@@ -169,10 +170,14 @@ class Reference:
     """
 
     # Instantiate with any iterable of Genomes
-    def __init__(self, genomes):
+    def __init__(self, genomes, taxmaps=list()):
         self.genomes = dict() # genome_name : genome dict
         self.contigs = dict() # contig_name : contig dict
         self.genomeof = dict() # contig : genome dict
+
+        # This is a list of dicts: The first one maps genomename to name of next taxonomic level
+        # The second maps name of second level to name of third level etc.
+        self.taxmaps = taxmaps
 
         # Load genomes into list in case it's a one-time iterator
         genomes_backup = list(genomes) if iter(genomes) is genomes else genomes
@@ -186,6 +191,37 @@ class Reference:
 
         self.breadth = sum(genome.breadth for genome in genomes_backup)
 
+    def load_tax_file(self, line_iterator, comment='#'):
+        """Load in a file with N+1 columns, the first being genomename, the next being
+        the equivalent taxonomic annotation at different ranks
+        Replaces the Reference's taxmaps list."""
+        taxmaps = list()
+        isempty = True
+
+        for line in line_iterator:
+            if line.startswith(comment):
+                continue
+
+            genomename, *clades = line[:-1].split('\t')
+
+            if isempty:
+                if not clades:
+                    raise ValueError('Must have at least two columns')
+
+                for i in clades:
+                    taxmaps.append(dict())
+                isempty = False
+
+            if genomename in taxmaps[0]:
+                raise KeyError("Genome name {} present more than once in taxfile".format(genomename))
+
+            previousrank = genomename
+            for nextrank, rankdict in zip(clades, taxmaps):
+                rankdict[previousrank] = nextrank
+                previousrank = nextrank
+
+        self.taxmaps = taxmaps
+
     @property
     def ngenomes(self):
         return len(self.genomes)
@@ -195,7 +231,8 @@ class Reference:
         return len(self.contigs)
 
     def __repr__(self):
-        return 'Reference(ngenomes={}, ncontigs={})'.format(self.ngenomes, self.ncontigs)
+        ranks = len(self.taxmaps) + 1
+        return 'Reference(ngenomes={}, ncontigs={}, ranks={})'.format(self.ngenomes, self.ncontigs, ranks)
 
     @staticmethod
     def _parse_subject_line(line):
@@ -295,6 +332,19 @@ class Binning:
     >>> b[0.5, 0.9] # num. genomes 0.5 recall, 0.9 precision
     1
 
+    Init arguments:
+    ----------- Required ---------
+    contigsof:     Dict of clusters, each sequence present in the Reference
+    reference:     Associated Reference object
+    ----------- Optional ---------
+    recalls:       Iterable of minimum recall thresholds
+    precisions:    Iterable of minimum precision thresholds
+    checkpresence: Whether to raise an error if a sequence if not present in Reference
+    disjoint:      Whether to raise an error if a sequence is in multiple bins
+    binsplit_separator: Split bins according to prefix before this separator in seq name
+    minsize:       Minimum sum of sequence lengths in a bin to not be ignored
+    mincontigs:    Minimum number of sequence in a bin to not be ignored
+
     Properties:
     self.reference:       Reference object of this benchmark
     self.recalls:         Sorted tuple of recall thresholds
@@ -306,8 +356,7 @@ class Binning:
     self.breadthof:       {bin_name: breadth}
     self.intersectionsof: {genome: {bin:_name: intersection}}
     self.breadth:         Total breadth of all bins
-    self.mean_f1:         Mean F1 score among all Genomes
-    self.mean_mcc         Mean Matthew's correlation coef. among all Genomes
+    self.counters:        List of (rec, prec) Counters of genomes for each taxonomic rank
     """
     _DEFAULTRECALLS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
     _DEFAULTPRECISIONS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
@@ -361,8 +410,128 @@ class Binning:
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         return 2*tp / (2*tp + fp + fn)
 
-    def _parse_bins(self, contigsof, checkpresence, disjoint):
+    def _getcounts(self):
+        """Get the number of taxnomic clades at each rank that are covered by at least 1 bin
+        at certain precision/recall thresholds.
+        Returns result as a list of Counters from lowest to highest clade, where the keys
+        are (recall, preicison) tuples, and value is number of reconstructed clades at that
+        level.
+        """
+        # One count per rank (+1 for inclusive "genome" rank)
+        counts = [_collections.Counter() for i in range(len(self.reference.taxmaps) + 1)]
+
+        # Calculate preicion and recall for each bin
+        # bin_name : {genomename1: X, genomename2: Y ... }
+        recallof = _collections.defaultdict(dict)
+        precisionof = _collections.defaultdict(dict)
+
+        for genome, intersectiondict in self.intersectionsof.items():
+            for binname in intersectiondict:
+                tp, tn, fp, fn = self.confusion_matrix(genome, binname)
+                recall = tp / (tp + fn)
+                precision = tp / (tp + fp)
+                recallof[binname][genome.name] = recall
+                precisionof[binname][genome.name] = precision
+
+        # Now for each counter, update it and then update recallof and precisionof to the
+        # higher rank. The last counter is not updated here, done after loop
+        for counter, taxmap in zip(counts, self.reference.taxmaps):
+            self._accumulate(recallof, precisionof, counter)
+
+            # Update recallof and precisionof. For recalls, we would need clade synteny
+            # information to figure out how much of a clades "core/pan genome" that we have
+            # covered. Therefore, clade recall is the max of all its members.
+            # For precision, we just care that no bin content fall out of the clade, so
+            # clade precision is the sum of precisisons of all its members
+            for _dict, function in (recallof, max), (precisionof, _add):
+                for binname, subdict in _dict.items():
+                    newsubdict = dict()
+                    for clade, measure in subdict.items():
+                        newclade = taxmap[clade]
+                        newmeasure = function(measure, newsubdict.get(newclade, 0.0))
+                        newsubdict[newclade] = newmeasure
+                    _dict[binname] = newsubdict
+
+        # Accumulate for last (i.e. highest) rank
+        self._accumulate(recallof, precisionof, counts[-1])
+        return counts
+
+    def _accumulate(self, recallof, precisionof, counter):
+        """Using the recallof/precisionof dicts calculated in _getcounts function, fill a
+        counter with the number of found clades.
+        """
+        # Create a mapping: {clade : seen_boolean_vector}, where the vector represents
+        # seen or not at the different recall/precision values
+        clades = set()
+        for precisiondict in precisionof.values():
+            clades.update(precisiondict.keys())
+        arrlen = len(self.recalls) * len(self.precisions)
+        isseen = {clade: bytearray(arrlen) for clade in clades}
+
+        # Now update the vectors, setting them to 1 if the clade has been seen at that
+        # recall/prec threshold, 0 otherwise
+        for binname, precisiondict in precisionof.items():
+            for clade, precision in precisiondict.items():
+                recall = recallof[binname][clade]
+                vector = isseen[clade]
+                for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
+                    if recall < min_recall:
+                        break
+
+                    if precision >= min_precision:
+                        vector[i] = 1
+
+        # Now update the Counter
+        sums = [0] * len(vector)
+        for vector in isseen.values():
+            for i in range(len(vector)):
+                sums[i] += vector[i]
+
+        for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
+            counter[(min_recall, min_precision)] = sums[i]
+
+    def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
+              precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True,
+              binsplit_separator=None, minsize=None, mincontigs=None):
+        # See class docstring for explanation of arguments
+
+        # Checkpresence enforces that each contig in a bin is also in the reference,
+        # disjoint enforces that each contig is only present in one bin.
+        if not isinstance(reference, Reference):
+            raise ValueError('reference must be a Reference')
+
+        self.precisions = tuple(sorted(precisions))
+        self.recalls = tuple(sorted(recalls))
+        self.reference = reference
+
+        self.contigsof = dict() # bin_name: {contigs} dict
+        self.binof = dict() # contig: bin_name or {bin_names} dict
+        self.breadthof = dict() # bin_name: int dict
+        self._parse_bins(contigsof, checkpresence, disjoint, binsplit_separator, minsize, mincontigs)
+        self.breadth = sum(self.breadthof.values())
+
+        # intersectionsof[genome] = {genome: {binname: tp, binname: tp ... }}
+        # for all bins with nonzero true positives
+        intersectionsof = dict()
+        for genome in reference.genomes.values():
+            intersectionsof[genome] = dict()
+            for bin_name, intersection in self._iter_intersections(genome):
+                intersectionsof[genome][bin_name] = intersection
+        self.intersectionsof = intersectionsof
+
+        # Set counts
+        self.counters = self._getcounts()
+
+    def _parse_bins(self, contigsof, checkpresence, disjoint, binsplit_separator, minsize, mincontigs):
         "Fills self.binof, self.contigsof and self.breadthof during instantiation"
+
+        if binsplit_separator is not None:
+            contigsof = binsplit(contigsof, binsplit_separator)
+
+        if minsize is not None or mincontigs is not None:
+            minsize = 1 if minsize is None else minsize
+            mincontigs = 1 if mincontigs is None else mincontigs
+            contigsof = filter_clusters(contigsof, self.reference, minsize, mincontigs, checkpresence=checkpresence)
 
         for bin_name, contig_names in contigsof.items():
             contigset = set()
@@ -404,74 +573,10 @@ class Binning:
                 breadth += Genome.getbreadth(contigs)
             self.breadthof[bin_name] = breadth
 
-    def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
-              precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True):
-        # Checkpresence enforces that each contig in a bin is also in the reference,
-        # disjoint enforces that each contig is only present in one bin.
-        if not isinstance(reference, Reference):
-            raise ValueError('reference must be a Reference')
-
-        self.precisions = tuple(sorted(precisions))
-        self.recalls = tuple(sorted(recalls))
-        self.reference = reference
-
-        self.contigsof = dict() # bin_name: {contigs} dict
-        self.binof = dict() # contig: bin_name or {bin_names} dict
-        self.breadthof = dict() # bin_name: int dict
-        self._parse_bins(contigsof, checkpresence, disjoint)
-        self.breadth = sum(self.breadthof.values())
-
-        # counts[r,p] is number of genomes w. recall >= r, precision >= p
-        counts = _collections.Counter()
-        # intersectionsof[genome] = {genome: {binname: tp, binname: tp ... }}
-        # for all bins with nonzero true positives
-        intersectionsof = dict()
-
-        # Calculate intersectionsof
-        for genome in reference.genomes.values():
-            intersectionsof[genome] = dict()
-            for bin_name, intersection in self._iter_intersections(genome):
-                intersectionsof[genome][bin_name] = intersection
-        self.intersectionsof = intersectionsof
-
-        # Calculate MCC score
-        mccs = [max((self.mcc(genome, binname) for binname in self.intersectionsof[genome]),
-                default=0.0) for genome in reference.genomes.values()]
-        self.mean_mcc = 0 if len(mccs) == 0 else sum(mccs) / len(mccs)
-        del mccs
-
-        # Calculate F1 scores
-        f1s = [max((self.f1(genome, binname) for binname in self.intersectionsof[genome]),
-                default=0.0) for genome in reference.genomes.values()]
-        self.mean_f1 = 0 if len(f1s) == 0 else sum(f1s) / len(f1s)
-        del f1s
-
-        # Calculate number of genomes above threshols
-        # This could use some optimization
-        for genome in reference.genomes.values():
-            # Keep track of whether the genome has been found at those thresholds
-            found = [False]*(len(self.recalls) * len(self.precisions))
-
-            thresholds = list() # save to list to cache them for multiple iterations
-            for bin_name in self.intersectionsof[genome]:
-                tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
-                recall = tp / (tp + fn)
-                precision = tp / (tp + fp)
-                thresholds.append((recall, precision))
-
-            for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
-                for recall, precision in thresholds:
-                    if recall >= min_recall and precision >= min_precision:
-                        found[i] = True
-            for i, thresholds in enumerate(_product(self.recalls, self.precisions)):
-                if found[i]:
-                    counts[thresholds] += 1
-
-        self._counts = counts
-
     @classmethod
     def from_file(cls, filehandle, reference, recalls=_DEFAULTRECALLS,
-                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=False):
+                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=False,
+                  binsplit_separator=None, minsize=None, mincontigs=None):
         contigsof = dict()
         for line in filehandle:
             if line.startswith('#'):
@@ -485,28 +590,30 @@ class Binning:
             else:
                 contigsof[bin_name].append(contig_name)
 
-        return cls(contigsof, reference, recalls, precisions, checkpresence, disjoint)
+        return cls(contigsof, reference, recalls, precisions, checkpresence, disjoint,
+                   binsplit_separator, minsize, mincontigs)
 
-    def print_matrix(self, file=_sys.stdout):
+    def print_matrix(self, rank, file=_sys.stdout):
         """Prints the recall/precision number of bins to STDOUT."""
+
+        if rank >= len(self.counters):
+            raise IndexError("Taxonomic rank out of range")
 
         print('\tRecall', file=file)
         print('Prec.', '\t'.join([str(r) for r in self.recalls]), sep='\t', file=file)
 
         for min_precision in self.precisions:
-            row = [self._counts[(min_recall, min_precision)] for min_recall in self.recalls]
+            row = [self.counters[rank][(min_recall, min_precision)] for min_recall in self.recalls]
             print(min_precision, '\t'.join([str(i) for i in row]), sep='\t', file=file)
 
     def __repr__(self):
         fields = (self.ncontigs, self.reference.ncontigs, hex(id(self.reference)))
         return 'Binning({}/{} contigs, ReferenceID={})'.format(*fields)
 
-    def __getitem__(self, key):
-        recall, precision = key
-        if recall not in self.recalls or precision not in self.precisions:
-            raise KeyError('Not initialized with recall={}, precision={}'.format(recall, precision))
-
-        return self._counts.get(key, 0)
+    def summary(self, precision=0.9, recalls=None):
+        if recalls is None:
+            recalls = self.recalls
+        return [[counter[(recall, precision)] for recall in recalls] for counter in self.counters]
 
 def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True):
     """Creates a shallow copy of clusters, but without any clusters with a total size
@@ -535,3 +642,30 @@ def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True
             filtered[binname] = contignames.copy()
 
     return filtered
+
+def binsplit(clusters, separator):
+    """Splits a set of clusters by the prefix of their keys.
+    The separator is a string which separated prefix from postfix of contignames. The
+    resulting split clusters have the prefix and separator prepended to them.
+
+    >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
+    >>> binsplit(clusters, "-")
+    {'s2-bin1': {'c1', 'c3'}, 's1-bin1': {'c1', 'c5'}, 's5-bin1': {'c8'}}
+    """
+    split = dict()
+    bysample = _collections.defaultdict(set)
+
+    for binname, contignames in clusters.items():
+        bysample.clear()
+
+        for contigname in contignames:
+            sample, sep, identifier = contigname.partition(separator)
+            if not identifier:
+                raise KeyError("Separator not in contigname: '{}'".format(contigname))
+            bysample[sample].add(contigname)
+
+        for sample, splitcontignames in bysample.items():
+            newkey = "{}{}{}".format(sample, separator, binname)
+            split[newkey] = splitcontignames
+
+    return split
