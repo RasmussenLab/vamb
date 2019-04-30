@@ -482,9 +482,9 @@ class Binning:
                         vector[i] = 1
 
         # Now update the Counter
-        sums = [0] * len(vector)
+        sums = [0] * arrlen
         for vector in isseen.values():
-            for i in range(len(vector)):
+            for i in range(arrlen):
                 sums[i] += vector[i]
 
         for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
