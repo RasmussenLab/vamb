@@ -78,6 +78,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
 
+    if destroy:
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
     else:
@@ -126,9 +127,6 @@ class VAE(_nn.Module):
 
     def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
-        if any(i < 1 for i in nhiddens):
-            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
-
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
 
@@ -141,6 +139,12 @@ class VAE(_nn.Module):
 
         if nhiddens is None:
             nhiddens = [512, 512] if nsamples > 1 else [256, 256]
+
+        if dropout is None:
+            dropout = 0.2 if nsamples > 1 else 0.0
+
+        if any(i < 1 for i in nhiddens):
+            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
         if beta <= 0:
             raise ValueError('beta must be > 0, not {}'.format(beta))

@@ -217,6 +217,10 @@ class Reference:
 
             previousrank = genomename
             for nextrank, rankdict in zip(clades, taxmaps):
+                existing = rankdict.get(previousrank, nextrank)
+                if existing != nextrank:
+                    raise KeyError("Rank {} mapped to both {} and {}".format(previousrank, existing, nextrank))
+
                 rankdict[previousrank] = nextrank
                 previousrank = nextrank
 
@@ -314,14 +318,6 @@ class Reference:
         "Remove a genome if it is present, else do nothing."
         if genome.name in self.genomes:
             self.remove(genome)
-
-    def remove_small_genomes(self, *, minbreadth):
-        "Removes any genomes smaller than the minimum breadth"
-        # Copy this so we can iterate over the dict while removing values
-        genomes_copy = list(self.genomes.values())
-        for genome in genomes_copy:
-            if genome.breadth < minbreadth:
-                self.remove(genome)
 
 class Binning:
     """The result of a set of clusters applied to a Reference.

@@ -284,6 +284,7 @@ def main():
     trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
                         default=1e-3, help='learning rate [0.001]')
 
+    # Clustering arguments
     clusto = parser.add_argument_group(title='Clustering options', description=None)
     clusto.add_argument('-w', dest='windowsize', metavar='', type=int,
                         default=200, help='size of window to count successes [200]')
@@ -428,3 +429,6 @@ def main():
             minclustersize=args.minsize,
             maxclusters=args.maxclusters,
             logfile=logfile)
+
+if __name__ == '__main__':
+    main()
