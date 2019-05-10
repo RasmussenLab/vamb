@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
 
-# Note on this source code:
-# Clustering is the timewise bottle neck of VAMB for large datasets, as it
-# scales quadratically with number of sequences. Because clustering time is
-# dominated by operation on dense matrices, GPU acceleration can achieve
-# tremendous effects (80x speedup in our test). So there is a great incentive
-# for writing GPU-friendly code.
-# Unfortunately, most people don't have good GPUs. Even worse, it turns out
-# that fast GPU code is slow CPU code and vice versa - for example, CPU
-# clustering is greatly sped up by removing sequences from the matrix, whereas
-# this slows down GPU clustering.
-# So we have to implement BOTH a numpy-based CPU clustering and a torch-based
-# GPU clustering, duplicating all our code.
-
 __doc__ = """Iterative medoid clustering.
 
 Usage:
@@ -23,16 +10,6 @@ Implements one core function, cluster, along with the helper
 functions write_clusters and read_clusters.
 For all functions in this module, a collection of clusters are represented as
 a {clustername, set(elements)} dict.
-
-cluster algorithm:
-(1): Pick random seed observation S
-(2): Define cluster(S) = all observations with cosine distance from S < THRESHOLD
-(3): Sample MOVES observations I from cluster(S)
-(4): If any mean(cluster(i)) < mean(cluster(S)) for i in I: Let S be i, go to (2)
-     Else: cluster(S) = all observations with cosine distance from S < THRESHOLD
-(5): Output cluster(S) as cluster, remove cluster(S) from observations
-(6): If no more observations or MAX_CLUSTERS have been reached: Stop
-     Else: Go to (1)
 """
 
 import sys as _sys
