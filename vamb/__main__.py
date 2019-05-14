@@ -73,8 +73,8 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     return tnfs, contignames
 
-def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore, subprocesses,
-              ncontigs, logfile):
+def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore, minid,
+              subprocesses, ncontigs, logfile):
     begintime = time.time()
     log('\nLoading RPKM', logfile)
     # If rpkm is given, we load directly from .npz file
@@ -103,6 +103,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
                                             dumpdirectory=dumpdirectory,
                                             minscore=minalignscore,
                                             minlength=mincontiglength,
+                                            minid=minid,
                                             subprocesses=subprocesses,
                                             logfile=logfile)
         print('', file=logfile)
@@ -252,8 +253,10 @@ def main():
 
     inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
                          help='ignore contigs shorter than this [100]')
-    inputos.add_argument('-s', dest='minascore', metavar='', type=int,
+    inputos.add_argument('-s', dest='minascore', metavar='', type=int, default=None,
                          help='ignore reads with alignment score below this [None]')
+    inputos.add_argument('-z', dest='minid', metavar='', type=float, default=None,
+                         help='ignore reads with nucleotide identity below this [None]')
     inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
                          help=('number of subprocesses to spawn '
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
@@ -344,6 +347,9 @@ def main():
     if args.minlength < 100:
         raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
 
+    if args.minid is not None and (args.minid < 0 or args.minid >= 1.0):
+        raise argparse.ArgumentTypeError('Minimum nucleotide ID must be in [0,1)')
+
     if args.subprocesses < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
 
@@ -413,6 +419,7 @@ def main():
             args.jgi,
             mincontiglength=args.minlength,
             minalignscore=args.minascore,
+            minid=args.minid,
             subprocesses=subprocesses,
             nhiddens=args.nhiddens,
             nlatent=args.nlatent,

@@ -84,40 +84,39 @@ def mergecolumns(pathlist):
 
     return result
 
-def _get_alternate_references(alignedsegment):
-    """Given a pysam aligned segment, returns a list with the names of all
-    alternate references it maps to, marked by 'XA'. Assumes 'XA' tag is there.
-    """
+def _identity(segment):
+    "Return the nucleotide identity of the given aligned segment."
+    mismatches, matches = 0, 0
+    for kind, number in segment.cigartuples:
+        # 0, 7, 8, is match/mismatch, match, mismatch, respectively
+        if kind in (0, 7, 8):
+            matches += number
+        # 1, 2 is insersion, deletion
+        elif kind in (1, 2):
+            mismatches += number
+    matches -= segment.get_tag('NM')
+    return matches / (matches+mismatches)
 
-    references = list()
-    # XA is a string contigname1,<other info>;contigname2,<other info>; ...
-    secondary_alignment_string = alignedsegment.get_tag('XA')
-    secondary_alignments = secondary_alignment_string.split(';')[:-1]
-
-    for secondary_alignment in secondary_alignments:
-        references.append(secondary_alignment.partition(',')[0])
-
-    return references
-
-
-def _filter_segments(segmentiterator, minscore):
+def _filter_segments(segmentiterator, minscore, minid):
     """Returns an iterator of AlignedSegment filtered for reads with low
     alignment score.
     """
 
     for alignedsegment in segmentiterator:
-        # Must be mapped, not secondary and not supplementary alignment.
-        # Why not secondary/suppl alignment? Because then I'd have to keep track
-        # of where each read aligned to and divide by total number of alignments
-        # for each individual read. Possible, but slow and RAM-hungry.
-        if alignedsegment.flag & 0x904 != 0:
+        # Skip if unaligned or suppl. aligment
+        if alignedsegment.flag & 0x804 != 0:
             continue
+
         if minscore is not None and alignedsegment.get_tag('AS') < minscore:
             continue
 
+        if minid is not None:
+            if _identity(alignedsegment) < minid:
+                continue
+
         yield alignedsegment
 
-def _get_contig_rpkms(inpath, outpath, minscore, minlength):
+def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
 
@@ -126,6 +125,7 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength):
         outpath: Path to dump depths array to or None
         minscore [None]: Minimum alignment score (AS field) to consider
         minlength [2000]: Discard any references shorter than N bases
+        minid [None]: Discard any reads with ID lower than this
 
     Outputs:
         path: Same as input path
@@ -136,39 +136,52 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength):
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
-
-    # We can only get secondary alignment reference names, not indices. So we must
-    # make an idof dict to look up the indices.
-    idof = {contig: i for i, contig in enumerate(bamfile.references)}
     contiglengths = bamfile.lengths
-    halfreads = _np.zeros(len(contiglengths), dtype=_np.float32)
+    readcounts = _np.zeros(len(contiglengths), dtype=_np.float32)
 
-    total_half_reads = 0
-    for segment in _filter_segments(bamfile, minscore):
-        # Read w. unmapped mates count twice as they represent a whole read
-        value = 1.0 if (segment.is_paired and not segment.mate_is_unmapped) else 2.0
-        total_half_reads += value
+    # Initialize with first aligned read
+    filtered_segments = _filter_segments(bamfile, minscore, minid)
+    try:
+        segment = next(filtered_segments)
+        read_name = segment.query_name
+        multimap = 1.0
+        reference_ids = [segment.reference_id]
+    except StopIteration:
+        pass
 
-        if segment.has_tag('XA'):
-            # Discount the value added to halfreads for each of the many mappings
-            alternates = _get_alternate_references(segment)
-            value *= 1.0 / (1 + len(alternates))
-            for reference in _get_alternate_references(segment):
-                id = idof[reference]
-                halfreads[id] += value
+    total_reads = 0
+    # Now count up each read in the BAM file
+    for segment in filtered_segments:
+        # If we reach a new read_name, we tally up the previous read
+        # towards all its references.
+        if segment.query_name != read_name:
+            read_name = segment.query_name
+            total_reads += 1
+            to_add = 1.0 / multimap
+            for reference_id in reference_ids:
+                readcounts[reference_id] += to_add
+            reference_ids.clear()
+            multimap = 0.0
 
-        halfreads[segment.reference_id] += value
+        multimap += 1.0
+        reference_ids.append(segment.reference_id)
 
     bamfile.close()
-    del idof
+    # Add final read
+    if total_reads != 0:
+        to_add = 1.0 / multimap
+        for reference_id in reference_ids:
+            readcounts[reference_id] += to_add
+
+    # Calcuate RPKM iself
     rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
 
-    if total_half_reads > 0:
-        millionmappedreads = total_half_reads / 2e6
+    if total_reads > 0:
+        millionmappedreads = total_reads / 2e6
 
-        for i, (contiglength, nhalfreads) in enumerate(zip(contiglengths, halfreads)):
+        for i, (contiglength, nreads) in enumerate(zip(contiglengths, readcounts)):
             kilobases = contiglength / 1000
-            rpkms[i] = nhalfreads / (kilobases * millionmappedreads)
+            rpkms[i] = nreads / (kilobases * millionmappedreads)
 
     # Now filter for small contigs
     lengthmask = _np.array(contiglengths, dtype=_np.int32) >= minlength
@@ -183,8 +196,7 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength):
 
     return inpath, arrayresult, len(rpkms)
 
-
-def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
+def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid=None,
                   subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
 
@@ -250,7 +262,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100,
             else:
                 outpath = _os.path.join(dumpdirectory, str(pathnumber) + '.npz')
 
-            arguments = (path, outpath, minscore, minlength)
+            arguments = (path, outpath, minscore, minlength, minid)
             processresults.append(pool.apply_async(_get_contig_rpkms, arguments,
                                                    callback=_callback))
 
@@ -308,6 +320,7 @@ Input:
     dumpdirectory: [None] Dir to create and dump per-sample depths NPZ files to
     minscore [None]: Minimum alignment score (AS field) to consider
     minlength [100]: Ignore any references shorter than N bases
+    minid [None]: Discard any reads with nucleotide identity less than this
     subprocesses [{}]: Number of subprocesses to spawn
     logfile: [None] File to print progress to
 
