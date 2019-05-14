@@ -61,6 +61,7 @@ from operator import add as _add
 from itertools import product as _product
 import sys as _sys
 from math import sqrt as _sqrt
+import vamb.vambtools as _vambtools
 
 class Contig:
     """An immutable object representing a contig mapping to a subject at position start:end.
@@ -522,7 +523,7 @@ class Binning:
         "Fills self.binof, self.contigsof and self.breadthof during instantiation"
 
         if binsplit_separator is not None:
-            contigsof = binsplit(contigsof, binsplit_separator)
+            contigsof = _vambtools.binsplit(contigsof, binsplit_separator)
 
         if minsize is not None or mincontigs is not None:
             minsize = 1 if minsize is None else minsize
@@ -638,30 +639,3 @@ def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True
             filtered[binname] = contignames.copy()
 
     return filtered
-
-def binsplit(clusters, separator):
-    """Splits a set of clusters by the prefix of their keys.
-    The separator is a string which separated prefix from postfix of contignames. The
-    resulting split clusters have the prefix and separator prepended to them.
-
-    >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
-    >>> binsplit(clusters, "-")
-    {'s2-bin1': {'c1', 'c3'}, 's1-bin1': {'c1', 'c5'}, 's5-bin1': {'c8'}}
-    """
-    split = dict()
-    bysample = _collections.defaultdict(set)
-
-    for binname, contignames in clusters.items():
-        bysample.clear()
-
-        for contigname in contignames:
-            sample, sep, identifier = contigname.partition(separator)
-            if not identifier:
-                raise KeyError("Separator not in contigname: '{}'".format(contigname))
-            bysample[sample].add(contigname)
-
-        for sample, splitcontignames in bysample.items():
-            newkey = "{}{}{}".format(sample, separator, binname)
-            split[newkey] = splitcontignames
-
-    return split

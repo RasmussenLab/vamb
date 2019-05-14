@@ -94,6 +94,9 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
     else:
         log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
            logfile, 1)
+        log('Min alignment score: {}'.format(minalignscore), logfile, 1)
+        log('Min identity: {}'.format(minid), logfile, 1)
+        log('Min contig length: {}'.format(mincontiglength), logfile, 1)
         log('Order of columns are:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
@@ -158,7 +161,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     return mask, latent
 
 def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
-            minclustersize, cuda, logfile):
+            minclustersize, separator, cuda, logfile):
     begintime = time.time()
 
     log('\nClustering', logfile)
@@ -167,10 +170,15 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
+    log('Separator: {}'.format(separator), logfile, 1)
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
                               minsuccesses=minsuccesses, labels=contignames,
                               logfile=logfile)
+
+    # Binsplit if given a separator
+    if separator is not None:
+        it = vamb.vambtools.binsplit(it, separator)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
         clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile, it,
@@ -185,9 +193,9 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
-        mincontiglength, minalignscore, subprocesses, nhiddens, nlatent, nepochs, batchsize,
+        mincontiglength, minalignscore, minid, subprocesses, nhiddens, nlatent, nepochs, batchsize,
         cuda, alpha, beta, dropout, lrate, batchsteps, windowsize, minsuccesses,
-        minclustersize, maxclusters, logfile):
+        minclustersize, separator, maxclusters, logfile):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
@@ -200,7 +208,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     # Parse BAMs, save as npz
     ncontigs = len(contignames)
     rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore,
-                      subprocesses, ncontigs, logfile)
+                      minid, subprocesses, ncontigs, logfile)
 
     # Train, save model
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
@@ -211,7 +219,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
 
     # Cluster, save tsv file
     cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
-            minclustersize, cuda, logfile)
+            minclustersize, separator, cuda, logfile)
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
@@ -297,6 +305,8 @@ def main():
                         default=1, help='minimum cluster size [1]')
     clusto.add_argument('-c', dest='maxclusters', metavar='', type=int,
                         default=None, help='stop after c clusters [None = infinite]')
+    clusto.add_argument('-o', dest='separator', metavar='', type=str,
+                        default=None, help='binsplit separator [None = no split]')
 
     ######################### PRINT HELP IF NO ARGUMENTS ###################
     if len(sys.argv) == 1:
@@ -349,6 +359,9 @@ def main():
 
     if args.minid is not None and (args.minid < 0 or args.minid >= 1.0):
         raise argparse.ArgumentTypeError('Minimum nucleotide ID must be in [0,1)')
+
+    if args.minid is not None and args.bamfiles is None:
+        raise argparse.ArgumentTypeError('If minid is set, RPKM must be passed as bam files')
 
     if args.subprocesses < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
@@ -434,6 +447,7 @@ def main():
             windowsize=args.windowsize,
             minsuccesses=args.minsuccesses,
             minclustersize=args.minsize,
+            separator=args.separator,
             maxclusters=args.maxclusters,
             logfile=logfile)
 
