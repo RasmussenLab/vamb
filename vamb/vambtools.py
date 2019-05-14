@@ -5,6 +5,7 @@ import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
+import collections as _collections
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
 'AAAA/TTTT', 'AAAC/GTTT', 'AAAG/CTTT', 'AAAT/ATTT',
@@ -391,3 +392,50 @@ def load_jgi(filehandle):
 
     columns = tuple(range(3, len(fields), 2))
     return _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
+
+def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
+    "Split a single bin by the prefix of the headers"
+
+    bysample.clear()
+    for header in headers:
+        if not isinstance(header, str):
+            raise TypeError('Can only split named sequences, not of type {}'.format(type(header)))
+
+        sample, sep, identifier = header.partition(separator)
+
+        if not identifier:
+            raise KeyError("Separator '{}' not in sequence label: '{}'".format(separator, header))
+
+        bysample[sample].add(header)
+
+    for sample, splitheaders in bysample.items():
+        newbinname = "{}{}{}".format(sample, separator, binname)
+        yield newbinname, splitheaders
+
+def _binsplit_generator(cluster_iterator, separator):
+    "Return a generator over split bins with the function above."
+    for binname, headers in cluster_iterator:
+        for newbinname, splitheaders in _split_bin(binname, headers, separator):
+            yield newbinname, splitheaders
+
+def binsplit(clusters, separator):
+    """Splits a set of clusters by the prefix of their names.
+    The separator is a string which separated prefix from postfix of contignames. The
+    resulting split clusters have the prefix and separator prepended to them.
+
+    clusters can be an iterator, in which case this function returns an iterator, or a dict
+    with contignames: set_of_contignames pair, in which case a dict is returned.
+
+    Example:
+    >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
+    >>> binsplit(clusters, "-")
+    {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
+    """
+    if iter(clusters) is clusters: # clusters is an iterator
+        return _binsplit_generator(clusters, separator)
+
+    elif isinstance(clusters, dict):
+        return dict(_binsplit_generator(clusters.items(), separator))
+
+    else:
+        raise TypeError("clusters must be iterator of pairs or dict")

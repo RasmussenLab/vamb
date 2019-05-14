@@ -82,6 +82,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
     else:
+        # Despite saying "copy=False", the masking always creates a copy.
         rpkm = rpkm[mask].astype(_np.float32, copy=False)
         tnf = tnf[mask].astype(_np.float32, copy=False)
 
