@@ -53,7 +53,7 @@ python3.7 -m vamb
 You can also run the inner `vamb` directory as a script. This will work even if you did not install with pip:
 
 ```
-python my_scripts/vamb/vamb`
+python my_scripts/vamb/vamb
 ```
 
 ## Example command to run Vamb
@@ -61,7 +61,7 @@ python my_scripts/vamb/vamb`
 Vamb with default inputs (a FASTA file and some BAM files) can be executed like so:
 
 ```
-vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam`
+vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam
 ```
 
 For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.
