@@ -6,3 +6,5 @@ src/_vambtools.cpp
 *~
 vamb.egg-info
 changelog
+.DS_Store
+.ipynb_checkpoints
