@@ -279,7 +279,7 @@ def write_bins(directory, bins, fastadict, maxbins=250):
         bins: {'name': {set of contignames}} dictionary (can be loaded from
         clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
-        maxbins: Raise an error if trying to make more bins than this
+        maxbins: None or else raise an error if trying to make more bins than this
 
     Output: None
     """
@@ -287,7 +287,7 @@ def write_bins(directory, bins, fastadict, maxbins=250):
     # Safety measure so someone doesn't accidentally make 50000 tiny bins
     # If you do this on a compute cluster it can grind the entire cluster to
     # a halt and piss people off like you wouldn't believe.
-    if len(bins) > maxbins:
+    if maxbins is not None and len(bins) > maxbins:
         raise ValueError('{} bins exceed maxbins of {}'.format(len(bins), maxbins))
 
     # Check that the directory is not a non-directory file,

@@ -13,7 +13,7 @@ parser.add_argument('refpath', help='Path to reference file')
 parser.add_argument('--tax', dest='taxpath', help='Path to taxonomic maps [optional]')
 parser.add_argument('-m', dest='min_bin_size', metavar='', type=int,
                     default=200000, help='Minimum size of bins')
-parser.add_argument('-s', dest='separator', help='Binsplit separator', default='C')
+parser.add_argument('-s', dest='separator', help='Binsplit separator', default=None)
 parser.add_argument('--disjoint', action='store_true', help='Enforce disjoint clusters')
 
 if len(sys.argv) == 1:
@@ -39,7 +39,7 @@ with open(args.refpath) as file:
 
 if args.taxpath is not None:
     with open(args.taxpath) as file:
-        reference.load_taxfile(file)
+        reference.load_tax_file(file)
 
 binning = vamb.benchmark.Binning(clusters, reference, minsize=args.min_bin_size, disjoint=args.disjoint,
                             binsplit_separator=args.separator)
