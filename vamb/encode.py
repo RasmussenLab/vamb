@@ -180,7 +180,6 @@ class VAE(_nn.Module):
 
         # Latent layers
         self.mu = _nn.Linear(self.nhiddens[-1], self.nlatent)
-        self.logsigma = _nn.Linear(self.nhiddens[-1], self.nlatent)
 
         # Add first decoding layer
         for nin, nout in zip([self.nlatent] + self.nhiddens[::-1], self.nhiddens[::-1]):
@@ -208,22 +207,8 @@ class VAE(_nn.Module):
 
         # Latent layers
         mu = self.mu(tensor)
-        logsigma = self.softplus(self.logsigma(tensor))
 
-        return mu, logsigma
-
-    # sample with gaussian noise
-    def reparameterize(self, mu, logsigma):
-        epsilon = _torch.randn(mu.size(0), mu.size(1))
-
-        if self.usecuda:
-            epsilon = epsilon.cuda()
-
-        epsilon.requires_grad = True
-
-        latent = mu + epsilon * _torch.exp(logsigma/2)
-
-        return latent
+        return mu
 
     def _decode(self, tensor):
         tensors = list()
@@ -246,13 +231,12 @@ class VAE(_nn.Module):
 
     def forward(self, depths, tnf):
         tensor = _torch.cat((depths, tnf), 1)
-        mu, logsigma = self._encode(tensor)
-        latent = self.reparameterize(mu, logsigma)
-        depths_out, tnf_out = self._decode(latent)
+        mu = self._encode(tensor)
+        depths_out, tnf_out = self._decode(mu)
 
-        return depths_out, tnf_out, mu, logsigma
+        return depths_out, tnf_out, mu
 
-    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
+    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu):
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
@@ -263,18 +247,15 @@ class VAE(_nn.Module):
             ce_weight = 1 - self.alpha
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
-        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
         sse_weight = self.alpha / 136
-        kld_weight = 1 / (self.nlatent * self.beta)
-        loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
+        loss = ce * ce_weight + sse * sse_weight
 
-        return loss, ce, sse, kld
+        return loss, ce, sse
 
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         self.train()
 
         epoch_loss = 0
-        epoch_kldloss = 0
         epoch_sseloss = 0
         epoch_celoss = 0
 
@@ -296,26 +277,24 @@ class VAE(_nn.Module):
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
+            depths_out, tnf_out, mu = self(depths_in, tnf_in)
 
-            loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
-                                                  tnf_out, mu, logsigma)
+            loss, ce, sse = self.calc_loss(depths_in, depths_out, tnf_in,
+                                                  tnf_out, mu)
 
             loss.backward()
             optimizer.step()
 
             epoch_loss += loss.data.item()
-            epoch_kldloss += kld.data.item()
             epoch_sseloss += sse.data.item()
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
-            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
+            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tBatchsize: {}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
                   epoch_sseloss / len(data_loader),
-                  epoch_kldloss / len(data_loader),
                   data_loader.batch_size,
                   ), file=logfile)
 
@@ -357,7 +336,7 @@ class VAE(_nn.Module):
                     tnf = tnf.cuda()
 
                 # Evaluate
-                out_depths, out_tnf, mu, logsigma = self(depths, tnf)
+                out_depths, out_tnf, mu = self(depths, tnf)
 
                 if self.usecuda:
                     mu = mu.cpu()
