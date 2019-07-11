@@ -16,7 +16,7 @@ Vamb is most easily installed with pip - make sure your pip version is up to dat
 ### Installation for casual users:
 
 ```
-pip install https://github.com/jakobnissen/vamb/archive/v2.0.0.zip
+pip install https://github.com/jakobnissen/vamb/archive/v2.0.1.zip
 ```
 
 ### Installation for advanced users:
