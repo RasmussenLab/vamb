@@ -79,7 +79,7 @@ def mergecolumns(pathlist):
     for columnno, path in enumerate(pathlist[1:]):
         column = _np.load(path)['arr_0']
         if len(column) != length:
-            raise ValueError("Length of data at {} is unlike other RPKM data".format(path))
+            raise ValueError("Length of data at {} is not equal to that of {}".format(path, pathlist[0]))
         result[:,columnno + 1] = column
 
     return result
@@ -167,6 +167,7 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
         reference_ids.append(segment.reference_id)
 
     bamfile.close()
+
     # Add final read
     if total_reads != 0:
         to_add = 1.0 / multimap
