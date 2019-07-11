@@ -238,11 +238,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
         else:
             # Check for un-parsable characters in the sequence
-<<<<<<< HEAD:vambtools.py
             stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
-=======
-            stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN\n')
->>>>>>> dev:vamb/vambtools.py
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
