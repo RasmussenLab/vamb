@@ -29,11 +29,7 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-<<<<<<< HEAD:__init__.py
-__version__ = (1, 0, 1)
-=======
-__version__ = (1, 1, 0)
->>>>>>> dev:vamb/__init__.py
+__version__ = (2, 0, 0)
 
 import sys as _sys
 if _sys.version_info[:2] < (3, 5):
