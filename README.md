@@ -117,4 +117,4 @@ __5) Map the reads to the FASTA file to obtain BAM files__
 
 We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. Be careful to choose proper parameters for your aligner - in general, if a read from contig A will map to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. We run the following command to create our BAM files:
 
-`bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 -h 100 | samtools view -F 3584 -b --threads 8 > sample.bam`
+`bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 | samtools view -F 3584 -b --threads 8 > sample.bam`
