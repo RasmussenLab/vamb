@@ -572,7 +572,7 @@ class Binning:
 
     @classmethod
     def from_file(cls, filehandle, reference, recalls=_DEFAULTRECALLS,
-                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=False,
+                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True,
                   binsplit_separator=None, minsize=None, mincontigs=None):
         contigsof = dict()
         for line in filehandle:
@@ -631,7 +631,7 @@ def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True
             if contig is not None:
                 size += len(contig)
             elif checkpresence:
-                raise KeyError('Contig {} not in reference'.format(contigname))
+                raise KeyError('Contigname {} not in reference'.format(contigname))
             else:
                 pass
 
