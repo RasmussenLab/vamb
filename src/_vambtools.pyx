@@ -4,8 +4,7 @@ import array
 from cpython cimport array
 
 # Notes/assumptions for nucleotide counters:
-# 1) Contigs ONLY consists of values 64, 67, 71, 84, NOTHING ELSE
-# 2) They are at least 4 bp long
+# 1) Contigs ONLY consists of values 64, 67, 71, 84, all others are skipped
 
 # Lookup in this array gives the index of the canonical tetranucleotide.
 # E.g CCTA is the 92nd alphabetic 4mer, whose reverse complement, TAGG, is the 202nd.
@@ -45,14 +44,19 @@ cpdef int _overwrite_matrix(float[:,:] matrix, unsigned char[:] mask):
     This is only important to save on memory.
     """
 
-    cdef int i, j, matrixindex
+    cdef int i = 0
+    cdef int j = 0
+    cdef int matrixindex = 0
     cdef int length = matrix.shape[1]
     cdef int masklength = len(mask)
 
+    # First skip to the first zero in the mask, since the matrix at smaller
+    # indices than this should remain untouched.
     for i in range(masklength):
         if mask[i] == 0:
             break
 
+    # If the mask is all true, don't touch array.
     if i == masklength:
         return masklength
 

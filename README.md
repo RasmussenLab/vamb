@@ -4,99 +4,98 @@
 
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
 
-Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with many samples, well with 5-10 samples and poorly relying only on the nucleotide composition. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from commandline and from within a Python interpreter.
+Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with > 5 samples and poorly relying only on the nucleotide composition. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from command line and from within a Python interpreter.
 
 For more information on the background, context, and theory of Vamb, read [our paper on bioRxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) (DOI: 10.1101/490078)
 
-For more information about the implementation, methodological considerations, future directions, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
+For more information about the implementation, methodological considerations, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
+Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
 
-Vamb requires Python v. >= 3.5 and the following packages to run:
+### Installation for casual users:
 
-* PyTorch
-* Numpy
-* pysam
+```
+pip install https://github.com/jakobnissen/vamb/archive/v1.1.0.zip
+```
 
-So make sure you have those installed. When you have that:
+### Installation for advanced users:
 
-### 1: Get Vamb on your computer
+This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
-__If you have `git` installed__
+```
+# clone the desired branch from the repository, here master
+git clone https://github.com/jakobnissen/vamb -b master
 
-    [jakni@nissen:scripts]$ git clone https://github.com/jakobnissen/vamb
+# dev install
+cd vamb
+pip install -e .
+```
 
-__If you don't__
+### Installing by compiling the Cython yourself
 
-You then presumably have access to the Vamb directory with this notebook, so just put it wherever:
+If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` using Cython and move the resulting executable to the inner of the two `vamb` directories.
 
-    [jakni@nissen:scripts]$ cp -r /path/to/vamb/directory vamb
+# Running
 
-### 2: Make sure you can use Vamb
+## Invoking Vamb
 
-__Check if you can import Vamb to Python__
+After installation with pip, Vamb will show up in your PATH variable, and you can simply run:
 
-Open Python, append the parent directory of the vamb directory to your `sys.path`, then import Vamb. For example, if the Vamb directory is placed at `/home/jakni/scripts/vamb`, I would append `'/home/jakni/scripts'`:
+```
+vamb
+```
 
-    [jakni@nissen:scripts]$ python3 # must be Python 3!
-    Python 3.7.1 (default, Oct 22 2018, 10:41:28)
-    [GCC 8.2.1 20180831] on linux
-    Type "help", "copyright", "credits" or "license" for more information.
-    >>> import sys; sys.path.append('/home/jakni/scripts'); import vamb
-    >>>
+To run Vamb with another Python executable (say, if you want to run with `python3.7`) than the default, you can run:
 
-If no error occurs, like above, you successfully installed Vamb.
+```
+python3.7 -m vamb
+```
 
-__If you can't import Vamb to Python__
+You can also run the inner `vamb` directory as a script. This will work even if you did not install with pip:
 
-This can happen if you miss any of the dependencies. If it raises an error that you can't import `vambtools`, you probably need to compile the vambtools source file yourself. Either compile the `src/_vambtools.c` source file using whatever C compiler you want to, or compile the `src/_vambtools.pyx`. To do the latter:
+```
+python my_scripts/vamb/vamb
+```
 
-* Make sure you have the Python package Cython installed.
-* Go to the `src/` directory in the vamb directory
-* run `python build_vambtools.py build_ext --inplace` to do the compilation with the `build_vambtools.py` script
-* This will create a binary file. On my computer it's called `_vambtools.cpython-36m-x86_64-linux-gnu.so` but this will depend on your Python version and OS. Move this binary file to the parent directory, i.e. the `vamb` diretory. You can rename it to something nicer like `_vambtools.so` if you want, but it's not necessary.
-* You should now be able to import Vamb.
+## Example command to run Vamb
 
-# Quickstart
+Vamb with default inputs (a FASTA file and some BAM files) can be executed like so:
 
-Take a brief look on the options with:
+```
+vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam
+```
 
-    [jakni@nissen:scripts]$ python3 vamb/run.py --help
-
-Do the defaults look alright? They probably do, but you might want to check number of processes to launch and the option for GPU acceleration.
-
-Then, in order to run it, just do:
-
-    [jakni@nissen:scripts]$ python3 vamb/run.py outdir contigs.fna path/to/bamfiles/*.bam
+For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.
 
 # Inputs and outputs
 
 ### Inputs
 
-Like other metagenomic binners, Vamb relies on two properties of the DNA sequences to be binned:
+Vamb relies on two properties of the DNA sequences to be binned:
 
 * The kmer-composition of the sequence (here tetranucleotide frequency, *TNF*) and
 * The abundance of the contigs in each sample (the *depth* or the *RPKM*).
 
 So before you can run Vamb, you need to have files from which Vamb can calculate these values.
 
-* TNF is calculated from a regular fasta file of DNA sequences.
-* Depth is calculated from BAM-files of mapping reads to that same fasta file.
+* TNF is calculated from a regular FASTA file of DNA sequences.
+* Depth is calculated from BAM-files of mapping reads to that same FASTA file.
 
-The observed values for both of these measures become uncertain when the sequences is too short due to the law of large numbers. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on contigs is better.
+Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM file is constructed carelessly, for example by allowing reads from distinct species to crossmap, the BAM file will not contain information with which Vamb can separate the crossmapping species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
 
-With fewer samples (up to 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. The better approach is to split the dataset up into smaller chuncks and bin them independently.
+The observed values for both TNF and RPKM are statistically uncertain when the sequences are too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on (larger) contigs are better.
 
-There are situations where you can't just filter the fasta file, maybe because you have already spent tonnes of time getting those BAM files and you're not going to remap if your life depended on it, or because your fasta file contains genes and so removing all entries less than e.g. 2000 bps is a bit too much to ask. In those situations, you can still pass the argument `minlength` (`-m` on command line) if you want to have Vamb ignore the smaller contigs. This is not ideal, since the smaller, contigs will still have recruited some reads during mapping which are then not mapped to the larger contigs, but it can work alright.
+With fewer samples (up to about 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. The better approach is to split the dataset up into groups of similar samples and bin them independently.
 
 ### Outputs
 
-Vamb produces the following six output files:
+Vamb produces the following output files:
 
-- `log.txt` - a text file with information about the Vamb run.
-- `tnf.npz`, `rpkm.npz`, and `latent.npz` - Numpy .npz files with TNFs, abundances, and the latent encoding of these two.
-- `model.pt` - a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` in Python.
-- `clusters.tsv` - a text file with two columns and one row per sequence: Left column for the cluster name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
+- `log.txt` - a text file with information about the Vamb run. Look here (and at stderr) if you experience errors.
+- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - Numpy .npz files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
+- `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` from Python.
+- `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
 ### Recommended preparation
 
@@ -118,42 +117,6 @@ There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs 
 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
-We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. In theory, any mapper that produces a BAM file.
+We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. Be careful to choose proper parameters for your aligner - in general, if a read from contig A will map to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. We run the following command to create our BAM files:
 
-# Troubleshooting
-
-__Importing VAMB raises a RuntimeWarning that the compiletime version is wrong__
-
-Urgh, compiled languages, man! :/ Anyway, if it's just a warning it doesn't really matter as VAMB can run just fine despite it.
-
-### Parsing the FASTA file
-
-No trouble seen so far.
-
-### Parsing the BAM files
-
-No trouble seen so far.
-
-### Autoencoding
-
-No trouble seen so far.
-
-### Clustering
-
-__It warns: Only [N]% of contigs has well-separated threshold__
-
-See the issue below
-
-__It warns: Only [N]% of contigs has *any* observable threshold__
-
-This happens if the inter-contig distances do not neatly separate into close and far contigs, which can happen if:
-
-* There is little data, e.g. < 50k contigs
-* The VAE has not trained sufficiently
-* There is, for some reason, little signal in your data (low read abundances, similar bacterial strains etc.)
-
-Make sure the assembly and mapping went well. If it did, there is not much to do about it. We do not know at what percentage of well-separated or observable threshold Vamb becomes unusable. I would still use Vamb unless the following error is thrown:
-
-__It warns: Too little data: [ERROR]. Setting threshold to 0.08__
-
-This happens if less than 5 of the Pearson samples (default of 2500 samples) return any threshold. If this happens for a reasonable number of Pearson samples, e.g. > 100, I would not trust Vamb to deliver good results, and would use another binner instead.
+`bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 | samtools view -F 3584 -b --threads 8 > sample.bam`

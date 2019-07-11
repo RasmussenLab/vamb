@@ -1,8 +1,11 @@
 
 import os as _os
 import gzip as _gzip
+import bz2 as _bz2
+import lzma as _lzma
 import numpy as _np
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
+import collections as _collections
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
 'AAAA/TTTT', 'AAAC/GTTT', 'AAAG/CTTT', 'AAAT/ATTT',
@@ -84,7 +87,7 @@ def inplace_maskarray(array, mask):
     """
 
     if len(mask) != len(array):
-        raise ValueError('Lengths must match')
+        raise ValueError('Lengths of array and mask must match')
     elif array.ndim != 2:
         raise ValueError('Can only take a 2 dimensional-array.')
 
@@ -95,27 +98,45 @@ def inplace_maskarray(array, mask):
     return array
 
 class Reader:
-    "Use this instead of `open` for files which may be gzipped or not."
+    """Use this instead of `open` to open files which are either plain text,
+    gzipped, bzip2'd or zipped with LZMA.
+
+    Usage:
+    >>> with Reader(file, readmode) as file: # by default textmode
+    >>>     print(next(file))
+    TEST LINE
+    """
 
     def __init__(self, filename, readmode='r'):
         if readmode not in ('r', 'rb'):
-            raise ValueError("the reader cannot write, set mode to 'r' or 'rb'")
+            raise ValueError("the Reader cannot write, set mode to 'r' or 'rb'")
 
         self.filename = filename
         self.readmode = readmode
 
     def __enter__(self):
         with open(self.filename, 'rb') as f:
-            signature = f.peek(2)[:2]
+            signature = f.peek(8)[:8]
 
-        # Gzipped files begin with the two bytes 1F8B
-        if tuple(signature) == (31, 139):
+        # Gzipped files begin with the two bytes 0x1F8B
+        if tuple(signature[:2]) == (0x1F, 0x8B):
             if self.readmode == 'r':
                 self.filehandle = _gzip.open(self.filename, 'rt')
-
             else:
                 self.filehandle = _gzip.open(self.filename, self.readmode)
-
+        # bzip2 files begin with the signature BZ
+        elif signature[:2] == b'BZ':
+            if self.readmode == 'r':
+                self.filehandle = _bz2.open(self.filename, 'rt')
+            else:
+                self.filehandle = _bz2.open(self.filename, self.readmode)
+        # .XZ files begins with 0xFD377A585A0000
+        elif tuple(signature[:7]) == (0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00):
+            if self.readmode == 'r':
+                self.filehandle = _lzma.open(self.filename, 'rt')
+            else:
+                self.filehandle = _lzma.open(self.filename, self.readmode)
+        # Else we assume it's a text file.
         else:
             self.filehandle = open(self.filename, self.readmode)
 
@@ -123,8 +144,6 @@ class Reader:
 
     def __exit__(self, type, value, traceback):
         self.filehandle.close()
-
-
 
 class FastaEntry:
     """One single FASTA entry"""
@@ -134,6 +153,8 @@ class FastaEntry:
     def __init__(self, header, sequence):
         if header[0] in ('>', '#') or header[0].isspace():
             raise ValueError('Header cannot begin with #, > or whitespace')
+        if '\t' in header:
+            raise ValueError('Header cannot contain a tab')
 
         self.header = header
         self.sequence = bytearray(sequence)
@@ -149,27 +170,6 @@ class FastaEntry:
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
         return '>{}\n{}'.format(self.header, spacedseq)
 
-    # Two entries with same header cannot co-exist in same set/dict!
-    def __hash__(self):
-        return hash(self.header)
-
-    def __contains__(self, other):
-        if isinstance(other, str):
-            return other.encode() in self.sequence
-
-        elif isinstance(other, bytes) or isinstance(other, bytearray):
-            return other in self.sequence
-
-        else:
-            raise TypeError('Can only compare to str, bytes or bytearray')
-
-    # Entries are compared equal by their sequence.
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.sequence == other.sequence
-        else:
-            raise TypeError('Cannot compare to object of other class')
-
     def __getitem__(self, index):
         return self.sequence[index]
 
@@ -183,8 +183,6 @@ class FastaEntry:
 
     def fourmer_freq(self):
         return _fourmerfreq(self.sequence)
-
-
 
 def byte_iterfasta(filehandle, comment=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
@@ -200,7 +198,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
     Output: Generator of FastaEntry-objects from file
     """
 
-    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvSWKMYRBDHVn',
+    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
                                b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
 
     # Skip to first header
@@ -216,7 +214,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
             else:
                 raise ValueError('First non-comment line is not a Fasta header')
 
-        else: # nobreak
+        else: # no break
             raise ValueError('Empty or outcommented file')
 
     except TypeError:
@@ -228,10 +226,10 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     # Iterate over lines
     for line in filehandle:
+        linenumber += 1
+
         if line.startswith(comment):
             continue
-
-        linenumber += 1
 
         if line.startswith(b'>'):
             yield FastaEntry(header, b''.join(buffer))
@@ -240,12 +238,15 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
         else:
             # Check for un-parsable characters in the sequence
+<<<<<<< HEAD:vambtools.py
             stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
+=======
+            stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN\n')
+>>>>>>> dev:vamb/vambtools.py
             if len(stripped) > 0:
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
                                                                          bad_character))
-
             masked = line[:-1].translate(linemask)
             buffer.append(masked)
 
@@ -274,8 +275,6 @@ def loadfasta(byte_iterator, keep=None, comment=b'#'):
 
     return entries
 
-
-
 def write_bins(directory, bins, fastadict, maxbins=250):
     """Writes bins as FASTA files in a directory, one file per bin.
 
@@ -284,14 +283,16 @@ def write_bins(directory, bins, fastadict, maxbins=250):
         bins: {'name': {set of contignames}} dictionary (can be loaded from
         clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
-        maxbins: Raise an error if trying to make more bins than this
+        maxbins: None or else raise an error if trying to make more bins than this
 
     Output: None
     """
 
-    # Safety measure so someone doesn't accidentally make 5000 tiny bins
-    if len(bins) > maxbins:
-        raise ValueError('Bins exceed maxbins')
+    # Safety measure so someone doesn't accidentally make 50000 tiny bins
+    # If you do this on a compute cluster it can grind the entire cluster to
+    # a halt and piss people off like you wouldn't believe.
+    if maxbins is not None and len(bins) > maxbins:
+        raise ValueError('{} bins exceed maxbins of {}'.format(len(bins), maxbins))
 
     # Check that the directory is not a non-directory file,
     # and that its parent directory indeed exists
@@ -308,14 +309,12 @@ def write_bins(directory, bins, fastadict, maxbins=250):
     allcontigs = set()
 
     for contigs in bins.values():
-        contigset = set(contigs)
-        allcontigs.update(contigset)
+        allcontigs.update(set(contigs))
 
-    for contig in allcontigs:
-        if contig not in fastadict:
-            raise IndexError('{} not in fastadict'.format(contig))
-
-    del allcontigs, contigset
+    allcontigs -= fastadict.keys()
+    if allcontigs:
+        nmissing = len(allcontigs)
+        raise IndexError('{} contigs in bins missing from fastadict'.format(nmissing))
 
     # Make the directory if it does not exist - if it does, do nothing
     try:
@@ -334,20 +333,6 @@ def write_bins(directory, bins, fastadict, maxbins=250):
                 entry = fastadict[contig]
                 print(entry.format(), file=file)
 
-
-
-def read_tsv(file, dtype=_np.float32):
-    """Loads array in TSV format
-
-    Input: Open file or path to file with tsv-formatted array
-
-    Output: A Numpy array
-    """
-
-    array = _np.loadtxt(file, delimiter='\t', comments='#', dtype=dtype)
-
-    return array
-
 def read_npz(file):
     """Loads array in .npz-format
 
@@ -361,19 +346,6 @@ def read_npz(file):
     npz.close()
 
     return array
-
-def write_tsv(file, array, header=''):
-    """Writes a Numpy array to an open file or path in .tsv format
-
-    Inputs:
-        file: Open file or path to file
-        array: Numpy array
-        headers: String to use as header (will be prepended by #)
-
-    Output: None
-    """
-
-    _np.savetxt(file, array, fmt='%.4f', delimiter='\t', header=header, comments='#')
 
 def write_npz(file, array):
     """Writes a Numpy array to an open file or path in .npz format
@@ -403,3 +375,71 @@ def filtercontigs(infile, outfile, minlength=2000):
     for entry in fasta_entries:
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
+
+def load_jgi(filehandle):
+    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
+    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
+
+    Usage:
+        with open('/path/to/jgi_depths.tsv') as file:
+            depths = load_jgi(file)
+    Input:
+        File handle of open output depth file
+    Output:
+        N_contigs x N_samples Numpy matrix of dtype float32
+    """
+
+    header = next(filehandle)
+    fields = header.split('\t')
+    if not fields[4].endswith('-var'):
+        raise ValueError('Input file format error: 5th column should contain variances.')
+
+    columns = tuple(range(3, len(fields), 2))
+    return _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
+
+def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
+    "Split a single bin by the prefix of the headers"
+
+    bysample.clear()
+    for header in headers:
+        if not isinstance(header, str):
+            raise TypeError('Can only split named sequences, not of type {}'.format(type(header)))
+
+        sample, sep, identifier = header.partition(separator)
+
+        if not identifier:
+            raise KeyError("Separator '{}' not in sequence label: '{}'".format(separator, header))
+
+        bysample[sample].add(header)
+
+    for sample, splitheaders in bysample.items():
+        newbinname = "{}{}{}".format(sample, separator, binname)
+        yield newbinname, splitheaders
+
+def _binsplit_generator(cluster_iterator, separator):
+    "Return a generator over split bins with the function above."
+    for binname, headers in cluster_iterator:
+        for newbinname, splitheaders in _split_bin(binname, headers, separator):
+            yield newbinname, splitheaders
+
+def binsplit(clusters, separator):
+    """Splits a set of clusters by the prefix of their names.
+    The separator is a string which separated prefix from postfix of contignames. The
+    resulting split clusters have the prefix and separator prepended to them.
+
+    clusters can be an iterator, in which case this function returns an iterator, or a dict
+    with contignames: set_of_contignames pair, in which case a dict is returned.
+
+    Example:
+    >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
+    >>> binsplit(clusters, "-")
+    {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
+    """
+    if iter(clusters) is clusters: # clusters is an iterator
+        return _binsplit_generator(clusters, separator)
+
+    elif isinstance(clusters, dict):
+        return dict(_binsplit_generator(clusters.items(), separator))
+
+    else:
+        raise TypeError("clusters must be iterator of pairs or dict")

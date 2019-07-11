@@ -1,0 +1,10 @@
+*.so
+__pycache__
+*.o
+src/_vambtools.cpp
+.eggs
+*~
+vamb.egg-info
+changelog
+.DS_Store
+.ipynb_checkpoints

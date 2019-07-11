@@ -9,7 +9,7 @@ Usage:
 >>> vae.trainmodel(dataloader)
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
-(183882, 40)
+(183882, 32)
 """
 
 __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
@@ -61,31 +61,38 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         raise ValueError('Lengths of RPKM and TNF must be the same')
 
     if tnf.shape[1] != 136:
-        raise ValueError('TNF must be 136 long along axis 1')
+        raise ValueError('TNF must be length 136 long along axis 1')
 
-    tnfsum = tnf.sum(axis=1)
-    mask = tnfsum != 0
-    del tnfsum
-    depthssum = rpkm.sum(axis=1)
-    mask &= depthssum != 0
+    if not (rpkm.dtype == tnf.dtype == _np.float32):
+        raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
+
+    mask = tnf.sum(axis=1) != 0
+
+    # If multiple samples, also include nonzero depth as requirement for accept
+    # of sequences
+    if rpkm.shape[1] > 1:
+        depthssum = rpkm.sum(axis=1)
+        mask &= depthssum != 0
+        depthssum = depthssum[mask]
 
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
 
     if destroy:
-        if not (rpkm.dtype == tnf.dtype == _np.float32):
-            raise ValueError('Arrays must be of data type np.float32 if destroy is True')
-
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
     else:
+        # Despite saying "copy=False", the masking always creates a copy.
         rpkm = rpkm[mask].astype(_np.float32, copy=False)
         tnf = tnf[mask].astype(_np.float32, copy=False)
 
-    depthssum = depthssum[mask]
+    # If multiple samples, normalize to sum to 1, else zscore normalize
+    if rpkm.shape[1] > 1:
+        rpkm /= depthssum.reshape((-1, 1))
+    else:
+        _vambtools.zscore(rpkm, axis=0, inplace=True)
 
     # Normalize arrays and create the Tensors
-    rpkm /= depthssum.reshape((-1, 1))
     _vambtools.zscore(tnf, axis=0, inplace=True)
     depthstensor = _torch.from_numpy(rpkm)
     tnftensor = _torch.from_numpy(tnf)
@@ -102,9 +109,9 @@ class VAE(_nn.Module):
 
     Instantiate with:
         nsamples: Number of samples in abundance matrix
-        nhiddens: List of n_neurons in the hidden layers [[325, 325]]
-        nlatent: Number of neurons in the latent layer [40]
-        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [0.05]
+        nhiddens: List of n_neurons in the hidden layers [None=Auto]
+        nlatent: Number of neurons in the latent layer [32]
+        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
         beta: Multiply KLD by the inverse of this value [200]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
@@ -114,24 +121,40 @@ class VAE(_nn.Module):
 
     vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
+
+    If alpha or dropout is None and there is only one sample, they are set to
+    0.99 and 0.0, respectively
     """
 
-    def __init__(self, nsamples, nhiddens=[325, 325], nlatent=40, alpha=0.05,
+    def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
-        if any(i < 1 for i in nhiddens):
-            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
-
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
 
+        if nsamples < 1:
+            raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
+
+        # If only 1 sample, we weigh alpha and nhiddens differently
+        if alpha is None:
+            alpha = 0.15 if nsamples > 1 else 0.50
+
+        if nhiddens is None:
+            nhiddens = [512, 512] if nsamples > 1 else [256, 256]
+
+        if dropout is None:
+            dropout = 0.2 if nsamples > 1 else 0.0
+
+        if any(i < 1 for i in nhiddens):
+            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
+
         if beta <= 0:
-            raise ValueError('beta must be > 0')
+            raise ValueError('beta must be > 0, not {}'.format(beta))
 
         if not (0 < alpha < 1):
-            raise ValueError('alpha must be 0 < alpha < 1')
+            raise ValueError('alpha must be 0 < alpha < 1, not {}'.format(alpha))
 
         if not (0 <= dropout < 1):
-            raise ValueError('dropout must be 0 <= dropout < 1')
+            raise ValueError('dropout must be 0 <= dropout < 1, not {}'.format(dropout))
 
         super(VAE, self).__init__()
 
@@ -212,8 +235,12 @@ class VAE(_nn.Module):
         reconstruction = self.outputlayer(tensor)
 
         # Decompose reconstruction to depths and tnf signal
-        depths_out = _F.softmax(reconstruction.narrow(1, 0, self.nsamples), dim=1)
+        depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, 136)
+
+        # If multiple samples, apply softmax
+        if self.nsamples > 1:
+            depths_out = _F.softmax(depths_out, dim=1)
 
         return depths_out, tnf_out
 
@@ -226,11 +253,17 @@ class VAE(_nn.Module):
         return depths_out, tnf_out, mu, logsigma
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
-        ce = - (depths_out.log() * depths_in).sum(dim=1).mean()
+        # If multiple samples, use cross entropy, else use SSE for abundance
+        if self.nsamples > 1:
+            # Add 1e-9 to depths_out to avoid numerical instability.
+            ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
+            ce_weight = (1 - self.alpha) / _log(self.nsamples)
+        else:
+            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
+            ce_weight = 1 - self.alpha
+
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-
-        ce_weight = (1 - self.alpha) / _log(self.nsamples)
         sse_weight = self.alpha / 136
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
@@ -395,7 +428,7 @@ class VAE(_nn.Module):
             dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
-            batchsteps: Double batchsize at these epochs [25, 75, 150, 300]
+            batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
@@ -403,7 +436,7 @@ class VAE(_nn.Module):
         """
 
         if lrate < 0:
-            raise ValueError('Learning rate cannot be negative')
+            raise ValueError('Learning rate must be positive, not {}'.format(lrate))
 
         if nepochs < 1:
             raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
