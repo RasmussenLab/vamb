@@ -82,7 +82,8 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         rpkm = _vambtools.inplace_maskarray(rpkm, mask)
         tnf = _vambtools.inplace_maskarray(tnf, mask)
     else:
-        # Despite saying "copy=False", the masking always creates a copy.
+        # The astype operation does not copy due to "copy=False", but the masking
+        # operation does.
         rpkm = rpkm[mask].astype(_np.float32, copy=False)
         tnf = tnf[mask].astype(_np.float32, copy=False)
 
@@ -92,7 +93,8 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     else:
         _vambtools.zscore(rpkm, axis=0, inplace=True)
 
-    # Normalize arrays and create the Tensors
+    # Normalize arrays and create the Tensors (the tensors share the underlying memory)
+    # if the Numpy arrays
     _vambtools.zscore(tnf, axis=0, inplace=True)
     depthstensor = _torch.from_numpy(rpkm)
     tnftensor = _torch.from_numpy(tnf)
@@ -442,14 +444,19 @@ class VAE(_nn.Module):
             raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
 
         if batchsteps is None:
-            batchsteps = list()
+            batchsteps_set = set()
         else:
+            # First collect to list in order to allow all element types, then check that
+            # they are integers
+            batchsteps = list(batchsteps)
+            if not all(isinstance(i, int) for i in batchsteps):
+                raise ValueError('All elements of batchsteps must be integers')
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError('Max batchsteps must not equal or exceed nepochs')
             last_batchsize = dataloader.batch_size * 2**len(batchsteps)
             if len(dataloader.dataset) < last_batchsize:
                 raise ValueError('Last batch size exceeds dataset length')
-
+            batchsteps_set = set(batchsteps)
 
         # Get number of features
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape
@@ -466,14 +473,15 @@ class VAE(_nn.Module):
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tStarting batch size:', dataloader.batch_size, file=logfile)
-            print('\tBatchsteps:', ', '.join(map(str, batchsteps)), file=logfile)
+            batchsteps_string = 'None' if batchsteps is None else ', '.join(map(str, batchsteps))
+            print('\tBatchsteps:', batchsteps_string, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN sequences:', ncontigs, file=logfile)
             print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
         for epoch in range(nepochs):
-            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps, logfile)
+            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps_set, logfile)
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:

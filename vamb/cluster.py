@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 __doc__ = """Iterative medoid clustering.
 
 Usage:
@@ -38,13 +36,13 @@ _NORMALPDF = _DELTA_X * _np.array(
 # Distance within which to search for medoid point
 _MEDOID_RADIUS = 0.05
 
-def _calc_histogram(distances, bins=_XS):
+def _calc_histogram(distances, seed, bins=_XS):
     """Calculates number of OTHER points within the bins given by bins."""
     histogram, _ = _np.histogram(distances, bins=bins)
 
     # compensate for self-correlation of chosen contig. This is not always true
     # due to floating point errors, yielding negative distance to self.
-    if histogram[0] > 0:
+    if distances[seed] >= 0:
         histogram[0] -= 1
 
     return histogram
@@ -60,7 +58,7 @@ def _calc_densities(histogram, pdf=_NORMALPDF):
 
     return densities
 
-def _find_threshold(distances, peak_valley_ratio, default, xs=_XS[1:]):
+def _find_threshold(histogram, peak_valley_ratio, default, xs=_XS[1:]):
     """Find a threshold distance, where where is a dip in point density
     that separates an initial peak in densities from the larger bulk around 0.5.
     Returns (threshold, success), where succes is False if no threshold could
@@ -73,7 +71,6 @@ def _find_threshold(distances, peak_valley_ratio, default, xs=_XS[1:]):
     density_at_minimum = None
     threshold = None
     success = False
-    histogram = _calc_histogram(distances)
 
     # If the point is a loner, immediately return a threshold in where only
     # that point is contained.
@@ -130,8 +127,6 @@ def _normalize(matrix, inplace=False):
     if not inplace:
         matrix = matrix.copy()
 
-    # If next line is uncommented, result is Pearson distance, not cosine
-    # matrix -= matrix.mean(axis=1).reshape((-1, 1))
     denominator = _np.linalg.norm(matrix, axis=1).reshape((-1, 1)) * (2 ** 0.5)
     denominator[denominator == 0] = 1
     matrix /= denominator
@@ -142,17 +137,6 @@ def _numpy_distances(matrix, index):
     "Return vector of distances from rows of normalized matrix to given row."
     return 0.5 - _np.dot(matrix, matrix[index].T)
 
-def _getcluster(distances, medoid, threshold):
-    """Returns the cluster given distances from a medoid"""
-    cluster = _np.where(distances <= threshold)[0]
-
-    # This happens if std(matrix[points]) == 0, then all distances
-    # become 0.5, even the distance to itself.
-    if len(cluster) == 0:
-        return _np.array([medoid])
-    else:
-        return cluster
-
 def _sample_medoid(matrix, medoid, threshold):
     """Returns:
     - A vector of indices to points within threshold
@@ -161,7 +145,7 @@ def _sample_medoid(matrix, medoid, threshold):
     """
 
     distances = _numpy_distances(matrix, medoid)
-    cluster = _getcluster(distances, medoid, threshold)
+    cluster = _np.where(distances <= threshold)[0]
     if len(cluster) == 1:
         average_distance = 0
     else:
@@ -214,7 +198,8 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
     while threshold is None:
         seed = (seed + 1) % len(matrix)
         medoid, distances = _numpy_wander_medoid(matrix, seed, max_steps, rng)
-        threshold, success = _find_threshold(distances, peak_valley_ratio, default)
+        histogram = _calc_histogram(distances, seed)
+        threshold, success = _find_threshold(histogram, peak_valley_ratio, default)
 
         # If success is not None, either threshold detection failed or succeded.
         if success is not None:
@@ -233,7 +218,7 @@ def _numpy_findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses,
                 attempts.clear()
                 successes = 0
 
-    cluster = _getcluster(distances, medoid, threshold)
+    cluster = _np.where(distances <= threshold)[0]
     return cluster, medoid, seed, peak_valley_ratio
 
 def _numpy_cluster(matrix, labels, indices, max_steps, windowsize, minsuccesses, default):

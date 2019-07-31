@@ -10,7 +10,7 @@ SETUP_METADATA = \
     "url": "https://github.com/jakobnissen/vamb",
     "author": "Jakob Nybo Nissen and Simon Rasmussen",
     "author_email": "jakni@dtu.dk",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "license": "MIT",
     "packages": find_packages(),
     "entry_points": {'console_scripts': [

@@ -1,5 +1,3 @@
-*__IMPORTANT__: A critical bug in clustering [was fixed January 24th 2019](https://github.com/jakobnissen/vamb/commit/f7f9ceb788086a6a80a7ffe0c6209658126902a9) - if you have run Vamb at any previous time, your results will likely have been terrible.*
-
 # Vamb
 
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
@@ -64,6 +62,11 @@ Vamb with default inputs (a FASTA file and some BAM files) can be executed like 
 
 ```
 vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam
+```
+
+For more command-line options, see the command-line help menu:
+```
+vamb -h
 ```
 
 For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.

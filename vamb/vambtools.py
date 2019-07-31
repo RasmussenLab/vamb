@@ -1,4 +1,3 @@
-
 import os as _os
 import gzip as _gzip
 import bz2 as _bz2
@@ -243,7 +242,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
                 bad_character = chr(stripped[0])
                 raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
                                                                          bad_character))
-            masked = line[:-1].translate(linemask)
+            masked = line.translate(linemask, b' \t\n')
             buffer.append(masked)
 
     yield FastaEntry(header, b''.join(buffer))
@@ -349,7 +348,6 @@ def write_npz(file, array):
     Inputs:
         file: Open file or path to file
         array: Numpy array
-        headers: String to use as header (will be prepended by #)
 
     Output: None
     """
