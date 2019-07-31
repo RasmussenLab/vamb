@@ -127,9 +127,11 @@ def _normalize(matrix, inplace=False):
     if not inplace:
         matrix = matrix.copy()
 
-    denominator = _np.linalg.norm(matrix, axis=1).reshape((-1, 1)) * (2 ** 0.5)
-    denominator[denominator == 0] = 1
-    matrix /= denominator
+    # If any rows are kept all zeros, the distance function will return 0.5 to all points
+    # inclusive itself, which can break the code in this module
+    zeromask = matrix.sum(axis=1) == 0
+    matrix[zeromask] = 1/matrix.shape[1]
+    matrix /= _np.linalg.norm(matrix, axis=1).reshape((-1, 1)) * (2 ** 0.5)
     return matrix
 
 # Returns cosine or Pearson distance when matrix is normalized as above.
