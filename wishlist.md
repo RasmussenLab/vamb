@@ -56,7 +56,7 @@ A possible future approach could be to encode the depths and TNF independently w
 
 __Implement an optional two-step clustering method for large datasets, if possible__
 
-So our clustering scales quadratically. That's alright for normally sized datasets, but at some point, someone is going to want to cluster 100 million sequences. Is there a way to evoid this scaling?
+So our clustering scales quadratically. That's alright for normally sized datasets, but at some point, someone is going to want to cluster 100 million sequences. Is there a way to avoid this scaling?
 
 Well, if we look at Canopy clustering (not to be confused with the binning method referred to as Canopy), that prevents the issue by first creating large, intersecting (i.e. non-disjoint) sets of points which I will call `partitions`, and then clustering those partitions independently. After clustering those, the clusters may be merged together by simply removing points that are present in multiple clusters from all their clusters but one.
 
@@ -93,7 +93,7 @@ We can prove this works:
 
 Hence we just need to pick values for `INNER` and `OUTER` to follow condition A, which means that the difference between `INNER` and `OUTER` should be above the cluster diameter for most realistic bins. No problem.
 
-Now, this relies on the triangle inequality `|SF| ≤ |SC| + |CF|` which does not hold true for Pearson distance, cosine distance etc. However, for cosine distance, it's the distances can be converted to radians, which **do** follow the triangle inqeuality. E.g, you can add cosine distances with this function:
+Now, this relies on the triangle inequality `|SF| ≤ |SC| + |CF|` which does not hold true for Pearson distance, cosine distance etc. However, for cosine distance, the distances can be converted to radians, which **do** follow the triangle inqeuality. E.g, you can add cosine distances with this function:
 
     def add_distances(a, b):
         radians_a = math.acos(1 - 2*a)

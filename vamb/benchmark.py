@@ -19,7 +19,7 @@
 # * True positives (TP) is the breadth of the intersection of the bin and the genome contigs
 # * False positives (FP) is the bin breadth minus TP
 # * False negatives (FN) is the Genome breadth minus TP
-# * True negatives (TN) is the Binning breadth minus TP+FP+FN
+# * True negatives (TN) is the Reference breadth minus TP+FP+FN
 #
 # From these values, the recall, precision, Matthew's correlation coefficient (MCC)
 # and F1 statistics are calculated.
@@ -397,6 +397,8 @@ class Binning:
         return true_positives, true_negatives, false_positives, false_negatives
 
     def mcc(self, genome, bin_name):
+        "Calculate Matthew's correlation coefficient between a genome and a bin."
+
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         mcc_num = tp * tn - fp * fn
         mcc_den = (tp + fp) * (tp + fn)
@@ -404,6 +406,8 @@ class Binning:
         return 0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
 
     def f1(self, genome, bin_name):
+        "Calculate F1 score between genome and a bin"
+
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         return 2*tp / (2*tp + fp + fn)
 
@@ -458,7 +462,7 @@ class Binning:
         counter with the number of found clades.
         """
         # Create a mapping: {clade : seen_boolean_vector}, where the vector represents
-        # seen or not at the different recall/precision values
+        # each clade seen or not at the different recall/precision values
         clades = set()
         for precisiondict in precisionof.values():
             clades.update(precisiondict.keys())
@@ -466,7 +470,7 @@ class Binning:
         isseen = {clade: bytearray(arrlen) for clade in clades}
 
         # Now update the vectors, setting them to 1 if the clade has been seen at that
-        # recall/prec threshold, 0 otherwise
+        # recall/prec threshold
         for binname, precisiondict in precisionof.items():
             for clade, precision in precisiondict.items():
                 recall = recallof[binname][clade]

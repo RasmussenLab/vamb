@@ -178,7 +178,7 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
     rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
 
     if total_reads > 0:
-        millionmappedreads = total_reads / 2e6
+        millionmappedreads = total_reads / 1e6
 
         for i, (contiglength, nreads) in enumerate(zip(contiglengths, readcounts)):
             kilobases = contiglength / 1000

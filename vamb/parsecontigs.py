@@ -1,4 +1,3 @@
-
 __doc__ = """Calculate z-normalized tetranucleotide frequency from a FASTA file.
 
 Usage:
