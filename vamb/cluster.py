@@ -158,7 +158,7 @@ def _sample_medoid(matrix, medoid, threshold):
     """
 
     distances = _calc_distances(matrix, medoid)
-    cluster = (distances <= threshold).nonzero()
+    cluster = _vambtools.torch_nonzero(distances <= threshold)
 
     if len(cluster) == 1:
         average_distance = 0.0
@@ -234,7 +234,8 @@ def _findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses, defau
                 attempts.clear()
                 successes = 0
 
-    cluster = (distances <= threshold).nonzero()
+    # This is the final cluster AFTER establishing the threshold used
+    cluster = _vambtools.torch_nonzero(distances <= threshold)
     return cluster, medoid, seed, peak_valley_ratio
 
 
@@ -299,7 +300,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
 
     Inputs:
         matrix: A (obs x features) Numpy matrix of data type numpy.float32
-        labels: None or Numpy array/list with labels for seqs [None = indices+1]
+        labels: None or Numpy array/list with labels for seqs [None = indices]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         default: Fallback threshold if cannot be estimated [0.09]
         windowsize: Length of window to count successes [200]

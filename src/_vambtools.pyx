@@ -38,6 +38,34 @@ cpdef array.array zeros(typecode, int size):
 
     return arr
 
+cdef int count_nonzeros(char[:] bools):
+    "Count number of nonzero elements in an uint8 vector"
+
+    cdef int count = 0
+    for i in range(len(bools)):
+        count += bools[i]
+
+    return count
+
+cdef void fill_indices(long[:] indices, char[:] bools, int indlength):
+    "Fills indlength elements of nonzero indices in bools to indices vector"
+
+    cdef int writeindex = 0
+    cdef long index = 0
+    while writeindex < indlength:
+        indices[writeindex] = index
+        writeindex += bools[index]
+        index += 1
+
+cpdef _nonzero(char[:] bools):
+    "Returns an int array of nonzero indices of boolean vector"
+
+    size = count_nonzeros(bools)
+    cpdef array.array indices = array.array('q')
+    array.resize(indices, size)
+    fill_indices(indices, bools, size)
+    return indices
+
 cpdef int _overwrite_matrix(float[:,:] matrix, unsigned char[:] mask):
     """Given a float32 matrix and Uint8 mask, does the same as setting the first
     rows of matrix to matrix[mask], but in-place.

@@ -3,7 +3,8 @@ import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
+import torch as _torch
+from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix, _nonzero
 import collections as _collections
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
@@ -92,9 +93,21 @@ def inplace_maskarray(array, mask):
 
     np_array = array.numpy()
     np_mask = mask.numpy()
-    index = vamb.vambtools._overwrite_matrix(np_array, np_mask)
+    index = _overwrite_matrix(np_array, np_mask)
     array.resize_((index, array.shape[1]))
     return array
+
+def torch_nonzero(tensor):
+    """A shoddy re-implementation of PyTorch's tensor.nonzero() because it is not optimized yet.
+    See https://github.com/pytorch/pytorch/pull/15190"""
+    if tensor.dtype != _torch.uint8:
+        raise TypeError("Must be tensor of dtype uint8")
+
+    np = tensor.numpy()
+    array = _nonzero(np)
+    np2 = _np.frombuffer(array, dtype=_np.int)
+    tensor2 = _torch.from_numpy(np2)
+    return tensor2
 
 class Reader:
     """Use this instead of `open` to open files which are either plain text,
