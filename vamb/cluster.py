@@ -158,7 +158,7 @@ def _sample_medoid(matrix, medoid, threshold):
     """
 
     distances = _calc_distances(matrix, medoid)
-    cluster = _vambtools.torch_nonzero(distances <= threshold)
+    cluster = _vambtools.smaller_indices(distances, threshold)
 
     if len(cluster) == 1:
         average_distance = 0.0
@@ -235,7 +235,7 @@ def _findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses, defau
                 successes = 0
 
     # This is the final cluster AFTER establishing the threshold used
-    cluster = _vambtools.torch_nonzero(distances <= threshold)
+    cluster = _vambtools.smaller_indices(distances, threshold)
     return cluster, medoid, seed, peak_valley_ratio
 
 
