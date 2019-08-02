@@ -4,7 +4,7 @@ import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
 import torch as _torch
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix, _nonzero
+from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix, _below_indices
 import collections as _collections
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
@@ -97,14 +97,14 @@ def inplace_maskarray(array, mask):
     array.resize_((index, array.shape[1]))
     return array
 
-def torch_nonzero(tensor):
-    """A shoddy re-implementation of PyTorch's tensor.nonzero() because it is not optimized yet.
+def smaller_indices(tensor, threshold):
+    """Get all indices where the tensor is smaller than the threshold
     See https://github.com/pytorch/pytorch/pull/15190"""
-    if tensor.dtype != _torch.uint8:
-        raise TypeError("Must be tensor of dtype uint8")
+    if tensor.dtype != _torch.float32:
+        raise TypeError("Must be tensor of dtype float32")
 
     np = tensor.numpy()
-    array = _nonzero(np)
+    array = _below_indices(np, threshold)
     np2 = _np.frombuffer(array, dtype=_np.int)
     tensor2 = _torch.from_numpy(np2)
     return tensor2
