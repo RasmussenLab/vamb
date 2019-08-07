@@ -126,6 +126,14 @@ def _find_threshold(histogram, peak_valley_ratio, default):
 
     return threshold, success
 
+def _smaller_indices(tensor, threshold):
+    """Get all indices where the tensor is smaller than the threshold.
+    Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190"""
+
+    arr = tensor.numpy()
+    indices = (arr <= threshold).nonzero()[0]
+    torch_indices = _torch.from_numpy(indices)
+    return torch_indices
 
 def _normalize(matrix, inplace=False):
     """Preprocess the matrix to make distance calculations faster.
@@ -158,7 +166,7 @@ def _sample_medoid(matrix, medoid, threshold):
     """
 
     distances = _calc_distances(matrix, medoid)
-    cluster = _vambtools.smaller_indices(distances, threshold)
+    cluster = _smaller_indices(distances, threshold)
 
     if len(cluster) == 1:
         average_distance = 0.0
@@ -235,7 +243,7 @@ def _findcluster(matrix, seed, peak_valley_ratio, max_steps, minsuccesses, defau
                 successes = 0
 
     # This is the final cluster AFTER establishing the threshold used
-    cluster = _vambtools.smaller_indices(distances, threshold)
+    cluster = _smaller_indices(distances, threshold)
     return cluster, medoid, seed, peak_valley_ratio
 
 

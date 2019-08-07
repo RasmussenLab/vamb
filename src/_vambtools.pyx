@@ -38,34 +38,6 @@ cpdef array.array zeros(typecode, int size):
 
     return arr
 
-cdef int count_below(float[::1] values, float threshold):
-    "Count number of elements less or equal to threshold in vector"
-
-    cdef int count = 0
-    for i in range(len(values)):
-        count += values[i] <= threshold
-
-    return count
-
-cdef void fill_indices(long[::1] indices, float[::1] vals, float threshold, int indlength):
-    "Fills indlength elements smaller than threshold in vals to indices"
-
-    cdef int writeindex = 0
-    cdef long index = 0
-    while writeindex < indlength:
-        indices[writeindex] = index
-        writeindex += vals[index] <= threshold
-        index += 1
-
-cpdef _below_indices(float[::1] vals, float threshold):
-    "Returns an int array of nonzero indices of boolean vector"
-
-    size = count_below(vals, threshold)
-    cpdef array.array indices = array.array('q')
-    array.resize(indices, size)
-    fill_indices(indices, vals, threshold, size)
-    return indices
-
 cpdef int _overwrite_matrix(float[:,::1] matrix, unsigned char[::1] mask):
     """Given a float32 matrix and Uint8 mask, does the same as setting the first
     rows of matrix to matrix[mask], but in-place.

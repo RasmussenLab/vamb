@@ -3,7 +3,6 @@ import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
-import torch as _torch
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix, _below_indices
 import collections as _collections
 
@@ -96,18 +95,6 @@ def inplace_maskarray(array, mask):
     index = _overwrite_matrix(np_array, np_mask)
     array.resize_((index, array.shape[1]))
     return array
-
-def smaller_indices(tensor, threshold):
-    """Get all indices where the tensor is smaller than the threshold
-    See https://github.com/pytorch/pytorch/pull/15190"""
-    if tensor.dtype != _torch.float32:
-        raise TypeError("Must be tensor of dtype float32")
-
-    np = tensor.numpy()
-    array = _below_indices(np, threshold)
-    np2 = _np.frombuffer(array, dtype=_np.int)
-    tensor2 = _torch.from_numpy(np2)
-    return tensor2
 
 class Reader:
     """Use this instead of `open` to open files which are either plain text,
