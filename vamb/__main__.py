@@ -174,7 +174,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
                               minsuccesses=minsuccesses, labels=contignames,
-                              logfile=logfile)
+                              logfile=logfile, cuda=cuda)
 
     # Binsplit if given a separator
     if separator is not None:
@@ -270,7 +270,7 @@ def main():
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
 
     # VAE arguments
-    vaeos = parser.add_argument_group(title='VAE hyperparameters', description=None)
+    vaeos = parser.add_argument_group(title='VAE options', description=None)
 
     vaeos.add_argument('-n', dest='nhiddens', metavar='', type=int, nargs='+',
                         default=None, help='hidden neurons [Auto]')
@@ -282,7 +282,7 @@ def main():
                         default=200.0, help='beta, capacity to learn [200.0]')
     vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
                         default=None, help='dropout [Auto]')
-    vaeos.add_argument('--cuda', help='use GPU [False]', action='store_true')
+    vaeos.add_argument('--cuda', help='Use GPU to train & cluster [False]', action='store_true')
 
     trainos = parser.add_argument_group(title='Training options', description=None)
 
@@ -383,7 +383,7 @@ def main():
         raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1.')
 
     if args.cuda and not torch.cuda.is_available():
-        raise ModuleNotFoundError('Cuda is not available for PyTorch')
+        raise ModuleNotFoundError('Cuda is not available on your PyTorch installation.')
 
     ###################### CHECK TRAINING OPTIONS ####################
     if args.nepochs < 1:
