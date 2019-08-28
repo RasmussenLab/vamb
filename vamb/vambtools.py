@@ -3,7 +3,7 @@ import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix, _below_indices
+from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
 import collections as _collections
 
 TNF_HEADER = '#contigheader\t' + '\t'.join([
@@ -91,7 +91,7 @@ def inplace_maskarray(array, mask):
         raise ValueError('Can only take a 2 dimensional-array.')
 
     np_array = array.numpy()
-    np_mask = mask.numpy()
+    np_mask = _np.frombuffer(mask.numpy(), dtype=_np.uint8)
     index = _overwrite_matrix(np_array, np_mask)
     array.resize_((index, array.shape[1]))
     return array
