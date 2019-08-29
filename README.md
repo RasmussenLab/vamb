@@ -2,7 +2,7 @@
 
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark.
 
-Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with > 5 samples and poorly relying only on the nucleotide composition. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from command line and from within a Python interpreter.
+Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with multiple samples, and pretty good on single-sample data. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from command line and from within a Python interpreter.
 
 For more information on the background, context, and theory of Vamb, read [our paper on bioRxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) (DOI: 10.1101/490078)
 
@@ -22,10 +22,8 @@ pip install https://github.com/jakobnissen/vamb/archive/v2.0.1.zip
 This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
 ```
-# clone the desired branch from the repository, here master
+# clone the desired branch from the repository, here master, but you can clone a release as well
 git clone https://github.com/jakobnissen/vamb -b master
-
-# dev install
 cd vamb
 pip install -e .
 ```
@@ -64,6 +62,12 @@ Vamb with default inputs (a FASTA file and some BAM files) can be executed like 
 vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam
 ```
 
+You probably want to split your bins by sample to deduplicate them and preserve strain variation, if so you should use a binsplitting separator (see the section on the FASTA file preparation under "Recommended preparation"). If your separator is "C", add `-o C`:
+
+```
+vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam -o C
+```
+
 For more command-line options, see the command-line help menu:
 ```
 vamb -h
@@ -89,14 +93,14 @@ Remember that the quality of Vamb's bins are no better than the quality of the i
 
 The observed values for both TNF and RPKM are statistically uncertain when the sequences are too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on (larger) contigs are better.
 
-With fewer samples (up to about 100), we recommend using contigs from an assembly with a minimum contig length cutoff of ~2000-ish basepairs. With many samples, the number of contigs can become overwhelming. The better approach is to split the dataset up into groups of similar samples and bin them independently.
+With fewer samples (up to about 1000), we recommend using contigs from a concatenation of single-sample assemblies with a minimum contig length cutoff of ~2000-ish basepairs, and then split your bins according to the sample of origin by using the `-o` option. With many samples, the number of contigs can become too large for the data to fit in RAM. The better approach is to split the dataset up into groups of similar samples and bin these groups, instead of binning each individual sample.
 
 ### Outputs
 
 Vamb produces the following output files:
 
 - `log.txt` - a text file with information about the Vamb run. Look here (and at stderr) if you experience errors.
-- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - Numpy .npz files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
+- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - [Numpy .npz](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html) files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
 - `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` from Python.
 - `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
@@ -108,11 +112,13 @@ We use AdapterRemoval combined with FastQC for this.
 
 __2) Assemble each sample individually OR co-assemble and get the contigs out__
 
-We recommend using metaSPAdes on each sample individually.
+We recommend using metaSPAdes on each sample individually. Single-sample assembly followed by samplewise binsplitting gives better result.
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique__
 
 We recommend prepending the sample name to each contig header from that sample.
+
+If you want to use binsplitting (and you should!), your contig headers should be of the format "{Samplename}{Separator}{Contigname}", where {Samplename} is some unique identifier for your sample, {Separator} is any string that does NOT occur in {Samplename} or {Contigname}, and {Contigname} is any unique name for your contig. For example, you could call contig 115 from sample 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {Contigname}.
 
 __4) Remove all small contigs from the FASTA file__
 
