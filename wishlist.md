@@ -4,6 +4,9 @@ Vamb is under an MIT licence, so please feel free to fork, extend, or copy Vamb 
 
 Here's a short wish list for improvements to Vamb we haven't had time for:
 
+__Remove softplus operation from logsigma tensor__
+I can't remember why we did this in the first place, but the problem is that softplus converts the value to some positive, nonzero number. Reconstruction loss favours logsigma being as negative as possible, and KLD loss favors logsigma being exactly zero. So logsigma will just be fixed to some close-to-zero number. It needs to be able to be negative. Just remove the softplus function or change it to something different.
+
 __Implement importance sampling in the VAE__
 Idea from this paper: https://arxiv.org/abs/1509.00519
 The general idea is that the CE/SSE losses are only calculated from a single sample of the latent distribution. This creates unavoidable sampling error, which can be reduced by sampling multiple values and taking an average of the CE/SSE loss.

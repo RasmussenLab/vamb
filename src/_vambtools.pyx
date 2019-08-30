@@ -10,7 +10,7 @@ from cpython cimport array
 # E.g CCTA is the 92nd alphabetic 4mer, whose reverse complement, TAGG, is the 202nd.
 # So the 92th and 202th value in this array is the same.
 # Hence we can map 256 4mers to 136 normal OR reverse-complemented ones
-cdef unsigned char[:] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7,
+cdef unsigned char[::1] complementer_fourmer = bytearray([0, 1, 2, 3, 4, 5, 6, 7,
         8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
         18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 11, 31, 32,
         33, 34, 35, 36, 37, 38, 39, 40, 41, 23, 42, 43, 44, 7, 45, 46,
@@ -38,7 +38,7 @@ cpdef array.array zeros(typecode, int size):
 
     return arr
 
-cpdef int _overwrite_matrix(float[:,:] matrix, unsigned char[:] mask):
+cpdef int _overwrite_matrix(float[:,::1] matrix, unsigned char[::1] mask):
     """Given a float32 matrix and Uint8 mask, does the same as setting the first
     rows of matrix to matrix[mask], but in-place.
     This is only important to save on memory.
@@ -70,7 +70,7 @@ cpdef int _overwrite_matrix(float[:,:] matrix, unsigned char[:] mask):
 
     return matrixindex
 
-cdef void c_kmercounts(unsigned char[:] bytesarray, int k, int[:] counts):
+cdef void c_kmercounts(unsigned char[::1] bytesarray, int k, int[::1] counts):
     """Count tetranucleotides of contig and put them in counts vector.
 
     The bytearray is expected to be np.uint8 of bytevalues of the contig.
@@ -124,14 +124,14 @@ cpdef _kmercounts(bytearray sequence, int k):
 
     counts = zeros('i', 4**k)
 
-    cdef unsigned char[:] sequenceview = sequence
-    cdef int[:] countview = counts
+    cdef unsigned char[::1] sequenceview = sequence
+    cdef int[::1] countview = counts
 
     c_kmercounts(sequenceview, k, countview)
 
     return counts
 
-cdef void c_fourmer_freq(int[:] counts, float[:] result):
+cdef void c_fourmer_freq(int[::1] counts, float[::1] result):
     """Puts kmercounts of k=4 in a nonredundant vector.
 
     The result is expected to be a 136 32-bit float vector
@@ -162,9 +162,9 @@ cpdef _fourmerfreq(bytearray sequence):
     counts = zeros('i', 256)
     frequencies = zeros('f', 136)
 
-    cdef unsigned char[:] sequenceview = sequence
-    cdef int[:] fourmercountview = counts
-    cdef float[:] frequencyview = frequencies
+    cdef unsigned char[::1] sequenceview = sequence
+    cdef int[::1] fourmercountview = counts
+    cdef float[::1] frequencyview = frequencies
 
     c_kmercounts(sequenceview, 4, fourmercountview)
     c_fourmer_freq(fourmercountview, frequencyview)

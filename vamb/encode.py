@@ -175,7 +175,7 @@ class VAE(_nn.Module):
         self.decoderlayers = _nn.ModuleList()
         self.decodernorms = _nn.ModuleList()
 
-        # Add all other hidden layers (do nothing if only 1 hidden layer)
+        # Add all other hidden layers
         for nin, nout in zip([self.nsamples + 136] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
