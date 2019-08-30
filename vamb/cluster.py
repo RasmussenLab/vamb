@@ -302,7 +302,7 @@ def _cluster(matrix, labels, indices, max_steps, windowsize, minsuccesses, defau
         # If we use CUDA and the arrays are on GPU, it's too slow to modify the arrays and
         # faster to simply mask.
         if not cuda:
-            _vambtools.inplace_maskarray(matrix, kept_mask)
+            _vambtools.torch_inplace_maskarray(matrix, kept_mask)
             indices = indices[kept_mask] # no need to inplace mask small array
             kept_mask.resize_(len(matrix))
             kept_mask[:] = 1
