@@ -80,9 +80,9 @@ def zscore(array, axis=None, inplace=False):
         return (array - mean) / std
 
 def numpy_inplace_maskarray(array, mask):
-    """In-place masking of a Tensor, i.e. if `mask` is a boolean mask of same
-    length as `array`, then array[mask] == inplace_maskarray(array, mask),
-    but does not allocate a new tensor.
+    """In-place masking of a Numpy array, i.e. if `mask` is a boolean mask of same
+    length as `array`, then array[mask] == numpy_inplace_maskarray(array, mask),
+    but does not allocate a new array.
     """
 
     if len(mask) != len(array):
@@ -97,7 +97,7 @@ def numpy_inplace_maskarray(array, mask):
 
 def torch_inplace_maskarray(array, mask):
     """In-place masking of a Tensor, i.e. if `mask` is a boolean mask of same
-    length as `array`, then array[mask] == inplace_maskarray(array, mask),
+    length as `array`, then array[mask] == torch_inplace_maskarray(array, mask),
     but does not allocate a new tensor.
     """
 
