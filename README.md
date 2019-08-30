@@ -118,7 +118,7 @@ __3) Concatenate the FASTA files together while making sure all contig headers s
 
 We recommend prepending the sample name to each contig header from that sample.
 
-If you want to use binsplitting (and you should!), your contig headers should be of the format "{Samplename}{Separator}{Contigname}", where {Samplename} is some unique identifier for your sample, {Separator} is any string that does NOT occur in {Samplename} or {Contigname}, and {Contigname} is any unique name for your contig. For example, you could call contig 115 from sample 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {Contigname}.
+If you want to use binsplitting (and you should!), your contig headers should be of the format "{Samplename}{Separator}{Contigname}", where {Samplename} is some unique identifier for your sample, {Separator} is any string that does NOT occur in {Samplename}, and {Contigname} is any unique name for your contig. For example, you could call contig 115 from sample 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {Contigname}.
 
 __4) Remove all small contigs from the FASTA file__
 
