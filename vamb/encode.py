@@ -79,8 +79,8 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         raise ValueError('Fewer sequences left after filtering than the batch size.')
 
     if destroy:
-        rpkm = _vambtools.inplace_maskarray(rpkm, mask)
-        tnf = _vambtools.inplace_maskarray(tnf, mask)
+        rpkm = _vambtools.numpy_inplace_maskarray(rpkm, mask)
+        tnf = _vambtools.numpy_inplace_maskarray(tnf, mask)
     else:
         # The astype operation does not copy due to "copy=False", but the masking
         # operation does.
