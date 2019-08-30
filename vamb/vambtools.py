@@ -80,20 +80,20 @@ def zscore(array, axis=None, inplace=False):
         return (array - mean) / std
 
 def inplace_maskarray(array, mask):
-    """In-place masking of an array, i.e. if `mask` is a boolean mask of same
+    """In-place masking of a Tensor, i.e. if `mask` is a boolean mask of same
     length as `array`, then array[mask] == inplace_maskarray(array, mask),
-    but does not allocate a new array.
+    but does not allocate a new tensor.
     """
 
     if len(mask) != len(array):
         raise ValueError('Lengths of array and mask must match')
-    elif array.ndim != 2:
+    elif array.dim() != 2:
         raise ValueError('Can only take a 2 dimensional-array.')
 
-    # Cython doesn't support bool arrays, so this does a no-copy type casting.
-    uints = _np.frombuffer(mask, dtype=_np.uint8)
-    index = _overwrite_matrix(array, uints)
-    array.resize((index, array.shape[1]), refcheck=False)
+    np_array = array.numpy()
+    np_mask = _np.frombuffer(mask.numpy(), dtype=_np.uint8)
+    index = _overwrite_matrix(np_array, np_mask)
+    array.resize_((index, array.shape[1]))
     return array
 
 class Reader:
