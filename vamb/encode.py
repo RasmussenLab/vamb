@@ -194,6 +194,7 @@ class VAE(_nn.Module):
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
+        self.softplus = _nn.Softplus()
         self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         if cuda:
@@ -209,7 +210,7 @@ class VAE(_nn.Module):
 
         # Latent layers
         mu = self.mu(tensor)
-        logsigma = self.logsigma(tensor)
+        logsigma = self.softplus(self.logsigma(tensor))
 
         return mu, logsigma
 
@@ -222,7 +223,7 @@ class VAE(_nn.Module):
 
         epsilon.requires_grad = True
 
-        latent = mu + epsilon * _torch.exp(logsigma)
+        latent = mu + epsilon * _torch.exp(logsigma/2)
 
         return latent
 

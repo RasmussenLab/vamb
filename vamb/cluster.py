@@ -234,6 +234,7 @@ def _findcluster(matrix, kept_mask, histogram, seed, peak_valley_ratio, max_step
             _torch.histc(distances[kept_mask], len(histogram), 0, _XMAX, out=histogram)
         else:
             _torch.histc(distances, len(histogram), 0, _XMAX, out=histogram)
+        histogram[0] -= 1 # Remove distance to self
 
         threshold, success = _find_threshold(histogram, peak_valley_ratio, default, cuda)
 
