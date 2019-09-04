@@ -263,7 +263,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     yield FastaEntry(header, b''.join(buffer))
 
-def loadfasta(byte_iterator, keep=None, comment=b'#'):
+def loadfasta(byte_iterator, keep=None, comment=b'#', compress=True):
     """Loads a FASTA file into a dictionary.
 
     Usage:
@@ -274,6 +274,7 @@ def loadfasta(byte_iterator, keep=None, comment=b'#'):
         byte_iterator: Iterator of binary lines of FASTA file
         keep: Keep entries with headers in `keep`. If None, keep all entries
         comment: Ignore lines beginning with any whitespace + comment
+        compress: Keep sequences compressed [True]
 
     Output: {header: FastaEntry} dict
     """
@@ -282,11 +283,14 @@ def loadfasta(byte_iterator, keep=None, comment=b'#'):
 
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
+            if compress:
+                entry.sequence = bytearray(_gzip.compress(entry.sequence))
+
             entries[entry.header] = entry
 
     return entries
 
-def write_bins(directory, bins, fastadict, maxbins=250):
+def write_bins(directory, bins, fastadict, compressed=True, maxbins=250):
     """Writes bins as FASTA files in a directory, one file per bin.
 
     Inputs:
@@ -294,6 +298,7 @@ def write_bins(directory, bins, fastadict, maxbins=250):
         bins: {'name': {set of contignames}} dictionary (can be loaded from
         clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
+        compressed: Sequences in dict are compressed [True]
         maxbins: None or else raise an error if trying to make more bins than this
 
     Output: None
@@ -342,6 +347,11 @@ def write_bins(directory, bins, fastadict, maxbins=250):
         with open(filename, 'w') as file:
             for contig in contigs:
                 entry = fastadict[contig]
+
+                if compressed:
+                    uncompressed = bytearray(_gzip.decompress(entry.sequence))
+                    entry = FastaEntry(entry.header, uncompressed)
+
                 print(entry.format(), file=file)
 
 def read_npz(file):

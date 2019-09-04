@@ -383,7 +383,7 @@ def cluster(matrix, labels=None, maxsteps=25, windowsize=200, minsuccesses=20,
 
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
-                 header=None):
+                 header=None, rename=True):
     """Writes clusters to an open filehandle.
 
     Inputs:
@@ -392,6 +392,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         max_clusters: Stop printing after this many clusters [None]
         min_size: Don't output clusters smaller than N contigs
         header: Commented one-line header to add
+        rename: Rename clusters to "cluster_1", "cluster_2" etc.
 
     Outputs:
         clusternumber: Number of clusters written
@@ -424,7 +425,8 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         if len(contigs) < min_size:
             continue
 
-        clustername = 'cluster_' + str(clusternumber + 1)
+        if rename:
+            clustername = 'cluster_' + str(clusternumber + 1)
 
         for contig in contigs:
             print(clustername, contig, sep='\t', file=filehandle)
