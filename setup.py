@@ -9,7 +9,7 @@ SETUP_METADATA = \
     "description": "Variational autoencoder for metagenomic binning",
     "url": "https://github.com/jakobnissen/vamb",
     "author": "Jakob Nybo Nissen and Simon Rasmussen",
-    "author_email": "jakni@dtu.dk",
+    "author_email": "jakobnybonissen@gmail.com",
     "version": "2.0.2",
     "license": "MIT",
     "packages": find_packages(),
