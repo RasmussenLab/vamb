@@ -10,9 +10,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument('vambpath', help='Path to vamb directory')
 parser.add_argument('clusterspath', help='Path to clusters.tsv')
 parser.add_argument('refpath', help='Path to reference file')
-parser.add_argument('--tax', dest='taxpath', help='Path to taxonomic maps [optional]')
+parser.add_argument('--tax', dest='taxpath', help='Path to taxonomic maps')
 parser.add_argument('-m', dest='min_bin_size', metavar='', type=int,
-                    default=200000, help='Minimum size of bins')
+                    default=200000, help='Minimum size of bins [200000]')
 parser.add_argument('-s', dest='separator', help='Binsplit separator', default=None)
 parser.add_argument('--disjoint', action='store_true', help='Enforce disjoint clusters')
 

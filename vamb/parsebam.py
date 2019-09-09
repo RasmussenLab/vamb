@@ -22,9 +22,9 @@
 # contig normalized by contig length and total number of reads.
 
 # We look at all hits, including secondary hits. We do not discount partial
-# alignments. Also, if a read maps to multiple contigs, we don't count each hit
-# as less than if it mapped to both. The reason for all these decisions is that
-# if the aligner believes it's a hit, we believe the contig is present.
+# alignments. Also, if a read maps to N contigs, we count each hit as 1/N reads.
+# The reason for all these decisions is that if the aligner believes it's a hit,
+# we believe the contig is present.
 
 # We do not take varying insert sizes into account. It is unlikely that
 # any contig with enough reads to provide a reliable estimate of depth would,
@@ -32,8 +32,7 @@
 # will average out over all contigs.
 
 # We count each read independently, because BWA MEM often assigns mating reads
-# to different contigs. If a read has their mate unmapped, we count it twice
-# to compensate (one single read corresponds to two paired reads).
+# to different contigs..
 
 __doc__ = """Estimate RPKM (depths) from BAM files of reads mapped to contigs.
 

@@ -30,7 +30,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` using Cython and move the resulting executable to the inner of the two `vamb` directories.
+If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` by running the script `src/build_vamtools.py`, then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
 
@@ -101,8 +101,8 @@ Vamb produces the following output files:
 
 - `log.txt` - a text file with information about the Vamb run. Look here (and at stderr) if you experience errors.
 - `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - [Numpy .npz](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html) files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
-- `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.VAE.load` from Python.
-- `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
+- `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.encode.VAE.load` from Python.
+- `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins`, or using the function `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
 ### Recommended preparation
 
@@ -112,7 +112,7 @@ We use AdapterRemoval combined with FastQC for this.
 
 __2) Assemble each sample individually OR co-assemble and get the contigs out__
 
-We recommend using metaSPAdes on each sample individually. Single-sample assembly followed by samplewise binsplitting gives better result.
+We recommend using metaSPAdes on each sample individually. Single-sample assembly followed by samplewise binsplitting gives better results.
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique__
 
