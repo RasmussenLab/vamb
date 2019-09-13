@@ -23,6 +23,11 @@ SETUP_METADATA = \
     "install_requires": ["numpy>=1.15", "torch>=0.4", "pysam>=0.14"],
     "setup_requires": ['Cython>=0.25.2', "setuptools>=38.6.0"],
     "python_requires": ">=3.5",
+    "classifiers":[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
     }
 
 setup(**SETUP_METADATA)

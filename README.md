@@ -30,7 +30,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx` by running the script `src/build_vamtools.py`, then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
+If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
 
