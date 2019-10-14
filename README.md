@@ -13,8 +13,14 @@ Vamb is most easily installed with pip - make sure your pip version is up to dat
 
 ### Installation for casual users:
 
+Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
 ```
 pip install https://github.com/jakobnissen/vamb/archive/v2.0.1.zip
+```
+
+or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo):
+```
+conda install -c bioconda vamb
 ```
 
 ### Installation for advanced users:
@@ -30,7 +36,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
+If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
 
@@ -87,11 +93,11 @@ Vamb relies on two properties of the DNA sequences to be binned:
 So before you can run Vamb, you need to have files from which Vamb can calculate these values.
 
 * TNF is calculated from a regular FASTA file of DNA sequences.
-* Depth is calculated from BAM-files of mapping reads to that same FASTA file.
+* Depth is calculated from BAM-files of a set of reads from each sample mapped to that same FASTA file.
 
 Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM file is constructed carelessly, for example by allowing reads from distinct species to crossmap, the BAM file will not contain information with which Vamb can separate the crossmapping species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
 
-The observed values for both TNF and RPKM are statistically uncertain when the sequences are too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced and thus can support hundreds of samples, but the results of working on (larger) contigs are better.
+The observed values for both TNF and RPKM are statistically uncertain when the sequences are too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced, but the results of working on (larger) contigs are better.
 
 With fewer samples (up to about 1000), we recommend using contigs from a concatenation of single-sample assemblies with a minimum contig length cutoff of ~2000-ish basepairs, and then split your bins according to the sample of origin by using the `-o` option. With many samples, the number of contigs can become too large for the data to fit in RAM. The better approach is to split the dataset up into groups of similar samples and bin these groups, instead of binning each individual sample.
 
@@ -100,7 +106,7 @@ With fewer samples (up to about 1000), we recommend using contigs from a concate
 Vamb produces the following output files:
 
 - `log.txt` - a text file with information about the Vamb run. Look here (and at stderr) if you experience errors.
-- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - [Numpy .npz](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html) files with TNFs, abundances, which sequences were successfully encoded, and the latent encoding of the sequences.
+- `tnf.npz`, `rpkm.npz`, `mask.npz` and `latent.npz` - [Numpy .npz](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html) files with TNFs, RPKM, which sequences were successfully encoded, and the latent encoding of the sequences.
 - `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.encode.VAE.load` from Python.
 - `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins`, or using the function `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
@@ -126,6 +132,8 @@ There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs 
 
 __5) Map the reads to the FASTA file to obtain BAM files__
 
-We have used BWA MEM for mapping, fully aware that it is not well suited for metagenomic mapping. Be careful to choose proper parameters for your aligner - in general, if a read from contig A will map to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. We run the following command to create our BAM files:
+Be careful to choose proper parameters for your aligner - in general, if a read from contig A will map to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. We have used following commands to create our BAM files:
 
-`bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 | samtools view -F 3584 -b --threads 8 > sample.bam`
+BWA MEM for smaller datasets: `bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 | samtools view -F 3584 -b --threads 8 > sample1.bam`
+
+Minimap2 for larger ones: `minimap2 -t 28 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam`

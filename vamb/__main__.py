@@ -97,7 +97,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
         log('Min identity: {}'.format(minid), logfile, 1)
         log('Min contig length: {}'.format(mincontiglength), logfile, 1)
-        log('Order of columns are:', logfile, 1)
+        log('Order of columns is:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
 

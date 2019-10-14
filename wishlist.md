@@ -20,25 +20,13 @@ Numpy does not provide any good API to limit the number of used threads. If one 
 
 PyTorch *does* provide `torch.set_num_threads`, but when I tested it, it simply didn't work and used all threads regardless. Vamb calls this function anyway, in case the torch folks fix it.
 
-__Do a more thorough hyperparameter search__
-
-This is probably the easiest (if time consuming) way to improve Vamb, and possibly may have the biggest impact. The problem is that clusters are not independent of the dataset they're in - what works for one dataset might not work for another. So get a collection of datasets, like the toy datasets from CAMI2, e.g. 5-10 training datasets and test more hyperparameters. In particular, these hyperparameters might be interesting to look at:
-
-$\alpha$
-
-This controls the relationship between CE and SSE, which has turned out to be critically important and unfortunately highly sensitive in our testing. But what controls the optimal value of $\alpha$? Number of samples? Sparsity of the abundance matrix? Length of contigs? Failing to answer this, even just getting the optimal $\alpha$ for more different datasets would be nice.
-
-$\beta$
-
-This controls the relationship between KLD and the reconstruction loss. I think it's unrealistic to expect to find an explanation for why this needs to be as it is, but optimizing it across more datasets would certainly help.
-
-*Sinusoidal increase of batchsize*
+__Sinusoidal increase of batchsize__
 
 When batchsize increases during training, we see an abrupt drop in loss. I suspect that this immediate drop has very little to do with the intention of increasing batchsize (finding more "flat" minima, e.g. robust minima, as well as simply decreasing stochastic movement similarly to simulated annealing). Rather, it seems that when changing the batch size, the network suddenly find that its local minima is no longer a minima, and jerks in a more favorable direction. Interestingly, this is *not* accompanied by an initial increase in loss, so it's an all-round win. In fact, in our tests, it seems to be an amazingly effective way to kick your network out of a local minima.
 
 Cyclical changes in learning rate have been used widely in the literature. Perhaps we can alter batch size cyclically, such that it varies between e.g. 64 and 4096 (with more epochs at the larger batch sizes), perhaps with the minimal batch size increasing over time. It could also be interesting to look at what with a cyclical batch size with single epochs of very low batch sizes, like 32 or 16 - does this give even bigger kicks to the network, allowing it to explore even lower minima?
 
-*The relationship between number of epochs, $\beta$ and batchsize*
+__The relationship between number of epochs, beta, and batchsize__
 
 The best number of epochs might not be exactly 500 - but this number surely depends on a lot of other factors. It's probably best to explore the other hyperparameters with a fixed number of epochs (say 500, or even 1000), then later optimize number of epochs.
 
@@ -53,6 +41,14 @@ However, the exact shape of the chi square distribution depends on the phylogene
 When experimenting with Vamb, we checked if we could, when presented with random pairs of contigs, heuristically estimate the parameters of the estimated chi square distribution of TNF distances between contigs of those lengths and based on that distribution predict whether or not the two contigs belonged in the same bin. It was quite accurate, but instantiating a `scipy.stats.chi2` object with the right parameters for each contig pair would make our clustering algorithm take weeks or months to run for a one-million-contig dataset.
 
 A possible future approach could be to encode the depths and TNF independently with the VAE (although it could still train using both depths and TNF at the same time), and, when calculating the contig-contig distances during clustering, using a heuristic approximation of the chi distribution which can be computed quickly. Alternatively, one could cluster exclusively on depths, then afterwards identify contigs in bins with divergent TNF and/or recruit unbinned contigs to bins with similar TNF.
+
+__Use Markov-normalized kmer frequencies instead of TNF__
+
+A large part of the signal in TNF actually comes from the implicit kmer distribution of k = {1, 2, 3}. By normalizing 3-mer frequency by the expected values based on 2-mer frequencies, a purer form om 3-mer frequencies can be obtained. For example, the expected frequency f(ATG) can be estimated as f(AT)\*f(TG)/f(T).
+
+We can then replace TNF with the concatenation of one neuron for GC content, 10 for Markov normalized 2-mer frequencies and 32 for Markov normalized 3-mer frequencies. We probably shouldn't do 4-mer frequencies, since that would create too many features - when Markov normalizing, the values become even more sensitive to short contig lengths. We can call this Markov Normalized Kmers (MNK)
+
+In simple experiments, MNK separares strains and species better than TNF using cosine or euclidian distances, despite being less than 1/3 as many features. However, perhaps the VAE's encoder implicitly learns the interactions between the TNFs in a way that mimics the Markov normalization, which would actually make MNK less effective than TNF. It will have to be tested.
 
 __Implement an optional two-step clustering method for large datasets, if possible__
 
