@@ -263,7 +263,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     yield FastaEntry(header, b''.join(buffer))
 
-def loadfasta(byte_iterator, keep=None, comment=b'#', compress=True):
+def loadfasta(byte_iterator, keep=None, comment=b'#', compress=False):
     """Loads a FASTA file into a dictionary.
 
     Usage:
@@ -274,7 +274,7 @@ def loadfasta(byte_iterator, keep=None, comment=b'#', compress=True):
         byte_iterator: Iterator of binary lines of FASTA file
         keep: Keep entries with headers in `keep`. If None, keep all entries
         comment: Ignore lines beginning with any whitespace + comment
-        compress: Keep sequences compressed [True]
+        compress: Keep sequences compressed [False]
 
     Output: {header: FastaEntry} dict
     """
@@ -290,7 +290,7 @@ def loadfasta(byte_iterator, keep=None, comment=b'#', compress=True):
 
     return entries
 
-def write_bins(directory, bins, fastadict, compressed=True, maxbins=250):
+def write_bins(directory, bins, fastadict, compressed=False, maxbins=250):
     """Writes bins as FASTA files in a directory, one file per bin.
 
     Inputs:
@@ -298,7 +298,7 @@ def write_bins(directory, bins, fastadict, compressed=True, maxbins=250):
         bins: {'name': {set of contignames}} dictionary (can be loaded from
         clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
-        compressed: Sequences in dict are compressed [True]
+        compressed: Sequences in dict are compressed [False]
         maxbins: None or else raise an error if trying to make more bins than this
 
     Output: None
