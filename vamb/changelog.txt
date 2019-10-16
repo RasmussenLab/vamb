@@ -1,0 +1,4 @@
+Now writes lengths.npz, a vector of contig lengths to output directory.
+If specified more than 8 cores for bam file parsing, now actually uses more cores.
+Updated README with more information about inputs
+Added a warning in README about running VAMB on fewer than 100,000 contigs

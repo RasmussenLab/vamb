@@ -109,9 +109,8 @@ def _filter_segments(segmentiterator, minscore, minid):
         if minscore is not None and alignedsegment.get_tag('AS') < minscore:
             continue
 
-        if minid is not None:
-            if _identity(alignedsegment) < minid:
-                continue
+        if minid is not None and _identity(alignedsegment) < minid:
+            continue
 
         yield alignedsegment
 

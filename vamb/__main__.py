@@ -64,6 +64,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
                                                  preallocate=True)
         tnfs, contignames, contiglengths = ret
         vamb.vambtools.write_npz(os.path.join(outdir, 'tnf.npz'), tnfs)
+        vamb.vambtools.write_npz(os.path.join(outdir, 'lengths.npz'), contiglengths)
 
     elapsed = round(time.time() - begintime, 2)
     ncontigs = len(contiglengths)
@@ -97,7 +98,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
         log('Min identity: {}'.format(minid), logfile, 1)
         log('Min contig length: {}'.format(mincontiglength), logfile, 1)
-        log('Order of columns is:', logfile, 1)
+        log('\nOrder of columns is:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
 
@@ -227,13 +228,17 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
 def main():
     doc = """Vamb: Variational autoencoders for metagenomic binning.
 
+    Default use, good for most datasets:
+    vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam
+
     For advanced use and extensions of Vamb, check documentation of the package
     at https://github.com/jakobnissen/vamb."""
-    usage = "python runvamb.py OUTPATH FASTA|.NPZs BAMPATHS|RPKM [OPTIONS ...]"
     parser = argparse.ArgumentParser(
+        prog="vamb",
         description=doc,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage=usage, add_help=False)
+        usage="%(prog)s outdir tnf_input rpkm_input [options]",
+        add_help=False)
 
     # Help
     helpos = parser.add_argument_group(title='Help', description=None)
@@ -282,7 +287,7 @@ def main():
                         default=200.0, help='beta, capacity to learn [200.0]')
     vaeos.add_argument('-d', dest='dropout',  metavar='',type=float,
                         default=None, help='dropout [Auto]')
-    vaeos.add_argument('--cuda', help='Use GPU to train & cluster [False]', action='store_true')
+    vaeos.add_argument('--cuda', help='use GPU to train & cluster [False]', action='store_true')
 
     trainos = parser.add_argument_group(title='Training options', description=None)
 
@@ -412,10 +417,10 @@ def main():
     ###################### SET UP LAST PARAMS ############################
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
+    subprocesses = args.subprocesses
     torch.set_num_threads(args.subprocesses)
-    subprocesses = DEFAULT_PROCESSES
     if args.bamfiles is not None:
-        subprocesses = min(DEFAULT_PROCESSES, len(args.bamfiles))
+        subprocesses = min(subprocesses, len(args.bamfiles))
 
     ################### RUN PROGRAM #########################
     os.mkdir(args.outdir)
