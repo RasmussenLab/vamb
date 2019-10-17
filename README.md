@@ -102,7 +102,7 @@ So before you can run Vamb, you need to have files from which Vamb can calculate
 
 Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM file is constructed carelessly, for example by allowing reads from distinct species to crossmap, the BAM file will not contain information with which Vamb can separate the crossmapping species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
 
-The observed values for both TNF and RPKM are statistically uncertain when the sequences are too short. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced, but the results of working on (larger) contigs are better.
+Estimation of TNF and RPKM is subject to statistical uncertainty. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced, but the results of working on (larger) contigs are better.
 
 With fewer samples (up to about 100), we recommend using contigs from a concatenation of single-sample assemblies with a minimum contig length cutoff of ~2000-ish basepairs, and then split your bins according to the sample of origin by using the `-o` option. With many samples, the number of contigs can become too large for the data to fit in RAM. The better approach is to split the dataset up into groups of similar samples and bin these groups, instead of binning each individual sample.
 
@@ -160,6 +160,3 @@ where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT`
 If you don't trust your alignments, set the `-z` and `-s` flag as appropriate, depending on the properties of your aligner. For example, with BWA MEM, I would use:
 
 `vamb -o SEP -z 0.95 -s 30 --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...]`
-
-
-minimap2 -t 28 -ax sr index.mmi -N 50 READS | samtools view -F 3584 -b --threads 8 > sample1.bam
