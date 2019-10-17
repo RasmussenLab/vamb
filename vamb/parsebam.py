@@ -114,6 +114,81 @@ def _filter_segments(segmentiterator, minscore, minid):
 
         yield alignedsegment
 
+def count_reads(bamfile, minscore=None, minid=None):
+    """Count number of reads mapping to each reference in a bamfile,
+    optionally filtering for score and minimum id.
+    Multi-mapping reads MUST be consecutive in file, and their counts are
+    split among the references.
+
+    Inputs:
+        bamfile: Open pysam.AlignmentFile
+        minscore: Minimum alignment score (AS field) to consider [None]
+        minid: Discard any reads with ID lower than this [None]
+
+    Output: Float32 Numpy array of read counts for each reference in file.
+    """
+    readcounts = _np.zeros(len(bamfile.lengths), dtype=_np.float32)
+
+    # Initialize with first aligned read - return immediately if the file
+    # is empty
+    filtered_segments = _filter_segments(bamfile, minscore, minid)
+    try:
+        segment = next(filtered_segments)
+        read_name = segment.query_name
+        multimap = 1.0
+        reference_ids = [segment.reference_id]
+    except StopIteration:
+        return readcounts
+
+    # Now count up each read in the BAM file
+    for segment in filtered_segments:
+        # If we reach a new read_name, we tally up the previous read
+        # towards all its references, split evenly.
+        if segment.query_name != read_name:
+            read_name = segment.query_name
+            to_add = 1.0 / multimap
+            for reference_id in reference_ids:
+                readcounts[reference_id] += to_add
+            reference_ids.clear()
+            multimap = 0.0
+
+        multimap += 1.0
+        reference_ids.append(segment.reference_id)
+
+    # Add final read
+    to_add = 1.0 / multimap
+    for reference_id in reference_ids:
+        readcounts[reference_id] += to_add
+
+    return readcounts
+
+def calc_rpkm(counts, lengths, minlength=0):
+    """Calculate RPKM based on read counts and sequence lengths.
+
+    Inputs:
+        counts: Numpy vector of read counts from count_reads
+        lengths: Array-like of contig lengths in same order as counts
+        minlength [0]: Discard any references shorter than N bases
+    """
+    if len(counts) != len(lengths):
+        raise ValueError("counts length and lengths length must be same")
+
+    millionmappedreads = counts.sum() / 1e6
+
+    # Prevent division by zero
+    if millionmappedreads == 0:
+        rpkm = _np.zeros(len(lengths), dtype=_np.float32)
+    else:
+        kilobases = _np.array(lengths, dtype=_np.float32) / 1000
+        rpkm = counts / (kilobases * millionmappedreads)
+
+    # Now filter away small contigs
+    if minlength > 0:
+        lengthmask = _np.array(lengths, dtype=_np.uint32) >= minlength
+        rpkm = rpkm[lengthmask]
+
+    return rpkm
+
 def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
@@ -121,9 +196,9 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
     Inputs:
         inpath: Path to BAM file
         outpath: Path to dump depths array to or None
-        minscore [None]: Minimum alignment score (AS field) to consider
-        minlength [2000]: Discard any references shorter than N bases
-        minid [None]: Discard any reads with ID lower than this
+        minscore: Minimum alignment score (AS field) to consider
+        minlength: Discard any references shorter than N bases
+        minid: Discard any reads with ID lower than this
 
     Outputs:
         path: Same as input path
@@ -134,57 +209,9 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
-    contiglengths = bamfile.lengths
-    readcounts = _np.zeros(len(contiglengths), dtype=_np.float32)
-
-    # Initialize with first aligned read
-    filtered_segments = _filter_segments(bamfile, minscore, minid)
-    try:
-        segment = next(filtered_segments)
-        read_name = segment.query_name
-        multimap = 1.0
-        reference_ids = [segment.reference_id]
-    except StopIteration:
-        pass
-
-    total_reads = 0
-    # Now count up each read in the BAM file
-    for segment in filtered_segments:
-        # If we reach a new read_name, we tally up the previous read
-        # towards all its references.
-        if segment.query_name != read_name:
-            read_name = segment.query_name
-            total_reads += 1
-            to_add = 1.0 / multimap
-            for reference_id in reference_ids:
-                readcounts[reference_id] += to_add
-            reference_ids.clear()
-            multimap = 0.0
-
-        multimap += 1.0
-        reference_ids.append(segment.reference_id)
-
+    counts = count_reads(bamfile, minscore, minid)
+    rpkms = calc_rpkm(counts, bamfile.lengths, minlength)
     bamfile.close()
-
-    # Add final read
-    if total_reads != 0:
-        to_add = 1.0 / multimap
-        for reference_id in reference_ids:
-            readcounts[reference_id] += to_add
-
-    # Calcuate RPKM iself
-    rpkms = _np.zeros(len(contiglengths), dtype=_np.float32)
-
-    if total_reads > 0:
-        millionmappedreads = total_reads / 1e6
-
-        for i, (contiglength, nreads) in enumerate(zip(contiglengths, readcounts)):
-            kilobases = contiglength / 1000
-            rpkms[i] = nreads / (kilobases * millionmappedreads)
-
-    # Now filter for small contigs
-    lengthmask = _np.array(contiglengths, dtype=_np.int32) >= minlength
-    rpkms = rpkms[lengthmask]
 
     # If dump to disk, array returned is None instead of rpkm array
     if outpath is not None:
@@ -238,7 +265,8 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid
     firstfile = _pysam.AlignmentFile(paths[0], "rb")
     ncontigs = sum(1 for length in firstfile.lengths if length >= minlength)
 
-    # Probe to check that the "AS" aux field is present (BWA makes this)
+    # Probe to check that the "AS" aux field is present (should be present
+    # as per SAM/BAM specs)
     if minscore is not None:
         segments = [j for i, j in zip(range(25), firstfile)]
         if not all(segment.has_tag("AS") for segment in segments):
