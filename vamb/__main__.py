@@ -18,6 +18,8 @@ os.environ["MKL_NUM_THREADS"] = str(DEFAULT_PROCESSES)
 os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_PROCESSES)
 os.environ["OMP_NUM_THREADS"] = str(DEFAULT_PROCESSES)
 
+# Append vamb to sys.path to allow vamb import even if vamb was not installed
+# using pip
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
@@ -118,7 +120,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
 
     if len(rpkms) != ncontigs:
         raise ValueError('Number of TNF and RPKM sequences do not match. '
-                         'Are you sure the BAM files originate from same FASTA file? '
+                         'Are you sure the BAM files originate from same FASTA file '
                          'and have headers?')
 
     elapsed = round(time.time() - begintime, 2)
@@ -347,7 +349,7 @@ def main():
 
     # Make sure only one RPKM input is there
     if sum(i is not None for i in (args.bamfiles, args.rpkm, args.jgi)) != 1:
-        raise argparse.ArgumentTypeError('Must specify BAM files, JGI file or RPKM input')
+        raise argparse.ArgumentTypeError('Must specify exactly one of BAM files, JGI file or RPKM input')
 
     for path in args.rpkm, args.jgi:
         if path is not None and not os.path.isfile(path):
@@ -367,6 +369,9 @@ def main():
 
     if args.minid is not None and args.bamfiles is None:
         raise argparse.ArgumentTypeError('If minid is set, RPKM must be passed as bam files')
+
+    if args.minascore is not None and args.bamfiles is None:
+        raise argparse.ArgumentTypeError('If minascore is set, RPKM must be passed as bam files')
 
     if args.subprocesses < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
@@ -401,6 +406,9 @@ def main():
     if max(args.batchsteps, default=0) >= args.nepochs:
         raise argparse.ArgumentTypeError('All batchsteps must be less than nepochs')
 
+    if min(args.batchsteps, default=1) < 1:
+        raise argparse.ArgumentTypeError('All batchsteps must be 1 or higher')
+
     if args.lrate <= 0:
         raise argparse.ArgumentTypeError('Learning rate must be positive')
 
@@ -413,6 +421,9 @@ def main():
 
     if args.minsuccesses < 1 or args.minsuccesses > args.windowsize:
         raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:windowsize.')
+
+    if args.separator is not None and len(args.separator) == 0:
+        raise argparse.ArgumentTypeError('Binsplit separator cannot be an empty string.')
 
     ###################### SET UP LAST PARAMS ############################
 

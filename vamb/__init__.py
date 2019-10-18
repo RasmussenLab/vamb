@@ -29,7 +29,7 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-__version__ = (2, 0, 2)
+__version__ = (2, 1, 0)
 
 import sys as _sys
 if _sys.version_info[:2] < (3, 5):

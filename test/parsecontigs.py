@@ -9,14 +9,15 @@ import vamb
 fasta_path = os.path.join(parentdir, 'test', 'data', 'fasta.fna')
 
 # Test it fails with non binary opened
-file = open(fasta_path)
-try:
-    entries = vamb.vambtools.byte_iterfasta(file)
-    next(entries)
-except TypeError:
-    pass
-else:
-    raise AssertionError('Should have failed when opening FASTA file in text mode')
+with open(fasta_path) as file:
+    try:
+        entries = vamb.vambtools.byte_iterfasta(file)
+        next(entries)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError('Should have failed w. TypeError when opening FASTA file in text mode')
+
 
 # Open and read file
 with open(fasta_path, 'rb') as file:
@@ -26,7 +27,7 @@ with open(fasta_path, 'rb') as file:
 assert [len(i) for i in contigs] == [100, 100, 150, 99, 0, 150]
 
 # Correctly translates ambiguous nucleotides to Ns
-contig3 = str(contigs[2].sequence)
+contig3 = contigs[2].sequence.decode()
 for invalid in 'SWKMYRBDHV':
     assert contig3.count(invalid) == 0
 assert contig3.count('N') == 11
