@@ -6,42 +6,6 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
 import collections as _collections
 
-TNF_HEADER = '#contigheader\t' + '\t'.join([
-'AAAA/TTTT', 'AAAC/GTTT', 'AAAG/CTTT', 'AAAT/ATTT',
-'AACA/TGTT', 'AACC/GGTT', 'AACG/CGTT', 'AACT/AGTT',
-'AAGA/TCTT', 'AAGC/GCTT', 'AAGG/CCTT', 'AAGT/ACTT',
-'AATA/TATT', 'AATC/GATT', 'AATG/CATT', 'AATT',
-'ACAA/TTGT', 'ACAC/GTGT', 'ACAG/CTGT', 'ACAT/ATGT',
-'ACCA/TGGT', 'ACCC/GGGT', 'ACCG/CGGT', 'ACCT/AGGT',
-'ACGA/TCGT', 'ACGC/GCGT', 'ACGG/CCGT', 'ACGT',
-'ACTA/TAGT', 'ACTC/GAGT', 'ACTG/CAGT', 'AGAA/TTCT',
-'AGAC/GTCT', 'AGAG/CTCT', 'AGAT/ATCT', 'AGCA/TGCT',
-'AGCC/GGCT', 'AGCG/CGCT', 'AGCT',      'AGGA/TCCT',
-'AGGC/GCCT', 'AGGG/CCCT', 'AGTA/TACT', 'AGTC/GACT',
-'AGTG/CACT', 'ATAA/TTAT', 'ATAC/GTAT', 'ATAG/CTAT',
-'ATAT',      'ATCA/TGAT', 'ATCC/GGAT', 'ATCG/CGAT',
-'ATGA/TCAT', 'ATGC/GCAT', 'ATGG/CCAT', 'ATTA/TAAT',
-'ATTC/GAAT', 'ATTG/CAAT', 'CAAA/TTTG', 'CAAC/GTTG',
-'CAAG/CTTG', 'CACA/TGTG', 'CACC/GGTG', 'CACG/CGTG',
-'CAGA/TCTG', 'CAGC/GCTG', 'CAGG/CCTG', 'CATA/TATG',
-'CATC/GATG', 'CATG',      'CCAA/TTGG', 'CCAC/GTGG',
-'CCAG/CTGG', 'CCCA/TGGG', 'CCCC/GGGG', 'CCCG/CGGG',
-'CCGA/TCGG', 'CCGC/GCGG', 'CCGG',      'CCTA/TAGG',
-'CCTC/GAGG', 'CGAA/TTCG', 'CGAC/GTCG', 'CGAG/CTCG',
-'CGCA/TGCG', 'CGCC/GGCG', 'CGCG',      'CGGA/TCCG',
-'CGGC/GCCG', 'CGTA/TACG', 'CGTC/GACG', 'CTAA/TTAG',
-'CTAC/GTAG', 'CTAG',      'CTCA/TGAG', 'CTCC/GGAG',
-'CTGA/TCAG', 'CTGC/GCAG', 'CTTA/TAAG', 'CTTC/GAAG',
-'GAAA/TTTC', 'GAAC/GTTC', 'GACA/TGTC', 'GACC/GGTC',
-'GAGA/TCTC', 'GAGC/GCTC', 'GATA/TATC', 'GATC',
-'GCAA/TTGC', 'GCAC/GTGC', 'GCCA/TGGC', 'GCCC/GGGC',
-'GCGA/TCGC', 'GCGC',      'GCTA/TAGC', 'GGAA/TTCC',
-'GGAC/GTCC', 'GGCA/TGCC', 'GGCC', 'GGGA/TCCC',
-'GGTA/TACC', 'GTAA/TTAC', 'GTAC', 'GTCA/TGAC',
-'GTGA/TCAC', 'GTTA/TAAC', 'TAAA/TTTA', 'TACA/TGTA',
-'TAGA/TCTA', 'TATA',      'TCAA/TTGA', 'TCCA/TGGA',
-'TCGA',      'TGAA/TTCA', 'TGCA', 'TTAA']) + '\n'
-
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
 
@@ -130,30 +94,25 @@ class Reader:
         self.readmode = readmode
 
     def __enter__(self):
+        readmode = 'rt' if self.readmode == 'r' else self.readmode
         with open(self.filename, 'rb') as f:
             signature = f.peek(8)[:8]
 
         # Gzipped files begin with the two bytes 0x1F8B
         if tuple(signature[:2]) == (0x1F, 0x8B):
-            if self.readmode == 'r':
-                self.filehandle = _gzip.open(self.filename, 'rt')
-            else:
-                self.filehandle = _gzip.open(self.filename, self.readmode)
+            self.filehandle = _gzip.open(self.filename, readmode)
+
         # bzip2 files begin with the signature BZ
         elif signature[:2] == b'BZ':
-            if self.readmode == 'r':
-                self.filehandle = _bz2.open(self.filename, 'rt')
-            else:
-                self.filehandle = _bz2.open(self.filename, self.readmode)
+            self.filehandle = _bz2.open(self.filename, readmode)
+
         # .XZ files begins with 0xFD377A585A0000
         elif tuple(signature[:7]) == (0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00):
-            if self.readmode == 'r':
-                self.filehandle = _lzma.open(self.filename, 'rt')
-            else:
-                self.filehandle = _lzma.open(self.filename, self.readmode)
+            self.filehandle = _lzma.open(self.filename, readmode)
+
         # Else we assume it's a text file.
         else:
-            self.filehandle = open(self.filename, self.readmode)
+            self.filehandle = open(self.filename, readmode)
 
         return self.filehandle
 

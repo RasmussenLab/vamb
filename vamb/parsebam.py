@@ -127,7 +127,8 @@ def count_reads(bamfile, minscore=None, minid=None):
 
     Output: Float32 Numpy array of read counts for each reference in file.
     """
-    readcounts = _np.zeros(len(bamfile.lengths), dtype=_np.float32)
+    # Use 64-bit floats for better precision when counting
+    readcounts = _np.zeros(len(bamfile.lengths))
 
     # Initialize with first aligned read - return immediately if the file
     # is empty
@@ -138,7 +139,7 @@ def count_reads(bamfile, minscore=None, minid=None):
         multimap = 1.0
         reference_ids = [segment.reference_id]
     except StopIteration:
-        return readcounts
+        return readcounts.astype(_np.float32)
 
     # Now count up each read in the BAM file
     for segment in filtered_segments:
@@ -160,31 +161,34 @@ def count_reads(bamfile, minscore=None, minid=None):
     for reference_id in reference_ids:
         readcounts[reference_id] += to_add
 
-    return readcounts
+    return readcounts.astype(_np.float32)
 
-def calc_rpkm(counts, lengths, minlength=0):
+def calc_rpkm(counts, lengths, minlength=None):
     """Calculate RPKM based on read counts and sequence lengths.
 
     Inputs:
         counts: Numpy vector of read counts from count_reads
-        lengths: Array-like of contig lengths in same order as counts
+        lengths: Iterable of contig lengths in same order as counts
         minlength [0]: Discard any references shorter than N bases
+
+    Output: Float32 Numpy vector of RPKM for all seqs with length >= minlength
     """
-    if len(counts) != len(lengths):
+    lengtharray = _np.array(lengths)
+    if len(counts) != len(lengtharray):
         raise ValueError("counts length and lengths length must be same")
 
     millionmappedreads = counts.sum() / 1e6
 
     # Prevent division by zero
     if millionmappedreads == 0:
-        rpkm = _np.zeros(len(lengths), dtype=_np.float32)
+        rpkm = _np.zeros(len(lengtharray), dtype=_np.float32)
     else:
-        kilobases = _np.array(lengths, dtype=_np.float32) / 1000
-        rpkm = counts / (kilobases * millionmappedreads)
+        kilobases = lengtharray / 1000
+        rpkm = (counts / (kilobases * millionmappedreads)).astype(_np.float32)
 
     # Now filter away small contigs
-    if minlength > 0:
-        lengthmask = _np.array(lengths, dtype=_np.uint32) >= minlength
+    if minlength is not None:
+        lengthmask = lengtharray >= minlength
         rpkm = rpkm[lengthmask]
 
     return rpkm

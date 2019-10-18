@@ -83,7 +83,7 @@ cdef void c_kmercounts(unsigned char[::1] bytesarray, int k, int[::1] counts):
         charvalue = lut[character]
 
         if charvalue == 4:
-            countdown = k-1
+            countdown = k
 
         kmer = ((kmer << 2) | charvalue) & mask
 
