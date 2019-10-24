@@ -195,7 +195,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'
         raise TypeError(errormsg) from None
 
-    header = probeline.strip(b'>\n').decode()
+    header = probeline[1:-1].decode()
     buffer = list()
 
     # Iterate over lines
