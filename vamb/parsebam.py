@@ -48,8 +48,11 @@ import os as _os
 import multiprocessing as _multiprocessing
 import numpy as _np
 import time as _time
+from hashlib import md5 as _md5
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
+
+
 
 def mergecolumns(pathlist):
     """Merges multiple npz files with columns to a matrix.
@@ -193,13 +196,22 @@ def calc_rpkm(counts, lengths, minlength=None):
 
     return rpkm
 
-def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
+def _hash_refnames(refnames):
+    "Hashes an interable of strings of Reference names using MD5."
+    hasher = _md5()
+    for refname in refnames:
+        hasher.update(refname.encode().rstrip())
+
+    return hasher.digest()
+
+def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
 
     Inputs:
         inpath: Path to BAM file
         outpath: Path to dump depths array to or None
+        refhash: Expected reference hash (None = no check)
         minscore: Minimum alignment score (AS field) to consider
         minlength: Discard any references shorter than N bases
         minid: Discard any reads with ID lower than this
@@ -210,9 +222,15 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
             If outpath is not None: None
             Else: A float32-array with RPKM for each contig in BAM header
         length: Length of rpkms array
+        hash: md5 of reference names
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
+    hash = _hash_refnames(bamfile.references)
+    if refhash is not None and hash != refhash:
+        errormsg = ('BAM file {} has reference hash {}, expected {}. Verify that all '
+                    'BAM headers and FASTA headers are identical and in the same order.')
+        raise ValueError(errormsg.format(inpath, hash, refhash))
     counts = count_reads(bamfile, minscore, minid)
     rpkms = calc_rpkm(counts, bamfile.lengths, minlength)
     bamfile.close()
@@ -226,8 +244,8 @@ def _get_contig_rpkms(inpath, outpath, minscore, minlength, minid):
 
     return inpath, arrayresult, len(rpkms)
 
-def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid=None,
-                  subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
+def read_bamfiles(paths, dumpdirectory=None, refhash=None, minscore=None, minlength=100,
+                  minid=None, subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
 
     # Define callback function depending on whether a logfile exists or not
@@ -263,25 +281,6 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid
         # Create directory to dump in
         _os.mkdir(dumpdirectory)
 
-    # Get references and lengths from first BAM file.
-    # We need these to print them in the output.
-    # Might as well do it before spawning all those processes.
-    firstfile = _pysam.AlignmentFile(paths[0], "rb")
-    ncontigs = sum(1 for length in firstfile.lengths if length >= minlength)
-
-    # Probe to check that the "AS" aux field is present (should be present
-    # as per SAM/BAM specs)
-    if minscore is not None:
-        segments = [j for i, j in zip(range(25), firstfile)]
-        if not all(segment.has_tag("AS") for segment in segments):
-            raise ValueError("If minscore is set, 'AS' field must be present in BAM file.")
-
-    firstfile.close()
-    del firstfile
-
-    if ncontigs == 0:
-        raise ValueError('No headers in first bam file after length filtering')
-
     # Spawn independent processes to calculate RPKM for each of the BAM files
     processresults = list()
 
@@ -293,7 +292,7 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid
             else:
                 outpath = _os.path.join(dumpdirectory, str(pathnumber) + '.npz')
 
-            arguments = (path, outpath, minscore, minlength, minid)
+            arguments = (path, outpath, refhash, minscore, minlength, minid)
             processresults.append(pool.apply_async(_get_contig_rpkms, arguments,
                                                    callback=_callback))
 
@@ -316,15 +315,19 @@ def read_bamfiles(paths, dumpdirectory=None, minscore=None, minlength=100, minid
         if process.ready() and not process.successful():
             print('\tERROR WHEN PROCESSING:', path, file=logfile)
             print('Vamb aborted due to error in subprocess. See stacktrace for source of exception.')
-            logfile.flush()
+            if logfile is not None:
+                logfile.flush()
             process.get()
 
-    # Verify we didn't get errors or wrong lengths
+    ncontigs = None
     for processresult in processresults:
         path, rpkm, length = processresult.get()
 
-        if length != ncontigs:
-            raise ValueError('Expected {} headers in {}, got {}.'.format(
+        # Verify length of contigs are same for all BAM files
+        if ncontigs is None:
+            ncontigs = length
+        elif length != ncontigs:
+            raise ValueError('First BAM file has {} headers, {} has {}.'.format(
                              ncontigs, path, length))
 
     # If we did not dump to disk, load directly from process results to
@@ -349,6 +352,7 @@ read_bamfiles.__doc__ = """Spawns processes to parse BAM files and get contig rp
 Input:
     path: List or tuple of paths to BAM files
     dumpdirectory: [None] Dir to create and dump per-sample depths NPZ files to
+    refhash: [None]: Check all BAM references md5-hash to this (None = no check)
     minscore [None]: Minimum alignment score (AS field) to consider
     minlength [100]: Ignore any references shorter than N bases
     minid [None]: Discard any reads with nucleotide identity less than this

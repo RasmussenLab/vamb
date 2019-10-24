@@ -76,8 +76,8 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     return tnfs, contignames
 
-def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore, minid,
-              subprocesses, ncontigs, logfile):
+def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, minalignscore,
+              minid, subprocesses, logfile):
     begintime = time.time()
     log('\nLoading RPKM', logfile)
     # If rpkm is given, we load directly from .npz file
@@ -97,6 +97,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
     else:
         log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
            logfile, 1)
+        log('Reference hash: {}'.format(refhash if refhash is None else refhash.hex()), logfile, 1)
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
         log('Min identity: {}'.format(minid), logfile, 1)
         log('Min contig length: {}'.format(mincontiglength), logfile, 1)
@@ -107,6 +108,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
         dumpdirectory = os.path.join(outdir, 'tmp')
         rpkms = vamb.parsebam.read_bamfiles(bampaths,
                                             dumpdirectory=dumpdirectory,
+                                            refhash=refhash,
                                             minscore=minalignscore,
                                             minlength=mincontiglength,
                                             minid=minid,
@@ -117,11 +119,6 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscor
     if bampaths is not None:
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
-
-    if len(rpkms) != ncontigs:
-        raise ValueError('Number of TNF and RPKM sequences do not match. '
-                         'Are you sure the BAM files originate from same FASTA file '
-                         'and have headers?')
 
     elapsed = round(time.time() - begintime, 2)
     log('Processed RPKM in {} seconds.'.format(elapsed), logfile, 1)
@@ -196,9 +193,9 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
-        mincontiglength, minalignscore, minid, subprocesses, nhiddens, nlatent, nepochs, batchsize,
-        cuda, alpha, beta, dropout, lrate, batchsteps, windowsize, minsuccesses,
-        minclustersize, separator, maxclusters, logfile):
+        mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
+        nepochs, batchsize, cuda, alpha, beta, dropout, lrate, batchsteps, windowsize,
+        minsuccesses, minclustersize, separator, maxclusters, logfile):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
@@ -209,9 +206,9 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
                                  mincontiglength, logfile)
 
     # Parse BAMs, save as npz
-    ncontigs = len(contignames)
-    rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, minalignscore,
-                      minid, subprocesses, ncontigs, logfile)
+    refhash = None if norefcheck else vamb.parsebam._hash_refnames(contignames)
+    rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
+                      minalignscore, minid, subprocesses, logfile)
 
     # Train, save model
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
@@ -275,6 +272,8 @@ def main():
     inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
                          help=('number of subprocesses to spawn '
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
+    inputos.add_argument('--norefcheck', help='skip reference name hashing check [False]',
+                         action='store_true')
 
     # VAE arguments
     vaeos = parser.add_argument_group(title='VAE options', description=None)
@@ -447,6 +446,7 @@ def main():
             args.rpkm,
             args.jgi,
             mincontiglength=args.minlength,
+            norefcheck=args.norefcheck,
             minalignscore=args.minascore,
             minid=args.minid,
             subprocesses=subprocesses,
