@@ -47,7 +47,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
             raise ValueError('TNFs .npz array must be of float32 dtype')
 
         if not np.issubdtype(contiglengths.dtype, np.integer):
-            raise ValueError('TNFs .npz array must be of an integer dtype')
+            raise ValueError('contig lengths .npz array must be of an integer dtype')
 
         if not (len(tnfs) == len(contignames) == len(contiglengths)):
             raise ValueError('Not all of TNFs, names and lengths are same length')
@@ -58,6 +58,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         contignames = list(contignames[mask])
         contiglengths = contiglengths[mask]
 
+    # Else parse FASTA files
     else:
         log('Loading data from FASTA file {}'.format(fastapath), logfile, 1)
         with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
@@ -72,12 +73,19 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     ncontigs = len(contiglengths)
     nbases = contiglengths.sum()
     log('Kept {} bases in {} sequences.'.format(nbases, ncontigs), logfile, 1)
+
+    # Warn if too few contigs
+    if ncontigs < 50000:
+        warning = ("WARNING: Running Vamb on fewer than 50,000 sequences might cause "
+        "overfitting of the VAE and poor results. Ideally, use 100k-5m sequences.")
+        print(warning, file=sys.stderr)
+        log(warning, logfile, 1)
     log('Processed TNF in {} seconds.'.format(elapsed), logfile, 1)
 
     return tnfs, contignames
 
-def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, minalignscore,
-              minid, subprocesses, logfile):
+def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, ncontigs,
+              minalignscore, minid, subprocesses, logfile):
     begintime = time.time()
     log('\nLoading RPKM', logfile)
     # If rpkm is given, we load directly from .npz file
@@ -116,9 +124,12 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, min
                                             logfile=logfile)
         print('', file=logfile)
 
-    if bampaths is not None:
+    if rpkmpath is None:
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
+
+    if len(rpkms) != ncontigs:
+        raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
     log('Processed RPKM in {} seconds.'.format(elapsed), logfile, 1)
@@ -188,7 +199,6 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     print('', file=logfile)
     log('Clustered {} contigs in {} bins.'.format(ncontigs, clusternumber), logfile, 1)
 
-    clusterdonetime = time.time()
     elapsed = round(time.time() - begintime, 2)
     log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
 
@@ -208,7 +218,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     # Parse BAMs, save as npz
     refhash = None if norefcheck else vamb.parsebam._hash_refnames(contignames)
     rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
-                      minalignscore, minid, subprocesses, logfile)
+                      len(tnfs), minalignscore, minid, subprocesses, logfile)
 
     # Train, save model
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,

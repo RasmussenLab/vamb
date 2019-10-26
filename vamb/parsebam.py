@@ -81,7 +81,8 @@ def mergecolumns(pathlist):
     for columnno, path in enumerate(pathlist[1:]):
         column = _np.load(path)['arr_0']
         if len(column) != length:
-            raise ValueError("Length of data at {} is not equal to that of {}".format(path, pathlist[0]))
+            raise ValueError("Length of data at {} is not equal to that of "
+                             "{}".format(path, pathlist[0]))
         result[:,columnno + 1] = column
 
     return result
@@ -197,7 +198,7 @@ def calc_rpkm(counts, lengths, minlength=None):
     return rpkm
 
 def _hash_refnames(refnames):
-    "Hashes an interable of strings of Reference names using MD5."
+    "Hashes an iterable of strings of reference names using MD5."
     hasher = _md5()
     for refname in refnames:
         hasher.update(refname.encode().rstrip())
@@ -226,11 +227,14 @@ def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
-    hash = _hash_refnames(bamfile.references)
-    if refhash is not None and hash != refhash:
-        errormsg = ('BAM file {} has reference hash {}, expected {}. Verify that all '
-                    'BAM headers and FASTA headers are identical and in the same order.')
-        raise ValueError(errormsg.format(inpath, hash, refhash))
+    if refhash is not None:
+        pairs = zip(bamfile.references, bamfile.lengths)
+        refnames = (ref for (ref, len) in pairs if len >= minlength)
+        hash = _hash_refnames(refnames)
+        if hash != refhash:
+            errormsg = ('BAM file {} has reference hash {}, expected {}. Verify that all '
+                        'BAM headers and FASTA headers are identical and in the same order.')
+            raise ValueError(errormsg.format(inpath, hash.hex(), refhash.hex()))
     counts = count_reads(bamfile, minscore, minid)
     rpkms = calc_rpkm(counts, bamfile.lengths, minlength)
     bamfile.close()
