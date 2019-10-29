@@ -173,7 +173,7 @@ def calc_rpkm(counts, lengths, minlength=None):
     Inputs:
         counts: Numpy vector of read counts from count_reads
         lengths: Iterable of contig lengths in same order as counts
-        minlength [0]: Discard any references shorter than N bases
+        minlength [None]: Discard any references shorter than N bases
 
     Output: Float32 Numpy vector of RPKM for all seqs with length >= minlength
     """
@@ -205,6 +205,32 @@ def _hash_refnames(refnames):
 
     return hasher.digest()
 
+def _check_bamfile(path, bamfile, refhash, minlength):
+    "Checks bam file for correctness (refhash and sort order). To be used before parsing."
+    # If refhash is set, check ref hash matches what is found.
+    if refhash is not None:
+        if minlength is None:
+            refnames = bamfile.references
+        else:
+            pairs = zip(bamfile.references, bamfile.lengths)
+            refnames = (ref for (ref, len) in pairs if len >= minlength)
+
+        hash = _hash_refnames(refnames)
+        if hash != refhash:
+            errormsg = ('BAM file {} has reference hash {}, expected {}. '
+                        'Verify that all BAM headers and FASTA headers are '
+                        'identical and in the same order.')
+            raise ValueError(errormsg.format(path, hash.hex(), refhash.hex()))
+
+    # Check that file is unsorted or sorted by read name.
+    hd_header = bamfile.header.get("HD", dict())
+    sort_order = hd_header.get("SO")
+    if sort_order in ("coordinate", "unknown"):
+        errormsg = ("BAM file {} is marked with sort order '{}', must be "
+                    "unsorted or sorted by readname.")
+        raise ValueError(errormsg.format(path, sort_order))
+
+
 def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
     """Returns  RPKM (reads per kilobase per million mapped reads)
     for all contigs present in BAM header.
@@ -227,14 +253,7 @@ def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
-    if refhash is not None:
-        pairs = zip(bamfile.references, bamfile.lengths)
-        refnames = (ref for (ref, len) in pairs if len >= minlength)
-        hash = _hash_refnames(refnames)
-        if hash != refhash:
-            errormsg = ('BAM file {} has reference hash {}, expected {}. Verify that all '
-                        'BAM headers and FASTA headers are identical and in the same order.')
-            raise ValueError(errormsg.format(inpath, hash.hex(), refhash.hex()))
+    _check_bamfile(inpath, bamfile, refhash, minlength)
     counts = count_reads(bamfile, minscore, minid)
     rpkms = calc_rpkm(counts, bamfile.lengths, minlength)
     bamfile.close()
@@ -248,7 +267,7 @@ def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
 
     return inpath, arrayresult, len(rpkms)
 
-def read_bamfiles(paths, dumpdirectory=None, refhash=None, minscore=None, minlength=100,
+def read_bamfiles(paths, dumpdirectory=None, refhash=None, minscore=None, minlength=None,
                   minid=None, subprocesses=DEFAULT_SUBPROCESSES, logfile=None):
     "Placeholder docstring - replaced after this func definition"
 
@@ -358,7 +377,7 @@ Input:
     dumpdirectory: [None] Dir to create and dump per-sample depths NPZ files to
     refhash: [None]: Check all BAM references md5-hash to this (None = no check)
     minscore [None]: Minimum alignment score (AS field) to consider
-    minlength [100]: Ignore any references shorter than N bases
+    minlength [None]: Ignore any references shorter than N bases
     minid [None]: Discard any reads with nucleotide identity less than this
     subprocesses [{}]: Number of subprocesses to spawn
     logfile: [None] File to print progress to
