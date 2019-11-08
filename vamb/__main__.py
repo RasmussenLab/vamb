@@ -72,7 +72,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     elapsed = round(time.time() - begintime, 2)
     ncontigs = len(contiglengths)
     nbases = contiglengths.sum()
-    log('Kept {} bases in {} sequences.'.format(nbases, ncontigs), logfile, 1)
+    log('Kept {} bases in {} sequences'.format(nbases, ncontigs), logfile, 1)
 
     # Warn if too few contigs
     if ncontigs < 50000:
@@ -80,7 +80,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         "overfitting of the VAE and poor results. Ideally, use 100k-5m sequences.")
         print(warning, file=sys.stderr)
         log(warning, logfile, 1)
-    log('Processed TNF in {} seconds.'.format(elapsed), logfile, 1)
+    log('Processed TNF in {} seconds'.format(elapsed), logfile, 1)
 
     return tnfs, contignames
 
@@ -103,7 +103,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
             rpkms = vamb.vambtools.load_jgi(file)
 
     else:
-        log('Parsing {} BAM files with {} subprocesses.'.format(len(bampaths), subprocesses),
+        log('Parsing {} BAM files with {} subprocesses'.format(len(bampaths), subprocesses),
            logfile, 1)
         log('Reference hash: {}'.format(refhash if refhash is None else refhash.hex()), logfile, 1)
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
@@ -114,14 +114,10 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
         print('', file=logfile)
 
         dumpdirectory = os.path.join(outdir, 'tmp')
-        rpkms = vamb.parsebam.read_bamfiles(bampaths,
-                                            dumpdirectory=dumpdirectory,
-                                            refhash=refhash,
-                                            minscore=minalignscore,
-                                            minlength=mincontiglength,
-                                            minid=minid,
-                                            subprocesses=subprocesses,
-                                            logfile=logfile)
+        rpkms = vamb.parsebam.read_bamfiles(bampaths, dumpdirectory=dumpdirectory,
+                                            refhash=refhash, minscore=minalignscore,
+                                            minlength=mincontiglength, minid=minid,
+                                            subprocesses=subprocesses, logfile=logfile)
         print('', file=logfile)
 
     if rpkmpath is None:
@@ -132,7 +128,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
         raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
-    log('Processed RPKM in {} seconds.'.format(elapsed), logfile, 1)
+    log('Processed RPKM in {} seconds'.format(elapsed), logfile, 1)
 
     return rpkms
 
@@ -167,7 +163,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     del vae # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    log('Trained VAE and encoded in {} seconds.'.format(elapsed), logfile, 1)
+    log('Trained VAE and encoded in {} seconds'.format(elapsed), logfile, 1)
 
     return mask, latent
 
@@ -181,26 +177,28 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
-    log('Separator: {}'.format(separator), logfile, 1)
+    log('Separator: "{}"'.format(separator), logfile, 1)
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
                               minsuccesses=minsuccesses, labels=contignames,
                               logfile=logfile, cuda=cuda)
 
+    renamed = (('C'+str(i+1), cluster) for (i, (_, cluster)) in enumerate(it))
+
     # Binsplit if given a separator
     if separator is not None:
-        it = vamb.vambtools.binsplit(it, separator)
+        renamed = vamb.vambtools.binsplit(renamed, separator)
 
     with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
-        clusternumber, ncontigs = vamb.cluster.write_clusters(clustersfile, it,
-                                                              max_clusters=maxclusters,
-                                                              min_size=minclustersize)
+        _ = vamb.cluster.write_clusters(clustersfile, renamed, max_clusters=maxclusters,
+                                        min_size=minclustersize, rename=False)
+    clusternumber, ncontigs = _
 
     print('', file=logfile)
-    log('Clustered {} contigs in {} bins.'.format(ncontigs, clusternumber), logfile, 1)
+    log('Clustered {} contigs in {} bins'.format(ncontigs, clusternumber), logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
-    log('Clustered contigs in {} seconds.'.format(elapsed), logfile, 1)
+    log('Clustered contigs in {} seconds'.format(elapsed), logfile, 1)
 
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
         mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
@@ -232,7 +230,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
             minclustersize, separator, cuda, logfile)
 
     elapsed = round(time.time() - begintime, 2)
-    log('\nCompleted Vamb in {} seconds.'.format(elapsed), logfile)
+    log('\nCompleted Vamb in {} seconds'.format(elapsed), logfile)
 
 def main():
     doc = """Vamb: Variational autoencoders for metagenomic binning.
@@ -383,7 +381,7 @@ def main():
         raise argparse.ArgumentTypeError('If minascore is set, RPKM must be passed as bam files')
 
     if args.subprocesses < 1:
-        raise argparse.ArgumentTypeError('Zero or negative subprocesses requested.')
+        raise argparse.ArgumentTypeError('Zero or negative subprocesses requested')
 
     ####################### CHECK VAE OPTIONS ################################
     if args.nhiddens is not None and any(i < 1 for i in args.nhiddens):
@@ -399,10 +397,10 @@ def main():
         raise argparse.ArgumentTypeError('beta cannot be negative or zero')
 
     if args.dropout is not None and (args.dropout < 0 or args.dropout >= 1):
-        raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1.')
+        raise argparse.ArgumentTypeError('dropout must be in 0 <= d < 1')
 
     if args.cuda and not torch.cuda.is_available():
-        raise ModuleNotFoundError('Cuda is not available on your PyTorch installation.')
+        raise ModuleNotFoundError('Cuda is not available on your PyTorch installation')
 
     ###################### CHECK TRAINING OPTIONS ####################
     if args.nepochs < 1:
@@ -423,16 +421,16 @@ def main():
 
     ###################### CHECK CLUSTERING OPTIONS ####################
     if args.minsize < 1:
-        raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0.')
+        raise argparse.ArgumentTypeError('Minimum cluster size must be at least 0')
 
     if args.windowsize < 1:
-        raise argparse.ArgumentTypeError('Window size must be at least 1.')
+        raise argparse.ArgumentTypeError('Window size must be at least 1')
 
     if args.minsuccesses < 1 or args.minsuccesses > args.windowsize:
-        raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:windowsize.')
+        raise argparse.ArgumentTypeError('Minimum cluster size must be in 1:windowsize')
 
     if args.separator is not None and len(args.separator) == 0:
-        raise argparse.ArgumentTypeError('Binsplit separator cannot be an empty string.')
+        raise argparse.ArgumentTypeError('Binsplit separator cannot be an empty string')
 
     ###################### SET UP LAST PARAMS ############################
 
