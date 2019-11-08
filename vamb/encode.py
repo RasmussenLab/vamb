@@ -473,7 +473,7 @@ class VAE(_nn.Module):
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tStarting batch size:', dataloader.batch_size, file=logfile)
-            batchsteps_string = 'None' if batchsteps is None else ', '.join(map(str, batchsteps))
+            batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
             print('\tBatchsteps:', batchsteps_string, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN sequences:', ncontigs, file=logfile)
