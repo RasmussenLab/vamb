@@ -64,7 +64,7 @@ from math import sqrt as _sqrt
 import vamb.vambtools as _vambtools
 
 class Contig:
-    """An immutable object representing a contig mapping to a subject at position start:end.
+    """An object representing a contig mapping to a subject at position start:end.
     Mapping positions use the half-open interval, like Python ranges and slices.
 
     Instantiate either with name, subject and mapping start/end:
@@ -79,13 +79,10 @@ class Contig:
         if end <= start:
             raise ValueError('Contig end must be higher than start')
 
-        super().__setattr__("name", name)
-        super().__setattr__("subject", subject)
-        super().__setattr__("start", start)
-        super().__setattr__("end", end)
-
-    def __setattr__(self, name, value):
-        raise AttributeError("Contig is immutable")
+        self.name = name
+        self.subject = subject
+        self.start = start
+        self.end = end
 
     @classmethod
     def subjectless(cls, name, length):
