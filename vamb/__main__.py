@@ -183,7 +183,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
                               minsuccesses=minsuccesses, labels=contignames,
                               logfile=logfile, cuda=cuda)
 
-    renamed = (('C'+str(i+1), cluster) for (i, (_, cluster)) in enumerate(it))
+    renamed = ((str(i+1), cluster) for (i, (_, cluster)) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:

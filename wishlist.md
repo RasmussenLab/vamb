@@ -4,7 +4,22 @@ Vamb is under an MIT licence, so please feel free to fork, extend, or copy Vamb 
 
 Here's a short wish list for improvements to Vamb we haven't had time for:
 
+__Fix bad optimization of logsigma in Vamb__
+
+In current code, the logsigma layer is calculated using a Linear layer followed by a softplus activation. The activation constrains logsigma to be in (0, ∞), e.g. σ is in (1, ∞).
+
+However, reconstruction loss pushes σ ➡ 0, ⟹ logsigma ➡ -∞. And KLD pushes σ ➡ 1, ⟹ logsigma ➡ 0. With nonzero weight on reconstruction loss and KLD, optimal σ must be somewhere in (-∞, 0).
+
+As this can never be reached due to the activation function, the optimizer _always_ pushes logsigma ➡ 0, meaning that the value before the activation function goes ➡ -∞. This is bad for two reasons:
+
+* It means the optimal value of σ is actually impossible to even _approximately_ reach, probably leading to poorer performance,
+
+* It creates a numerical instability due to float underflow. Luckily, the gradient also disappears as logsigma ➡ 0, so the underflow rarely occurs, but still.
+
+I tried changing this, but this is so deep in Vamb that a removal of this activation function requires new hyperparameter optimization and benchmarking.
+
 __Implement importance sampling in the VAE__
+
 Idea from this paper: https://arxiv.org/abs/1509.00519
 The general idea is that the CE/SSE losses are only calculated from a single sample of the latent distribution. This creates unavoidable sampling error, which can be reduced by sampling multiple values and taking an average of the CE/SSE loss.
 
