@@ -115,7 +115,7 @@ Vamb produces the following output files:
 - `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.encode.VAE.load` from Python.
 - `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins`, or using the function `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
-### Recommended workflow
+# Recommended workflow
 
 __1) Preprocess the reads and check their quality__
 

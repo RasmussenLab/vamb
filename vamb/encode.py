@@ -210,6 +210,16 @@ class VAE(_nn.Module):
 
         # Latent layers
         mu = self.mu(tensor)
+
+        # Note: This softplus constrains logsigma to positive. As reconstruction loss pushes
+        # logsigma as low as possible, and KLD pushes it towards 0, the optimizer will
+        # always push this to 0, meaning that the logsigma layer will be pushed towards
+        # negative infinity. This creates a nasty numerical instability in VAMB. Luckily,
+        # the gradient also disappears as it decreases towards negative infinity, avoiding
+        # NaN poisoning in most cases. We tried to remove the softplus layer, but this
+        # necessitates a new round of hyperparameter optimization, and there is no way in
+        # hell I am going to do that at the moment of writing.
+        # Also remove needless factor 2 in definition of latent in reparameterize function.
         logsigma = self.softplus(self.logsigma(tensor))
 
         return mu, logsigma
@@ -223,6 +233,7 @@ class VAE(_nn.Module):
 
         epsilon.requires_grad = True
 
+        # See comment above regarding softplus
         latent = mu + epsilon * _torch.exp(logsigma/2)
 
         return latent
