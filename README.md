@@ -6,7 +6,7 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 For more information on the background, context, and theory of Vamb, read [our paper on bioRxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) (DOI: 10.1101/490078)
 
-For more information about the implementation, methodological considerations, and advanced Python usage of Vamb, see the tutorial file (`doc/tutorial.html`)
+For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
 Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
@@ -18,7 +18,7 @@ Recommended: Vamb can be installed with pip (thanks to contribution from C. Titu
 pip install https://github.com/RasmussenLab/vamb/archive/2.1.0.zip
 ```
 
-or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo):
+or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo). Note that the Bioconda version is still 2.0.1, which is not the newest version of Vamb.
 ```
 conda install -c bioconda vamb
 ```
@@ -28,7 +28,7 @@ conda install -c bioconda vamb
 This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
 
 ```
-# clone the desired branch from the repository, here master, but you can clone a release as well
+# clone the desired branch from the repository, here master
 git clone https://github.com/jakobnissen/vamb -b master
 cd vamb
 pip install -e .
@@ -98,13 +98,11 @@ So before you can run Vamb, you need to have files from which Vamb can calculate
 
 :warning: *Important:* Vamb can use information from multi-mapping reads, but all alignments of a single read __must__ be consecutive in the BAM files. See section 4 of *Recommended workflow*.
 
-:warning: *Important:* Vamb works best on datasets with more than 100,000 contigs. If you have fewer than 50,000 contigs, we recommend you use another binner like MetaBAT2.
+:warning: *Important:* Vamb *may* be prone to overfitting on datasets with fewer than 50,000 contigs. If you have a dataset smaller than this, we recommend you use another binner like MetaBAT2.
 
-Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM file is constructed carelessly, for example by allowing reads from distinct species to crossmap, the BAM file will not contain information with which Vamb can separate the crossmapping species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
+Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM files are constructed carelessly, for example by allowing reads from distinct species to crossmap indiscriminately, your BAM files will not contain information with which Vamb can separate those species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
 
-Estimation of TNF and RPKM is subject to statistical uncertainty. Therefore, Vamb works poorly on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced, but the results of working on (larger) contigs are better.
-
-With fewer samples (up to about 100), we recommend using contigs from a concatenation of single-sample assemblies with a minimum contig length cutoff of ~2000-ish basepairs, and then split your bins according to the sample of origin by using the `-o` option. With many samples, the number of contigs can become too large for the data to fit in RAM. The better approach is to split the dataset up into groups of similar samples and bin these groups, instead of binning each individual sample.
+Estimation of TNF and RPKM is subject to statistical uncertainty. Therefore, Vamb works less well on short sequences and on data with low depth. Vamb *can* work on shorter sequences such as genes, which are more easily homology reduced. However, we recommend *not* using homology reduction on the input sequences, and instead prevent duplicated strains by using binsplitting (see section: _recommended workflow_.)
 
 ### Outputs
 
@@ -119,35 +117,35 @@ Vamb produces the following output files:
 
 __1) Preprocess the reads and check their quality__
 
-We use AdapterRemoval combined with FastQC for this.
+We use AdapterRemoval combined with FastQC for this - but you can use whichever tool you think gives the best results.
 
-__2) Assemble each sample individually OR co-assemble and get the contigs out__
+__2) Assemble each sample individually and get the contigs out__
 
-We recommend using metaSPAdes on each sample individually. Single-sample assembly followed by samplewise binsplitting gives the best results.
+We recommend using metaSPAdes on each sample individually. You can also use scaffolds or other nucleotide sequences instead of contigs as input sequences to Vamb. Assemble each sample individually, as single-sample assembly followed by samplewise binsplitting gives the best results.
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique, and filter away small contigs__
 
-You can use the function `vamb.vambtools.concatenate_fasta` for this.
+You can use the function `vamb.vambtools.concatenate_fasta` for this (available only in v. 2.1.0 or above).
 
-:warning: *Important:* If you have fewer contigs than about 100,000, Vamb's autoencoder is prone to overfitting, and below about 50,000 contigs Vamb performs worse than MetaBAT2. So count your sequences at this point and use MetaBAT2 instead if you have too few contigs.
+:warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs. If you have fewer than this number, we don't know how the autoencoder will have behave, so we suggest using MetaBAT2 instead of Vamb.
 
-There's a tradeoff here between a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of all contigs, and throwing out good data. We use a length cutoff of 2000 bp as default but haven't actually run tests for the optimal value.
+You should not try to bin very short sequences. When deciding the length cutoff for your input sequences, there's a tradeoff here between choosing a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of *all* contigs, and choosing a too high one, throwing out good data. We use a length cutoff of 2000 bp as default but haven't actually run tests for the optimal value.
 
 Your contig headers must be unique. Furthermore, if you want to use binsplitting (and you should!), your contig headers must be of the format {Samplename}{Separator}{X}, such that the part of the string before the *first* occurrence of {Separator} gives a name of the sample it originated from. For example, you could call contig number 115 from sample number 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {X}.
 
-If you have more than about 100 samples, the autoencoding and clustering steps can take a long time, and the mapping may be error-prone depending on the aligner. We have successfully run Vamb with 1000 samples and ~6 million contigs, but we recommend clustering your samples by similarity (for example, using MASH), and split your dataset into groups of ~100 samples, and then bin these independently.
+Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM. If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like MASH to group similar samples together in smaller batches, bin these batches individually. This way, you can still leverage co-abundance.
 
 __4) Map the reads to the FASTA file to obtain BAM files__
 
 :warning: *Important:* If you allow reads to map to multiple contigs, the abundance estimation will be more accurate. However, all BAM records for a single read *must* be consecutive in the BAM file, or else Vamb will miscount these alignments. This is the default order in the output of almost all aligners, but if you use BAM files sorted by alignment position and have multi-mapping reads, you must sort them by read name first.
 
-Be careful to choose proper parameters for your aligner - in general, if reads from contig A aligns to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. We have used following commands to create our BAM files:
+Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2`:
 
-BWA MEM for smaller datasets: `bwa mem filtered_contigs.fna sample1.forward.fastq.gz sample1.reverse.fastq.gz -t 8 | samtools view -F 3584 -b --threads 8 > sample1.bam`
+`minimap2 -t 28 -N 50 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam`
 
-Minimap2 for larger ones: `minimap2 -t 28 -N 50 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam`
+:warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
 
-:warning: *Important:* If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`), and/or filter for minimum alignments score using the `-s` flag (uses the `AS` optional field of the alignment.)
+If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`), and/or filter for minimum alignments score using the `-s` flag (uses the `AS` optional field of the alignment.)
 
 __5) Run Vamb__
 
@@ -157,6 +155,6 @@ If you trust the alignments in your BAM files, use:
 
 where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
 
-If you don't trust your alignments, set the `-z` and `-s` flag as appropriate, depending on the properties of your aligner. For example, with BWA MEM, I would use:
+If you don't trust your alignments, set the `-z` and `-s` flag as appropriate, depending on the properties of your aligner. For example, if I used the aligner BWA MEM, I would use:
 
 `vamb -o SEP -z 0.95 -s 30 --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...]`

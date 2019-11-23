@@ -1,4 +1,4 @@
-__doc__ = """Calculate z-normalized tetranucleotide frequency from a FASTA file.
+__doc__ = """Calculate tetranucleotide frequency from a FASTA file.
 
 Usage:
 >>> with open('/path/to/contigs.fna', 'rb') as filehandle
