@@ -62,9 +62,8 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     else:
         log('Loading data from FASTA file {}'.format(fastapath), logfile, 1)
         with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
-            ret = vamb.parsecontigs.read_contigs(tnffile,
-                                                 minlength=mincontiglength,
-                                                 preallocate=True)
+            ret = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
+
         tnfs, contignames, contiglengths = ret
         vamb.vambtools.write_npz(os.path.join(outdir, 'tnf.npz'), tnfs)
         vamb.vambtools.write_npz(os.path.join(outdir, 'lengths.npz'), contiglengths)

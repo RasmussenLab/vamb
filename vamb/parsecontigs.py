@@ -6,67 +6,50 @@ Usage:
 """
 
 import sys as _sys
-import os as _os
 import numpy as _np
-import gzip as _gzip
 import vamb.vambtools as _vambtools
 
-def _read_contigs_online(filehandle, minlength):
-    "Reads file once saving time, but has to internally copy sequences wasting memory."
-    tnfs = list()
-    contignames = list()
-    lengths = list()
+class PushArray:
+    """Data structure that allows efficient appending and extending a Numpy array"""
+    __slots__ = ['data', 'capacity', 'length']
+    def __init__(self, dtype, start_capacity=1<<16):
+        self.capacity = start_capacity
+        self.data = _np.empty(self.capacity, dtype=dtype)
+        self.length = 0
 
-    entries = _vambtools.byte_iterfasta(filehandle)
+    def grow(self):
+        "Grow capacity by power of two between 1/8 and 1/4 of current capacity"
+        toadd = max(32, int(self.capacity * 0.125))
+        newcap = self.capacity + (1 << toadd.bit_length())
+        self.capacity = newcap
+        self.data.resize(self.capacity, refcheck=False)
 
-    for entry in entries:
-        if len(entry) < minlength:
-            continue
+    def append(self, value):
+        if self.length == self.capacity:
+            self.grow()
 
-        tnfs.append(entry.fourmer_freq())
-        contignames.append(entry.header)
-        lengths.append(len(entry))
+        self.data[self.length] = value
+        self.length += 1
 
-    lengths = _np.array(lengths, dtype=_np.int)
-    tnfs = _np.array(tnfs, dtype=_np.float32)
+    def extend(self, values):
+        if self.length + len(values) > self.capacity:
+            self.grow()
 
-    return tnfs, contignames, lengths
+        self.data[self.length:self.length+len(values)] = values
+        self.length += len(values)
 
-def _read_contigs_preallocated(filehandle, minlength):
-    "Reads file twice wasting time, but does no copying, saving memory."
-    n_entries = 0
-    entries = _vambtools.byte_iterfasta(filehandle)
+    def take(self):
+        self.data.resize(self.length)
+        self.capacity = self.length
+        return self.data
 
-    for entry in entries:
-         if len(entry) >= minlength:
-             n_entries += 1
-
-    tnfs = _np.empty((n_entries, 136), dtype=_np.float32)
-    contignames = [None] * n_entries
-    lengths = _np.empty(n_entries, dtype=_np.int)
-
-    filehandle.seek(0) # Go back to beginning of file
-    entries = _vambtools.byte_iterfasta(filehandle)
-    entrynumber = 0
-    for entry in entries:
-        if len(entry) < minlength:
-            continue
-
-        tnfs[entrynumber] = entry.fourmer_freq()
-        contignames[entrynumber] = entry.header
-        lengths[entrynumber] = len(entry)
-
-        entrynumber += 1
-
-    return tnfs, contignames, lengths
-
-def read_contigs(filehandle, minlength=100, preallocate=True):
+def read_contigs(filehandle, minlength=100, preallocate=False):
     """Parses a FASTA file open in binary reading mode.
 
     Input:
         filehandle: Filehandle open in binary mode of a FASTA file
         minlength: Ignore any references shorter than N bases [100]
-        preallocate: Read contigs twice, saving memory [True]
+        preallocate: [DEPRECATED] Read contigs twice, saving memory [False]
 
     Outputs:
         tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
@@ -78,6 +61,25 @@ def read_contigs(filehandle, minlength=100, preallocate=True):
         raise ValueError('Minlength must be at least 4, not {}'.format(minlength))
 
     if preallocate:
-        return _read_contigs_preallocated(filehandle, minlength)
-    else:
-        return _read_contigs_online(filehandle, minlength)
+        print("Warning: Argument 'preallocate' in function read_contigs is deprecated."
+        " read_contigs is now always memory efficient.",
+        file=_sys.stderr)
+
+    tnfs = PushArray(_np.float32)
+    lengths = PushArray(_np.int)
+    contignames = list()
+
+    entries = _vambtools.byte_iterfasta(filehandle)
+
+    for entry in entries:
+        if len(entry) < minlength:
+            continue
+
+        tnfs.extend(entry.fourmer_freq())
+        lengths.append(len(entry))
+        contignames.append(entry.header)
+
+    lengths_arr = lengths.take()
+    tnfs_arr = tnfs.take().reshape(-1, 136)
+
+    return tnfs_arr, contignames, lengths_arr
