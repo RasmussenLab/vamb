@@ -10,8 +10,6 @@ For all functions in this module, a collection of clusters are represented as
 a {clustername, set(elements)} dict.
 """
 
-import sys as _sys
-import os as _os
 import random as _random
 import numpy as _np
 import torch as _torch
