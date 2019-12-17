@@ -6,6 +6,55 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
 import collections as _collections
 
+class PushArray:
+    """Data structure that allows efficient appending and extending a Numpy array.
+    Intended to strike a balance between not resizing too often (which is slow), and
+    not allocating too much at a time (which is memory inefficient).
+
+    Usage:
+    >>> arr = PushArray(numpy.float64)
+    >>> arr.append(5.0)
+    >>> arr.extend(numpy.linspace(4, 3, 3))
+    >>> arr.take() # return underlying Numpy array
+    array([5. , 4. , 3.5, 3. ])
+    """
+
+    __slots__ = ['data', 'capacity', 'length']
+
+    def __init__(self, dtype, start_capacity=1<<16):
+        self.capacity = start_capacity
+        self.data = _np.empty(self.capacity, dtype=dtype)
+        self.length = 0
+
+    def _grow(self, mingrowth):
+        """Grow capacity by power of two between 1/8 and 1/4 of current capacity, though at
+        least mingrowth"""
+        growth = max(int(self.capacity * 0.125), mingrowth)
+        nextpow2 = 1 << (growth - 1).bit_length()
+        self.capacity = self.capacity + nextpow2
+        self.data.resize(self.capacity, refcheck=False)
+
+    def append(self, value):
+        if self.length == self.capacity:
+            self._grow(64)
+
+        self.data[self.length] = value
+        self.length += 1
+
+    def extend(self, values):
+        lenv = len(values)
+        if self.length + lenv > self.capacity:
+            self._grow(lenv)
+
+        self.data[self.length:self.length+lenv] = values
+        self.length += lenv
+
+    def take(self):
+        "Return the underlying array"
+        self.data.resize(self.length, refcheck=False)
+        self.capacity = self.length
+        return self.data
+
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
 
@@ -122,6 +171,8 @@ class Reader:
 class FastaEntry:
     """One single FASTA entry"""
 
+    basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
+                               b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
     __slots__ = ['header', 'sequence']
 
     def __init__(self, header, sequence):
@@ -130,8 +181,15 @@ class FastaEntry:
         if '\t' in header:
             raise ValueError('Header cannot contain a tab')
 
+        masked = sequence.translate(self.basemask, b' \t\n')
+        stripped = masked.translate(None, b'ACGTN')
+        if len(stripped) > 0:
+            bad_character = chr(stripped[0])
+            msg = "Non-IUPAC DNA byte in sequence {}: '{}'"
+            raise ValueError(msg.format(header, bad_character))
+
         self.header = header
-        self.sequence = bytearray(sequence)
+        self.sequence = masked
 
     def __len__(self):
         return len(self.sequence)
@@ -177,7 +235,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     # Skip to first header
     try:
-        for linenumber, probeline in enumerate(filehandle):
+        for probeline in filehandle:
             stripped = probeline.lstrip()
             if stripped.startswith(comment):
                 pass
@@ -200,27 +258,18 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     # Iterate over lines
     for line in filehandle:
-        linenumber += 1
-
         if line.startswith(comment):
-            continue
+            pass
 
-        if line.startswith(b'>'):
-            yield FastaEntry(header, b''.join(buffer))
+        elif line.startswith(b'>'):
+            yield FastaEntry(header, bytearray().join(buffer))
             buffer.clear()
             header = line[1:-1].decode()
 
         else:
-            # Check for un-parsable characters in the sequence
-            stripped = line.translate(None, b'acgtuACGTUswkmyrbdhvnSWKMYRBDHVN \t\n')
-            if len(stripped) > 0:
-                bad_character = chr(stripped[0])
-                raise ValueError("Non-IUPAC DNA in line {}: '{}'".format(linenumber + 1,
-                                                                         bad_character))
-            masked = line.translate(linemask, b' \t\n')
-            buffer.append(masked)
+            buffer.append(line)
 
-    yield FastaEntry(header, b''.join(buffer))
+    yield FastaEntry(header, bytearray().join(buffer))
 
 def loadfasta(byte_iterator, keep=None, comment=b'#', compress=False):
     """Loads a FASTA file into a dictionary.
