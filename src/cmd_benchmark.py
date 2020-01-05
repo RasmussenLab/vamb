@@ -44,17 +44,6 @@ if args.taxpath is not None:
 binning = vamb.benchmark.Binning(clusters, reference, minsize=args.min_bin_size, disjoint=args.disjoint,
                             binsplit_separator=args.separator)
 
-print('#genome', 'bestbin', 'F1', 'recall', 'precision', sep='\t')
-for genome in reference.genomes.values():
-    dict_ = binning.intersectionsof.get(genome, dict())
-    bestbin, bestf1, recall, precision = 'NA', 'NA', 'NA', 'NA'
-    for binname, intersection in dict_.items():
-        tp, tn, fp, fn = binning.confusion_matrix(genome, binname)
-        f1 = 2*tp / (2*tp + fp + fn)
-        if bestf1 == 'NA' or f1 > bestf1:
-            bestf1 = f1
-            recall = tp / (tp + fn)
-            precision = tp / (tp + fp)
-            bestbin = binname
-
-    print('{}\t{}\t{}\t{}\t{}'.format(genome.name, bestbin, bestf1, recall, precision))
+for rank in range(len(binning.counters)):
+    binning.print_matrix(rank)
+    print("")

@@ -136,37 +136,42 @@ class Reader:
     """
 
     def __init__(self, filename, readmode='r'):
-        if readmode not in ('r', 'rb'):
+        if readmode not in ('r', 'rt', 'rb'):
             raise ValueError("the Reader cannot write, set mode to 'r' or 'rb'")
+        if readmode == 'r':
+            self.readmode = 'rt'
+        else:
+            self.readmode = readmode
 
         self.filename = filename
-        self.readmode = readmode
 
-    def __enter__(self):
-        readmode = 'rt' if self.readmode == 'r' else self.readmode
         with open(self.filename, 'rb') as f:
             signature = f.peek(8)[:8]
 
         # Gzipped files begin with the two bytes 0x1F8B
         if tuple(signature[:2]) == (0x1F, 0x8B):
-            self.filehandle = _gzip.open(self.filename, readmode)
+            self.filehandle = _gzip.open(self.filename, self.readmode)
 
         # bzip2 files begin with the signature BZ
         elif signature[:2] == b'BZ':
-            self.filehandle = _bz2.open(self.filename, readmode)
+            self.filehandle = _bz2.open(self.filename, self.readmode)
 
         # .XZ files begins with 0xFD377A585A0000
         elif tuple(signature[:7]) == (0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00):
-            self.filehandle = _lzma.open(self.filename, readmode)
+            self.filehandle = _lzma.open(self.filename, self.readmode)
 
         # Else we assume it's a text file.
         else:
-            self.filehandle = open(self.filename, readmode)
+            self.filehandle = open(self.filename, self.readmode)
 
-        return self.filehandle
+    def __enter__(self):
+        return self
 
     def __exit__(self, type, value, traceback):
         self.filehandle.close()
+
+    def __iter__(self):
+        return self.filehandle
 
 class FastaEntry:
     """One single FASTA entry"""
@@ -233,9 +238,11 @@ def byte_iterfasta(filehandle, comment=b'#'):
     linemask = bytes.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
                                b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
 
+    # Make it work for persistent iterators, e.g. lists
+    line_iterator = iter(filehandle)
     # Skip to first header
     try:
-        for probeline in filehandle:
+        for probeline in line_iterator:
             stripped = probeline.lstrip()
             if stripped.startswith(comment):
                 pass
@@ -257,7 +264,7 @@ def byte_iterfasta(filehandle, comment=b'#'):
     buffer = list()
 
     # Iterate over lines
-    for line in filehandle:
+    for line in line_iterator:
         if line.startswith(comment):
             pass
 
