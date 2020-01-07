@@ -34,6 +34,7 @@ def log(string, logfile, indent=0):
 def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength, logfile):
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
+    log('Minimum sequence length: {}'.format(mincontiglength), logfile, 1)
     # If no path to FASTA is given, we load TNF from .npz files
     if fastapath is None:
         log('Loading TNF from npz array {}'.format(tnfpath), logfile, 1)
@@ -71,6 +72,8 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     elapsed = round(time.time() - begintime, 2)
     ncontigs = len(contiglengths)
     nbases = contiglengths.sum()
+
+    print('', file=logfile)
     log('Kept {} bases in {} sequences'.format(nbases, ncontigs), logfile, 1)
 
     # Warn if too few contigs
@@ -81,7 +84,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
         log(warning, logfile, 1)
     log('Processed TNF in {} seconds'.format(elapsed), logfile, 1)
 
-    return tnfs, contignames
+    return tnfs, contignames, contiglengths
 
 def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, ncontigs,
               minalignscore, minid, subprocesses, logfile):
@@ -164,7 +167,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
 
     return mask, latent
 
-def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
+def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclusters,
             minclustersize, separator, cuda, logfile):
     begintime = time.time()
 
@@ -186,8 +189,8 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     if separator is not None:
         renamed = vamb.vambtools.binsplit(renamed, separator)
 
-    with open(os.path.join(outdir, 'clusters.tsv'), 'w') as clustersfile:
-        _ = vamb.cluster.write_clusters(clustersfile, renamed, max_clusters=maxclusters,
+    with open(clusterspath, 'w') as clustersfile:
+        _ = vamb.vambtools.write_clusters(clustersfile, renamed, max_clusters=maxclusters,
                                         min_size=minclustersize, rename=False)
     clusternumber, ncontigs = _
 
@@ -197,18 +200,53 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     elapsed = round(time.time() - begintime, 2)
     log('Clustered contigs in {} seconds'.format(elapsed), logfile, 1)
 
+def write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, minfasta, logfile):
+    begintime = time.time()
+
+    log('\nWriting FASTA files', logfile)
+    log('Minimum FASTA size: {}'.format(minfasta), logfile, 1)
+
+    lengthof = dict(zip(contignames, contiglengths))
+    filtered_clusters = dict()
+
+    with open(clusterspath) as file:
+        clusters = vamb.vambtools.read_clusters(file)
+
+    for cluster, contigs in clusters.items():
+        size = sum(lengthof[contig] for contig in contigs)
+        if size >= minfasta:
+            filtered_clusters[cluster] = clusters[cluster]
+
+    del lengthof, clusters
+    keep = set()
+    for contigs in filtered_clusters.values():
+        keep.update(set(contigs))
+
+    with vamb.vambtools.Reader(fastapath, 'rb') as file:
+        fastadict = vamb.vambtools.loadfasta(file, keep=keep)
+
+    vamb.vambtools.write_bins(os.path.join(outdir, "bins"), filtered_clusters, fastadict, maxbins=None)
+
+    ncontigs = sum(map(len, filtered_clusters.values()))
+    nfiles = len(filtered_clusters)
+    print('', file=logfile)
+    log('Wrote {} contigs to {} FASTA files'.format(ncontigs, nfiles), logfile, 1)
+
+    elapsed = round(time.time() - begintime, 2)
+    log('Wrote FASTA in {} seconds'.format(elapsed), logfile, 1)
+
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
         mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
         nepochs, batchsize, cuda, alpha, beta, dropout, lrate, batchsteps, windowsize,
-        minsuccesses, minclustersize, separator, maxclusters, logfile):
+        minsuccesses, minclustersize, separator, maxclusters, minfasta, logfile):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
 
     # Get TNFs, save as npz
-    tnfs, contignames = calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath,
-                                 mincontiglength, logfile)
+    tnfs, contignames, contiglengths = calc_tnf(outdir, fastapath, tnfpath, namespath,
+                                                lengthspath, mincontiglength, logfile)
 
     # Parse BAMs, save as npz
     refhash = None if norefcheck else vamb.parsebam._hash_refnames(contignames)
@@ -223,8 +261,15 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
-    cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
+    clusterspath = os.path.join(outdir, 'clusters.tsv')
+    cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclusters,
             minclustersize, separator, cuda, logfile)
+
+    del latent
+
+    if minfasta is not None:
+        write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, minfasta,
+        logfile)
 
     elapsed = round(time.time() - begintime, 2)
     log('\nCompleted Vamb in {} seconds'.format(elapsed), logfile)
@@ -279,6 +324,8 @@ def main():
                               '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
     inputos.add_argument('--norefcheck', help='skip reference name hashing check [False]',
                          action='store_true')
+    inputos.add_argument('--minfasta', dest='minfasta', metavar='', type=int, default=None,
+                         help='minimum bin size to output as fasta [None = no files]')
 
     # VAE arguments
     vaeos = parser.add_argument_group(title='VAE options', description=None)
@@ -363,6 +410,14 @@ def main():
         for bampath in args.bamfiles:
             if not os.path.isfile(bampath):
                 raise FileNotFoundError('Not an existing non-directory file: ' + bampath)
+
+    # Check minfasta settings
+    if args.minfasta is not None and args.fasta is None:
+        raise argparse.ArgumentTypeError('If minfasta is not None, '
+                                         'input fasta file must be given explicitly')
+
+    if args.minfasta < 0:
+        raise argparse.ArgumentTypeError('Minimum FASTA output size must be nonnegative')
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
     if args.minlength < 100:
@@ -470,6 +525,7 @@ def main():
             minclustersize=args.minsize,
             separator=args.separator,
             maxclusters=args.maxclusters,
+            minfasta=args.minfasta,
             logfile=logfile)
 
 if __name__ == '__main__':
