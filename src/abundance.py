@@ -34,7 +34,7 @@ with open(args.headerpath) as file:
     indexof = {line.strip():i for i,line in enumerate(file)}
 
 with open(args.clusterspath) as file:
-    clusters = vamb.cluster.read_clusters(file)
+    clusters = vamb.vambtools.read_clusters(file)
 
 # Check that all clusters names are in headers:
 for cluster in clusters.values():
