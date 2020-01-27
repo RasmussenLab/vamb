@@ -75,13 +75,6 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     print('', file=logfile)
     log('Kept {} bases in {} sequences'.format(nbases, ncontigs), logfile, 1)
-
-    # Warn if too few contigs
-    if ncontigs < 50000:
-        warning = ("WARNING: Running Vamb on fewer than 50,000 sequences might cause "
-        "overfitting of the VAE and poor results. Ideally, use 100k-5m sequences.")
-        print(warning, file=sys.stderr)
-        log(warning, logfile, 1)
     log('Processed TNF in {} seconds'.format(elapsed), logfile, 1)
 
     return tnfs, contignames, contiglengths
@@ -177,7 +170,8 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     log('Max clusters: {}'.format(maxclusters), logfile, 1)
     log('Min cluster size: {}'.format(minclustersize), logfile, 1)
     log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
-    log('Separator: "{}"'.format(separator), logfile, 1)
+    log('Separator: {}'.format(None if separator is None else ('"'+separator+'"')),
+        logfile, 1)
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
                               minsuccesses=minsuccesses, labels=contignames,
@@ -416,7 +410,7 @@ def main():
         raise argparse.ArgumentTypeError('If minfasta is not None, '
                                          'input fasta file must be given explicitly')
 
-    if args.minfasta < 0:
+    if args.minfasta is not None and args.minfasta < 0:
         raise argparse.ArgumentTypeError('Minimum FASTA output size must be nonnegative')
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########

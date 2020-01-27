@@ -174,14 +174,15 @@ class Reader:
         return self.filehandle
 
 class FastaEntry:
-    """One single FASTA entry"""
+    """One single FASTA entry. Instantiate with string header and bytearray
+    sequence."""
 
     basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
                                b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
     __slots__ = ['header', 'sequence']
 
     def __init__(self, header, sequence):
-        if header[0] in ('>', '#') or header[0].isspace():
+        if len(header) > 0 and (header[0] in ('>', '#') or header[0].isspace()):
             raise ValueError('Header cannot begin with #, > or whitespace')
         if '\t' in header:
             raise ValueError('Header cannot contain a tab')

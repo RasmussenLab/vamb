@@ -32,7 +32,7 @@ for path in args.clusterspath, args.refpath, args.taxpath:
         raise FileNotFoundError(path)
 
 with open(args.clusterspath) as file:
-    clusters = vamb.cluster.read_clusters(file)
+    clusters = vamb.vambtools.read_clusters(file)
 
 with open(args.refpath) as file:
     reference = vamb.benchmark.Reference.from_file(file)

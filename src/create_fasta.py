@@ -22,7 +22,7 @@ sys.path.append('../vamb')
 import vamb
 
 with open(args.clusterspath) as file:
-    clusters = vamb.cluster.read_clusters(file)
+    clusters = vamb.vambtools.read_clusters(file)
 
 with vamb.vambtools.Reader(args.fastapath, 'rb') as file:
     fastadict = vamb.vambtools.loadfasta(file)
