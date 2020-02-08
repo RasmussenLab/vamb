@@ -6,10 +6,29 @@ Usage:
 """
 
 import sys as _sys
+import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 
-def read_contigs(filehandle, minlength=100, preallocate=False):
+_KERNEL = _vambtools.read_npz(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                              "kernel.npz"))
+
+def _project(fourmers, kernel=_KERNEL):
+    "Project fourmers down in dimensionality"
+    s = fourmers.sum(axis=1).reshape(-1, 1)
+    s[s == 0] = 1.0
+    fourmers *= 1/s
+    fourmers += -(1/256)
+    return _np.dot(fourmers, kernel)
+
+def _convert(raw, projected):
+    "Move data from raw PushArray to projected PushArray, converting it."
+    raw_mat = raw.take().reshape(-1, 256)
+    projected_mat = _project(raw_mat)
+    projected.extend(projected_mat.ravel())
+    raw.clear()
+
+def read_contigs(filehandle, minlength=100):
     """Parses a FASTA file open in binary reading mode.
 
     Input:
@@ -26,12 +45,8 @@ def read_contigs(filehandle, minlength=100, preallocate=False):
     if minlength < 4:
         raise ValueError('Minlength must be at least 4, not {}'.format(minlength))
 
-    if preallocate:
-        print("Warning: Argument 'preallocate' in function read_contigs is deprecated."
-        " read_contigs is now always memory efficient.",
-        file=_sys.stderr)
-
-    tnfs = _vambtools.PushArray(_np.float32)
+    raw = _vambtools.PushArray(_np.float32)
+    projected = _vambtools.PushArray(_np.float32)
     lengths = _vambtools.PushArray(_np.int)
     contignames = list()
 
@@ -41,11 +56,19 @@ def read_contigs(filehandle, minlength=100, preallocate=False):
         if len(entry) < minlength:
             continue
 
-        tnfs.extend(entry.fourmer_freq())
+        fourmers = entry.kmercounts(4)
+        raw.extend(_np.array(fourmers, dtype=_np.float32))
+
+        if raw.length > 256000:
+            _convert(raw, projected)
+
         lengths.append(len(entry))
         contignames.append(entry.header)
 
-    tnfs_arr = tnfs.take().reshape(-1, 136)
+    if raw.length > 0:
+        _convert(raw, projected)
+
+    tnfs_arr = projected.take().reshape(-1, 103)
     lengths_arr = lengths.take()
 
     return tnfs_arr, contignames, lengths_arr

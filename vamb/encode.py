@@ -41,7 +41,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
 
     Inputs:
         rpkm: RPKM matrix (N_contigs x N_samples)
-        tnf: TNF matrix (N_contigs x 136)
+        tnf: TNF matrix (N_contigs x N_TNF)
         batchsize: Starting size of minibatches for dataloader
         destroy: Mutate rpkm and tnf array in-place instead of making a copy.
         cuda: Pagelock memory of dataloader (use when using GPU acceleration)
@@ -59,9 +59,6 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
 
     if len(rpkm) != len(tnf):
         raise ValueError('Lengths of RPKM and TNF must be the same')
-
-    if tnf.shape[1] != 136:
-        raise ValueError('TNF must be length 136 long along axis 1')
 
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
@@ -94,7 +91,7 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
         _vambtools.zscore(rpkm, axis=0, inplace=True)
 
     # Normalize arrays and create the Tensors (the tensors share the underlying memory)
-    # if the Numpy arrays
+    # of the Numpy arrays
     _vambtools.zscore(tnf, axis=0, inplace=True)
     depthstensor = _torch.from_numpy(rpkm)
     tnftensor = _torch.from_numpy(tnf)
@@ -163,6 +160,7 @@ class VAE(_nn.Module):
         # Initialize simple attributes
         self.usecuda = cuda
         self.nsamples = nsamples
+        self.ntnf = 103
         self.alpha = alpha
         self.beta = beta
         self.nhiddens = nhiddens
@@ -176,7 +174,7 @@ class VAE(_nn.Module):
         self.decodernorms = _nn.ModuleList()
 
         # Add all other hidden layers
-        for nin, nout in zip([self.nsamples + 136] + self.nhiddens, self.nhiddens):
+        for nin, nout in zip([self.nsamples + self.ntnf] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
@@ -190,7 +188,7 @@ class VAE(_nn.Module):
             self.decodernorms.append(_nn.BatchNorm1d(nout))
 
         # Reconstruction (output) layer
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + 136)
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + self.ntnf)
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
@@ -249,7 +247,7 @@ class VAE(_nn.Module):
 
         # Decompose reconstruction to depths and tnf signal
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
-        tnf_out = reconstruction.narrow(1, self.nsamples, 136)
+        tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
 
         # If multiple samples, apply softmax
         if self.nsamples > 1:
@@ -277,7 +275,7 @@ class VAE(_nn.Module):
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-        sse_weight = self.alpha / 136
+        sse_weight = self.alpha / 103
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
 

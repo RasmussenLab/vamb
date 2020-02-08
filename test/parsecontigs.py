@@ -60,7 +60,7 @@ with open(badfasta_path, 'rb') as file:
     try:
         entries = list(vamb.vambtools.byte_iterfasta(file))
     except ValueError as error:
-        assert error.args == ("Non-IUPAC DNA in line 7: 'P'",)
+        assert error.args == ("Non-IUPAC DNA byte in sequence badseq: 'P'",)
     else:
         raise AssertionError("Didn't fail at opening fad FASTA file")
 
@@ -79,24 +79,66 @@ with vamb.vambtools.Reader(gzip_path, 'rb') as file:
 assert len(contigs) == len(contigs2)
 assert all(i.sequence == j.sequence for i,j in zip(contigs, contigs2))
 
+# Test RC kernel
+sys.path.append(os.path.join(parentdir, "src"))
+import create_kernel
+
+rc_kernel = create_kernel.create_rc_kernel()
+
+def manual_rc_assert(counts):
+    indexof = {kmer:i for i,kmer in enumerate(create_kernel.all_kmers(4))}
+    cp = counts.copy()
+    for row in range(len(counts)):
+        for kmer in create_kernel.all_kmers(4):
+            rc = create_kernel.reverse_complement(kmer)
+            mean = (counts[row, indexof[kmer]] + counts[row, indexof[rc]]) / 2
+            cp[row, indexof[kmer]] = mean
+
+    return cp
+
+# Skip zero-length contigs with no 4mers
+counts = [contig.kmercounts(4) for contig in contigs[:3]]
+counts = np.array(counts, dtype=np.float32)
+
+counts /= counts.sum(axis=1).reshape(-1, 1)
+counts -= 1/256
+
+assert np.all(abs(manual_rc_assert(counts) - np.dot(counts, rc_kernel)) < 1e-6)
+
+# Test projection kernel
+contig = vamb.vambtools.FastaEntry('x', contigs[0].sequence*10000)
+counts = np.array(contig.kmercounts(4), dtype=np.float32)
+counts /= counts.sum()
+counts -= 1/256
+counts = np.dot(counts, rc_kernel)
+kernel = create_kernel.create_projection_kernel()
+
+projected = np.dot(counts, kernel)
+recreated = np.dot(kernel, projected)
+
+assert np.all(np.abs(counts - recreated) < 1e-6)
+
+# Test unified kernel
+assert np.all(np.abs(vamb.parsecontigs._KERNEL - np.dot(rc_kernel, kernel)) < 1e-7)
+
 # Test read_contigs
-for preallocate in True, False:
-    with open(fasta_path, 'rb') as file:
-        tnf, contignames, contiglengths = vamb.parsecontigs.read_contigs(file, preallocate=preallocate, minlength=100)
 
-    assert len(tnf) == len([i for i in contigs if len(i) >= 100])
-    assert all(i-1e-8 < j < i+1e-8 for i,j in zip(tnf[2], contig3_tnf_observed))
+with open(fasta_path, 'rb') as file:
+    tnf, contignames, contiglengths = vamb.parsecontigs.read_contigs(file, minlength=100)
 
-    assert contignames == ['Sequence1_100nt_no_special',
-     'Sequence2 100nt whitespace in header',
-     'Sequence3 150 nt, all ambiguous bases',
-     'Sequence6 150 nt, same as seq4 but mixed case']
+assert len(tnf) == len([i for i in contigs if len(i) >= 100])
+#assert all(i-1e-8 < j < i+1e-8 for i,j in zip(tnf[2], contig3_tnf_observed))
 
-    assert np.all(contiglengths == np.array([len(i) for i in contigs if len(i) >= 100]))
+assert contignames == ['Sequence1_100nt_no_special',
+ 'Sequence2 100nt whitespace in header',
+ 'Sequence3 150 nt, all ambiguous bases',
+ 'Sequence6 150 nt, same as seq4 but mixed case']
+
+assert np.all(contiglengths == np.array([len(i) for i in contigs if len(i) >= 100]))
 
 bigpath = os.path.join(parentdir, 'test', 'data', 'bigfasta.fna.gz')
 with vamb.vambtools.Reader(bigpath, 'rb') as f:
     tnf, _, __ = vamb.parsecontigs.read_contigs(f)
 
-target_tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
-assert np.all(abs(tnf - target_tnf) < 1e-8)
+#target_tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
+#assert np.all(abs(tnf - target_tnf) < 1e-8)

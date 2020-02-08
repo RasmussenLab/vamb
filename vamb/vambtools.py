@@ -3,11 +3,11 @@ import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
+from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 
 class PushArray:
-    """Data structure that allows efficient appending and extending a Numpy array.
+    """Data structure that allows efficient appending and extending a 1D Numpy array.
     Intended to strike a balance between not resizing too often (which is slow), and
     not allocating too much at a time (which is memory inefficient).
 
@@ -26,13 +26,16 @@ class PushArray:
         self.data = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
 
+    def _setcapacity(self, n):
+        self.data.resize(n, refcheck=False)
+        self.capacity = n
+
     def _grow(self, mingrowth):
         """Grow capacity by power of two between 1/8 and 1/4 of current capacity, though at
         least mingrowth"""
         growth = max(int(self.capacity * 0.125), mingrowth)
         nextpow2 = 1 << (growth - 1).bit_length()
-        self.capacity = self.capacity + nextpow2
-        self.data.resize(self.capacity, refcheck=False)
+        self._setcapacity(self.capacity + nextpow2)
 
     def append(self, value):
         if self.length == self.capacity:
@@ -51,9 +54,12 @@ class PushArray:
 
     def take(self):
         "Return the underlying array"
-        self.data.resize(self.length, refcheck=False)
-        self.capacity = self.length
+        self._setcapacity(self.length)
         return self.data
+
+    def clear(self, size=1<<16):
+        self.length = 0
+        self._setcapacity(size)
 
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -218,9 +224,6 @@ class FastaEntry:
         if k < 1 or k > 10:
             raise ValueError('k must be between 1 and 10 inclusive')
         return _kmercounts(self.sequence, k)
-
-    def fourmer_freq(self):
-        return _fourmerfreq(self.sequence)
 
 def byte_iterfasta(filehandle, comment=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
