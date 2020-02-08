@@ -125,7 +125,7 @@ __3) Concatenate the FASTA files together while making sure all contig headers s
 
 You can use the function `vamb.vambtools.concatenate_fasta` for this (available only in v. 2.1.0 or above).
 
-:warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs. If you have fewer than this number, we don't know how the autoencoder will have behave, so we suggest using MetaBAT2 instead of Vamb.
+:warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs.
 
 You should not try to bin very short sequences. When deciding the length cutoff for your input sequences, there's a tradeoff here between choosing a too low cutoff, retaining hard-to-bin contigs which adversely affects the binning of *all* contigs, and choosing a too high one, throwing out good data. We use a length cutoff of 2000 bp as default but haven't actually run tests for the optimal value.
 
