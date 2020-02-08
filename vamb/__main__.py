@@ -132,7 +132,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('\nCreating and training VAE', logfile)
 
     nsamples = rpkms.shape[1]
-    vae = vamb.encode.VAE(nsamples=nsamples, nhiddens=nhiddens, nlatent=nlatent,
+    vae = vamb.encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent,
                             alpha=alpha, beta=beta, dropout=dropout, cuda=cuda)
 
     log('Created VAE', logfile, 1)
