@@ -56,16 +56,15 @@ def read_contigs(filehandle, minlength=100):
         if len(entry) < minlength:
             continue
 
-        fourmers = entry.kmercounts(4)
-        raw.extend(_np.array(fourmers, dtype=_np.float32))
+        raw.extend(entry.kmercounts(4))
 
-        if raw.length > 256000:
+        if len(raw) > 256000:
             _convert(raw, projected)
 
         lengths.append(len(entry))
         contignames.append(entry.header)
 
-    if raw.length > 0:
+    if len(raw) > 0:
         _convert(raw, projected)
 
     tnfs_arr = projected.take().reshape(-1, 103)

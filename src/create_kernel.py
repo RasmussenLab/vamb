@@ -1,12 +1,13 @@
 __doc__ = """Create kernel for use in kmer frequencies.
-Method copied from See https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2765972/
+Method copied from https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2765972/
 
 Principle:
 There are 256 tetranucleotides, so a frequency distribution (tetranucleotide frequency, TNF)
 is a length 256 vector. But the individual TNFs are not independent. For example, AAAT
 must correlate highly with AATA. The TNFs are subject to at least 3 linear constrains:
 
-1) The vector must sum to one.
+1) The vector must sum to one. We simply shift the TNF down by 1/256 to make it sum to zero
+for simplicity instead.
 2) We cannot distinguish between a kmer and its reverse complement because the sequencede
 strand is arbitrary. So we must count e.g. AGAT as one half of AGAT and one half ATCT.
 So each kmer's frequency is the same as its reverse-complement.
@@ -45,10 +46,10 @@ def create_projection_kernel():
     indexof = {kmer:i for i,kmer in enumerate(all_kmers(4))}
     linear_equations = list()
 
-    # Constraint one: Sum to one
+    # Constraint one: Frequencies sum to one (or in this scaled case, zero)
     linear_equations.append([1]*256)
 
-    # Constaint two: Same as reverse complement
+    # Constaint two: Frequencies are same as that of reverse complement
     for kmer in all_kmers(4):
         revcomp = reverse_complement(kmer)
 
@@ -61,7 +62,7 @@ def create_projection_kernel():
         line[indexof[revcomp]] = -1
         linear_equations.append(line)
 
-    # Constraint three: ABCx = xABC
+    # Constraint three: sum(ABCx) = sum(xABC)
     for trimer in all_kmers(3):
         line = [0]*256
         for suffix in "ACGT":
@@ -71,12 +72,13 @@ def create_projection_kernel():
         linear_equations.append(line)
 
     linear_equations = np.array(linear_equations)
-    kernel = null_space(linear_equations)
+    kernel = null_space(linear_equations).astype(np.float32)
+    assert kernel.shape == (256, 103)
     return kernel
 
 def create_rc_kernel():
     indexof = {kmer:i for i,kmer in enumerate(all_kmers(4))}
-    rc_matrix = np.zeros((256, 256))
+    rc_matrix = np.zeros((256, 256), dtype=np.float32)
     for col, kmer in enumerate(all_kmers(4)):
         revcomp = reverse_complement(kmer)
         rc_matrix[indexof[kmer], col] += 0.5
@@ -84,12 +86,9 @@ def create_rc_kernel():
 
     return rc_matrix
 
-projection_kernel = create_projection_kernel()
-assert projection_kernel.shape == (256, 103)
+def create_dual_kernel():
+    return np.dot(create_rc_kernel(), create_projection_kernel())
 
-rc_kernel = create_rc_kernel()
-dual_kernel = np.dot(rc_kernel, projection_kernel).astype(np.float32)
-
+dual_kernel = create_dual_kernel()
 path = join(dirname(dirname(abspath(__file__))), "vamb", "kernel.npz")
-
 np.savez_compressed(path, dual_kernel)

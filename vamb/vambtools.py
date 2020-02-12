@@ -1,3 +1,5 @@
+__doc__ = "Various classes and functions Vamb uses internally."
+
 import os as _os
 import gzip as _gzip
 import bz2 as _bz2
@@ -25,6 +27,9 @@ class PushArray:
         self.capacity = start_capacity
         self.data = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
+
+    def __len__(self):
+        return self.length
 
     def _setcapacity(self, n):
         self.data.resize(n, refcheck=False)
@@ -57,9 +62,11 @@ class PushArray:
         self._setcapacity(self.length)
         return self.data
 
-    def clear(self, size=1<<16):
+    def clear(self, force=False):
+        "Empties the PushArray. If force is true, also truncates the underlying memory."
         self.length = 0
-        self._setcapacity(size)
+        if force:
+            self._setcapacity(0)
 
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -184,7 +191,7 @@ class FastaEntry:
     sequence."""
 
     basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
-                               b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
+                                   b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
     __slots__ = ['header', 'sequence']
 
     def __init__(self, header, sequence):
@@ -223,7 +230,10 @@ class FastaEntry:
     def kmercounts(self, k):
         if k < 1 or k > 10:
             raise ValueError('k must be between 1 and 10 inclusive')
-        return _kmercounts(self.sequence, k)
+
+        counts = _np.zeros(1 << (2*k), dtype=_np.int32)
+        _kmercounts(self.sequence, k, counts)
+        return counts
 
 def byte_iterfasta(filehandle, comment=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
