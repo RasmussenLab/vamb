@@ -14,16 +14,14 @@ Usage:
 
 __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 
-import sys as _sys
-import os as _os
 import numpy as _np
 import torch as _torch
 
 from math import log as _log
 
 from torch import nn as _nn
-from torch import optim as _optim
-from torch.nn import functional as _F
+from torch.optim import Adam as _Adam
+from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
@@ -251,7 +249,7 @@ class VAE(_nn.Module):
 
         # If multiple samples, apply softmax
         if self.nsamples > 1:
-            depths_out = _F.softmax(depths_out, dim=1)
+            depths_out = _softmax(depths_out, dim=1)
 
         return depths_out, tnf_out
 
@@ -469,7 +467,7 @@ class VAE(_nn.Module):
 
         # Get number of features
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape
-        optimizer = _optim.Adam(self.parameters(), lr=lrate)
+        optimizer = _Adam(self.parameters(), lr=lrate)
 
         if logfile is not None:
             print('\tNetwork properties:', file=logfile)
