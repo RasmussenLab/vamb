@@ -506,38 +506,47 @@ def filtercontigs(infile, outfile, minlength=2000):
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
 
-def concatenate_fasta(outpath, inpaths, minlength=2000):
-    """Creates a new FASTA file from input paths, and rename contig headers
+def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
+    """Creates a new FASTA file from input paths, and optionally rename contig headers
     to the pattern "S{sample number}C{contig identifier}".
 
     Inputs:
-        outpath: Path to FASTA file to create
+        outpath: Open filehandle for output file
         inpaths: Iterable of paths to FASTA files to read from
         minlength: Minimum contig length to keep [2000]
+        rename: Rename headers
 
     Output: None
     """
 
-    with open(outpath, "w") as outfile:
-        for (inpathno, inpath) in enumerate(inpaths):
+    headers = set()
+    for (inpathno, inpath) in enumerate(inpaths):
+        with Reader(inpath, "rb") as infile:
 
-            with open(inpath, "rb") as infile:
-                identifiers = set()
-                entries = byte_iterfasta(infile)
-                for entry in entries:
+            # If we rename, seq headers only have to be unique for each sample
+            if rename:
+                headers.clear()
+            entries = byte_iterfasta(infile)
 
-                    if len(entry) < minlength:
-                        continue
+            for entry in entries:
+                if len(entry) < minlength:
+                    continue
 
-                    header = entry.header
+                header = entry.header
+                identifier = header.split()[0]
 
-                    identifier = header.split()[0]
-                    if identifier in identifiers:
-                        raise ValueError("Multiple sequences have identifier {}"
-                                         "in file {}".format(identifier, inpath))
+                if rename:
                     newheader = "S{}C{}".format(inpathno + 1, identifier)
-                    entry.header = newheader
-                    print(entry.format(), file=outfile)
+                else:
+                    newheader = identifier
+
+                if newheader in headers:
+                    raise ValueError("Multiple sequences would be given "
+                                     "header {}.".format(newheader))
+                headers.add(newheader)
+
+                entry.header = newheader
+                print(entry.format(), file=outfile)
 
 def load_jgi(filehandle):
     """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
