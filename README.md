@@ -40,6 +40,44 @@ If you can't/don't want to use pip/Conda, you can do it the hard way: Get the mo
 
 # Running
 
+For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.
+For more command-line options, see the command-line help menu:
+```
+vamb -h
+```
+
+## TL;DR: Here's how to run Vamb
+
+For this example, let us suppose you have a directory of short (e.g. Illumina) reads in a
+directory `/path/to/reads`, and that _you have already quality controlled them_.
+
+1. Run your favorite metagenomic assembler on each sample individually:
+
+```
+spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
+-k 21,29,39,59,79,99 -t 24 -m 100gb -o /path/to/assemblies/sample1
+```
+
+2. Use Vamb's `src/concatenate.py` to make the FASTA catalogue of all your assemblies:
+
+```
+python src/concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
+/path/to/assemblies/sample2/contigs.fasta  [ ... ]
+```
+
+3. Use your favorite short-read aligner to map each your read files back to the resulting FASTA file:
+
+```
+minimap2 -I 50G -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
+minimap2 -t 8 -N 50 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
+```
+
+4. Run Vamb:
+
+```
+vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C
+```
+
 ## Invoking Vamb
 
 After installation with pip, Vamb will show up in your PATH variable, and you can simply run:
@@ -59,27 +97,6 @@ You can also run the inner `vamb` directory as a script. This will work even if 
 ```
 python my_scripts/vamb/vamb
 ```
-
-## Example command to run Vamb
-
-Vamb with default inputs (a FASTA file and some BAM files) can be executed like so:
-
-```
-vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam
-```
-
-You probably want to split your bins by sample to deduplicate them and preserve strain variation, if so you should use a binsplitting separator (see the section on the FASTA file preparation under "Recommended workflow"). If your separator is "C", add `-o C`:
-
-```
-vamb --outdir vambout --fasta /path/to/file.fasta --bamfiles /path/to/bamfiles/*.bam -o C
-```
-
-For more command-line options, see the command-line help menu:
-```
-vamb -h
-```
-
-For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.
 
 # Inputs and outputs
 
@@ -123,7 +140,7 @@ We recommend using metaSPAdes on each sample individually. You can also use scaf
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique, and filter away small contigs__
 
-You can use the function `vamb.vambtools.concatenate_fasta` for this (available only in v. 2.1.0 or above).
+You can use the function `vamb.vambtools.concatenate_fasta` for this (available only in v. 2.1.0 or above), or the script `src/concatenate.py`. (available only in v 2.3.0 or above.)
 
 :warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs.
 
