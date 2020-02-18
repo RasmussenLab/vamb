@@ -1,0 +1,37 @@
+New features:
+Support for PyTorch 1.2
+Support for CUDA-accelerated clustering
+Now writes lengths.npz, a vector of contig lengths to output directory.
+Now checks BAM files' is not present, unsorted or sorted by readname
+Now checks that the references in BAM file are same as references in FASTA file
+
+Bugfixes:
+Correctly compensate for float rounding error in cluster histogram function
+Fixed bug where RPKM were consistently half their true value
+Fixed a bug where all-zero rows could not be clustered
+make_dataloader now no longer crashes when passed destroy=True
+Fixed a NameError bug in vambtools.filterfasta that made it unusable
+If specified more than 8 cores for bam file parsing, now actually uses more cores.
+Fixed wrong error message if input contiglength npz array was not of integer type
+Correctly print batchsteps in VAE training if they are None
+Now raises a legible error if running Vamb on command line and length of RPKM and TNF does not match, even if refhashing is disabled.
+Now also creates a rpkm.npz file if depths input is a JGI file.
+
+Internal (interpreter-use) behaviour change
+New function: vambtools.concatenate_fasta, which creates a concatenated sequence catalogue from multiple FASTA files, renames the sequences to conform to binsplitting, and makes sure the headers are unique.
+New function: Added function parsebam.count_reads, that counts mapping read in BAM file
+New function: parsebam.calc_rpkm that calculates RPKM from read counts and contig lengths
+Removed function: Pearson correlation based clustering is no longer available
+When labels is None, vamb.cluster.cluster now returns an interator of indices, not indices + 1
+cluster.write_clusters now has a "rename" keyword. It will not rename clusters if set to False.
+vambtools.loadfasta and vambtools.write_bins now has keywords "compress" and "compressed" (False by default), which causes sequences to be stored in compressed form.
+parsebam.read_bamfiles now takes argument refhash, which shold be None or md5 hash that the references must hash to.
+Argument minlength can now consistently be passed as None in functions of module parsebam, similar to the other filtering parameters.
+benchmark.Contig is no longer immutable, and can now be desrialized using pickle.
+
+Misc:
+Improved validation of command line options
+Now handles whitespace in FASTA sequences (tabs, and spaces only)
+Increased numerical stability in RPKM estimation
+Numerous documentation and performance improvements
+Now warns user that VAE may overfit if less than 50,000 contigs are kept.

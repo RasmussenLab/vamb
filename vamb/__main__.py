@@ -31,7 +31,7 @@ def log(string, logfile, indent=0):
     print(('\t' * indent) + string, file=logfile)
     logfile.flush()
 
-def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength, logfile):
+def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength, kmersize, logfile):
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
     # If no path to FASTA is given, we load TNF from .npz files
@@ -61,8 +61,9 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     # Else parse FASTA files
     else:
         log('Loading data from FASTA file {}'.format(fastapath), logfile, 1)
+        log('Kmer size: {}'.format(kmersize), logfile, 1)
         with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
-            ret = vamb.parsecontigs.read_contigs(tnffile,
+            ret = vamb.parsecontigs.read_contigs(tnffile, kmersize,
                                                  minlength=mincontiglength,
                                                  preallocate=True)
         tnfs, contignames, contiglengths = ret
@@ -139,7 +140,8 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('\nCreating and training VAE', logfile)
 
     nsamples = rpkms.shape[1]
-    vae = vamb.encode.VAE(nsamples=nsamples, nhiddens=nhiddens, nlatent=nlatent,
+    ntnfs = tnfs.shape[1]
+    vae = vamb.encode.VAE(nsamples=nsamples, ntnfs=ntnfs, nhiddens=nhiddens, nlatent=nlatent,
                             alpha=alpha, beta=beta, dropout=dropout, cuda=cuda)
 
     log('Created VAE', logfile, 1)
@@ -201,7 +203,7 @@ def cluster(outdir, latent, contignames, windowsize, minsuccesses, maxclusters,
     log('Clustered contigs in {} seconds'.format(elapsed), logfile, 1)
 
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
-        mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
+        mincontiglength, kmersize, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
         nepochs, batchsize, cuda, alpha, beta, dropout, lrate, batchsteps, windowsize,
         minsuccesses, minclustersize, separator, maxclusters, logfile):
 
@@ -211,7 +213,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
 
     # Get TNFs, save as npz
     tnfs, contignames = calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath,
-                                 mincontiglength, logfile)
+                                 mincontiglength, kmersize, logfile)
 
     # Parse BAMs, save as npz
     refhash = None if norefcheck else vamb.parsebam._hash_refnames(contignames)
@@ -271,6 +273,8 @@ def main():
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
 
+    inputos.add_argument('-k', dest='kmersize', metavar='', type=int, default=4,
+                         help='size of kmers [4]')
     inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
                          help='ignore contigs shorter than this [100]')
     inputos.add_argument('-s', dest='minascore', metavar='', type=int, default=None,
@@ -368,6 +372,9 @@ def main():
                 raise FileNotFoundError('Not an existing non-directory file: ' + bampath)
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
+    if args.kmersize not in range(1,6):
+        raise argparse.ArgumentTypeError('Kmer size must be in 1:5')
+
     if args.minlength < 100:
         raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
 
@@ -454,6 +461,7 @@ def main():
             args.rpkm,
             args.jgi,
             mincontiglength=args.minlength,
+            kmersize=args.kmersize,
             norefcheck=args.norefcheck,
             minalignscore=args.minascore,
             minid=args.minid,

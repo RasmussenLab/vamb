@@ -10,29 +10,44 @@ import os as _os
 import numpy as _np
 import gzip as _gzip
 import vamb.vambtools as _vambtools
+import itertools as _itertools
 
-def _read_contigs_online(filehandle, minlength):
-    "Reads file once saving time, but has to internally copy sequences wasting memory."
-    tnfs = list()
-    contignames = list()
-    lengths = list()
+def _reverse_complement(kmer, table=str.maketrans("ACGT", "TGCA")):
+    return kmer.translate(table)[::-1]
 
-    entries = _vambtools.byte_iterfasta(filehandle)
+def _canonical_kmer_freq(kmers, k):
+    assert kmers.ndim == 2
+    assert kmers.shape[1] == 4**k
+    assert k in range(1, 6)
+    ncan = [0, 2, 10, 32, 136, 512][k]
 
-    for entry in entries:
-        if len(entry) < minlength:
-            continue
 
-        tnfs.append(entry.fourmer_freq())
-        contignames.append(entry.header)
-        lengths.append(len(entry))
+    # Create lookup table to reverse complement
+    rc_indexof = dict()
+    rc_indices = [0] * (4**k)
+    for i, _kmer in enumerate(_itertools.product("ACGT", repeat=k)):
+        kmer = ''.join(_kmer)
+        canonical = min(kmer, _reverse_complement(kmer))
 
-    lengths = _np.array(lengths, dtype=_np.int)
-    tnfs = _np.array(tnfs, dtype=_np.float32)
+        if canonical in rc_indexof:
+            rc_index = rc_indexof[canonical]
+        else:
+            rc_index = len(rc_indexof)
+            rc_indexof[canonical] = rc_index
 
-    return tnfs, contignames, lengths
+        rc_indices[i] = rc_index
 
-def _read_contigs_preallocated(filehandle, minlength):
+    result = _np.zeros((len(kmers), ncan), dtype=_np.float32)
+    for src, dst in enumerate(rc_indices):
+        result[:, dst] += kmers[:, src]
+
+    nkmers = kmers.sum(axis=1).reshape((-1, 1))
+    assert _np.all(nkmers > 1)
+    result /= nkmers
+
+    return result
+
+def _read_contigs_preallocated(filehandle, minlength, k):
     "Reads file twice wasting time, but does no copying, saving memory."
     n_entries = 0
     entries = _vambtools.byte_iterfasta(filehandle)
@@ -41,7 +56,8 @@ def _read_contigs_preallocated(filehandle, minlength):
          if len(entry) >= minlength:
              n_entries += 1
 
-    tnfs = _np.empty((n_entries, 136), dtype=_np.float32)
+
+    kmers = _np.empty((n_entries, 4**k), dtype=_np.int32)
     contignames = [None] * n_entries
     lengths = _np.empty(n_entries, dtype=_np.int)
 
@@ -52,19 +68,22 @@ def _read_contigs_preallocated(filehandle, minlength):
         if len(entry) < minlength:
             continue
 
-        tnfs[entrynumber] = entry.fourmer_freq()
+        kmers[entrynumber] = entry.kmercounts(k)
         contignames[entrynumber] = entry.header
         lengths[entrynumber] = len(entry)
 
         entrynumber += 1
 
-    return tnfs, contignames, lengths
+    freq = _canonical_kmer_freq(kmers, k)
 
-def read_contigs(filehandle, minlength=100, preallocate=True):
+    return freq, contignames, lengths
+
+def read_contigs(filehandle, k, minlength=100, preallocate=True):
     """Parses a FASTA file open in binary reading mode.
 
     Input:
         filehandle: Filehandle open in binary mode of a FASTA file
+        k: kmer size
         minlength: Ignore any references shorter than N bases [100]
         preallocate: Read contigs twice, saving memory [True]
 
@@ -78,6 +97,6 @@ def read_contigs(filehandle, minlength=100, preallocate=True):
         raise ValueError('Minlength must be at least 4, not {}'.format(minlength))
 
     if preallocate:
-        return _read_contigs_preallocated(filehandle, minlength)
+        return _read_contigs_preallocated(filehandle, minlength, k)
     else:
         return _read_contigs_online(filehandle, minlength)
