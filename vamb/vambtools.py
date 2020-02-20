@@ -407,7 +407,11 @@ def load_jgi(filehandle):
         raise ValueError('Input file format error: 5th column should contain variances.')
 
     columns = tuple(range(3, len(fields), 2))
-    return _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
+    array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
+
+    # Array is now a transpose, which can violate some assumptions like that it
+    # owns it own data. Copy to make a fresh array with own data.
+    return array.copy()
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
