@@ -120,8 +120,6 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
                                             minlength=mincontiglength, minid=minid,
                                             subprocesses=subprocesses, logfile=logfile)
         print('', file=logfile)
-
-    if rpkmpath is None:
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
 
