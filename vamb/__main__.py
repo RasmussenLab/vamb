@@ -174,10 +174,9 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
         logfile, 1)
 
     it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
-                              minsuccesses=minsuccesses, labels=contignames,
-                              logfile=logfile, cuda=cuda)
+                              minsuccesses=minsuccesses, logfile=logfile, cuda=cuda)
 
-    renamed = ((str(i+1), cluster) for (i, (_, cluster)) in enumerate(it))
+    renamed = ((str(i+1), c.as_tuple(contignames)[1]) for (i, c) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
@@ -185,7 +184,7 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
 
     with open(clusterspath, 'w') as clustersfile:
         _ = vamb.vambtools.write_clusters(clustersfile, renamed, max_clusters=maxclusters,
-                                        min_size=minclustersize, rename=False)
+                                          min_size=minclustersize, rename=False)
     clusternumber, ncontigs = _
 
     print('', file=logfile)
