@@ -32,7 +32,7 @@ _NORMALPDF = _DELTA_X * _torch.Tensor(
        2.66955661e-08, 9.13472041e-10, 2.43432053e-11])
 
 # Distance within which to search for medoid point
-_MEDOID_RADIUS = 0.05
+_MEDOID_RADIUS = 0.07
 
 class Cluster:
     __slots__ = ['medoid', 'seed', 'members', 'pvr', 'radius', 'isdefault', 'successes', 'attempts']
@@ -286,6 +286,7 @@ def _findcluster(matrix, indices, kept_mask, histogram, seed, peak_valley_ratio,
             if len(attempts) == attempts.maxlen and successes < minsuccesses:
                 peak_valley_ratio += 0.1
                 attempts.clear()
+                successes = 0
 
     # These are the points of the final cluster AFTER establishing the threshold used
     points = _smaller_indices(distances, kept_mask, threshold, cuda)
