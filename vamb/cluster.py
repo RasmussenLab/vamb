@@ -70,6 +70,184 @@ class Cluster:
   pvr:       {:.1f}
   """.format(self.medoid, len(self.members), self.seed, radius, self.successes, self.attempts, self.pvr)
 
+class ClusterGenerator:
+    """Iterative medoid cluster generator. Iterate this object to get clusters.
+
+    Inputs:
+        matrix: A (obs x features) Numpy matrix of data type numpy.float32
+        maxsteps: Stop searching for optimal medoid after N futile attempts [25]
+        default: Fallback threshold if cannot be estimated [0.09]
+        windowsize: Length of window to count successes [200]
+        minsuccesses: Minimum acceptable number of successes [15]
+        destroy: Save memory by destroying matrix while clustering [False]
+        normalized: Matrix is already preprocessed [False]
+    """
+    def _check_params(self, matrix, maxsteps, windowsize, minsuccesses):
+        """Checks matrix, and maxsteps."""
+
+        if matrix.dtype != _np.float32:
+            raise(ValueError("Matrix must be of dtype float32"))
+
+        if maxsteps < 1:
+            raise ValueError('maxsteps must be a positive integer, not {}'.format(maxsteps))
+
+        if windowsize < 1:
+            raise ValueError('windowsize must be at least 1, not {}'.format(windowsize))
+
+        if minsuccesses < 1 or minsuccesses > windowsize:
+            raise ValueError('minsuccesses must be between 1 and windowsize, not {}'.format(minsuccesses))
+
+        if len(matrix) < 1:
+            raise ValueError('Matrix must have at least 1 observation.')
+
+    def _init_histogram_kept_mask(self, N):
+        "N is number of contigs"
+        if _torch.__version__ >= '1.2':
+            # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
+            cuda_hist_dtype = _torch.float
+            # Masking using uint8 tensors deprecated in PyTorch 1.2
+            kept_mask_dtype = _torch.bool
+        else:
+            cuda_hist_dtype = _torch.long
+            kept_mask_dtype = _torch.uint8
+
+        kept_mask = _torch.ones(N, dtype=kept_mask_dtype)
+
+        if self.CUDA:
+            histogram = _torch.empty(_ceil(_XMAX/_DELTA_X), dtype=cuda_hist_dtype).cuda()
+            kept_mask = kept_mask.cuda()
+        else:
+            histogram = _torch.empty(_ceil(_XMAX/_DELTA_X))
+
+        return histogram, kept_mask
+
+    def __init__(self, matrix, maxsteps=25, windowsize=200, minsuccesses=20, destroy=False,
+                normalized=False, cuda=False):
+        self._check_params(matrix, maxsteps, windowsize, minsuccesses)
+        if not destroy:
+            matrix = matrix.copy()
+
+        # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
+        # track of which points are which.
+        _np.random.RandomState(0).shuffle(matrix)
+        indices = _np.random.RandomState(0).permutation(len(matrix))
+        indices = _torch.from_numpy(indices)
+        matrix = _torch.from_numpy(matrix)
+
+        if not normalized:
+            _normalize(matrix, inplace=True)
+
+        # Move to GPU
+        if cuda:
+            matrix = matrix.cuda()
+
+        self.MAXSTEPS = maxsteps
+        self.MINSUCCESSES = minsuccesses
+        self.CUDA = cuda
+        self.RNG = _random.Random(0)
+
+        self.matrix = matrix
+        self.indices = indices
+        self.seed = -1
+        self.peak_valley_ratio = 0.1
+        self.attempts = _deque(maxlen=windowsize)
+        self.successes = 0
+        self.radii = list()
+        self.default = None
+
+        histogram, kept_mask = self._init_histogram_kept_mask(len(indices))
+        self.histogram = histogram
+        self.kept_mask = kept_mask
+
+    # It's an iterator itself
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        # Stop criterion
+        if self.CUDA:
+            if not _torch.any(self.kept_mask).item():
+                raise StopIteration
+        elif len(self.matrix) == 0:
+            raise StopIteration
+
+        cluster, medoid, points = self._findcluster()
+
+        for point in points:
+            self.kept_mask[point] = 0
+
+        if not self.CUDA:
+            _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
+            self.indices = self.indices[self.kept_mask] # no need to inplace mask small array
+            self.kept_mask.resize_(len(self.matrix))
+            self.kept_mask[:] = 1
+
+        return cluster
+
+    def _findcluster(self):
+        """Finds a cluster to output."""
+        threshold = None
+
+        # Keep looping until we find a cluster
+        while threshold is None:
+            # If on GPU, we need to take next seed which has not already been clusted out.
+            # if not, clustered points have been removed, so we can just take next seed
+            if self.CUDA:
+                self.seed = (self.seed + 1) % len(self.matrix)
+                while self.kept_mask[self.seed] == False:
+                    self.seed = (self.seed + 1) % len(self.matrix)
+            else:
+                self.seed = (self.seed + 1) % len(self.matrix)
+
+            medoid, distances = _wander_medoid(self.matrix, self.kept_mask, self.seed, self.MAXSTEPS, self.RNG, self.CUDA)
+
+            # We need to make a histogram of only the unclustered distances - when run on GPU
+            # these have not been removed and we must use the kept_mask
+            if self.CUDA:
+                _torch.histc(distances[self.kept_mask], len(self.histogram), 0, _XMAX, out=self.histogram)
+            else:
+                _torch.histc(distances, len(self.histogram), 0, _XMAX, out=self.histogram)
+            self.histogram[0] -= 1 # Remove distance to self
+
+            threshold, success = _find_threshold(self.histogram, self.peak_valley_ratio, self.default, self.CUDA)
+
+            # If success is not None, either threshold detection failed or succeded.
+            if success is not None:
+                # Keep accurately track of successes if we exceed maxlen
+                if len(self.attempts) == self.attempts.maxlen:
+                    self.successes -= self.attempts.popleft()
+
+                # Add the current success to count
+                self.successes += success
+                self.attempts.append(success)
+
+                # If less than minsuccesses of the last maxlen attempts were successful,
+                # we relax the clustering criteria and reset counting successes.
+                if len(self.attempts) == self.attempts.maxlen and self.successes < self.MINSUCCESSES:
+                    self.peak_valley_ratio += 0.1
+
+                    if self.peak_valley_ratio > 0.55:
+                        if len(self.radii) == 0:
+                            self.default = 0.09
+                        else:
+                            self.default = sorted(self.radii)[len(self.radii)//2]
+                            self.radii.clear()
+
+                    self.attempts.clear()
+                    self.successes = 0
+
+        # These are the points of the final cluster AFTER establishing the threshold used
+        points = _smaller_indices(distances, self.kept_mask, threshold, self.CUDA)
+        isdefault = success is None and threshold == self.default and self.peak_valley_ratio > 0.55
+        if self.default is None and success and self.peak_valley_ratio < 0.55:
+            self.radii.append(threshold)
+
+        # "indices" keeps the true indices, not the modified ones that should be output.
+        cluster = Cluster(self.indices[medoid].item(), self.seed, self.indices[points].numpy(),
+                        self.peak_valley_ratio,
+                          threshold, isdefault, self.successes, len(self.attempts))
+        return cluster, medoid, points
+
 def _calc_densities(histogram, cuda, pdf=_NORMALPDF):
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
@@ -242,170 +420,9 @@ def _wander_medoid(matrix, kept_mask, medoid, max_attempts, rng, cuda):
 
     return medoid, distances
 
-
-def _findcluster(matrix, indices, kept_mask, histogram, seed, peak_valley_ratio, max_steps,
-                 minsuccesses, default, rng, attempts, cuda):
-    """Finds a cluster to output."""
-    threshold = None
-    successes = sum(attempts)
-
-    while threshold is None:
-        # If on GPU, we need to take next seed which has not already been clusted out.
-        # if not, clustered points have been removed, so we can just take next seed
-        if cuda:
-            seed = (seed + 1) % len(matrix)
-            while kept_mask[seed] == False:
-                seed = (seed + 1) % len(matrix)
-        else:
-            seed = (seed + 1) % len(matrix)
-
-        medoid, distances = _wander_medoid(matrix, kept_mask, seed, max_steps, rng, cuda)
-
-        # We need to make a histogram of only the unclustered distances - when run on GPU
-        # these have not been removed and we must use the kept_mask
-        if cuda:
-            _torch.histc(distances[kept_mask], len(histogram), 0, _XMAX, out=histogram)
-        else:
-            _torch.histc(distances, len(histogram), 0, _XMAX, out=histogram)
-        histogram[0] -= 1 # Remove distance to self
-
-        threshold, success = _find_threshold(histogram, peak_valley_ratio, default, cuda)
-
-        # If success is not None, either threshold detection failed or succeded.
-        if success is not None:
-            # Keep accurately track of successes if we exceed maxlen
-            if len(attempts) == attempts.maxlen:
-                successes -= attempts.popleft()
-
-            # Add the current success to count
-            successes += success
-            attempts.append(success)
-
-            # If less than minsuccesses of the last maxlen attempts were successful,
-            # we relax the clustering criteria and reset counting successes.
-            if len(attempts) == attempts.maxlen and successes < minsuccesses:
-                peak_valley_ratio += 0.1
-                attempts.clear()
-                successes = 0
-
-    # These are the points of the final cluster AFTER establishing the threshold used
-    points = _smaller_indices(distances, kept_mask, threshold, cuda)
-    isdefault = success is None and threshold == default and peak_valley_ratio > 0.55
-
-    # "indices" keeps the true indices, not the modified ones that should be output.
-    cluster = Cluster(indices[medoid].item(), seed, indices[points].numpy(), peak_valley_ratio,
-                      threshold, isdefault, successes, len(attempts))
-    return cluster, medoid, points
-
-
-def _cluster(matrix, indices, max_steps, windowsize, minsuccesses, default, cuda):
-    """Yields (medoid, points) pairs from a (obs x features) matrix"""
-    seed = -1
-    rng = _random.Random(0)
-    peak_valley_ratio = 0.1
-    attempts = _deque(maxlen=windowsize)
-
-    if _torch.__version__ >= '1.2':
-        # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
-        cuda_hist_dtype = _torch.float
-        # Masking using uint8 tensors deprecated in PyTorch 1.2
-        kept_mask_dtype = _torch.bool
-    else:
-        cuda_hist_dtype = _torch.long
-        kept_mask_dtype = _torch.uint8
-
-    kept_mask = _torch.ones(len(indices), dtype=kept_mask_dtype)
-
-    if cuda:
-        histogram = _torch.empty(_ceil(_XMAX/_DELTA_X), dtype=cuda_hist_dtype).cuda()
-        kept_mask = kept_mask.cuda()
-    else:
-        histogram = _torch.empty(_ceil(_XMAX/_DELTA_X))
-
-    done = False
-    while not done:
-        _ = _findcluster(matrix, indices, kept_mask, histogram, seed, peak_valley_ratio,
-                         max_steps, minsuccesses, default, rng, attempts, cuda)
-        cluster, medoid, points = _
-        seed = cluster.seed
-        peak_valley_ratio = cluster.pvr
-
-        for point in points:
-            kept_mask[point] = 0
-
-        yield cluster
-
-        # If we use CUDA and the arrays are on GPU, it's too slow to modify the arrays and
-        # faster to simply mask.
-        if not cuda:
-            _vambtools.torch_inplace_maskarray(matrix, kept_mask)
-            indices = indices[kept_mask] # no need to inplace mask small array
-            kept_mask.resize_(len(matrix))
-            kept_mask[:] = 1
-            done = len(matrix) == 0
-        else:
-            done = not _torch.any(kept_mask).item()
-
-def _check_params(matrix, maxsteps, windowsize, minsuccesses, default, logfile):
-    """Checks matrix, and maxsteps."""
-
-    if maxsteps < 1:
-        raise ValueError('maxsteps must be a positive integer, not {}'.format(maxsteps))
-
-    if windowsize < 1:
-        raise ValueError('windowsize must be at least 1, not {}'.format(windowsize))
-
-    if minsuccesses < 1 or minsuccesses > windowsize:
-        raise ValueError('minsuccesses must be between 1 and windowsize, not {}'.format(minsuccesses))
-
-    if default <= 0.0:
-        raise ValueError('default threshold must be a positive float, not {}'.format(default))
-
-    if len(matrix) < 1:
-        raise ValueError('Matrix must have at least 1 observation.')
-
-def cluster(matrix, maxsteps=25, windowsize=200, minsuccesses=20,
-            default=0.09, destroy=False, normalized=False, logfile=None, cuda=False):
-    """Iterative medoid cluster generator. Yields an iterable of Cluster
-
-    Inputs:
-        matrix: A (obs x features) Numpy matrix of data type numpy.float32
-        maxsteps: Stop searching for optimal medoid after N futile attempts [25]
-        default: Fallback threshold if cannot be estimated [0.09]
-        windowsize: Length of window to count successes [200]
-        minsuccesses: Minimum acceptable number of successes [15]
-        destroy: Save memory by destroying matrix while clustering [False]
-        normalized: Matrix is already preprocessed [False]
-        logfile: Print threshold estimates and certainty to file [None]
-
-    Output: Generator of Cluster objects.
-    """
-
-    if matrix.dtype != _np.float32:
-        raise(ValueError("Matrix must be of dtype float32"))
-
-    if not destroy:
-        matrix = matrix.copy()
-
-    # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
-    # track of which points are which.
-    _np.random.RandomState(0).shuffle(matrix)
-    indices = _np.random.RandomState(0).permutation(len(matrix))
-
-    indices = _torch.from_numpy(indices)
-    matrix = _torch.from_numpy(matrix)
-
-    if not normalized:
-        _normalize(matrix, inplace=True)
-
-    _check_params(matrix, maxsteps, windowsize, minsuccesses, default, logfile)
-
-    # Move to GPU
-    if cuda:
-        matrix = matrix.cuda()
-
-    return _cluster(matrix, indices, maxsteps, windowsize, minsuccesses, default, cuda)
-
+def cluster(matrix, maxsteps=25, windowsize=200, minsuccesses=20, destroy=False,
+            normalized=False, cuda=False):
+    return ClusterGenerator(matrix, maxsteps, windowsize, minsuccesses, destroy, normalized, cuda)
 
 def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
                  header=None, rename=True):
