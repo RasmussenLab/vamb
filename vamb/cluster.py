@@ -15,9 +15,12 @@ from collections import defaultdict as _defaultdict, deque as _deque
 from math import ceil as _ceil
 import vamb.vambtools as _vambtools
 
+_DEFAULT_RADIUS = 0.06
+# Distance within which to search for medoid point
+_MEDOID_RADIUS = 0.05
+
 _DELTA_X = 0.005
 _XMAX = 0.3
-_DEFAULT_RADIUS = 0.09
 
 # This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
@@ -31,9 +34,6 @@ _NORMALPDF = _DELTA_X * _torch.Tensor(
        1.75283005e+00, 4.43184841e-01, 8.72682695e-02, 1.33830226e-02,
        1.59837411e-03, 1.48671951e-04, 1.07697600e-05, 6.07588285e-07,
        2.66955661e-08, 9.13472041e-10, 2.43432053e-11])
-
-# Distance within which to search for medoid point
-_MEDOID_RADIUS = 0.07
 
 class Cluster:
     __slots__ = ['medoid', 'seed', 'members', 'pvr', 'radius', 'isdefault', 'successes', 'attempts']
@@ -82,6 +82,24 @@ class ClusterGenerator:
         destroy: Save memory by destroying matrix while clustering [False]
         normalized: Matrix is already preprocessed [False]
     """
+
+    __slots__ = ['MAXSTEPS', 'MINSUCCESSES', 'CUDA', 'RNG', 'matrix', 'indices',
+                 'seed', 'nclusters', 'peak_valley_ratio', 'attempts', 'successes',
+                 'histogram', 'kept_mask']
+
+    def __repr__(self):
+        return "ClusterGenerator({} points, {} clusters)".format(len(self.matrix), self.nclusters)
+
+    def __str__(self):
+        return """ClusterGenerator({} points, {} clusters)
+  CUDA:         {}
+  MAXSTEPS:     {}
+  MINSUCCESSES: {}
+  pvr:          {}
+  successes:    {}/{}
+""".format(len(self.matrix), self.nclusters, self.CUDA, self.MAXSTEPS, self.MINSUCCESSES,
+    self.peak_valley_ratio, self.successes, len(self.attempts))
+
     def _check_params(self, matrix, maxsteps, windowsize, minsuccesses):
         """Checks matrix, and maxsteps."""
 
@@ -147,8 +165,11 @@ class ClusterGenerator:
         self.RNG = _random.Random(0)
 
         self.matrix = matrix
+        # This refers to the indices of the original matrix. As we remove points, these
+        # indices do not correspond to merely range(len(matrix)) anymore.
         self.indices = indices
         self.seed = -1
+        self.nclusters = 0
         self.peak_valley_ratio = 0.1
         self.attempts = _deque(maxlen=windowsize)
         self.successes = 0
@@ -162,7 +183,8 @@ class ClusterGenerator:
         return self
 
     def __next__(self):
-        # Stop criterion
+        # Stop criterion. For CUDA, inplace masking the array is too slow, so the matrix is
+        # unchanged. On CPU, we continually modify the matrix by removing rows.
         if self.CUDA:
             if not _torch.any(self.kept_mask).item():
                 raise StopIteration
@@ -170,10 +192,13 @@ class ClusterGenerator:
             raise StopIteration
 
         cluster, medoid, points = self._findcluster()
+        self.nclusters += 1
 
         for point in points:
             self.kept_mask[point] = 0
 
+        # Remove all points that's been clustered away. Is slow it itself, but speeds up
+        # distance calculation by having fewer points. Worth it on CPU, not on GPU
         if not self.CUDA:
             _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
             self.indices = self.indices[self.kept_mask] # no need to inplace mask small array
@@ -230,7 +255,6 @@ class ClusterGenerator:
         points = _smaller_indices(distances, self.kept_mask, threshold, self.CUDA)
         isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
 
-        # "indices" keeps the true indices, not the modified ones that should be output.
         cluster = Cluster(self.indices[medoid].item(), self.seed, self.indices[points].numpy(),
                         self.peak_valley_ratio,
                           threshold, isdefault, self.successes, len(self.attempts))
