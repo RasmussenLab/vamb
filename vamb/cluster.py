@@ -105,7 +105,7 @@ def _find_threshold(histogram, peak_valley_ratio, default, cuda):
         x += delta_x
 
     # Don't allow a threshold too high - this is relaxed with p_v_ratio
-    if threshold is not None and threshold > 0.14 + 0.1 * peak_valley_ratio:
+    if threshold is not None and threshold > 0.20 + peak_valley_ratio:
         threshold = None
         success = False
 
