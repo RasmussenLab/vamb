@@ -477,6 +477,16 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
             for entry in bin:
                 print(entry.format(), file=file)
 
+def validate_input_array(array):
+    "Returns array similar to input array but C-contiguous and with own data."
+    if not array.flags['C_CONTIGUOUS']:
+        array = _np.ascontiguousarray(array)
+    if not array.flags['OWNDATA']:
+        array = array.copy()
+
+    assert (array.flags['C_CONTIGUOUS'] and array.flags['OWNDATA'])
+    return array
+
 def read_npz(file):
     """Loads array in .npz-format
 
@@ -486,7 +496,7 @@ def read_npz(file):
     """
 
     npz = _np.load(file)
-    array = npz['arr_0']
+    array = validate_input_array(npz['arr_0'])
     npz.close()
 
     return array
@@ -581,10 +591,7 @@ def load_jgi(filehandle):
 
     columns = tuple(range(3, len(fields), 2))
     array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
-
-    # Array is now a transpose, which can violate some assumptions like that it
-    # owns it own data. Copy to make a fresh array with own data.
-    return array.copy()
+    return validate_input_array(array)
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
