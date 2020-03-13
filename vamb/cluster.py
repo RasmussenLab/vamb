@@ -17,6 +17,7 @@ import vamb.vambtools as _vambtools
 
 _DELTA_X = 0.005
 _XMAX = 0.3
+_DEFAULT_RADIUS = 0.09
 
 # This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
@@ -76,7 +77,6 @@ class ClusterGenerator:
     Inputs:
         matrix: A (obs x features) Numpy matrix of data type numpy.float32
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
-        default: Fallback threshold if cannot be estimated [0.09]
         windowsize: Length of window to count successes [200]
         minsuccesses: Minimum acceptable number of successes [15]
         destroy: Save memory by destroying matrix while clustering [False]
@@ -152,8 +152,6 @@ class ClusterGenerator:
         self.peak_valley_ratio = 0.1
         self.attempts = _deque(maxlen=windowsize)
         self.successes = 0
-        self.radii = list()
-        self.default = None
 
         histogram, kept_mask = self._init_histogram_kept_mask(len(indices))
         self.histogram = histogram
@@ -209,7 +207,7 @@ class ClusterGenerator:
                 _torch.histc(distances, len(self.histogram), 0, _XMAX, out=self.histogram)
             self.histogram[0] -= 1 # Remove distance to self
 
-            threshold, success = _find_threshold(self.histogram, self.peak_valley_ratio, self.default, self.CUDA)
+            threshold, success = _find_threshold(self.histogram, self.peak_valley_ratio, self.CUDA)
 
             # If success is not None, either threshold detection failed or succeded.
             if success is not None:
@@ -225,22 +223,12 @@ class ClusterGenerator:
                 # we relax the clustering criteria and reset counting successes.
                 if len(self.attempts) == self.attempts.maxlen and self.successes < self.MINSUCCESSES:
                     self.peak_valley_ratio += 0.1
-
-                    if self.peak_valley_ratio > 0.55:
-                        if len(self.radii) == 0:
-                            self.default = 0.09
-                        else:
-                            self.default = sorted(self.radii)[len(self.radii)//2]
-                            self.radii.clear()
-
                     self.attempts.clear()
                     self.successes = 0
 
         # These are the points of the final cluster AFTER establishing the threshold used
         points = _smaller_indices(distances, self.kept_mask, threshold, self.CUDA)
-        isdefault = success is None and threshold == self.default and self.peak_valley_ratio > 0.55
-        if self.default is None and success and self.peak_valley_ratio < 0.55:
-            self.radii.append(threshold)
+        isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
 
         # "indices" keeps the true indices, not the modified ones that should be output.
         cluster = Cluster(self.indices[medoid].item(), self.seed, self.indices[points].numpy(),
@@ -263,12 +251,12 @@ def _calc_densities(histogram, cuda, pdf=_NORMALPDF):
 
     return densities
 
-def _find_threshold(histogram, peak_valley_ratio, default, cuda):
+def _find_threshold(histogram, peak_valley_ratio, cuda):
     """Find a threshold distance, where where is a dip in point density
     that separates an initial peak in densities from the larger bulk around 0.5.
     Returns (threshold, success), where succes is False if no threshold could
     be found, True if a good threshold could be found, and None if the point is
-    alone, or the default threshold has been used.
+    alone, or the threshold has been used.
     """
     peak_density = 0
     peak_over = False
@@ -317,13 +305,13 @@ def _find_threshold(histogram, peak_valley_ratio, default, cuda):
         x += delta_x
 
     # Don't allow a threshold too high - this is relaxed with p_v_ratio
-    if threshold is not None and threshold > 0.14 + 0.1 * peak_valley_ratio:
+    if threshold is not None and threshold > 0.2 + peak_valley_ratio:
         threshold = None
         success = False
 
     # If ratio has been set to 0.6, we do not accept returning no threshold.
     if threshold is None and peak_valley_ratio > 0.55:
-        threshold = default
+        threshold = _DEFAULT_RADIUS
         success = None
 
     return threshold, success
