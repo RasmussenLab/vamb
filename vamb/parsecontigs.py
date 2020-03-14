@@ -64,9 +64,12 @@ def read_contigs(filehandle, minlength=100):
         lengths.append(len(entry))
         contignames.append(entry.header)
 
-    tnfs_arr = tnfs.take()
+    # Convert rest of contigs
+    _convert(raw, projected)
+    tnfs_arr = projected.take()
+
     # Don't use reshape since it creates a new array object with shared memory
-    tnfs_arr.shape = (len(tnfs_arr)//136, 136)
+    tnfs_arr.shape = (len(tnfs_arr)//103, 103)
     lengths_arr = lengths.take()
 
     return tnfs_arr, contignames, lengths_arr
