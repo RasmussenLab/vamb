@@ -408,85 +408,63 @@ class Binning:
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         return 2*tp / (2*tp + fp + fn)
 
-    def _getcounts(self):
-        """Get the number of taxnomic clades at each rank that are covered by at least 1 bin
-        at certain precision/recall thresholds.
-        Returns result as a list of Counters from lowest to highest clade, where the keys
-        are (recall, preicison) tuples, and value is number of reconstructed clades at that
-        level.
+    def _getseen(self, recprecof):
+        """Make a {genome: isseen} dict, where isseen is a boolean vector
+        (implemented as an integer), 1 if a genome is seen at that recall, prec level,
+        0 otherwise
         """
-        # One count per rank (+1 for inclusive "genome" rank)
-        counts = [_collections.Counter() for i in range(len(self.reference.taxmaps) + 1)]
-
-        # Calculate preicion and recall for each bin
-        # bin_name : {genomename1: X, genomename2: Y ... }
-        recallof = _collections.defaultdict(dict)
-        precisionof = _collections.defaultdict(dict)
-
-        for genome, intersectiondict in self.intersectionsof.items():
-            for binname in intersectiondict:
-                tp, tn, fp, fn = self.confusion_matrix(genome, binname)
-                recall = tp / (tp + fn)
-                precision = tp / (tp + fp)
-                recallof[binname][genome.name] = recall
-                precisionof[binname][genome.name] = precision
-
-        # Now for each counter, update it and then update recallof and precisionof to the
-        # higher rank. The last counter is not updated here, done after loop
-        for counter, taxmap in zip(counts, self.reference.taxmaps):
-            self._accumulate(recallof, precisionof, counter)
-
-            # Update recallof and precisionof. For recalls, we would need clade synteny
-            # information to figure out how much of a clades "core/pan genome" that we have
-            # covered. Therefore, clade recall is the max of all its members.
-            # For precision, we just care that no bin content fall out of the clade, so
-            # clade precision is the sum of precisisons of all its members
-            for _dict, function in (recallof, max), (precisionof, _add):
-                for binname, subdict in _dict.items():
-                    newsubdict = dict()
-                    for clade, measure in subdict.items():
-                        newclade = taxmap[clade]
-                        newmeasure = function(measure, newsubdict.get(newclade, 0.0))
-                        newsubdict[newclade] = newmeasure
-                    _dict[binname] = newsubdict
-
-        # Accumulate for last (i.e. highest) rank
-        self._accumulate(recallof, precisionof, counts[-1])
-        return counts
-
-    def _accumulate(self, recallof, precisionof, counter):
-        """Using the recallof/precisionof dicts calculated in _getcounts function, fill a
-        counter with the number of found clades.
-        """
-        # Create a mapping: {clade : seen_boolean_vector}, where the vector represents
-        # each clade seen or not at the different recall/precision values
-        clades = set()
-        for precisiondict in precisionof.values():
-            clades.update(precisiondict.keys())
-        arrlen = len(self.recalls) * len(self.precisions)
-        isseen = {clade: bytearray(arrlen) for clade in clades}
-
-        # Now update the vectors, setting them to 1 if the clade has been seen at that
-        # recall/prec threshold
-        for binname, precisiondict in precisionof.items():
-            for clade, precision in precisiondict.items():
-                recall = recallof[binname][clade]
-                vector = isseen[clade]
+        isseen = dict()
+        for genome, _dict in recprecof.items():
+            seen = 0
+            for binname, (recall, precision) in _dict.items():
                 for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
                     if recall < min_recall:
                         break
 
                     if precision >= min_precision:
-                        vector[i] = 1
+                        seen |= 1 << i
+            isseen[genome] = seen
+        return isseen
 
-        # Now update the Counter
-        sums = [0] * arrlen
-        for vector in isseen.values():
-            for i in range(arrlen):
-                sums[i] += vector[i]
+    def _accumulate(self, seen, counts):
+        "Given a 'seen' dict, make a dict of counts at each threshold level"
+        nsums = (len(self.recalls) * len(self.precisions))
+        sums = [0] * nsums
+        for v in seen.values():
+            for i in range(nsums):
+                sums[i] += (v >> i) & 1 == 1
 
-        for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
-            counter[(min_recall, min_precision)] = sums[i]
+        for i, (recall, precision) in enumerate(_product(self.recalls, self.precisions)):
+            counts[(recall, precision)] = sums[i]
+
+    def _get_prec_rec_dict(self):
+        recprecof = _collections.defaultdict(dict)
+        for genome, intersectiondict in self.intersectionsof.items():
+            for binname in intersectiondict:
+                tp, tn, fp, fn = self.confusion_matrix(genome, binname)
+                recall = tp / (tp + fn)
+                precision = tp / (tp + fp)
+                recprecof[genome.name][binname] = (recall, precision)
+
+        return recprecof
+
+    def _getcounts(self):
+        # One count per rank (+1 for inclusive "genome" rank)
+        counts = [_collections.Counter() for i in range(len(self.reference.taxmaps) + 1)]
+        recprecof = self._get_prec_rec_dict()
+        seen = self._getseen(recprecof)
+        # Calculate counts for each taxonomic level
+        for counter, taxmap in zip(counts, self.reference.taxmaps):
+            self._accumulate(seen, counter)
+            newseen = dict()
+            for clade, v in seen.items():
+                newclade = taxmap[clade]
+                newseen[newclade] = newseen.get(newclade, 0) | v
+            seen = newseen
+
+        self._accumulate(seen, counts[-1])
+
+        return counts
 
     def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
               precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True,
