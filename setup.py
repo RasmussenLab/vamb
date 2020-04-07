@@ -13,6 +13,7 @@ SETUP_METADATA = \
     "version": "3.0.0",
     "license": "MIT",
     "packages": find_packages(),
+    "package_data": {"vamb": ["kernel.npz"]},
     "entry_points": {'console_scripts': [
         'vamb = vamb.__main__:main'
         ]
