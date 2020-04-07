@@ -177,11 +177,14 @@ class Reader:
         else:
             self.filehandle = open(self.filename, self.readmode)
 
+    def close(self):
+        self.filehandle.close()
+
     def __enter__(self):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.filehandle.close()
+        self.close()
 
     def __iter__(self):
         return self.filehandle

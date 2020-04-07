@@ -38,18 +38,11 @@ contig3_fourmers_expected = """0000002100000001000001021200010010100110001001120
 0101010000001001020111010010000111001000010010000010200001000100211110101100010
 10000120010100010001000010011110100000100""".replace('\n', '')
 contig3_fourmers_observed = contigs[2].kmercounts(4)
-contig3_tnf_expected = """0001103301000001000101021300121202102201120111011001100001000010
-002100011111100300001120000202221101210022010011022100022011130031100200""".replace('\n', '')
-contig3_tnf_observed = contigs[2].fourmer_freq()
 
 for i, j in zip(contig3_fourmers_expected, contig3_fourmers_observed):
     assert int(i) == j
 
-for i, j in zip(contig3_tnf_expected, contig3_tnf_observed):
-    assert int(i)/103 - 1e-8 < j < int(i)/103 + 1e-8 # float weirdness
-
 assert all(i == 0 for i in contigs[3].kmercounts(4))
-assert all(i == 0 for i in contigs[3].fourmer_freq())
 
 # Correctly deals with lowercase
 assert contigs[2].sequence == contigs[5].sequence
