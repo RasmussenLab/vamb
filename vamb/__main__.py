@@ -132,7 +132,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('\nCreating and training VAE', logfile)
 
     nsamples = rpkms.shape[1]
-    vae = vamb.encode.VAE(nsamples=nsamples, nhiddens=nhiddens, nlatent=nlatent,
+    vae = vamb.encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent,
                             alpha=alpha, beta=beta, dropout=dropout, cuda=cuda)
 
     log('Created VAE', logfile, 1)
@@ -173,11 +173,10 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     log('Separator: {}'.format(None if separator is None else ('"'+separator+'"')),
         logfile, 1)
 
-    it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize,
-                              minsuccesses=minsuccesses, labels=contignames,
-                              logfile=logfile, cuda=cuda)
+    it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize, normalized=False,
+                              minsuccesses=minsuccesses, cuda=cuda)
 
-    renamed = ((str(i+1), cluster) for (i, (_, cluster)) in enumerate(it))
+    renamed = ((str(i+1), c.as_tuple(contignames)[1]) for (i, c) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
@@ -185,7 +184,7 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
 
     with open(clusterspath, 'w') as clustersfile:
         _ = vamb.vambtools.write_clusters(clustersfile, renamed, max_clusters=maxclusters,
-                                        min_size=minclustersize, rename=False)
+                                          min_size=minclustersize, rename=False)
     clusternumber, ncontigs = _
 
     print('', file=logfile)

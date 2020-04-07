@@ -52,8 +52,6 @@ from hashlib import md5 as _md5
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
-
-
 def mergecolumns(pathlist):
     """Merges multiple npz files with columns to a matrix.
 

@@ -1,13 +1,15 @@
+__doc__ = "Various classes and functions Vamb uses internally."
+
 import os as _os
 import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
-from vamb._vambtools import _kmercounts, _fourmerfreq, zeros, _overwrite_matrix
+from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 
 class PushArray:
-    """Data structure that allows efficient appending and extending a Numpy array.
+    """Data structure that allows efficient appending and extending a 1D Numpy array.
     Intended to strike a balance between not resizing too often (which is slow), and
     not allocating too much at a time (which is memory inefficient).
 
@@ -26,13 +28,19 @@ class PushArray:
         self.data = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
 
+    def __len__(self):
+        return self.length
+
+    def _setcapacity(self, n):
+        self.data.resize(n, refcheck=False)
+        self.capacity = n
+
     def _grow(self, mingrowth):
         """Grow capacity by power of two between 1/8 and 1/4 of current capacity, though at
         least mingrowth"""
         growth = max(int(self.capacity * 0.125), mingrowth)
         nextpow2 = 1 << (growth - 1).bit_length()
-        self.capacity = self.capacity + nextpow2
-        self.data.resize(self.capacity, refcheck=False)
+        self._setcapacity(self.capacity + nextpow2)
 
     def append(self, value):
         if self.length == self.capacity:
@@ -51,9 +59,14 @@ class PushArray:
 
     def take(self):
         "Return the underlying array"
-        self.data.resize(self.length, refcheck=False)
-        self.capacity = self.length
+        self._setcapacity(self.length)
         return self.data
+
+    def clear(self, force=False):
+        "Empties the PushArray. If force is true, also truncates the underlying memory."
+        self.length = 0
+        if force:
+            self._setcapacity(0)
 
 def zscore(array, axis=None, inplace=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -164,11 +177,14 @@ class Reader:
         else:
             self.filehandle = open(self.filename, self.readmode)
 
+    def close(self):
+        self.filehandle.close()
+
     def __enter__(self):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.filehandle.close()
+        self.close()
 
     def __iter__(self):
         return self.filehandle
@@ -178,7 +194,7 @@ class FastaEntry:
     sequence."""
 
     basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
-                               b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
+                                   b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
     __slots__ = ['header', 'sequence']
 
     def __init__(self, header, sequence):
@@ -217,10 +233,10 @@ class FastaEntry:
     def kmercounts(self, k):
         if k < 1 or k > 10:
             raise ValueError('k must be between 1 and 10 inclusive')
-        return _kmercounts(self.sequence, k)
 
-    def fourmer_freq(self):
-        return _fourmerfreq(self.sequence)
+        counts = _np.zeros(1 << (2*k), dtype=_np.int32)
+        _kmercounts(self.sequence, k, counts)
+        return counts
 
 def byte_iterfasta(filehandle, comment=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
@@ -464,6 +480,16 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
             for entry in bin:
                 print(entry.format(), file=file)
 
+def validate_input_array(array):
+    "Returns array similar to input array but C-contiguous and with own data."
+    if not array.flags['C_CONTIGUOUS']:
+        array = _np.ascontiguousarray(array)
+    if not array.flags['OWNDATA']:
+        array = array.copy()
+
+    assert (array.flags['C_CONTIGUOUS'] and array.flags['OWNDATA'])
+    return array
+
 def read_npz(file):
     """Loads array in .npz-format
 
@@ -473,7 +499,7 @@ def read_npz(file):
     """
 
     npz = _np.load(file)
-    array = npz['arr_0']
+    array = validate_input_array(npz['arr_0'])
     npz.close()
 
     return array
@@ -568,10 +594,7 @@ def load_jgi(filehandle):
 
     columns = tuple(range(3, len(fields), 2))
     array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
-
-    # Array is now a transpose, which can violate some assumptions like that it
-    # owns it own data. Copy to make a fresh array with own data.
-    return array.copy()
+    return validate_input_array(array)
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
