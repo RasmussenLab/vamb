@@ -247,7 +247,6 @@ def _get_contig_rpkms(inpath, outpath, refhash, minscore, minlength, minid):
             If outpath is not None: None
             Else: A float32-array with RPKM for each contig in BAM header
         length: Length of rpkms array
-        hash: md5 of reference names
     """
 
     bamfile = _pysam.AlignmentFile(inpath, "rb")
