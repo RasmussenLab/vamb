@@ -203,7 +203,7 @@ class FastaEntry:
         if '\t' in header:
             raise ValueError('Header cannot contain a tab')
 
-        masked = sequence.translate(self.basemask, b' \t\n')
+        masked = sequence.translate(self.basemask, b' \t\n\r')
         stripped = masked.translate(None, b'ACGTN')
         if len(stripped) > 0:
             bad_character = chr(stripped[0])
@@ -251,9 +251,6 @@ def byte_iterfasta(filehandle, comment=b'#'):
 
     Output: Generator of FastaEntry-objects from file
     """
-
-    linemask = bytes.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
-                               b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
 
     # Make it work for persistent iterators, e.g. lists
     line_iterator = iter(filehandle)
@@ -399,7 +396,7 @@ def loadfasta(byte_iterator, keep=None, comment=b'#', compress=False):
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
             if compress:
-                entry.sequence = bytearray(_gzip.compress(entry.sequence))
+                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=2))
 
             entries[entry.header] = entry
 

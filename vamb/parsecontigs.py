@@ -10,6 +10,7 @@ import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 
+# This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL = _vambtools.read_npz(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                               "kernel.npz"))
 
@@ -34,7 +35,6 @@ def read_contigs(filehandle, minlength=100):
     Input:
         filehandle: Filehandle open in binary mode of a FASTA file
         minlength: Ignore any references shorter than N bases [100]
-        preallocate: [DEPRECATED] Read contigs twice, saving memory [False]
 
     Outputs:
         tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
