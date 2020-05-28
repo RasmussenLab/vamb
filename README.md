@@ -19,6 +19,7 @@ pip install https://github.com/RasmussenLab/vamb/archive/3.0.1.zip
 ```
 
 or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
+(note that the BioConda package does not include GPU support. If you run a Linux system, you can [install pytorch-gpu](https://anaconda.org/anaconda/pytorch-gpu), on MacOS you will have to compile PyTorch from source)
 ```
 conda install -c bioconda vamb
 ```
