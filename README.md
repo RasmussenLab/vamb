@@ -162,6 +162,8 @@ Be careful to choose proper parameters for your aligner - in general, if reads f
 
 If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`), and/or filter for minimum alignments score using the `-s` flag (uses the `AS` optional field of the alignment.)
 
+We have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module. For the best results, we recommend [downloading MetaBAT2](https://bitbucket.org/berkeleylab/metabat/src/master/), using `jgi_summarize_bam_contig_depths` to estimate depths, and then running Vamb with `--jgi` instead of `--bamfiles`.
+
 __5) Run Vamb__
 
 If you trust the alignments in your BAM files, use:
