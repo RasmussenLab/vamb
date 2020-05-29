@@ -95,9 +95,10 @@ def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
     tnftensor = _torch.from_numpy(tnf)
 
     # Create dataloader
+    n_workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
-                             shuffle=True, num_workers=1, pin_memory=cuda)
+                             shuffle=True, num_workers=n_workers, pin_memory=cuda)
 
     return dataloader, mask
 

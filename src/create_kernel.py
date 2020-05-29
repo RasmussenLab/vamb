@@ -90,5 +90,8 @@ def create_dual_kernel():
     return np.dot(create_rc_kernel(), create_projection_kernel())
 
 dual_kernel = create_dual_kernel()
-path = join(dirname(dirname(abspath(__file__))), "vamb", "kernel.npz")
-np.savez_compressed(path, dual_kernel)
+
+# Prevent overwriting kernel when running tests
+if __name__ == "__main__":
+    path = join(dirname(dirname(abspath(__file__))), "vamb", "kernel.npz")
+    np.savez_compressed(path, dual_kernel)
