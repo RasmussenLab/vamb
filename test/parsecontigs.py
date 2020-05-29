@@ -108,11 +108,11 @@ kernel = create_kernel.create_projection_kernel()
 
 projected = np.dot(counts, kernel)
 recreated = np.dot(kernel, projected)
-
 assert np.all(np.abs(counts - recreated) < 1e-6)
 
-# Test unified kernel
-assert np.all(np.abs(vamb.parsecontigs._KERNEL - np.dot(rc_kernel, kernel)) < 1e-7)
+projected = np.dot(counts, vamb.parsecontigs._KERNEL)
+recreated = np.dot(vamb.parsecontigs._KERNEL, projected)
+assert np.all(np.abs(counts - recreated) < 1e-6)
 
 # Test read_contigs
 
