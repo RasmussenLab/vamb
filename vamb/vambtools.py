@@ -586,10 +586,11 @@ def load_jgi(filehandle):
 
     header = next(filehandle)
     fields = header.split('\t')
-    if not fields[4].endswith('-var'):
-        raise ValueError('Input file format error: 5th column should contain variances.')
+    if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
+        raise ValueError('Input file format error: First columns should be "contigName,"'
+        '"contigLen" and "totalAvgDepth"')
 
-    columns = tuple(range(3, len(fields), 2))
+    columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
     array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
     return validate_input_array(array)
 
