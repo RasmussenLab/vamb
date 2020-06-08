@@ -29,7 +29,7 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def make_dataloader(rpkm, tnf, batchsize=64, destroy=False, cuda=False):
+def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.

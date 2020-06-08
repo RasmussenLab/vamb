@@ -340,7 +340,7 @@ def main():
     trainos.add_argument('-e', dest='nepochs', metavar='', type=int,
                         default=500, help='epochs [500]')
     trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
-                        default=64, help='starting batch size [64]')
+                        default=256, help='starting batch size [256]')
     trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='*',
                         default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
     trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
