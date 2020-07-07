@@ -29,7 +29,7 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
+def make_dataloader(rpkm, batchsize=256, destroy=False, cuda=False):
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -49,25 +49,21 @@ def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
         mask: A boolean mask of which contigs are kept
     """
 
-    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
+    if not isinstance(rpkm, _np.ndarray):
         raise ValueError('TNF and RPKM must be Numpy arrays')
 
     if batchsize < 1:
         raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
 
-    if len(rpkm) != len(tnf):
-        raise ValueError('Lengths of RPKM and TNF must be the same')
 
-    if not (rpkm.dtype == tnf.dtype == _np.float32):
+    if not (rpkm.dtype ==  _np.float32):
         raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
-
-    mask = tnf.sum(axis=1) != 0
 
     # If multiple samples, also include nonzero depth as requirement for accept
     # of sequences
     if rpkm.shape[1] > 1:
         depthssum = rpkm.sum(axis=1)
-        mask &= depthssum != 0
+        mask = depthssum != 0
         depthssum = depthssum[mask]
 
     if mask.sum() < batchsize:
@@ -75,12 +71,10 @@ def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
 
     if destroy:
         rpkm = _vambtools.numpy_inplace_maskarray(rpkm, mask)
-        tnf = _vambtools.numpy_inplace_maskarray(tnf, mask)
     else:
         # The astype operation does not copy due to "copy=False", but the masking
         # operation does.
         rpkm = rpkm[mask].astype(_np.float32, copy=False)
-        tnf = tnf[mask].astype(_np.float32, copy=False)
 
     # If multiple samples, normalize to sum to 1, else zscore normalize
     if rpkm.shape[1] > 1:
@@ -90,13 +84,11 @@ def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
 
     # Normalize arrays and create the Tensors (the tensors share the underlying memory)
     # of the Numpy arrays
-    _vambtools.zscore(tnf, axis=0, inplace=True)
     depthstensor = _torch.from_numpy(rpkm)
-    tnftensor = _torch.from_numpy(tnf)
 
     # Create dataloader
     n_workers = 4 if cuda else 1
-    dataset = _TensorDataset(depthstensor, tnftensor)
+    dataset = _TensorDataset(depthstensor)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda)
 
@@ -109,8 +101,6 @@ class VAE(_nn.Module):
         nsamples: Number of samples in abundance matrix
         nhiddens: List of n_neurons in the hidden layers [None=Auto]
         nlatent: Number of neurons in the latent layer [32]
-        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
-        beta: Multiply KLD by the inverse of this value [200]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
@@ -124,17 +114,12 @@ class VAE(_nn.Module):
     0.99 and 0.0, respectively
     """
 
-    def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
-                 beta=200, dropout=0.2, cuda=False):
+    def __init__(self, nsamples, nhiddens=None, nlatent=32, dropout=0.2, cuda=False):
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
 
         if nsamples < 1:
             raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
-
-        # If only 1 sample, we weigh alpha and nhiddens differently
-        if alpha is None:
-            alpha = 0.15 if nsamples > 1 else 0.50
 
         if nhiddens is None:
             nhiddens = [512, 512] if nsamples > 1 else [256, 256]
@@ -145,12 +130,6 @@ class VAE(_nn.Module):
         if any(i < 1 for i in nhiddens):
             raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
 
-        if beta <= 0:
-            raise ValueError('beta must be > 0, not {}'.format(beta))
-
-        if not (0 < alpha < 1):
-            raise ValueError('alpha must be 0 < alpha < 1, not {}'.format(alpha))
-
         if not (0 <= dropout < 1):
             raise ValueError('dropout must be 0 <= dropout < 1, not {}'.format(dropout))
 
@@ -159,9 +138,6 @@ class VAE(_nn.Module):
         # Initialize simple attributes
         self.usecuda = cuda
         self.nsamples = nsamples
-        self.ntnf = 103
-        self.alpha = alpha
-        self.beta = beta
         self.nhiddens = nhiddens
         self.nlatent = nlatent
         self.dropout = dropout
@@ -173,13 +149,12 @@ class VAE(_nn.Module):
         self.decodernorms = _nn.ModuleList()
 
         # Add all other hidden layers
-        for nin, nout in zip([self.nsamples + self.ntnf] + self.nhiddens, self.nhiddens):
+        for nin, nout in zip([self.nsamples] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
         # Latent layers
         self.mu = _nn.Linear(self.nhiddens[-1], self.nlatent)
-        self.logsigma = _nn.Linear(self.nhiddens[-1], self.nlatent)
 
         # Add first decoding layer
         for nin, nout in zip([self.nlatent] + self.nhiddens[::-1], self.nhiddens[::-1]):
@@ -187,7 +162,7 @@ class VAE(_nn.Module):
             self.decodernorms.append(_nn.BatchNorm1d(nout))
 
         # Reconstruction (output) layer
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + self.ntnf)
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples)
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
@@ -208,32 +183,7 @@ class VAE(_nn.Module):
         # Latent layers
         mu = self.mu(tensor)
 
-        # Note: This softplus constrains logsigma to positive. As reconstruction loss pushes
-        # logsigma as low as possible, and KLD pushes it towards 0, the optimizer will
-        # always push this to 0, meaning that the logsigma layer will be pushed towards
-        # negative infinity. This creates a nasty numerical instability in VAMB. Luckily,
-        # the gradient also disappears as it decreases towards negative infinity, avoiding
-        # NaN poisoning in most cases. We tried to remove the softplus layer, but this
-        # necessitates a new round of hyperparameter optimization, and there is no way in
-        # hell I am going to do that at the moment of writing.
-        # Also remove needless factor 2 in definition of latent in reparameterize function.
-        logsigma = self.softplus(self.logsigma(tensor))
-
-        return mu, logsigma
-
-    # sample with gaussian noise
-    def reparameterize(self, mu, logsigma):
-        epsilon = _torch.randn(mu.size(0), mu.size(1))
-
-        if self.usecuda:
-            epsilon = epsilon.cuda()
-
-        epsilon.requires_grad = True
-
-        # See comment above regarding softplus
-        latent = mu + epsilon * _torch.exp(logsigma/2)
-
-        return latent
+        return mu
 
     def _decode(self, tensor):
         tensors = list()
@@ -246,46 +196,36 @@ class VAE(_nn.Module):
 
         # Decompose reconstruction to depths and tnf signal
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
-        tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
 
         # If multiple samples, apply softmax
         if self.nsamples > 1:
             depths_out = _softmax(depths_out, dim=1)
 
-        return depths_out, tnf_out
+        return depths_out
 
-    def forward(self, depths, tnf):
-        tensor = _torch.cat((depths, tnf), 1)
-        mu, logsigma = self._encode(tensor)
-        latent = self.reparameterize(mu, logsigma)
-        depths_out, tnf_out = self._decode(latent)
+    def forward(self, tensor):
+        mu = self._encode(tensor)
+        depths_out = self._decode(mu)
 
-        return depths_out, tnf_out, mu, logsigma
+        return depths_out, mu
 
-    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
+    def calc_loss(self, depths_in, depths_out, mu):
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
             ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
-            ce_weight = (1 - self.alpha) / _log(self.nsamples)
+            ce_weight = 1 / _log(self.nsamples)
         else:
             ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
-            ce_weight = 1 - self.alpha
+            ce_weight = 1
 
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
-        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-        sse_weight = self.alpha / self.ntnf
-        kld_weight = 1 / (self.nlatent * self.beta)
-        loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
-
-        return loss, ce, sse, kld
+        loss = ce * ce_weight
+        return loss, ce
 
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         self.train()
 
         epoch_loss = 0
-        epoch_kldloss = 0
-        epoch_sseloss = 0
         epoch_celoss = 0
 
         if epoch in batchsteps:
@@ -296,36 +236,29 @@ class VAE(_nn.Module):
                                       num_workers=data_loader.num_workers,
                                       pin_memory=data_loader.pin_memory)
 
-        for depths_in, tnf_in in data_loader:
+        for (depths_in,) in data_loader:
             depths_in.requires_grad = True
-            tnf_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
-                tnf_in = tnf_in.cuda()
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
+            depths_out, mu = self(depths_in)
 
-            loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
-                                                  tnf_out, mu, logsigma)
+            loss, ce = self.calc_loss(depths_in, depths_out, mu)
 
             loss.backward()
             optimizer.step()
 
             epoch_loss += loss.data.item()
-            epoch_kldloss += kld.data.item()
-            epoch_sseloss += sse.data.item()
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
-            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
+            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tBatchsize: {}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
-                  epoch_sseloss / len(data_loader),
-                  epoch_kldloss / len(data_loader),
                   data_loader.batch_size,
                   ), file=logfile)
 
@@ -350,7 +283,7 @@ class VAE(_nn.Module):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths_array, tnf_array = data_loader.dataset.tensors
+        (depths_array,) = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -360,14 +293,13 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf in new_data_loader:
+            for (depths,) in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
-                    tnf = tnf.cuda()
 
                 # Evaluate
-                out_depths, out_tnf, mu, logsigma = self(depths, tnf)
+                out_depths, mu = self(depths)
 
                 if self.usecuda:
                     mu = mu.cpu()
@@ -385,8 +317,6 @@ class VAE(_nn.Module):
         Output: None
         """
         state = {'nsamples': self.nsamples,
-                 'alpha': self.alpha,
-                 'beta': self.beta,
                  'dropout': self.dropout,
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
@@ -412,14 +342,12 @@ class VAE(_nn.Module):
         dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
 
         nsamples = dictionary['nsamples']
-        alpha = dictionary['alpha']
-        beta = dictionary['beta']
         dropout = dictionary['dropout']
         nhiddens = dictionary['nhiddens']
         nlatent = dictionary['nlatent']
         state = dictionary['state']
 
-        vae = cls(nsamples, nhiddens, nlatent, alpha, beta, dropout, cuda)
+        vae = cls(nsamples, nhiddens, nlatent, dropout, cuda)
         vae.load_state_dict(state)
 
         if cuda:
@@ -473,8 +401,6 @@ class VAE(_nn.Module):
         if logfile is not None:
             print('\tNetwork properties:', file=logfile)
             print('\tCUDA:', self.usecuda, file=logfile)
-            print('\tAlpha:', self.alpha, file=logfile)
-            print('\tBeta:', self.beta, file=logfile)
             print('\tDropout:', self.dropout, file=logfile)
             print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
             print('\tN latent:', self.nlatent, file=logfile)
