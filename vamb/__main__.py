@@ -274,7 +274,7 @@ def main():
     vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam
 
     For advanced use and extensions of Vamb, check documentation of the package
-    at https://github.com/jakobnissen/vamb."""
+    at https://github.com/RasmussenLab/vamb."""
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,

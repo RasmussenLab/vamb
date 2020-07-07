@@ -373,10 +373,10 @@ class Binning:
             bin_name = self.binof.get(contig)
             if bin_name is None:
                 continue
-            elif isinstance(bin_name, str):
-                bin_names.add(bin_name)
-            else:
+            elif isinstance(bin_name, set):
                 bin_names.update(bin_name)
+            else:
+                bin_names.add(bin_name)
 
         for bin_name in bin_names:
             intersecting_contigs = genome.contigs.intersection(self.contigsof[bin_name])
