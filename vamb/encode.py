@@ -274,7 +274,7 @@ class VAE(_nn.Module):
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-        sse_weight = self.alpha / 103
+        sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
 
