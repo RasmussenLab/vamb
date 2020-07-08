@@ -37,7 +37,7 @@ def read_contigs(filehandle, minlength=100):
         minlength: Ignore any references shorter than N bases [100]
 
     Outputs:
-        tnfs: An (n_FASTA_entries x 136) matrix of tetranucleotide freq.
+        tnfs: An (n_FASTA_entries x 103) matrix of tetranucleotide freq.
         contignames: A list of contig headers
         lengths: A Numpy array of contig lengths
     """

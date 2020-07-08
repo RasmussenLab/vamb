@@ -173,10 +173,10 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     log('Separator: {}'.format(None if separator is None else ('"'+separator+'"')),
         logfile, 1)
 
-    it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize, normalized=False,
-                              minsuccesses=minsuccesses, cuda=cuda)
+    it = vamb.cluster.cluster(latent, contignames, destroy=True, windowsize=windowsize,
+                              normalized=False, minsuccesses=minsuccesses, cuda=cuda)
 
-    renamed = ((str(i+1), c.as_tuple(contignames)[1]) for (i, c) in enumerate(it))
+    renamed = ((str(i+1), c) for (i, c) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
