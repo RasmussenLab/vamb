@@ -149,7 +149,7 @@ You should not try to bin very short sequences. When deciding the length cutoff 
 
 Your contig headers must be unique. Furthermore, if you want to use binsplitting (and you should!), your contig headers must be of the format {Samplename}{Separator}{X}, such that the part of the string before the *first* occurrence of {Separator} gives a name of the sample it originated from. For example, you could call contig number 115 from sample number 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {X}.
 
-Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM. If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like MASH to group similar samples together in smaller batches, bin these batches individually. This way, you can still leverage co-abundance.
+Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM. If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like MASH to group similar samples together in smaller batches, bin these batches individually. This way, you can still leverage co-abundance. **NB:** We are working on a version using memory-mapping that is much more RAM-efficient but 10-20% slower. Here we have processed a dataset of 942 samples with 30M contigs (total of 117Gbp contig sequence) in 40Gb RAM.
 
 __4) Map the reads to the FASTA file to obtain BAM files__
 
