@@ -16,6 +16,7 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 
 import numpy as _np
 import torch as _torch
+import os as _os
 
 from math import log as _log
 
@@ -29,7 +30,43 @@ import vamb.vambtools as _vambtools
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
+class BatchLoadDatasetFromNPY(_TensorDataset):
+   def __init__(self, rpkm_path, tnf_path):
+      self.rpkm_path = rpkm_path
+      # fhandle_rpkm = open(rpkm_path, 'rb')
+      # major, minor = _np.lib.format.read_magic(fhandle_rpkm)
+      # shape, fortran, dtype = _np.lib.format.read_array_header_1_0(fhandle_rpkm)
+      # self.shape_rpkm = shape
+      # fhandle_rpkm.close()
+      self.rpkm_mmap_array = _np.load(self.rpkm_path, mmap_mode='r')
+      self.shape_rpkm = self.rpkm_mmap_array.shape
+      
+      self.tnf_path = tnf_path
+      # fhandle_tnf = open(self.tnf_path, 'rb')
+      # major, minor = _np.lib.format.read_magic(fhandle_tnf)
+      # shape, fortran, dtype = _np.lib.format.read_array_header_1_0(fhandle_tnf)
+      # self.shape_tnf = shape
+      # fhandle_rpkm.close()
+      self.tnf_mmap_array = _np.load(self.tnf_path, mmap_mode='r')
+      self.shape_tnf = self.tnf_mmap_array.shape
+   
+   def __len__(self):
+      return self.shape_rpkm[0]
+   
+   def __getitem__(self, index):
+      #print(index)
+      # Get rpkm data
+      rpkm = _torch.from_numpy(self.rpkm_mmap_array[index,:])
+      #print("torch rpkm " + str(rpkm))
+      
+      # Get tnf data
+      tnf = _torch.from_numpy(self.tnf_mmap_array[index,:])
+      #print("torch tnf " + str(tnf))
+     
+      return (rpkm, tnf)
+
+
+def make_dataloader(rpkm_path, tnf_path, batchsize=64, destroy=False, cuda=False):
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -48,59 +85,17 @@ def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
         DataLoader: An object feeding data to the VAE
         mask: A boolean mask of which contigs are kept
     """
-
-    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
-        raise ValueError('TNF and RPKM must be Numpy arrays')
-
-    if batchsize < 1:
-        raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
-
-    if len(rpkm) != len(tnf):
-        raise ValueError('Lengths of RPKM and TNF must be the same')
-
-    if not (rpkm.dtype == tnf.dtype == _np.float32):
-        raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
-
-    mask = tnf.sum(axis=1) != 0
-
-    # If multiple samples, also include nonzero depth as requirement for accept
-    # of sequences
-    if rpkm.shape[1] > 1:
-        depthssum = rpkm.sum(axis=1)
-        mask &= depthssum != 0
-        depthssum = depthssum[mask]
-
-    if mask.sum() < batchsize:
-        raise ValueError('Fewer sequences left after filtering than the batch size.')
-
-    if destroy:
-        rpkm = _vambtools.numpy_inplace_maskarray(rpkm, mask)
-        tnf = _vambtools.numpy_inplace_maskarray(tnf, mask)
-    else:
-        # The astype operation does not copy due to "copy=False", but the masking
-        # operation does.
-        rpkm = rpkm[mask].astype(_np.float32, copy=False)
-        tnf = tnf[mask].astype(_np.float32, copy=False)
-
-    # If multiple samples, normalize to sum to 1, else zscore normalize
-    if rpkm.shape[1] > 1:
-        rpkm /= depthssum.reshape((-1, 1))
-    else:
-        _vambtools.zscore(rpkm, axis=0, inplace=True)
-
-    # Normalize arrays and create the Tensors (the tensors share the underlying memory)
-    # of the Numpy arrays
-    _vambtools.zscore(tnf, axis=0, inplace=True)
-    depthstensor = _torch.from_numpy(rpkm)
-    tnftensor = _torch.from_numpy(tnf)
-
+    
+    if not _os.path.isfile(rpkm_path) or not _os.path.isfile(tnf_path):
+        raise ValueError('TNF and RPKM files do not exist')
+    
     # Create dataloader
     n_workers = 4 if cuda else 1
-    dataset = _TensorDataset(depthstensor, tnftensor)
+    dataset = BatchLoadDatasetFromNPY(rpkm_path, tnf_path)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda)
 
-    return dataloader, mask
+    return dataloader
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
@@ -274,7 +269,7 @@ class VAE(_nn.Module):
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-        sse_weight = self.alpha / self.ntnf
+        sse_weight = self.alpha / 103
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
 
@@ -350,8 +345,9 @@ class VAE(_nn.Module):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths_array, tnf_array = data_loader.dataset.tensors
-        length = len(depths_array)
+        #depths_array, tnf_array = data_loader.dataset.tensors
+        #length = len(depths_array)
+        length = data_loader.dataset.shape_rpkm[0]
 
         # We make a Numpy array instead of a Torch array because, if we create
         # a Torch array, then convert it to Numpy, Numpy will believe it doesn't
@@ -467,7 +463,7 @@ class VAE(_nn.Module):
             batchsteps_set = set(batchsteps)
 
         # Get number of features
-        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
+        #ncontigs, nsamples = dataloader.dataset.tensors[0].shape
         optimizer = _Adam(self.parameters(), lr=lrate)
 
         if logfile is not None:
@@ -484,8 +480,8 @@ class VAE(_nn.Module):
             batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
             print('\tBatchsteps:', batchsteps_string, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
-            print('\tN sequences:', ncontigs, file=logfile)
-            print('\tN samples:', nsamples, file=logfile, end='\n\n')
+            #print('\tN sequences:', ncontigs, file=logfile)
+            #print('\tN samples:', nsamples, file=logfile, end='\n\n')
 
         # Train
         for epoch in range(nepochs):

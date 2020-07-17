@@ -38,26 +38,26 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     # If no path to FASTA is given, we load TNF from .npz files
     if fastapath is None:
         log('Loading TNF from npz array {}'.format(tnfpath), logfile, 1)
-        tnfs = vamb.vambtools.read_npz(tnfpath)
+        #tnfs = vamb.vambtools.read_npz(tnfpath)
         log('Loading contignames from npz array {}'.format(namespath), logfile, 1)
         contignames = vamb.vambtools.read_npz(namespath)
         log('Loading contiglengths from npz array {}'.format(lengthspath), logfile, 1)
         contiglengths = vamb.vambtools.read_npz(lengthspath)
 
-        if not tnfs.dtype == np.float32:
-            raise ValueError('TNFs .npz array must be of float32 dtype')
+        #if not tnfs.dtype == np.float32:
+        #    raise ValueError('TNFs .npz array must be of float32 dtype')
 
         if not np.issubdtype(contiglengths.dtype, np.integer):
             raise ValueError('contig lengths .npz array must be of an integer dtype')
 
-        if not (len(tnfs) == len(contignames) == len(contiglengths)):
-            raise ValueError('Not all of TNFs, names and lengths are same length')
+        #if not (len(tnfs) == len(contignames) == len(contiglengths)):
+        #    raise ValueError('Not all of TNFs, names and lengths are same length')
 
         # Discard any sequence with a length below mincontiglength
-        mask = contiglengths >= mincontiglength
-        tnfs = tnfs[mask]
-        contignames = list(contignames[mask])
-        contiglengths = contiglengths[mask]
+        #mask = contiglengths >= mincontiglength
+        #tnfs = tnfs[mask]
+        #contignames = list(contignames[mask])
+        #contiglengths = contiglengths[mask]
 
     # Else parse FASTA files
     else:
@@ -77,7 +77,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     log('Kept {} bases in {} sequences'.format(nbases, ncontigs), logfile, 1)
     log('Processed TNF in {} seconds'.format(elapsed), logfile, 1)
 
-    return tnfs, contignames, contiglengths
+    return tnfpath, contignames, contiglengths
 
 def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, ncontigs,
               minalignscore, minid, subprocesses, logfile):
@@ -86,10 +86,10 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
     # If rpkm is given, we load directly from .npz file
     if rpkmpath is not None:
         log('Loading RPKM from npz array {}'.format(rpkmpath), logfile, 1)
-        rpkms = vamb.vambtools.read_npz(rpkmpath)
+        #rpkms = vamb.vambtools.read_npz(rpkmpath)
 
-        if not rpkms.dtype == np.float32:
-            raise ValueError('RPKMs .npz array must be of float32 dtype')
+        #if not rpkms.dtype == np.float32:
+        #    raise ValueError('RPKMs .npz array must be of float32 dtype')
 
     # Else if JGI is given, we load from that
     elif jgipath is not None:
@@ -117,32 +117,32 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
 
-    if len(rpkms) != ncontigs:
-        raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
+    #if len(rpkms) != ncontigs:
+    #    raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
     log('Processed RPKM in {} seconds'.format(elapsed), logfile, 1)
 
-    return rpkms
+    return rpkmpath
 
 def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
-            batchsize, nepochs, lrate, batchsteps, logfile):
+            batchsize, nepochs, lrate, batchsteps, nsamples, logfile):
 
     begintime = time.time()
     log('\nCreating and training VAE', logfile)
-
-    nsamples = rpkms.shape[1]
+    
     vae = vamb.encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent,
                             alpha=alpha, beta=beta, dropout=dropout, cuda=cuda)
 
     log('Created VAE', logfile, 1)
-    dataloader, mask = vamb.encode.make_dataloader(rpkms, tnfs, batchsize,
+    dataloader = vamb.encode.make_dataloader(rpkms, tnfs, batchsize,
                                                    destroy=True, cuda=cuda)
     log('Created dataloader and mask', logfile, 1)
-    vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
-    n_discarded = len(mask) - mask.sum()
-    log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
-    log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
+    #vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
+    #n_discarded = len(mask) - mask.sum()
+    #n_discarded = 0
+    #log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
+    #log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
     print('', file=logfile)
 
     modelpath = os.path.join(outdir, 'model.pt')
@@ -158,7 +158,7 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     elapsed = round(time.time() - begintime, 2)
     log('Trained VAE and encoded in {} seconds'.format(elapsed), logfile, 1)
 
-    return mask, latent
+    return latent
 
 def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclusters,
             minclustersize, separator, cuda, logfile):
@@ -173,10 +173,10 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     log('Separator: {}'.format(None if separator is None else ('"'+separator+'"')),
         logfile, 1)
 
-    it = vamb.cluster.cluster(latent, contignames, destroy=True, windowsize=windowsize,
-                              normalized=False, minsuccesses=minsuccesses, cuda=cuda)
+    it = vamb.cluster.cluster(latent, destroy=True, windowsize=windowsize, normalized=False,
+                              minsuccesses=minsuccesses, cuda=cuda)
 
-    renamed = ((str(i+1), c) for (i, c) in enumerate(it))
+    renamed = ((str(i+1), c.as_tuple(contignames)[1]) for (i, c) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
@@ -231,7 +231,7 @@ def write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, min
 def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
         mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
         nepochs, batchsize, cuda, alpha, beta, dropout, lrate, batchsteps, windowsize,
-        minsuccesses, minclustersize, separator, maxclusters, minfasta, logfile):
+        minsuccesses, minclustersize, separator, maxclusters, minfasta, nsamples, logfile):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
@@ -247,11 +247,11 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
                       len(tnfs), minalignscore, minid, subprocesses, logfile)
 
     # Train, save model
-    mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
-                           dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile)
+    latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
+                           dropout, cuda, batchsize, nepochs, lrate, batchsteps, nsamples, logfile)
 
     del tnfs, rpkms
-    contignames = [c for c, m in zip(contignames, mask) if m]
+    #contignames = [c for c, m in zip(contignames, mask) if m]
 
     # Cluster, save tsv file
     clusterspath = os.path.join(outdir, 'clusters.tsv')
@@ -274,7 +274,7 @@ def main():
     vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam
 
     For advanced use and extensions of Vamb, check documentation of the package
-    at https://github.com/RasmussenLab/vamb."""
+    at https://github.com/jakobnissen/vamb."""
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,
@@ -302,6 +302,7 @@ def main():
     rpkmos.add_argument('--bamfiles', metavar='', help='paths to (multiple) BAM files', nargs='+')
     rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM')
     rpkmos.add_argument('--jgi', metavar='', help='path to output of jgi_summarize_bam_contig_depths')
+    rpkmos.add_argument('--nsamples', metavar='', help='nsamples when using memory-mapping', type=int)
 
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
@@ -340,7 +341,7 @@ def main():
     trainos.add_argument('-e', dest='nepochs', metavar='', type=int,
                         default=500, help='epochs [500]')
     trainos.add_argument('-t', dest='batchsize', metavar='', type=int,
-                        default=256, help='starting batch size [256]')
+                        default=64, help='starting batch size [64]')
     trainos.add_argument('-q', dest='batchsteps', metavar='', type=int, nargs='*',
                         default=[25, 75, 150, 300], help='double batch size at epochs [25 75 150 300]')
     trainos.add_argument('-r', dest='lrate',  metavar='',type=float,
@@ -519,6 +520,7 @@ def main():
             separator=args.separator,
             maxclusters=args.maxclusters,
             minfasta=args.minfasta,
+	    nsamples=args.nsamples,
             logfile=logfile)
 
 if __name__ == '__main__':
