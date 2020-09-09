@@ -129,7 +129,7 @@ Vamb produces the following output files:
 - `model.pt` - containing a PyTorch model object of the trained VAE. You can load the VAE from this file using `vamb.encode.VAE.load` from Python.
 - `clusters.tsv` - a two-column text file with one row per sequence: Left column for the cluster (i.e bin) name, right column for the sequence name. You can create the FASTA-file bins themselves using `vamb.vambtools.write_bins`, or using the function `vamb.vambtools.write_bins` (see `doc/tutorial.html` for more details).
 
-# Parameter optimisation (optional)
+## Parameter optimisation (optional)
 
 The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default is -l 32 -h 512 512)
 
