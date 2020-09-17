@@ -486,7 +486,13 @@ def main():
         subprocesses = min(subprocesses, len(args.bamfiles))
 
     ################### RUN PROGRAM #########################
-    os.mkdir(args.outdir)
+    try:
+        os.mkdir(args.outdir)
+    except FileExistsError:
+        pass
+    except:
+        raise
+        
     logpath = os.path.join(args.outdir, 'log.txt')
 
     with open(logpath, 'w') as logfile:
