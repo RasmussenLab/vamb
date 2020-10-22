@@ -1,0 +1,4 @@
+assemblies/contigs.sample_1.fna.gz
+assemblies/contigs.sample_2.fna.gz
+assemblies/contigs.sample_3.fna.gz
+assemblies/contigs.sample_4.fna.gz
