@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 
 # set configurations
-MM_MEM = config.get("minimap_mem", "")
-MM_PPN = config.get("minimap_ppn", "")
-VAMB_MEM = config.get("vamb_mem", "")
-VAMB_PPN = config.get("vamb_ppn", "")
-MMI = config.get("mmi", "")
-SAMPLES = config.get("sample_file", "")
-SAMPLE_DATA = config.get("sample_data", "")
-CONTIGS = config.get("contigs", "")
-VAMB_PARAMS = config.get("vamb_params", "")
-TMP_DIR = config.get("tmpdir", "")
+INDEX_SIZE = config.get("index_size", "12G")
+MM_MEM = config.get("minimap_mem", "35gb")
+MM_PPN = config.get("minimap_ppn", "10")
+VAMB_MEM = config.get("vamb_mem", "20gb")
+VAMB_PPN = config.get("vamb_ppn", "10")
+SAMPLE_DATA = config.get("sample_data", "samples2data.txt")
+CONTIGS = config.get("contigs", "contigs.txt")
+VAMB_PARAMS = config.get("vamb_params", "-o C -m 2000 --minfasta 500000")
+
+# parse if GPUs is needed #
+VAMB_threads, VAMB_GPU = VAMB_PPN.split(":")
 
 # define helper function
 def cat_fasta(inpaths, outpath):
@@ -33,7 +34,7 @@ def cat_fasta(inpaths, outpath):
     # Run the code. Compressing DNA is easy, this is about 8% bigger than compresslevel 9,
     # but ~15x faster.
     filehandle = gzip.open(str_outpath, "wt", compresslevel=3)
-    vamb.vambtools.concatenate_fasta(filehandle, inpaths, minlength=2000, rename=False)
+    vamb.vambtools.concatenate_fasta(filehandle, inpaths, minlength=2000, rename=True)
     filehandle.close()
 
 
@@ -217,7 +218,7 @@ rule vamb:
     log:
         "log/vamb/vamb.log"
     threads:
-        int(VAMB_PPN)
+        int(VAMB_threads)
     shell:
         "rm -rf vamb;"
         "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
@@ -234,7 +235,7 @@ rule checkm:
     log:
         "log/vamb/checkm.log"
     threads:
-        int(VAMB_PPN)
+        int(MM_PPN)
     conda:
         "envs/checkm.yaml"
     shell:
