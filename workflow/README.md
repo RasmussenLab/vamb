@@ -9,7 +9,7 @@ In short it will:
 2. Index resulting contig-file with minimap2 and create a sequence dictionary
 3. Map reads with minimap2 to the combined contig set
 4. Sort bam-files and create a jgi-count matrix by running individual samples in parallel 
-5. Run VAMB to bin the contigs
+5. Run Vamb to bin the contigs
 6. Determine completeness and contamination of the bins using CheckM
 ```
 
@@ -32,15 +32,15 @@ Option 2 (conda environment): If you rather want a specific conda environment fo
  conda install -n vamb -c conda-forge mamba
  mamba create -n vamb python=3.7
  mamba install -n vamb -c conda-forge -c bioconda snakemake
- mamba install -c pytorch pytorch torchvision cudatoolkit=10.2
+ mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
  mamba install -n vamb -c bioconda vamb=3.0.2
 ```
 
 ## Set up configuration with your data
 
-To run the snakemake workflow you need to set up three files: the configuration file (_config.json_), a file with paths to your contig-files (_contigs.txt_) and a file with paths to your reads (_samples2data.txt_). Example files are included and described here for an example dataset of four samples: 
+To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: 
 
-_contigs.txt_ contains paths to each of the per-sample assemblies:
+`contigs.txt` contains paths to each of the per-sample assemblies:
 ```
 assemblies/contigs.sample_1.fna.gz
 assemblies/contigs.sample_2.fna.gz
@@ -48,7 +48,7 @@ assemblies/contigs.sample_3.fna.gz
 assemblies/contigs.sample_4.fna.gz
 ```
 
-_samples2data.txt_ contains sample name, path to read-pair1 and path to read-pair2 (tab-separated):
+_`samples2data.txt` contains sample name, path to read-pair1 and path to read-pair2 (tab-separated):
 ```
 sample_1    reads/sample_1.r1.fq.gz    reads/sample_1.r2.fq.gz
 sample_2    reads/sample_2.r1.fq.gz    reads/sample_2.r2.fq.gz
@@ -57,7 +57,7 @@ sample_4    reads/sample_4.r1.fq.gz    reads/sample_4.r2.fq.gz
 
 ```
 
-Then the configuration file (_config.json_). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `mem` and `ppn` shows the amount of memory and cores set aside for minimap2 and VAMB and finally `vamb_params` gives the parameters used by VAMB. Here we tell it to use the multi-split approach (`-o C`), to skip contigs smaller than 2kb (`-m 2000`) and to write all bins larger than 500kb as fasta (`--minfasta 500000`). With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "35gb"`).
+Then the configuration file (`config.json`). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `mem` and `ppn` shows the amount of memory and cores set aside for minimap2 and VAMB and finally `vamb_params` gives the parameters used by VAMB. Here we tell it to use the multi-split approach (`-o C`), to skip contigs smaller than 2kb (`-m 2000`) and to write all bins larger than 500kb as fasta (`--minfasta 500000`). With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "35gb"`).
 
 ```
 {
