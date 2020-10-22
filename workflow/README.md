@@ -1,4 +1,4 @@
-## VAMB snakemake workflow
+# VAMB snakemake workflow
 
 This is a snakemake workflow that performs all the necessary steps to run VAMB. As input it takes paired end reads and individual sample de novo assemblies, process them through best practice pipeline (multi-split), runs VAMB and CheckM to assess the quality of the bins. It only requires conda, snakemake and VAMB to be installed to run as it uses conda environments to do the alignment, counting and to run CheckM.  
 
@@ -15,7 +15,7 @@ In short it will:
 
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
-### Installation 
+## Installation 
 To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and then [Snakemake](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html).
 
 After installing miniconda, you can install snakemake like this (here in global environment, see snakemake link above if you want a conda environment instead):
@@ -31,7 +31,7 @@ The current VAMB package at conda is not GPU-enabled (and I had some other troub
  pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
 ```
 
-### Set up configuration with your data
+## Set up configuration with your data
 
 To run the snakemake workflow you need to set up three files: the configuration file (_config.json_), a file with paths to your contig-files (_contigs.txt_) and a file with paths to your reads (_samples2data.txt_). Example files are included and described here as well for an example dataset of four samples: 
 
@@ -70,7 +70,7 @@ Then the configuration file (_config.json_). The first two lines points to the f
 For GPU usage: add `--cuda` to the _vamb_params_. If you are using qsub update then update _vamb_ppn_ accordingly (e.g. on our system we exchange "10" to "10:gpus=1".
 
 
-### Example running
+## Example run
 
 When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. Also if you have not already installed minimap2, samtools, metabat2 and CheckM add the `--use-conda` flag to make snakemake install the dependencies for you during runtime. E.g. you could do:
 
