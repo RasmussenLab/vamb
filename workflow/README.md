@@ -16,7 +16,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ### Installation 
-To run the workflow first install a Python3 version of [Miniconda] (https://docs.conda.io/en/latest/miniconda.html) and then [Snakemake] (https://snakemake.readthedocs.io/en/stable/getting_started/installation.html).
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and then [Snakemake](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html).
 
 After installing miniconda, you can install snakemake like this (here in global environment, see snakemake link above if you want a conda environment instead):
 
