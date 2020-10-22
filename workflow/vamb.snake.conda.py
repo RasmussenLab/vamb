@@ -219,6 +219,8 @@ rule vamb:
         "log/vamb/vamb.log"
     threads:
         int(VAMB_threads)
+    conda:
+        "envs/vamb.yaml"
     shell:
         "rm -rf vamb;"
         "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
