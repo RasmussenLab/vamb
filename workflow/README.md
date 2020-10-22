@@ -91,7 +91,7 @@ snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/
 
 Note 1: If you installed in a conda environment (option 2 above), remember to activate your conda environment using `conda activate vamb` before running the above commands.
 
-Note 2: If you want to re-run with different parameters of VAMB you can change the _vamb_params_ in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing _vamb_ folder.
+Note 2: If you want to re-run with different parameters of VAMB you can change the `vamb_params` in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing `vamb` folder.
 
 Please let us know if you have any issues and we can try to help out.
 
