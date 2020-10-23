@@ -224,7 +224,7 @@ rule vamb:
     conda:
         "envs/vamb.yaml"
     shell:
-        "{VAMB_PRELOAD};"
+        "{VAMB_PRELOAD}"
         "rm -rf vamb;"
         "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
 

@@ -103,7 +103,7 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
    "vamb_mem": "10gb",
    "vamb_ppn": "10:gpus=1",
    "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
-   "vamb_preload": "module load cuda/toolkit/10.2.89"
+   "vamb_preload": "module load cuda/toolkit/10.2.89;"
 }
 ```
 
