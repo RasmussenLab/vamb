@@ -68,22 +68,20 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10",
-   "vamb_params": "-o C -m 2000 --minfasta 500000"
+   "vamb_params": "-o C -m 2000 --minfasta 500000",
+   "vamb_preload": ""
 }
 ```
 
-For GPU usage: add `--cuda` to the `vamb_params`. If you are using qsub then also update `vamb_ppn` accordingly - e.g. on our system we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`.
-
-
 ## Example run
 
-When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. We add the flag `--use-conda` to make snakemake install the dependencies (Minimap2, Samtools, MetaBAT2, CheckM and Vamb) for you during runtime. You might have noticed we already installed Vamb above, but it is needed here as well if one installed a into a conda environment (option 2) and are using `--cluster`.  
+When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. You can then run snakemake on a laptop or workstation as below. We add the flag `--use-conda` to make snakemake install the dependencies (Minimap2, Samtools, MetaBAT2, CheckM and Vamb) for you during runtime.
 
 ```
 snakemake --cores 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --use-conda
 ```
 
-If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` option below.
+If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` option below. 
 
 ```
 snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --use-conda --latency-wait 60 --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
@@ -91,7 +89,42 @@ snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/
 
 Note 1: If you installed in a conda environment (option 2 above), remember to activate your conda environment using `conda activate vamb` before running the above commands.
 
-Note 2: If you want to re-run with different parameters of VAMB you can change the `vamb_params` in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing `vamb` folder.
+Note 2: If you want to re-run with different parameters of VAMB you can change  `vamb_params` in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing `vamb` folder.
+
+
+## Using a GPU to speed up Vamb
+
+Using a GPU can speed up Vamb considerably - especially when you are binning millions of contigs. In order to enable it you need to make a couple of changes to the configuration file. Basically we need to add `--cuda` to the `vamb_params` to tell Vamb to use the GPU. Then If you are using the `--cluster` option, you also need to update `vamb_ppn` accordingly - e.g. on our system (qsub) we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`. 
+
+```
+{
+   "contigs": "contigs.txt",
+   "sample_data": "samples2data.txt",
+   "index_size": "3G",
+   "minimap_mem": "15gb",
+   "minimap_ppn": "10",
+   "vamb_mem": "10gb",
+   "vamb_ppn": "10:gpus=1",
+   "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
+   "vamb_preload": ""
+}
+```
+
+Note that I could not get `vamb` to work with `cuda` on our cluster without pre-loading an already installed cudatoolkit module. Therefore it is possible to add loading a module for when running Vamb: `"vamb_preload": "module load cuda/toolkit/10.2.89"`. In that case the `config.json` file looks like this if I want to use GPU acceleration:  
+
+```
+{
+   "contigs": "contigs.txt",
+   "sample_data": "samples2data.txt",
+   "index_size": "3G",
+   "minimap_mem": "15gb",
+   "minimap_ppn": "10",
+   "vamb_mem": "10gb",
+   "vamb_ppn": "10:gpus=1",
+   "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
+   "vamb_preload": "module load cuda/toolkit/10.2.89;"
+}
+```
 
 Please let us know if you have any issues and we can try to help out.
 
