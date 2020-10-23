@@ -9,6 +9,7 @@ VAMB_PPN = config.get("vamb_ppn", "10")
 SAMPLE_DATA = config.get("sample_data", "samples2data.txt")
 CONTIGS = config.get("contigs", "contigs.txt")
 VAMB_PARAMS = config.get("vamb_params", "-o C -m 2000 --minfasta 500000")
+VAMB_PRELOAD = config.get("vamb_preload", "") 
 
 # parse if GPUs is needed #
 VAMB_threads, VAMB_GPU = VAMB_PPN.split(":")
@@ -78,6 +79,8 @@ rule cat_contigs:
         int(1)
     log:
         "log/contigs/catcontigs.log"
+    conda:
+        "envs/vamb.yaml"
     run:
         cat_fasta(input, output)
 
@@ -222,6 +225,7 @@ rule vamb:
     conda:
         "envs/vamb.yaml"
     shell:
+        "{VAMB_PRELOAD};"
         "rm -rf vamb;"
         "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
 
