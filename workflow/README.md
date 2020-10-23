@@ -16,25 +16,22 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and herefter install the dependencies of Vamb.
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `vamb` and herefter install all the dependencies needed.
 
-Option 1 (global install):
 ```
  conda install -c conda-forge mamba
- mamba install -c conda-forge -c bioconda snakemake 
- mamba install -c pytorch pytorch torchvision cudatoolkit=10.2
- mamba install -c bioconda vamb=3.0.2
-```
-
-Option 2 (conda environment): If you rather want a specific conda environment for your Vamb installation you can do this. Here we make a conda environment called `vamb` and installs the required packages. To activate the environment use `conda activate vamb` and use `conda deactivate` to get back to your normal shell.
-
-```
- conda install -n vamb -c conda-forge mamba
  mamba create -n vamb python=3.7
  mamba install -n vamb -c conda-forge -c bioconda snakemake
- mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
- mamba install -n vamb -c bioconda vamb=3.0.2
+ mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
+ mamba install -n vamb -c bioconda minimap2 metabat2 pysam checkm-genome 
+ mamba install -n vamb -c pytorch pytorch=1.4 torchvision=0.5 cudatoolkit=10.2
+ conda activate vamb
+ pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
+ conda deactivate
 ```
+
+We only have access to `vamb` and the other programs when we are inside this specific conda environment. We can use `conda activate vamb` to activate the environment (the name of shell changes and should say something with vamb) and `conda deactivate` to get out of it again. Therefore, if you can an error further down it could simply be because you have not activated environment.  
+
 
 ## Set up configuration with your data
 
@@ -68,23 +65,23 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10",
-   "vamb_params": "-o C -m 2000 --minfasta 500000",
-   "vamb_preload": ""
+   "vamb_params": "-o C -m 2000 --minfasta 500000"
 }
 ```
 
 ## Example run
 
-When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. You can then run snakemake on a laptop or workstation as below. We add the flag `--use-conda` to make snakemake install the dependencies (Minimap2, Samtools, MetaBAT2, CheckM and Vamb) for you during runtime.
+When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. You can then run snakemake on a laptop or workstation as below - remember to activate the conda environment first before running snakemake.
 
 ```
-snakemake --cores 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --use-conda
+conda activate vamb
+snakemake --cores 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py
 ```
 
 If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` option below. 
 
 ```
-snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --use-conda --latency-wait 60 --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
+snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --latency-wait 60 --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
 ```
 
 Note 1: If you installed in a conda environment (option 2 above), remember to activate your conda environment using `conda activate vamb` before running the above commands.
@@ -94,7 +91,7 @@ Note 2: If you want to re-run with different parameters of VAMB you can change  
 
 ## Using a GPU to speed up Vamb
 
-Using a GPU can speed up Vamb considerably - especially when you are binning millions of contigs. In order to enable it you need to make a couple of changes to the configuration file. Basically we need to add `--cuda` to the `vamb_params` to tell Vamb to use the GPU. Then If you are using the `--cluster` option, you also need to update `vamb_ppn` accordingly - e.g. on our system (qsub) we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`. 
+Using a GPU can speed up Vamb considerably - especially when you are binning millions of contigs. In order to enable it you need to make a couple of changes to the configuration file. Basically we need to add `--cuda` to the `vamb_params` to tell Vamb to use the GPU. Then If you are using the `--cluster` option, you also need to update `vamb_ppn` accordingly - e.g. on our system (qsub) we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`. Therefore the `config.json` file looks like this if I want to use GPU acceleration:
 
 ```
 {
@@ -106,25 +103,15 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
    "vamb_mem": "10gb",
    "vamb_ppn": "10:gpus=1",
    "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
-   "vamb_preload": ""
+   "vamb_preload": "module load cuda/toolkit/10.2.89"
 }
 ```
 
-Note that I could not get `vamb` to work with `cuda` on our cluster without pre-loading an already installed cudatoolkit module. Therefore it is possible to add loading a module for when running Vamb: `"vamb_preload": "module load cuda/toolkit/10.2.89"`. In that case the `config.json` file looks like this if I want to use GPU acceleration:  
+Note that I could not get `vamb` to work with `cuda` on our cluster when installing from bioconda. Therefore I added a line to preload cuda toolkit to the configuration file that will load this module when running `vamb`. 
 
-```
-{
-   "contigs": "contigs.txt",
-   "sample_data": "samples2data.txt",
-   "index_size": "3G",
-   "minimap_mem": "15gb",
-   "minimap_ppn": "10",
-   "vamb_mem": "10gb",
-   "vamb_ppn": "10:gpus=1",
-   "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
-   "vamb_preload": "module load cuda/toolkit/10.2.89;"
-}
-```
+  
+
+
 
 Please let us know if you have any issues and we can try to help out.
 
