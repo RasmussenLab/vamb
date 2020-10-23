@@ -9,10 +9,11 @@ VAMB_PPN = config.get("vamb_ppn", "10")
 SAMPLE_DATA = config.get("sample_data", "samples2data.txt")
 CONTIGS = config.get("contigs", "contigs.txt")
 VAMB_PARAMS = config.get("vamb_params", "-o C -m 2000 --minfasta 500000")
-VAMB_PRELOAD = config.get("vamb_preload", "") 
+VAMB_PRELOAD = config.get("vamb_preload", "")
 
 # parse if GPUs is needed #
-VAMB_threads, VAMB_GPU = VAMB_PPN.split(":")
+VAMB_split = VAMB_PPN.split(":") 
+VAMB_threads = VAMB_split[0]
 
 # define helper function
 def cat_fasta(inpaths, outpath):
@@ -79,8 +80,6 @@ rule cat_contigs:
         int(1)
     log:
         "log/contigs/catcontigs.log"
-    conda:
-        "envs/vamb.yaml"
     run:
         cat_fasta(input, output)
 
@@ -98,7 +97,7 @@ rule index:
     conda: 
         "envs/minimap2.yaml"
     shell:
-        "minimap2 -I 12G -d {output} {input} 2> {log}"
+        "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log}"
 
 rule dict:
     input:
