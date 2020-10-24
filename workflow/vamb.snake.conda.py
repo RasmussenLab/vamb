@@ -45,8 +45,9 @@ def jgi2npz(inpath, outpath):
     
     import vamb
     import os
+    with open(str(inpath), "r") as file:
+        depths = vamb.vambtools.load_jgi(file)
     
-    depths = vamb.vambtools.load_jgi(str(inpath))
     vamb.vambtools.write_npz(str(outpath), depths)
 
 
