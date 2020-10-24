@@ -46,8 +46,8 @@ def jgi2npz(inpath, outpath):
     import vamb
     import os
     
-    depths = vamb.vambtools.load_jgi(inpath)
-    vamb.vambtools.write_npz(outpath, depths)
+    depths = vamb.vambtools.load_jgi(str(inpath))
+    vamb.vambtools.write_npz(str(outpath), depths)
 
 
 ## read in sample information ##
@@ -221,7 +221,7 @@ rule jgi_to_npz:
     params:
         walltime="86400", nodes="1", ppn="1", mem=VAMB_MEM
     log:
-        "log/jgi/jgi_to_npz"
+        "log/jgi/jgi_to_npz.log"
     run:
         jgi2npz(input, output)
 
