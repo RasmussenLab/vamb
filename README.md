@@ -59,10 +59,10 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 -k 21,29,39,59,79,99 -t 24 -m 100gb -o /path/to/assemblies/sample1
 ```
 
-2. Use Vamb's `src/concatenate.py` to make the FASTA catalogue of all your assemblies:
+2. Use Vamb's `concatenate.py` to make the FASTA catalogue of all your assemblies:
 
 ```
-python src/concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
+python vamb/concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
 /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 

@@ -3,9 +3,7 @@ channels:
   - bioconda
   - pytorch
 dependencies:
-  - vamb
-  - pysam
   - pytorch
   - torchvision
-  - numpy
   - cudatoolkit=10.2
+  - vamb=3.0.2
