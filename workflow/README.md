@@ -24,7 +24,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba install -n vamb -c conda-forge -c bioconda snakemake
  mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
  mamba install -n vamb -c bioconda minimap2 metabat2 pysam checkm-genome 
- mamba install -n vamb -c pytorch pytorch=1.4 torchvision=0.5 cudatoolkit=10.2
+ mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
  conda activate vamb
  pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
  conda deactivate
@@ -108,10 +108,6 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
 ```
 
 Note that I could not get `vamb` to work with `cuda` on our cluster when installing from bioconda. Therefore I added a line to preload cuda toolkit to the configuration file that will load this module when running `vamb`. 
-
-  
-
-
 
 Please let us know if you have any issues and we can try to help out.
 
