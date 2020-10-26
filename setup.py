@@ -18,6 +18,7 @@ SETUP_METADATA = \
         'vamb = vamb.__main__:main'
         ]
     },
+    "scripts": ['src/concatenate.py'],
     "ext_modules": [Extension("vamb._vambtools",
                                sources=["src/_vambtools.pyx"],
                                language="c")],
