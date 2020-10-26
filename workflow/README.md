@@ -30,7 +30,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda deactivate
 ```
 
-We only have access to `vamb` and the other programs when we are inside this specific conda environment. We can use `conda activate vamb` to activate the environment (the name of shell changes and should say something with vamb) and `conda deactivate` to get out of it again. Therefore, if you can an error further down it could simply be because you have not activated environment.  
+We only have access to `vamb` and the other programs when we are inside this specific conda environment. We can use `conda activate vamb` to activate the environment (the name of shell changes and should say something with vamb) and `conda deactivate` to get out of it again. Therefore, if you can an error further down it could simply be because you have not activated the environment.  
 
 
 ## Set up configuration with your data
@@ -78,10 +78,10 @@ conda activate vamb
 snakemake --cores 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py
 ```
 
-If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` option below. 
+If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` and `--use-conda` options below. The latter is added because when running on the cluster we need to build the different program environments before starting the runs. Therefore, it can a little bit of time before it actually starts running the first jobs.
 
 ```
-snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --latency-wait 60 --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
+snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
 ```
 
 Note 1: If you installed in a conda environment (option 2 above), remember to activate your conda environment using `conda activate vamb` before running the above commands.

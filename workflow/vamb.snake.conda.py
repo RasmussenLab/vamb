@@ -172,7 +172,7 @@ rule paste_abundances:
         column1to3="jgi/jgi.column1to3",
         data=expand("jgi/{sample}.cut.jgi", sample=IDS)
     output:
-        temp("jgi_matrix/jgi.abundance.dat") 
+        "jgi_matrix/jgi.abundance.dat" 
     params:
         walltime="86400", nodes="1", ppn="1", mem="1gb"
     log:
