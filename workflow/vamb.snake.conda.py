@@ -39,18 +39,6 @@ def cat_fasta(inpaths, outpath):
     vamb.vambtools.concatenate_fasta(filehandle, inpaths, minlength=2000, rename=True)
     filehandle.close()
 
-
-def jgi2npz(inpath, outpath):
-    '''Convert JGI matrix to NPZ format'''
-    
-    import vamb
-    import os
-    with open(str(inpath), "r") as file:
-        depths = vamb.vambtools.load_jgi(file)
-    
-    vamb.vambtools.write_npz(str(outpath), depths)
-
-
 ## read in sample information ##
 
 # read in sample2path
@@ -214,21 +202,9 @@ rule paste_abundances:
     shell: 
         "paste {input.column1to3} {input.data} > {output} 2>{log}" 
 
-rule jgi_to_npz:
-    input:
-        "jgi_matrix/jgi.abundance.dat"
-    output:
-        "jgi_matrix/jgi.abundance.npz"
-    params:
-        walltime="86400", nodes="1", ppn="1", mem=VAMB_MEM
-    log:
-        "log/jgi/jgi_to_npz.log"
-    run:
-        jgi2npz(input, output)
-
 rule vamb:
     input:
-        rpkm = "jgi_matrix/jgi.abundance.npz",
+        rpkm = "jgi_matrix/jgi.abundance.dat",
         contigs = "contigs.flt.fna.gz"
     output:
         "vamb/clusters.tsv",
