@@ -15,30 +15,6 @@ VAMB_PRELOAD = config.get("vamb_preload", "")
 VAMB_split = VAMB_PPN.split(":") 
 VAMB_threads = VAMB_split[0]
 
-# define helper function
-def cat_fasta(inpaths, outpath):
-    '''Concatenate fastas. Will remove contigs smaller than 2kbp
-    and rename the contigs to fit with multi-split'''
-    
-    import vamb
-    import os
-    import gzip
-    
-    # Check inputs
-    for path in inpaths:
-        if not os.path.isfile(path):
-            raise FileNotFoundError(path)
-    
-    str_outpath = str(outpath)
-    if os.path.exists(str_outpath):
-        raise FileExistsError(str_outpath)
-    
-    # Run the code. Compressing DNA is easy, this is about 8% bigger than compresslevel 9,
-    # but ~15x faster.
-    filehandle = gzip.open(str_outpath, "wt", compresslevel=3)
-    vamb.vambtools.concatenate_fasta(filehandle, inpaths, minlength=2000, rename=True)
-    filehandle.close()
-
 ## read in sample information ##
 
 # read in sample2path
@@ -79,8 +55,10 @@ rule cat_contigs:
         int(1)
     log:
         "log/contigs/catcontigs.log"
-    run:
-        cat_fasta(input, output)
+    conda:
+        "envs/vamb.yaml"
+    shell:
+        "concatenate.py {output} {input} -m 2000"
 
 rule index:
     input:
@@ -204,7 +182,7 @@ rule paste_abundances:
 
 rule vamb:
     input:
-        rpkm = "jgi_matrix/jgi.abundance.dat",
+        jgi = "jgi_matrix/jgi.abundance.dat",
         contigs = "contigs.flt.fna.gz"
     output:
         "vamb/clusters.tsv",
@@ -225,7 +203,7 @@ rule vamb:
     shell:
         "{VAMB_PRELOAD}"
         "rm -rf vamb;"
-        "vamb --outdir vamb --fasta {input.contigs} --rpkm {input.rpkm} {VAMB_PARAMS} 2>{log}"
+        "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
 
 rule checkm:
     input:
