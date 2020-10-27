@@ -32,7 +32,7 @@ This is for developers who want to be able to edit Python files and have the cha
 
 ```
 # clone the desired branch from the repository, here master
-git clone https://github.com/jakobnissen/vamb -b master
+git clone https://github.com/RasmussenLab/vamb -b master
 cd vamb
 pip install -e .
 ```
