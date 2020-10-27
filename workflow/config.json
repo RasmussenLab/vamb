@@ -1,0 +1,11 @@
+{
+   "contigs": "contigs.txt",
+   "sample_data": "samples2data.txt",
+   "index_size": "3G",
+   "minimap_mem": "15gb",
+   "minimap_ppn": "10",
+   "vamb_mem": "10gb",
+   "vamb_ppn": "10",
+   "vamb_params": "-o C -m 2000 --minfasta 500000",
+   "vamb_preload": ""
+}
