@@ -1,0 +1,9 @@
+name: vamb
+channels:
+  - bioconda
+  - pytorch
+dependencies:
+  - pytorch
+  - torchvision
+  - cudatoolkit=10.2
+  - vamb=3.0.2

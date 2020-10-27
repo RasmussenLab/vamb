@@ -41,7 +41,10 @@ If you can't/don't want to use pip/Conda, you can do it the hard way: Get the mo
 
 # Running
 
-For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory.
+For a detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory. 
+
+**Updated in 3.0.2: for a snakemake pipeline see `workflow` directory.**
+
 For more command-line options, see the command-line help menu:
 ```
 vamb -h
@@ -59,10 +62,10 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 -k 21,29,39,59,79,99 -t 24 -m 100gb -o /path/to/assemblies/sample1
 ```
 
-2. Use Vamb's `src/concatenate.py` to make the FASTA catalogue of all your assemblies:
+2. Use Vamb's `concatenate.py` to make the FASTA catalogue of all your assemblies:
 
 ```
-python src/concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
+concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
 /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 
@@ -78,6 +81,12 @@ minimap2 -t 8 -N 50 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/t
 ```
 vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
 ```
+
+Note that we have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module (see below). If you want to use this approach instead we provide an easy to use `snakemake` workflow which will do this for you. 
+
+## Snakemake workflow
+
+To make it even easier to run Vamb in the best possible way, we have created a [Snakemake](https://snakemake.readthedocs.io/en/stable/#) workflow that will run steps 2-4 above using MetaBAT2's `jgi_summarize_bam_contig_depths` program for improved counting. Additionally it will run [CheckM](https://ecogenomics.github.io/CheckM/) to estimate completeness and contamination of the resulting bins. It can run both on a local machine, a workstation and a HPC system using `qsub` - it is included in the `workflow` folder.
 
 ## Invoking Vamb
 
@@ -131,14 +140,14 @@ Vamb produces the following output files:
 
 ## Parameter optimisation (optional)
 
-The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default is -l 32 -h 512 512)
+The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default is `-l 32 -h 512 512`)`:
 
 ```
 vamb -l 24 -h 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
 vamb -l 40 -h 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
 ```
 
-It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods.
+It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
 
 
 # Recommended workflow
@@ -175,7 +184,7 @@ Be careful to choose proper parameters for your aligner - in general, if reads f
 
 If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`), and/or filter for minimum alignments score using the `-s` flag (uses the `AS` optional field of the alignment.)
 
-We have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module. For the best results, we recommend [downloading MetaBAT2](https://bitbucket.org/berkeleylab/metabat/src/master/), using `jgi_summarize_bam_contig_depths` to estimate depths, and then running Vamb with `--jgi` instead of `--bamfiles`.
+We have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module. For the best results, we recommend [downloading MetaBAT2](https://bitbucket.org/berkeleylab/metabat/src/master/), using `jgi_summarize_bam_contig_depths` to estimate depths, and then running Vamb with `--jgi` instead of `--bamfiles`. Also consider using the `snakemake` workflow which will do this for you. 
 
 __5) Run Vamb__
 

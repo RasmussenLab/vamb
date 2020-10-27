@@ -10,7 +10,7 @@ SETUP_METADATA = \
     "url": "https://github.com/jakobnissen/vamb",
     "author": "Jakob Nybo Nissen and Simon Rasmussen",
     "author_email": "jakobnybonissen@gmail.com",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "license": "MIT",
     "packages": find_packages(),
     "package_data": {"vamb": ["kernel.npz"]},
@@ -18,10 +18,11 @@ SETUP_METADATA = \
         'vamb = vamb.__main__:main'
         ]
     },
+    "scripts": ['src/concatenate.py'],
     "ext_modules": [Extension("vamb._vambtools",
                                sources=["src/_vambtools.pyx"],
                                language="c")],
-    "install_requires": ["numpy>=1.15", "torch>=0.4", "pysam>=0.14"],
+    "install_requires": ["numpy>=1.15", "torch>=1.4", "pysam>=0.14", "torchvision>=0.6"],
     "setup_requires": ['Cython>=0.25.2', "setuptools>=38.6.0"],
     "python_requires": ">=3.5",
     "classifiers":[
