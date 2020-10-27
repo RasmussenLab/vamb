@@ -176,7 +176,7 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     it = vamb.cluster.cluster(latent, contignames, destroy=True, windowsize=windowsize,
                               normalized=False, minsuccesses=minsuccesses, cuda=cuda)
 
-    renamed = ((str(i+1), c) for (i, (n,c)) in enumerate(it)) 
+    renamed = ((str(i+1), c) for (i, (n,c)) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
