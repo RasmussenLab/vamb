@@ -8,4 +8,5 @@ vamb.egg-info
 changelog
 .DS_Store
 .ipynb_checkpoints
-workflow/README.old.md
+build/
+dist/
