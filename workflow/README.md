@@ -65,7 +65,7 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10",
-   "vamb_params": "-o C -m 2000 --minfasta 500000"
+   "vamb_params": "-o C -m 2000 --minfasta 500000 --outdir vamb"
 }
 ```
 
@@ -102,7 +102,7 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10:gpus=1",
-   "vamb_params": "-o C -m 2000 --minfasta 500000 --cuda",
+   "vamb_params": "-o C -m 2000 --minfasta 500000 --outdir vamb --cuda",
    "vamb_preload": "module load cuda/toolkit/10.2.89;"
 }
 ```
