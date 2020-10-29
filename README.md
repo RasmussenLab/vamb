@@ -19,7 +19,7 @@ pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
 ```
 
 or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
-(note that the BioConda package does not include GPU support, but should be updated in a couple of days).
+(note that the BioConda package does not include GPU support).
  
 ```
 conda install -c pytorch pytorch torchvision cudatoolkit=10.2
