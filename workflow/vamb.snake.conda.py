@@ -6,6 +6,8 @@ MM_MEM = config.get("minimap_mem", "35gb")
 MM_PPN = config.get("minimap_ppn", "10")
 VAMB_MEM = config.get("vamb_mem", "20gb")
 VAMB_PPN = config.get("vamb_ppn", "10")
+CHECKM_MEM = config.get("checkm_mem", "25gb")
+CHECKM_PPN = config.get("checkm_ppn", "10")
 SAMPLE_DATA = config.get("sample_data", "samples2data.txt")
 CONTIGS = config.get("contigs", "contigs.txt")
 VAMB_PARAMS = config.get("vamb_params", "-o C -m 2000 --minfasta 500000")
@@ -211,13 +213,13 @@ rule checkm:
     output:
         "vamb/checkm.results"
     params:
-        walltime="86400", nodes="1", ppn=MM_PPN, mem=MM_MEM,
+        walltime="86400", nodes="1", ppn=CHECKM_PPN, mem=CHECKM_MEM,
         bins = "vamb/bins",
         outdir = "vamb/checkm.outdir"
     log:
         "log/vamb/checkm.log"
     threads:
-        int(MM_PPN)
+        int(CHECKM_PPN)
     conda:
         "envs/checkm.yaml"
     shell:

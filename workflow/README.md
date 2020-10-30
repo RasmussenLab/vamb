@@ -23,7 +23,8 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba create -n vamb python=3.7
  mamba install -n vamb -c conda-forge -c bioconda snakemake
  mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
- mamba install -n vamb -c bioconda minimap2 metabat2 pysam checkm-genome 
+ mamba install -n vamb -c bioconda minimap2 pysam checkm-genome 
+ mamba install -n vamb -c bioconda/label/cf201901 metabat2
  mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
  conda activate vamb
  pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
@@ -65,6 +66,8 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10",
+   "checkm_mem": "25gb",
+   "checkm_ppn": "10",   
    "vamb_params": "-o C -m 2000 --minfasta 500000 --outdir vamb"
 }
 ```
@@ -88,13 +91,14 @@ Note 1: If you installed in a conda environment (option 2 above), remember to ac
 
 Note 2: If you want to re-run with different parameters of VAMB you can change  `vamb_params` in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing `vamb` folder.
 
-Note 3: Currently I cannot get `vamb` to build correctly directly from bioconda (could be my system). If this is a problem for you as well you can use the snakemake workflow on a cluster by installing `vamb` and the dependencies in your main python environment and then run without `--use-conda`. Therefore, installation will be:
+Note 3: Currently I cannot get `vamb` to build correctly directly from bioconda (could be my system). If this is a problem for you as well you can use the snakemake workflow on a cluster by installing `vamb` and the dependencies in your main python environment and then run without `--use-conda`. Therefore, installation and running will be:
 
  ```
  # install dependencies and vamb
  mamba install -c conda-forge -c bioconda snakemake
  mamba install -c conda-forge -c bioconda "samtools>=1.8"
- mamba install -c bioconda minimap2 metabat2 pysam checkm-genome 
+ mamba install -c bioconda minimap2 pysam checkm-genome
+ mamba install -c bioconda/label/cf201901 metabat2 
  mamba install -c pytorch pytorch torchvision cudatoolkit=10.2
  pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
  
@@ -116,6 +120,8 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
    "minimap_ppn": "10",
    "vamb_mem": "10gb",
    "vamb_ppn": "10:gpus=1",
+   "checkm_mem": "25gb",
+   "checkm_ppn": "10",   
    "vamb_params": "-o C -m 2000 --minfasta 500000 --outdir vamb --cuda",
    "vamb_preload": "module load cuda/toolkit/10.2.89;"
 }
