@@ -91,21 +91,6 @@ Note 1: If you installed in a conda environment (option 2 above), remember to ac
 
 Note 2: If you want to re-run with different parameters of VAMB you can change  `vamb_params` in the config-file, but remember to rename the existing `vamb` folder as it will overwrite existing `vamb` folder.
 
-Note 3: Currently I cannot get `vamb` to build correctly directly from bioconda (could be my system). If this is a problem for you as well you can use the snakemake workflow on a cluster by installing `vamb` and the dependencies in your main python environment and then run without `--use-conda`. Therefore, installation and running will be:
-
- ```
- # install dependencies and vamb
- mamba install -c conda-forge -c bioconda snakemake
- mamba install -c conda-forge -c bioconda "samtools>=1.8"
- mamba install -c bioconda minimap2 pysam checkm-genome
- mamba install -c bioconda/label/cf201901 metabat2 
- mamba install -c pytorch pytorch torchvision cudatoolkit=10.2
- pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
- 
- # running the pipeline
- snakemake --jobs 20 --configfile config.json --snakefile /path/to/vamb/workflow/vamb.snake.conda.py --latency-wait 60 --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
-```
-
 
 ## Using a GPU to speed up Vamb
 
