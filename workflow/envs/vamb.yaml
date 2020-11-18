@@ -1,9 +1,13 @@
 name: vamb
 channels:
-  - bioconda
   - pytorch
+  - conda-forge
+  - bioconda
 dependencies:
   - pytorch
+  - pip
   - torchvision
   - cudatoolkit=10.2
-  - vamb=3.0.2
+  - pysam
+  - pip:
+     - git+https://github.com/RasmussenLab/vamb@3.0.2
