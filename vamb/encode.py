@@ -191,7 +191,7 @@ class VAE(_nn.Module):
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
-        self.softplus = _nn.Softplus()
+        #self.softplus = _nn.Softplus()
         self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         if cuda:
@@ -217,7 +217,7 @@ class VAE(_nn.Module):
         # necessitates a new round of hyperparameter optimization, and there is no way in
         # hell I am going to do that at the moment of writing.
         # Also remove needless factor 2 in definition of latent in reparameterize function.
-        logsigma = self.softplus(self.logsigma(tensor))
+        logsigma = self.logsigma(tensor)
 
         return mu, logsigma
 
