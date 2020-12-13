@@ -7,6 +7,7 @@ import lzma as _lzma
 import numpy as _np
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
+from hashlib import md5 as _md5
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -435,7 +436,7 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
         raise NotADirectoryError(abspath)
 
     if minsize < 0:
-        raise ArgumentError("Minsize must be nonnegative")
+        raise ValueError("Minsize must be nonnegative")
 
     # Check that all contigs in all bins are in the fastadict
     allcontigs = set()
@@ -571,6 +572,45 @@ def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
                 entry.header = newheader
                 print(entry.format(), file=outfile)
 
+def _hash_refnames(refnames):
+    "Hashes an iterable of strings of reference names using MD5."
+    hasher = _md5()
+    for refname in refnames:
+        hasher.update(refname.encode().rstrip())
+
+    return hasher.digest()
+
+def _load_jgi(filehandle, refhash):
+    "This function can be merged with load_jgi below in the next breaking release (post 3.0)"
+    header = next(filehandle)
+    fields = header.strip().split('\t')
+    if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
+        raise ValueError('Input file format error: First columns should be "contigName,"'
+        '"contigLen" and "totalAvgDepth"')
+
+    columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
+    array = PushArray(_np.float32)
+    identifiers = list()
+
+    for row in filehandle:
+        fields = row.split('\t')
+        for col in columns:
+            array.append(float(fields[col]))
+        
+        identifiers.append(fields[0])
+    
+    if refhash is not None:
+        hash = _hash_refnames(identifiers)
+        if hash != refhash:
+            errormsg = ('JGI file has reference hash {}, expected {}. '
+                        'Verify that all BAM headers and FASTA headers are '
+                        'identical and in the same order.')
+            raise ValueError(errormsg.format(hash.hex(), refhash.hex()))
+
+    result = array.take()
+    result.shape = (len(result) // len(columns), len(columns))
+    return validate_input_array(result)
+
 def load_jgi(filehandle):
     """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
     See https://bitbucket.org/berkeleylab/metabat for more info on that program.
@@ -583,16 +623,7 @@ def load_jgi(filehandle):
     Output:
         N_contigs x N_samples Numpy matrix of dtype float32
     """
-
-    header = next(filehandle)
-    fields = header.split('\t')
-    if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
-        raise ValueError('Input file format error: First columns should be "contigName,"'
-        '"contigLen" and "totalAvgDepth"')
-
-    columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
-    array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
-    return validate_input_array(array)
+    return _load_jgi(filehandle, None)
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
@@ -602,7 +633,7 @@ def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(se
         if not isinstance(header, str):
             raise TypeError('Can only split named sequences, not of type {}'.format(type(header)))
 
-        sample, sep, identifier = header.partition(separator)
+        sample, _sep, identifier = header.partition(separator)
 
         if not identifier:
             raise KeyError("Separator '{}' not in sequence label: '{}'".format(separator, header))

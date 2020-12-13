@@ -90,17 +90,19 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
 
         if not rpkms.dtype == np.float32:
             raise ValueError('RPKMs .npz array must be of float32 dtype')
+    
+    else:
+        log('Reference hash: {}'.format(refhash if refhash is None else refhash.hex()), logfile, 1)
 
     # Else if JGI is given, we load from that
-    elif jgipath is not None:
+    if jgipath is not None:
         log('Loading RPKM from JGI file {}'.format(jgipath), logfile, 1)
         with open(jgipath) as file:
-            rpkms = vamb.vambtools.load_jgi(file)
+            rpkms = vamb.vambtools._load_jgi(file, refhash)
 
     else:
         log('Parsing {} BAM files with {} subprocesses'.format(len(bampaths), subprocesses),
            logfile, 1)
-        log('Reference hash: {}'.format(refhash if refhash is None else refhash.hex()), logfile, 1)
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
         log('Min identity: {}'.format(minid), logfile, 1)
         log('Min contig length: {}'.format(mincontiglength), logfile, 1)
@@ -242,7 +244,7 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
                                                 lengthspath, mincontiglength, logfile)
 
     # Parse BAMs, save as npz
-    refhash = None if norefcheck else vamb.parsebam._hash_refnames(contignames)
+    refhash = None if norefcheck else vamb.vambtools._hash_refnames(contignames)
     rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
                       len(tnfs), minalignscore, minid, subprocesses, logfile)
 

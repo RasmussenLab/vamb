@@ -48,7 +48,7 @@ import os as _os
 import multiprocessing as _multiprocessing
 import numpy as _np
 import time as _time
-from hashlib import md5 as _md5
+import vamb.vambtools as _vambtools
 
 DEFAULT_SUBPROCESSES = min(8, _os.cpu_count())
 
@@ -195,14 +195,6 @@ def calc_rpkm(counts, lengths, minlength=None):
 
     return rpkm
 
-def _hash_refnames(refnames):
-    "Hashes an iterable of strings of reference names using MD5."
-    hasher = _md5()
-    for refname in refnames:
-        hasher.update(refname.encode().rstrip())
-
-    return hasher.digest()
-
 def _check_bamfile(path, bamfile, refhash, minlength):
     "Checks bam file for correctness (refhash and sort order). To be used before parsing."
     # If refhash is set, check ref hash matches what is found.
@@ -213,7 +205,7 @@ def _check_bamfile(path, bamfile, refhash, minlength):
             pairs = zip(bamfile.references, bamfile.lengths)
             refnames = (ref for (ref, len) in pairs if len >= minlength)
 
-        hash = _hash_refnames(refnames)
+        hash = _vambtools._hash_refnames(refnames)
         if hash != refhash:
             errormsg = ('BAM file {} has reference hash {}, expected {}. '
                         'Verify that all BAM headers and FASTA headers are '
@@ -271,7 +263,7 @@ def read_bamfiles(paths, dumpdirectory=None, refhash=None, minscore=None, minlen
     # Define callback function depending on whether a logfile exists or not
     if logfile is not None:
         def _callback(result):
-            path, rpkms, length = result
+            path, _rpkms, _length = result
             print('\tProcessed', path, file=logfile)
             logfile.flush()
 
