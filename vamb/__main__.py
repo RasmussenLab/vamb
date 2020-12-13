@@ -98,7 +98,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
     if jgipath is not None:
         log('Loading RPKM from JGI file {}'.format(jgipath), logfile, 1)
         with open(jgipath) as file:
-            rpkms = vamb.vambtools._load_jgi(file, refhash)
+            rpkms = vamb.vambtools._load_jgi(file, mincontiglength, refhash)
 
     else:
         log('Parsing {} BAM files with {} subprocesses'.format(len(bampaths), subprocesses),

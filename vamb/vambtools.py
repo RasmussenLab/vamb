@@ -580,7 +580,7 @@ def _hash_refnames(refnames):
 
     return hasher.digest()
 
-def _load_jgi(filehandle, refhash):
+def _load_jgi(filehandle, minlength, refhash):
     "This function can be merged with load_jgi below in the next breaking release (post 3.0)"
     header = next(filehandle)
     fields = header.strip().split('\t')
@@ -594,6 +594,9 @@ def _load_jgi(filehandle, refhash):
 
     for row in filehandle:
         fields = row.split('\t')
+        if int(fields[1]) < minlength:
+            continue
+
         for col in columns:
             array.append(float(fields[col]))
         
@@ -623,7 +626,7 @@ def load_jgi(filehandle):
     Output:
         N_contigs x N_samples Numpy matrix of dtype float32
     """
-    return _load_jgi(filehandle, None)
+    return _load_jgi(filehandle, 0, None)
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
