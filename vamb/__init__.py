@@ -21,11 +21,11 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-__version__ = (3, 0, 2)
+__version__ = (4, 0, 0)
 
 import sys as _sys
-if _sys.version_info[:2] < (3, 5):
-    raise ImportError('Python version must be >= 3.5')
+if _sys.version_info[:2] < (3, 6):
+    raise ImportError('Python version must be >= 3.6')
 
 from . import vambtools
 from . import parsebam

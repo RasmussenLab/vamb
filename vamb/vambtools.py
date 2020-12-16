@@ -572,7 +572,7 @@ def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
                 entry.header = newheader
                 print(entry.format(), file=outfile)
 
-def _hash_refnames(refnames):
+def hash_refnames(refnames):
     "Hashes an iterable of strings of reference names using MD5."
     hasher = _md5()
     for refname in refnames:
@@ -585,7 +585,7 @@ def verify_refhash(refnames, expected):
     if expected is None:
         return
     
-    refhash = _hash_refnames(refnames)
+    refhash = hash_refnames(refnames)
     if refhash != expected:
         errormsg = (
             "Got reference name hash {}, expected {}. "
@@ -594,8 +594,20 @@ def verify_refhash(refnames, expected):
         ).format(refhash.hex(), expected.hex())
         raise ValueError(errormsg)
 
-def _load_jgi(filehandle, minlength, refhash):
-    "This function can be merged with load_jgi below in the next breaking release (post 3.0)"
+def load_jgi(filehandle, minlength, refhash):
+    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
+    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
+
+    Usage:
+        with open('/path/to/jgi_depths.tsv') as file:
+            depths = load_jgi(file, 1000, my_hash)
+    Input:
+        filehandle: File handle of open output depth file
+        minlength: Minimum contig length to keep
+        refhash: Hash of references to compare against (None = no check)
+    Output:
+        N_contigs x N_samples Numpy matrix of dtype float32
+    """
     header = next(filehandle)
     fields = header.strip().split('\t')
     if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
@@ -621,20 +633,6 @@ def _load_jgi(filehandle, minlength, refhash):
     result = array.take()
     result.shape = (len(result) // len(columns), len(columns))
     return validate_input_array(result)
-
-def load_jgi(filehandle):
-    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
-    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
-
-    Usage:
-        with open('/path/to/jgi_depths.tsv') as file:
-            depths = load_jgi(file)
-    Input:
-        File handle of open output depth file
-    Output:
-        N_contigs x N_samples Numpy matrix of dtype float32
-    """
-    return _load_jgi(filehandle, 0, None)
 
 def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
