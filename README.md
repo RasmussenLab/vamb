@@ -4,7 +4,9 @@ Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmar
 
 Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with multiple samples, and pretty good on single-sample data. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from command line and from within a Python interpreter.
 
-For more information on the background, context, and theory of Vamb, read [our pre-print on bioRxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) (DOI: 10.1101/490078). Vamb has changed quite a bit since the the pre-print, but it should give a good background. The current version of Vamb (in reveiw) uses "multi-split binning" which is not mentioned in the pre-print.
+**Vamb is now out in Nature Biotechnology - read the manuscript [here](https://doi.org/10.1038/s41587-020-00777-4) and a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb.** 
+
+Vamb has changed a lot since the pre-print at [biorxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) so we really recommend reading it at Nature Biotechnology. For instance, the current version of Vamb uses "multi-split binning" which is not mentioned in the pre-print.
 
 For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
@@ -28,7 +30,7 @@ conda install -c bioconda vamb
 
 ### Installation for advanced users:
 
-This is for developers who want to be able to edit Python files and have the changes show up directly in the running command:
+If you want to install the latest version from GitHub you can clone and install it using:
 
 ```
 # clone the desired branch from the repository, here master
@@ -40,6 +42,10 @@ pip install -e .
 ### Installing by compiling the Cython yourself
 
 If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
+
+### Windows
+
+Vamb does currently not compile on Windows because it is dependent on `pysam`, but a Windows-friendly version is hopefully on the way (see branch `v4`). Let us know if you want to run Vamb on Windows.
 
 # Running
 
@@ -164,7 +170,7 @@ We recommend using metaSPAdes on each sample individually. You can also use scaf
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique, and filter away small contigs__
 
-You can use the function `vamb.vambtools.concatenate_fasta` for this (available only in v. 2.1.0 or above), or the script `src/concatenate.py`. (available only in v 2.3.0 or above.)
+You can use the function `vamb.vambtools.concatenate_fasta` for this or the script `src/concatenate.py`. 
 
 :warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs.
 
@@ -172,7 +178,7 @@ You should not try to bin very short sequences. When deciding the length cutoff 
 
 Your contig headers must be unique. Furthermore, if you want to use binsplitting (and you should!), your contig headers must be of the format {Samplename}{Separator}{X}, such that the part of the string before the *first* occurrence of {Separator} gives a name of the sample it originated from. For example, you could call contig number 115 from sample number 9 "S9C115", where "S9" would be {Samplename}, "C" is {Separator} and "115" is {X}.
 
-Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM. If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like MASH to group similar samples together in smaller batches, bin these batches individually. This way, you can still leverage co-abundance. **NB:** We are working on a version using memory-mapping that is much more RAM-efficient but 10-20% slower. Here we have processed a dataset of 942 samples with 30M contigs (total of 117Gbp contig sequence) in 40Gb RAM.
+Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM. If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like MASH to group similar samples together in smaller batches, bin these batches individually. This way, you can still leverage co-abundance. **NB:** We have a version using memory-mapping that is much more RAM-efficient but 10-20% slower. Here we have processed a dataset of 942 samples with 30M contigs (total of 117Gbp contig sequence) in 40Gb RAM - see branch `mmap`.
 
 __4) Map the reads to the FASTA file to obtain BAM files__
 
@@ -180,7 +186,7 @@ __4) Map the reads to the FASTA file to obtain BAM files__
 
 Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2`:
 
-`minimap2 -T almeida.fna -t 28 -N 50 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam`
+```minimap2 -T almeida.fna -t 28 -N 50 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam```
 
 :warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
 
