@@ -94,7 +94,7 @@ Note 2: If you want to re-run with different parameters of VAMB you can change  
 
 ## Using a GPU to speed up Vamb
 
-Using a GPU can speed up Vamb considerably - especially when you are binning millions of contigs. In order to enable it you need to make a couple of changes to the configuration file. Basically we need to add `--cuda` to the `vamb_params` to tell Vamb to use the GPU. Then If you are using the `--cluster` option, you also need to update `vamb_ppn` accordingly - e.g. on our system (qsub) we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`. Therefore the `config.json` file looks like this if I want to use GPU acceleration:
+Using a GPU can speed up Vamb considerably - especially when you are binning millions of contigs. In order to enable it you need to make a couple of changes to the configuration file. Basically we need to add `--cuda` to the `vamb_params` to tell Vamb to use the GPU. Then if you are using the `--cluster` option, you also need to update `vamb_ppn` accordingly - e.g. on our system (qsub) we exchange `"vamb_ppn": "10"` to `"vamb_ppn": "10:gpus=1"`. Therefore the `config.json` file looks like this if I want to use GPU acceleration:
 
 ```
 {
