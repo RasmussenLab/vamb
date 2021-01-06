@@ -16,6 +16,7 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 
 import numpy as _np
 import torch as _torch
+_torch.manual_seed(0)
 
 from math import log as _log
 
