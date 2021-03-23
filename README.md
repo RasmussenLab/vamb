@@ -173,7 +173,7 @@ __4) Map the reads to the FASTA file to obtain BAM files__
 
 :warning: *Important:* If you allow reads to map to multiple contigs, the abundance estimation will be more accurate. However, all BAM records for a single read *must* be consecutive in the BAM file, or else Vamb will miscount these alignments. This is the default order in the output of almost all aligners, but if you use BAM files sorted by alignment position and have multi-mapping reads, you must sort them by read name first.
 
-Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2`:
+Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15)):
 
 ```minimap2 -T almeida.fna -t 28 -N 5 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam```
 
