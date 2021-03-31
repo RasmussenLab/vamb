@@ -594,7 +594,8 @@ def _load_jgi(filehandle, minlength, refhash):
 
     for row in filehandle:
         fields = row.split('\t')
-        if int(fields[1]) < minlength:
+        # We use float because very large numbers will be printed in scientific notation
+        if float(fields[1]) < minlength:
             continue
 
         for col in columns:
