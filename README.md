@@ -91,7 +91,11 @@ minimap2 -t 8 -N 50 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/t
 vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
 ```
 
-Note that we have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module (see below). If you want to use this approach instead we provide an easy to use `snakemake` workflow which will do this for you. 
+Note that we have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module (see below). If you want to use this approach instead we provide an easy to use `snakemake` workflow which will do this for you.
+
+5. Apply the relevant postprocessing filters
+
+Vamb outputs every input contig, even those not binned with other contigs. Depending on your use case, the large number of small bins may not be relevant. Make sure to filter the contigs either using a binning quality control tool, by size, or by aligning the resulting bins to references.
 
 ## Snakemake workflow
 
@@ -207,3 +211,6 @@ vamb -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz 
 
 It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
 
+__6) Postprocess the results__
+
+Vamb will bin every input contig. Contigs that cannot be binned with other contigs will result in single-bin contigs. Therefore, the output of Vamb includes many tiny bins, which may be relevant if you are looking for e.g. plasmids or viruses, but not if you are looking for cellular genomes. These small bins may account for the large majority of bins. When using the output of Vamb, it is therefore critical to filter the output bins based on whatever criteria is relevant for your particular analysis. You could use a binning quality control tool such as CheckM, or align the bins to reference genomes, or simply filter away all bins smaller than, say, 500 kbp.
