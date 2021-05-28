@@ -4,12 +4,9 @@ Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmar
 
 Vamb is a metagenomic binner which feeds sequence composition information from a contig catalogue and co-abundance information from BAM files into a variational autoencoder and clusters the latent representation. It performs excellently with multiple samples, and pretty good on single-sample data. Vamb is implemented purely in Python (with a little bit of Cython) and can be used both from command line and from within a Python interpreter.
 
-**Vamb is now out in Nature Biotechnology - read the manuscript [here](https://doi.org/10.1038/s41587-020-00777-4) and a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb.**
+:star: Vamb is benchmarked in CAMI2. Read our interpretations of the results [here.](https://github.com/github/RasmussenLab/blob/master/doc/CAMI2.md) :star:
 
-
-Vamb has changed a lot since the pre-print at [biorxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) so we really recommend reading it at Nature Biotechnology. For instance, the current version of Vamb uses "multi-split binning" which is not mentioned in the pre-print.
-
-For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the tutorial file (`doc/tutorial.html`)
+For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial.](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.html)
 
 # Installation
 Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
@@ -200,6 +197,10 @@ If you don't trust your alignments, set the `-z` and `-s` flag as appropriate, d
 
 `vamb -o SEP -z 0.95 -s 30 --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`
 
+__6) Postprocess the results__
+
+Vamb will bin every input contig. Contigs that cannot be binned with other contigs will result in single-bin contigs. Therefore, the output of Vamb includes many tiny bins, which may be relevant if you are looking for e.g. plasmids or viruses, but not if you are looking for cellular genomes. These small bins may account for the large majority of bins. When using the output of Vamb, it is therefore critical to filter the output bins based on whatever criteria is relevant for your particular analysis. You could use a binning quality control tool such as CheckM, or align the bins to reference genomes, or simply filter away all bins smaller than, say, 500 kbp.
+
 ## Parameter optimisation (optional)
 
 The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default for multiple samples is `-l 32 -n 512 512`)`:
@@ -210,7 +211,3 @@ vamb -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz 
 ```
 
 It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
-
-__6) Postprocess the results__
-
-Vamb will bin every input contig. Contigs that cannot be binned with other contigs will result in single-bin contigs. Therefore, the output of Vamb includes many tiny bins, which may be relevant if you are looking for e.g. plasmids or viruses, but not if you are looking for cellular genomes. These small bins may account for the large majority of bins. When using the output of Vamb, it is therefore critical to filter the output bins based on whatever criteria is relevant for your particular analysis. You could use a binning quality control tool such as CheckM, or align the bins to reference genomes, or simply filter away all bins smaller than, say, 500 kbp.
