@@ -5,16 +5,16 @@ Usage:
 ...     tnfs, contignames, lengths = read_contigs(filehandle)
 """
 
-import sys as _sys
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
+from typing import Tuple, List
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL = _vambtools.read_npz(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                               "kernel.npz"))
 
-def _project(fourmers, kernel=_KERNEL):
+def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL):
     "Project fourmers down in dimensionality"
     s = fourmers.sum(axis=1).reshape(-1, 1)
     s[s == 0] = 1.0
@@ -22,14 +22,14 @@ def _project(fourmers, kernel=_KERNEL):
     fourmers += -(1/256)
     return _np.dot(fourmers, kernel)
 
-def _convert(raw, projected):
+def _convert(raw: _np.ndarray, projected: _np.ndarray):
     "Move data from raw PushArray to projected PushArray, converting it."
     raw_mat = raw.take().reshape(-1, 256)
     projected_mat = _project(raw_mat)
     projected.extend(projected_mat.ravel())
     raw.clear()
 
-def read_contigs(filehandle, minlength=100):
+def read_contigs(filehandle, minlength: int = 100) -> Tuple[_np.ndarray, List[str], _np.ndarray]:
     """Parses a FASTA file open in binary reading mode.
 
     Input:

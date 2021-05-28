@@ -199,6 +199,12 @@ class FastaEntry:
     __slots__ = ['header', 'sequence']
 
     def __init__(self, header, sequence):
+        if not isinstance(sequence, bytearray):
+            sequence = bytearray(sequence)
+
+        if not isinstance(header, str):
+            header = str(header)
+
         if len(header) > 0 and (header[0] in ('>', '#') or header[0].isspace()):
             raise ValueError('Header cannot begin with #, > or whitespace')
         if '\t' in header:
@@ -269,7 +275,8 @@ def byte_iterfasta(filehandle, comment=b'#'):
                 raise ValueError('First non-comment line is not a Fasta header')
 
         else: # no break
-            raise ValueError('Empty or outcommented file')
+            return None
+            #raise ValueError('Empty or outcommented file')
 
     except TypeError:
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'

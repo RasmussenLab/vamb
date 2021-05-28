@@ -6,15 +6,21 @@ Usage:
 """
 
 import pycoverm as _pycoverm
-import sys as _sys
 import os as _os
 import numpy as _np
-import time as _time
 import vamb.vambtools as _vambtools
+from typing import List, Optional
 
 DEFAULT_THREADS = _os.cpu_count()
 
-def read_bamfiles(paths, refhash, minlength, lengths, minid, nthreads):
+def read_bamfiles(
+    paths: List[str],
+    refhash: Optional[bytes],
+    minlength: int,
+    lengths: Optional[_np.ndarray],
+    minid: float,
+    nthreads: int
+) -> _np.ndarray:
     "Placeholder docstring - replaced after this func definition"
     # Verify values:
     if minid < 0 or minid > 1:
@@ -24,6 +30,10 @@ def read_bamfiles(paths, refhash, minlength, lengths, minid, nthreads):
     # numbers will be thrown wildly off.
     if minlength < 250:
         raise ValueError("minlength must be at least 250")
+
+    #for path in paths:
+    #    if not pycoverm.is_bam_sorted(path):
+    #        raise ValueError(f"Path {path} is not sorted by reference.")
 
     headers, coverage = _pycoverm.get_coverages_from_bam(
         paths, threads=nthreads, min_identity=minid)

@@ -502,7 +502,7 @@ class Binning:
         "Fills self.binof, self.contigsof and self.breadthof during instantiation"
 
         if binsplit_separator is not None:
-            contigsof = _vambtools.binsplit(contigsof, binsplit_separator)
+            contigsof = dict(_vambtools.binsplit(contigsof, binsplit_separator))
 
         if minsize is not None or mincontigs is not None:
             minsize = 1 if minsize is None else minsize
