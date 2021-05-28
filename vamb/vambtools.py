@@ -580,6 +580,20 @@ def _hash_refnames(refnames):
 
     return hasher.digest()
 
+def verify_refhash(refnames, expected):
+    "Compares hash of refnames with bytes expected and errors if not the same"
+    if expected is None:
+        return
+    
+    refhash = _hash_refnames(refnames)
+    if refhash != expected:
+        errormsg = (
+            "Got reference name hash {}, expected {}. "
+            "Make sure all BAM and FASTA headers are identical "
+            "and in the same order."
+        ).format(refhash.hex(), expected.hex())
+        raise ValueError(errormsg)
+
 def _load_jgi(filehandle, minlength, refhash):
     "This function can be merged with load_jgi below in the next breaking release (post 3.0)"
     header = next(filehandle)
@@ -602,15 +616,8 @@ def _load_jgi(filehandle, minlength, refhash):
             array.append(float(fields[col]))
         
         identifiers.append(fields[0])
-    
-    if refhash is not None:
-        hash = _hash_refnames(identifiers)
-        if hash != refhash:
-            errormsg = ('JGI file has reference hash {}, expected {}. '
-                        'Verify that all BAM headers and FASTA headers are '
-                        'identical and in the same order.')
-            raise ValueError(errormsg.format(hash.hex(), refhash.hex()))
 
+    verify_refhash(identifiers, refhash)
     result = array.take()
     result.shape = (len(result) // len(columns), len(columns))
     return validate_input_array(result)
