@@ -8,5 +8,6 @@ vamb.egg-info
 changelog
 .DS_Store
 .ipynb_checkpoints
+TODO.md
 build/
 dist/

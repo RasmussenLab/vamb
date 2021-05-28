@@ -128,7 +128,7 @@ class VAE(_nn.Module):
     def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
         if nlatent < 1:
-            raise ValueError('Minimum 1 latent neuron, not {}'.format(latent))
+            raise ValueError('Minimum 1 latent neuron, not {}'.format(nlatent))
 
         if nsamples < 1:
             raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
