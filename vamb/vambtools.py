@@ -8,6 +8,7 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
+from typing import Optional
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -69,7 +70,7 @@ class PushArray:
         if force:
             self._setcapacity(0)
 
-def zscore(array, axis=None, inplace=False):
+def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False):
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
 
     Inputs:
@@ -82,7 +83,7 @@ def zscore(array, axis=None, inplace=False):
         else: New normalized Numpy-array"""
 
     if axis is not None and axis >= array.ndim:
-        raise _np.AxisError('array only has {} axes'.format(array.ndim))
+        raise _np.AxisError(axis)
 
     if inplace and not _np.issubdtype(array.dtype, _np.floating):
         raise TypeError('Cannot convert a non-float array to zscores')
@@ -106,7 +107,7 @@ def zscore(array, axis=None, inplace=False):
     else:
         return (array - mean) / std
 
-def numpy_inplace_maskarray(array, mask):
+def numpy_inplace_maskarray(array: _np.ndarray, mask: _np.ndarray):
     """In-place masking of a Numpy array, i.e. if `mask` is a boolean mask of same
     length as `array`, then array[mask] == numpy_inplace_maskarray(array, mask),
     but does not allocate a new array.
@@ -587,11 +588,8 @@ def hash_refnames(refnames):
 
     return hasher.digest()
 
-def verify_refhash(refnames, expected):
-    "Compares hash of refnames with bytes expected and errors if not the same"
-    if expected is None:
-        return
-    
+def verify_refhash(refnames, expected: bytes):
+    "Compares hash of refnames with bytes expected and errors if not the same"    
     refhash = hash_refnames(refnames)
     if refhash != expected:
         errormsg = (

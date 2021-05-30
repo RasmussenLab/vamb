@@ -22,7 +22,7 @@ def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL):
     fourmers += -(1/256)
     return _np.dot(fourmers, kernel)
 
-def _convert(raw: _np.ndarray, projected: _np.ndarray):
+def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
     "Move data from raw PushArray to projected PushArray, converting it."
     raw_mat = raw.take().reshape(-1, 256)
     projected_mat = _project(raw_mat)
@@ -47,7 +47,7 @@ def read_contigs(filehandle, minlength: int = 100) -> Tuple[_np.ndarray, List[st
 
     raw = _vambtools.PushArray(_np.float32)
     projected = _vambtools.PushArray(_np.float32)
-    lengths = _vambtools.PushArray(_np.int)
+    lengths = _vambtools.PushArray(_np.int32)
     contignames = list()
 
     entries = _vambtools.byte_iterfasta(filehandle)

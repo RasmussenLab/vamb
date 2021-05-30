@@ -17,8 +17,8 @@ def read_bamfiles(
     paths: List[str],
     refhash: Optional[bytes],
     minlength: int,
-    lengths: Optional[_np.ndarray],
     minid: float,
+    lengths: Optional[_np.ndarray],
     nthreads: int
 ) -> _np.ndarray:
     "Placeholder docstring - replaced after this func definition"
@@ -31,24 +31,27 @@ def read_bamfiles(
     if minlength < 250:
         raise ValueError("minlength must be at least 250")
 
-    #for path in paths:
-    #    if not pycoverm.is_bam_sorted(path):
-    #        raise ValueError(f"Path {path} is not sorted by reference.")
+    for path in paths:
+        if not _pycoverm.is_bam_sorted(path):
+            raise ValueError(f"Path {path} is not sorted by reference.")
 
     headers, coverage = _pycoverm.get_coverages_from_bam(
-        paths, threads=nthreads, min_identity=minid)
+        paths, threads=nthreads, min_identity=minid,
+        trim_upper=0.1, trim_lower=0.1
+    )
 
     # Filter length
     headers = list(headers)
     if lengths is not None:
         if len(lengths) != len(headers):
             raise ValueError("Lengths of headers and lengths does not match.")
-        mask = _np.array(list(map(lambda x: x >= minlength, lengths)), dtype=_np.bool)
+        mask = _np.array(list(map(lambda x: x >= minlength, lengths)), dtype=bool)
         headers = [h for (h,m) in zip(headers, mask) if m]
         _vambtools.numpy_inplace_maskarray(coverage, mask)
 
     # Check refhash
-    _vambtools.verify_refhash(headers, refhash)
+    if refhash is not None:
+        _vambtools.verify_refhash(headers, refhash)
 
     return coverage
 
