@@ -26,7 +26,7 @@ from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Set, Optional
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
@@ -61,7 +61,7 @@ def make_dataloader(
         raise ValueError('TNF and RPKM must be Numpy arrays')
 
     if batchsize < 1:
-        raise ValueError('Minimum batchsize of 1, not {}'.format(batchsize))
+        raise ValueError(f'Minimum batchsize of 1, not {batchsize}')
 
     if len(rpkm) != len(tnf):
         raise ValueError('Lengths of RPKM and TNF must be the same')
@@ -105,8 +105,10 @@ def make_dataloader(
     # Create dataloader
     n_workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor)
-    dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
-                             shuffle=True, num_workers=n_workers, pin_memory=cuda)
+    dataloader = _DataLoader(
+        dataset=dataset, batch_size=batchsize, drop_last=True,
+        shuffle=True, num_workers=n_workers, pin_memory=cuda
+    )
 
     return dataloader, mask
 
@@ -143,10 +145,10 @@ class VAE(_nn.Module):
         cuda:bool=False
     ):
         if nlatent < 1:
-            raise ValueError('Minimum 1 latent neuron, not {}'.format(nlatent))
+            raise ValueError(f'Minimum 1 latent neuron, not {nlatent}')
 
         if nsamples < 1:
-            raise ValueError('nsamples must be > 0, not {}'.format(nsamples))
+            raise ValueError(f'nsamples must be > 0, not {nsamples}')
 
         # If only 1 sample, we weigh alpha and nhiddens differently
         if alpha is None:
@@ -159,16 +161,16 @@ class VAE(_nn.Module):
             dropout = 0.2 if nsamples > 1 else 0.0
 
         if any(i < 1 for i in nhiddens):
-            raise ValueError('Minimum 1 neuron per layer, not {}'.format(min(nhiddens)))
+            raise ValueError(f'Minimum 1 neuron per layer, not {min(nhiddens)}')
 
         if beta <= 0:
-            raise ValueError('beta must be > 0, not {}'.format(beta))
+            raise ValueError(f'beta must be > 0, not {beta}')
 
         if not (0 < alpha < 1):
-            raise ValueError('alpha must be 0 < alpha < 1, not {}'.format(alpha))
+            raise ValueError(f'alpha must be 0 < alpha < 1, not {alpha}')
 
         if not (0 <= dropout < 1):
-            raise ValueError('dropout must be 0 <= dropout < 1, not {}'.format(dropout))
+            raise ValueError(f'dropout must be 0 <= dropout < 1, not {dropout}')
 
         super(VAE, self).__init__()
 
@@ -484,13 +486,13 @@ class VAE(_nn.Module):
         """
 
         if lrate < 0:
-            raise ValueError('Learning rate must be positive, not {}'.format(lrate))
+            raise ValueError(f'Learning rate must be positive, not {lrate}')
 
         if nepochs < 1:
-            raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
+            raise ValueError('Minimum 1 epoch, not {nepochs}')
 
         if batchsteps is None:
-            batchsteps_set = set()
+            batchsteps_set: Set[int] = set()
         else:
             # First collect to list in order to allow all element types, then check that
             # they are integers
@@ -527,7 +529,7 @@ class VAE(_nn.Module):
 
         # Train
         for epoch in range(nepochs):
-            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps_set, logfile)
+            dataloader = self.trainepoch(dataloader, epoch, optimizer, sorted(batchsteps_set), logfile)
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:

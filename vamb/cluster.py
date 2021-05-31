@@ -49,7 +49,7 @@ class Cluster:
         self.attempts = attempts
 
     def __repr__(self) -> str:
-        return '<Cluster of medoid {}, {} members>'.format(self.medoid, len(self.members))
+        return f'<Cluster of medoid {self.medoid}, {len(self.members)} members>'
 
     def as_tuple(self, labels=None) -> Tuple[int, Set[int]]:
         if labels is None:
@@ -58,21 +58,23 @@ class Cluster:
             return (labels[self.medoid], {labels[i] for i in self.members})
 
     def dump(self) -> str:
-        return '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(self.medoid, self.seed, self.pvr, self.radius,
-        self.isdefault, self.successes, self.attempts, ','.join([str(i) for i in self.members]))
+        return (
+            '{self.medoid}\t{self.seed}\t{self.pvt}\t{self.radius}\t{self.isdefault}'
+            '\t{self.successes}\t{self.attempts}\t'
+        ) +','.join([str(i) for i in self.members])
 
     def __str__(self) -> str:
-        radius = "{:.3f}".format(self.radius)
+        radius = f"{self.radius:.3f}"
         if self.isdefault:
             radius += " (fallback)"
 
-        return """Cluster of medoid {}
-  N members: {}
-  seed:      {}
-  radius:    {}
-  successes: {} / {}
-  pvr:       {:.1f}
-  """.format(self.medoid, len(self.members), self.seed, radius, self.successes, self.attempts, self.pvr)
+        return f"""Cluster of medoid {self.medoid}
+  N members: {len(self.members)}
+  seed:      {self.seed}
+  radius:    {radius}
+  successes: {self.successes} / {self.attempts}
+  pvr:       {self.pvr:.1f}
+  """
 
 class ClusterGenerator:
     """Iterative medoid cluster generator. Iterate this object to get clusters.
@@ -92,17 +94,16 @@ class ClusterGenerator:
                  'histogram', 'kept_mask']
 
     def __repr__(self) -> str:
-        return "ClusterGenerator({} points, {} clusters)".format(len(self.matrix), self.nclusters)
+        return f"ClusterGenerator({len(self.matrix)} points, {self.nclusters} clusters)"
 
     def __str__(self) -> str:
-        return """ClusterGenerator({} points, {} clusters)
-  CUDA:         {}
-  MAXSTEPS:     {}
-  MINSUCCESSES: {}
-  pvr:          {}
-  successes:    {}/{}
-""".format(len(self.matrix), self.nclusters, self.CUDA, self.MAXSTEPS, self.MINSUCCESSES,
-    self.peak_valley_ratio, self.successes, len(self.attempts))
+        return f"""ClusterGenerator({len(self.matrix)} points, {self.nclusters} clusters)
+  CUDA:         {self.CUDA}
+  MAXSTEPS:     {self.MAXSTEPS}
+  MINSUCCESSES: {self.MINSUCCESSES}
+  pvr:          {self.peak_valley_ratio}
+  successes:    {self.successes}/{len(self.attempts)}
+"""
 
     def _check_params(self, matrix, maxsteps, windowsize, minsuccesses) -> None:
         """Checks matrix, and maxsteps."""
@@ -111,13 +112,13 @@ class ClusterGenerator:
             raise(ValueError("Matrix must be of dtype float32"))
 
         if maxsteps < 1:
-            raise ValueError('maxsteps must be a positive integer, not {}'.format(maxsteps))
+            raise ValueError(f'maxsteps must be a positive integer, not {maxsteps}')
 
         if windowsize < 1:
-            raise ValueError('windowsize must be at least 1, not {}'.format(windowsize))
+            raise ValueError(f'windowsize must be at least 1, not {windowsize}')
 
         if minsuccesses < 1 or minsuccesses > windowsize:
-            raise ValueError('minsuccesses must be between 1 and windowsize, not {}'.format(minsuccesses))
+            raise ValueError(f'minsuccesses must be between 1 and windowsize, not {minsuccesses}')
 
         if len(matrix) < 1:
             raise ValueError('Matrix must have at least 1 observation.')
@@ -484,7 +485,7 @@ def cluster(
     Output: Generator of (medoid, {point1, point2 ...}) tuples for each cluster.
     """
     if labels is not None and len(matrix) != len(labels):
-        raise ValueError("Got {} labels for {} points".format(len(labels), len(matrix)))
+        raise ValueError(f"Got {len(labels)} labels for {len(matrix)} points")
 
     it = ClusterGenerator(matrix, maxsteps, windowsize, minsuccesses, destroy, normalized, cuda)
     for cluster in it:
@@ -503,7 +504,9 @@ def pairs(clustergenerator, labels):
     """
     maxindex = clustergenerator.indices.max()
     if len(labels) < maxindex:
-        raise ValueError("Cluster generator contains point no {}, "
-                         "but was given only {} labels".format(maxindex, len(labels)))
+        raise ValueError(
+            f"Cluster generator contains point no {maxindex}, "
+            f"but was given only {len(labels)} labels"
+        )
 
     return ((str(i+1), c.as_tuple(labels)[1]) for (i, c) in enumerate(clustergenerator))

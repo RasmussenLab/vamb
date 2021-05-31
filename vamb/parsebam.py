@@ -11,7 +11,8 @@ import numpy as _np
 import vamb.vambtools as _vambtools
 from typing import List, Optional
 
-DEFAULT_THREADS = _os.cpu_count()
+_ncpu = _os.cpu_count()
+DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
 
 def read_bamfiles(
     paths: List[str],
@@ -24,12 +25,12 @@ def read_bamfiles(
     "Placeholder docstring - replaced after this func definition"
     # Verify values:
     if minid < 0 or minid > 1:
-        raise ValueError("minid must be between 0 and 1")
+        raise ValueError(f"minid must be between 0 and 1, not {minid}")
 
     # Coverage cuts off 75 bp in both sides, so if this is much lower,
     # numbers will be thrown wildly off.
     if minlength < 250:
-        raise ValueError("minlength must be at least 250")
+        raise ValueError(f"minlength must be at least 250, not {minlength}")
 
     for path in paths:
         if not _pycoverm.is_bam_sorted(path):

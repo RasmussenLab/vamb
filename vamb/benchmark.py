@@ -90,7 +90,7 @@ class Contig:
         return cls(name, name, 0, length)
 
     def __repr__(self):
-        return 'Contig({}, subject={}, {}:{})'.format(self.name, self.subject, self.start, self.end)
+        return f'Contig({self.name}, subject={self.subject}, {self.start}:{self.end})'
 
     def __len__(self):
         return self.end - self.start
@@ -146,7 +146,7 @@ class Genome:
         self.breadth = self.getbreadth(self.contigs)
 
     def __repr__(self):
-        return 'Genome({}, ncontigs={}, breadth={})'.format(self.name, self.ncontigs, self.breadth)
+        return f'Genome({self.name}, ncontigs={self.ncontigs}, breadth={self.breadth})'
 
 class Reference:
     """A set of Genomes known to represent the ground truth for binning.
@@ -211,13 +211,13 @@ class Reference:
                 isempty = False
 
             if genomename in taxmaps[0]:
-                raise KeyError("Genome name {} present more than once in taxfile".format(genomename))
+                raise KeyError(f"Genome name {genomename} present more than once in taxfile")
 
             previousrank = genomename
             for nextrank, rankdict in zip(clades, taxmaps):
                 existing = rankdict.get(previousrank, nextrank)
                 if existing != nextrank:
-                    raise KeyError("Rank {} mapped to both {} and {}".format(previousrank, existing, nextrank))
+                    raise KeyError(f"Rank {previousrank} mapped to both {existing} and {nextrank}")
 
                 rankdict[previousrank] = nextrank
                 previousrank = nextrank
@@ -234,7 +234,7 @@ class Reference:
 
     def __repr__(self):
         ranks = len(self.taxmaps) + 1
-        return 'Reference(ngenomes={}, ncontigs={}, ranks={})'.format(self.ngenomes, self.ncontigs, ranks)
+        return f'Reference(ngenomes={self.ngenomes}, ncontigs={self.ncontigs}, ranks={ranks})'
 
     @staticmethod
     def _parse_subject_line(line):
@@ -299,7 +299,7 @@ class Reference:
             self.genomes[genome.name] = genome
             for contig in genome.contigs:
                 if contig.name in self.contigs:
-                    raise KeyError("Contig name '{}' multiple times in Reference.".format(contig.name))
+                    raise KeyError(f"Contig name '{contig.name}' multiple times in Reference.")
 
                 self.contigs[contig.name] = contig
                 self.genomeof[contig] = genome
@@ -520,7 +520,7 @@ class Binning:
                 # Check that the contig is in the reference
                 if contig is None:
                     if checkpresence:
-                        raise KeyError('Contig {} not in reference.'.format(contig_name))
+                        raise KeyError(f'Contig {contig_name} not in reference.')
                     else:
                         continue
 
@@ -530,7 +530,7 @@ class Binning:
                     self.binof[contig] = bin_name
                 else:
                     if disjoint:
-                        raise KeyError('Contig {} found in multiple bins'.format(contig_name))
+                        raise KeyError(f'Contig {contig_name} found in multiple bins')
                     elif isinstance(existing, str):
                         self.binof[contig] = {existing, bin_name}
                     else:
@@ -583,8 +583,10 @@ class Binning:
             print(min_precision, '\t'.join([str(i) for i in row]), sep='\t', file=file)
 
     def __repr__(self):
-        fields = (self.ncontigs, self.reference.ncontigs, hex(id(self.reference)))
-        return 'Binning({}/{} contigs, ReferenceID={})'.format(*fields)
+        return (
+            f'Binning({self.ncontigs}/{self.reference.ncontigs} contigs, '
+            f'ReferenceID={hex(id(self.reference))})'
+        )
 
     def summary(self, precision=0.9, recalls=None):
         if recalls is None:
@@ -610,7 +612,7 @@ def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True
             if contig is not None:
                 size += len(contig)
             elif checkpresence:
-                raise KeyError('Contigname {} not in reference'.format(contigname))
+                raise KeyError(f'Contigname {contigname} not in reference')
             else:
                 pass
 
