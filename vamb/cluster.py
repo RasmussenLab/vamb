@@ -10,10 +10,10 @@ functions write_clusters and read_clusters.
 import random as _random
 import numpy as _np
 import torch as _torch
-from collections import defaultdict as _defaultdict, deque as _deque
+from collections import deque as _deque
 from math import ceil as _ceil
 import vamb.vambtools as _vambtools
-from typing import Tuple, List, Set, Union, Optional
+from typing import Tuple, Set, Optional
 
 _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
