@@ -26,11 +26,18 @@ from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
+from typing import Tuple, List, Optional
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
-def make_dataloader(rpkm, tnf, batchsize=256, destroy=False, cuda=False):
+def make_dataloader(
+    rpkm: _np.ndarray,
+    tnf: _np.ndarray,
+    batchsize:int=256,
+    destroy:bool=False,
+    cuda:bool=False
+) -> Tuple[_DataLoader, _np.ndarray]:
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -125,8 +132,16 @@ class VAE(_nn.Module):
     0.99 and 0.0, respectively
     """
 
-    def __init__(self, nsamples, nhiddens=None, nlatent=32, alpha=None,
-                 beta=200, dropout=0.2, cuda=False):
+    def __init__(
+        self,
+        nsamples: int,
+        nhiddens: Optional[List[int]]=None,
+        nlatent:int=32,
+        alpha:Optional[float]=None,
+        beta:float=200.0,
+        dropout:Optional[float]=0.2,
+        cuda:bool=False
+    ):
         if nlatent < 1:
             raise ValueError('Minimum 1 latent neuron, not {}'.format(nlatent))
 
@@ -198,7 +213,7 @@ class VAE(_nn.Module):
         if cuda:
             self.cuda()
 
-    def _encode(self, tensor):
+    def _encode(self, tensor: _torch.Tensor):
         tensors = list()
 
         # Hidden layers
@@ -223,7 +238,7 @@ class VAE(_nn.Module):
         return mu, logsigma
 
     # sample with gaussian noise
-    def reparameterize(self, mu, logsigma):
+    def reparameterize(self, mu: _torch.Tensor, logsigma: _torch.Tensor):
         epsilon = _torch.randn(mu.size(0), mu.size(1))
 
         if self.usecuda:
@@ -236,7 +251,7 @@ class VAE(_nn.Module):
 
         return latent
 
-    def _decode(self, tensor):
+    def _decode(self, tensor: _torch.Tensor):
         tensors = list()
 
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
@@ -255,7 +270,7 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out
 
-    def forward(self, depths, tnf):
+    def forward(self, depths: _torch.Tensor, tnf: _torch.Tensor):
         tensor = _torch.cat((depths, tnf), 1)
         mu, logsigma = self._encode(tensor)
         latent = self.reparameterize(mu, logsigma)
@@ -263,7 +278,15 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out, mu, logsigma
 
-    def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out, mu, logsigma):
+    def calc_loss(
+        self,
+        depths_in: _torch.Tensor,
+        depths_out: _torch.Tensor,
+        tnf_in: _torch.Tensor,
+        tnf_out: _torch.Tensor,
+        mu: _torch.Tensor,
+        logsigma: _torch.Tensor
+    ) -> Tuple[_torch.Tensor, _torch.Tensor, _torch.Tensor, _torch.Tensor]:
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
@@ -281,13 +304,20 @@ class VAE(_nn.Module):
 
         return loss, ce, sse, kld
 
-    def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
+    def trainepoch(
+        self,
+        data_loader: _DataLoader,
+        epoch: int,
+        optimizer,
+        batchsteps: List[int],
+        logfile
+    ):
         self.train()
 
-        epoch_loss = 0
-        epoch_kldloss = 0
-        epoch_sseloss = 0
-        epoch_celoss = 0
+        epoch_loss = 0.0
+        epoch_kldloss = 0.0
+        epoch_sseloss = 0.0
+        epoch_celoss = 0.0
 
         if epoch in batchsteps:
             data_loader = _DataLoader(dataset=data_loader.dataset,
@@ -397,7 +427,7 @@ class VAE(_nn.Module):
         _torch.save(state, filehandle)
 
     @classmethod
-    def load(cls, path, cuda=False, evaluate=True):
+    def load(cls, path: str, cuda:bool=False, evaluate:bool=True):
         """Instantiates a VAE from a model file.
 
         Inputs:
@@ -431,8 +461,15 @@ class VAE(_nn.Module):
 
         return vae
 
-    def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
-                   batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
+    def trainmodel(
+        self,
+        dataloader: _DataLoader,
+        nepochs: int=500,
+        lrate: float=1e-3,
+        batchsteps: Optional[List[int]]=[25, 75, 150, 300],
+        logfile=None,
+        modelfile=None
+    ):
         """Train the autoencoder from depths array and tnf array.
 
         Inputs:
@@ -482,7 +519,7 @@ class VAE(_nn.Module):
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tStarting batch size:', dataloader.batch_size, file=logfile)
-            batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
+            batchsteps_string = ', '.join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
             print('\tBatchsteps:', batchsteps_string, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN sequences:', ncontigs, file=logfile)

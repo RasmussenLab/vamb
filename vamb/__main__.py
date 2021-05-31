@@ -9,14 +9,19 @@ import torch
 import datetime
 import time
 import shutil
+from typing import List, Optional, Tuple
 
-DEFAULT_PROCESSES = min(os.cpu_count(), 8)
+_ncpu = os.cpu_count()
+if _ncpu is None:
+    DEFAULT_THREADS = 8
+else:
+    DEFAULT_THREADS = min(_ncpu, 8)
 
 # These MUST be set before importing numpy
 # I know this is a shitty hack, see https://github.com/numpy/numpy/issues/11826
-os.environ["MKL_NUM_THREADS"] = str(DEFAULT_PROCESSES)
-os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_PROCESSES)
-os.environ["OMP_NUM_THREADS"] = str(DEFAULT_PROCESSES)
+os.environ["MKL_NUM_THREADS"] = str(DEFAULT_THREADS)
+os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_THREADS)
+os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 
 # Append vamb to sys.path to allow vamb import even if vamb was not installed
 # using pip
@@ -27,21 +32,29 @@ import numpy as np
 import vamb
 
 ################################# DEFINE FUNCTIONS ##########################
-def log(string, logfile, indent=0):
+def log(string: str, logfile, indent: int=0):
     print(('\t' * indent) + string, file=logfile)
     logfile.flush()
 
-def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength, logfile):
+def calc_tnf(
+    outdir: str,
+    fastapath: Optional[str],
+    tnfpath: Optional[str],
+    namespath: Optional[str],
+    lengthspath: Optional[str],
+    mincontiglength: int,
+    logfile
+) -> Tuple[np.ndarray, List[str], np.ndarray]:
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
-    log('Minimum sequence length: {}'.format(mincontiglength), logfile, 1)
+    log(f'Minimum sequence length: {mincontiglength}', logfile, 1)
     # If no path to FASTA is given, we load TNF from .npz files
     if fastapath is None:
-        log('Loading TNF from npz array {}'.format(tnfpath), logfile, 1)
+        log(f'Loading TNF from npz array {tnfpath}', logfile, 1)
         tnfs = vamb.vambtools.read_npz(tnfpath)
-        log('Loading contignames from npz array {}'.format(namespath), logfile, 1)
+        log(f'Loading contignames from npz array {namespath}', logfile, 1)
         contignames = vamb.vambtools.read_npz(namespath)
-        log('Loading contiglengths from npz array {}'.format(lengthspath), logfile, 1)
+        log(f'Loading contiglengths from npz array {lengthspath}', logfile, 1)
         contiglengths = vamb.vambtools.read_npz(lengthspath)
 
         if not tnfs.dtype == np.float32:
@@ -61,7 +74,7 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
 
     # Else parse FASTA files
     else:
-        log('Loading data from FASTA file {}'.format(fastapath), logfile, 1)
+        log(f'Loading data from FASTA file {fastapath}', logfile, 1)
         with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
             ret = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
 
@@ -74,61 +87,84 @@ def calc_tnf(outdir, fastapath, tnfpath, namespath, lengthspath, mincontiglength
     nbases = contiglengths.sum()
 
     print('', file=logfile)
-    log('Kept {} bases in {} sequences'.format(nbases, ncontigs), logfile, 1)
-    log('Processed TNF in {} seconds'.format(elapsed), logfile, 1)
+    log(f'Kept {nbases} bases in {ncontigs} sequences', logfile, 1)
+    log(f'Processed TNF in {elapsed} seconds', logfile, 1)
 
     return tnfs, contignames, contiglengths
 
-def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, ncontigs,
-              minalignscore, minid, subprocesses, logfile):
+def calc_rpkm(
+    outdir: str,
+    bampaths: Optional[List[str]],
+    rpkmpath: Optional[str],
+    jgipath: Optional[str],
+    mincontiglength: int,
+    refhash: Optional[bytes],
+    lengths: np.ndarray,
+    minid: float,
+    nthreads: int,
+    logfile
+) -> np.ndarray:
     begintime = time.time()
     log('\nLoading RPKM', logfile)
     # If rpkm is given, we load directly from .npz file
     if rpkmpath is not None:
-        log('Loading RPKM from npz array {}'.format(rpkmpath), logfile, 1)
+        log(f'Loading RPKM from npz array {rpkmpath}', logfile, 1)
         rpkms = vamb.vambtools.read_npz(rpkmpath)
 
         if not rpkms.dtype == np.float32:
             raise ValueError('RPKMs .npz array must be of float32 dtype')
     
     else:
-        log('Reference hash: {}'.format(refhash if refhash is None else refhash.hex()), logfile, 1)
+        log(f'Reference hash: {refhash if refhash is None else refhash.hex()}', logfile, 1)
 
     # Else if JGI is given, we load from that
     if jgipath is not None:
-        log('Loading RPKM from JGI file {}'.format(jgipath), logfile, 1)
+        log(f'Loading RPKM from JGI file {jgipath}', logfile, 1)
         with open(jgipath) as file:
             rpkms = vamb.vambtools.load_jgi(file, mincontiglength, refhash)
 
-    else:
-        log('Parsing {} BAM files with {} subprocesses'.format(len(bampaths), subprocesses),
-           logfile, 1)
-        log('Min alignment score: {}'.format(minalignscore), logfile, 1)
-        log('Min identity: {}'.format(minid), logfile, 1)
-        log('Min contig length: {}'.format(mincontiglength), logfile, 1)
+    elif bampaths is not None:
+        log(f'Parsing {len(bampaths)} BAM files with {nthreads} threads', logfile, 1)
+        log(f'Min identity: {minid}', logfile, 1)
+        log(f'Min contig length: {mincontiglength}', logfile, 1)
         log('\nOrder of columns is:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
 
         dumpdirectory = os.path.join(outdir, 'tmp')
-        rpkms = vamb.parsebam.read_bamfiles(bampaths, dumpdirectory=dumpdirectory,
-                                            refhash=refhash, minscore=minalignscore,
-                                            minlength=mincontiglength, minid=minid,
-                                            subprocesses=subprocesses, logfile=logfile)
+        rpkms = vamb.parsebam.read_bamfiles(
+            bampaths, refhash=refhash,
+            minlength=mincontiglength,
+            minid=minid, lengths=lengths, nthreads=nthreads
+        )
         print('', file=logfile)
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
         shutil.rmtree(dumpdirectory)
 
-    if len(rpkms) != ncontigs:
+    if len(rpkms) != len(lengths):
         raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
-    log('Processed RPKM in {} seconds'.format(elapsed), logfile, 1)
+    log(f'Processed RPKM in {elapsed} seconds', logfile, 1)
 
     return rpkms
 
-def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
-            batchsize, nepochs, lrate, batchsteps, logfile):
+def trainvae(
+    outdir: str,
+    rpkms: np.ndarray,
+    tnfs: np.ndarray,
+    nhiddens: Optional[List[int]],
+    nlatent: int,
+    alpha: Optional[float],
+    beta: float,
+    dropout: Optional[float],
+    cuda: bool,
+    batchsize: int,
+    nepochs: int,
+    lrate: float,
+    batchsteps: List[int],
+    logfile
+) -> Tuple[np.ndarray, np.ndarray]:
 
     begintime = time.time()
     log('\nCreating and training VAE', logfile)
@@ -143,8 +179,8 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     log('Created dataloader and mask', logfile, 1)
     vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
     n_discarded = len(mask) - mask.sum()
-    log('Number of sequences unsuitable for encoding: {}'.format(n_discarded), logfile, 1)
-    log('Number of sequences remaining: {}'.format(len(mask) - n_discarded), logfile, 1)
+    log(f'Number of sequences unsuitable for encoding: {n_discarded}', logfile, 1)
+    log(f'Number of sequences remaining: {len(mask) - n_discarded}', logfile, 1)
     print('', file=logfile)
 
     modelpath = os.path.join(outdir, 'model.pt')
@@ -158,21 +194,31 @@ def trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta, dropout, cuda,
     del vae # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    log('Trained VAE and encoded in {} seconds'.format(elapsed), logfile, 1)
+    log(f'Trained VAE and encoded in {elapsed} seconds', logfile, 1)
 
     return mask, latent
 
-def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclusters,
-            minclustersize, separator, cuda, logfile):
+def cluster(
+    clusterspath: str,
+    latent: np.ndarray,
+    contignames: List[str], 
+    windowsize: int,
+    minsuccesses: int,
+    maxclusters: int,
+    minclustersize: int,
+    separator: str,
+    cuda: bool,
+    logfile
+) -> None:
     begintime = time.time()
 
     log('\nClustering', logfile)
-    log('Windowsize: {}'.format(windowsize), logfile, 1)
-    log('Min successful thresholds detected: {}'.format(minsuccesses), logfile, 1)
-    log('Max clusters: {}'.format(maxclusters), logfile, 1)
-    log('Min cluster size: {}'.format(minclustersize), logfile, 1)
-    log('Use CUDA for clustering: {}'.format(cuda), logfile, 1)
-    log('Separator: {}'.format(None if separator is None else ('"'+separator+'"')),
+    log(f'Windowsize: {windowsize}', logfile, 1)
+    log(f'Min successful thresholds detected: {minsuccesses}', logfile, 1)
+    log(f'Max clusters: {maxclusters}', logfile, 1)
+    log(f'Min cluster size: {minclustersize}', logfile, 1)
+    log(f'Use CUDA for clustering: {cuda}', logfile, 1)
+    log('Separator: {}'.format(None if separator is None else ("\""+separator+"\"")),
         logfile, 1)
 
     it = vamb.cluster.cluster(latent, contignames, destroy=True, windowsize=windowsize,
@@ -190,16 +236,24 @@ def cluster(clusterspath, latent, contignames, windowsize, minsuccesses, maxclus
     clusternumber, ncontigs = _
 
     print('', file=logfile)
-    log('Clustered {} contigs in {} bins'.format(ncontigs, clusternumber), logfile, 1)
+    log(f'Clustered {ncontigs} contigs in {clusternumber} bins', logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
-    log('Clustered contigs in {} seconds'.format(elapsed), logfile, 1)
+    log(f'Clustered contigs in {elapsed} seconds', logfile, 1)
 
-def write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, minfasta, logfile):
+def write_fasta(
+    outdir: str,
+    clusterspath: str,
+    fastapath: str,
+    contignames: List[str],
+    contiglengths: np.ndarray,
+    minfasta: int,
+    logfile
+) -> None:
     begintime = time.time()
 
     log('\nWriting FASTA files', logfile)
-    log('Minimum FASTA size: {}'.format(minfasta), logfile, 1)
+    log('Minimum FASTA size: {minfasta}', logfile, 1)
 
     lengthof = dict(zip(contignames, contiglengths))
     filtered_clusters = dict()
@@ -225,15 +279,42 @@ def write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, min
     ncontigs = sum(map(len, filtered_clusters.values()))
     nfiles = len(filtered_clusters)
     print('', file=logfile)
-    log('Wrote {} contigs to {} FASTA files'.format(ncontigs, nfiles), logfile, 1)
+    log(f'Wrote {ncontigs} contigs to {nfiles} FASTA files', logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
-    log('Wrote FASTA in {} seconds'.format(elapsed), logfile, 1)
+    log(f'Wrote FASTA in {elapsed} seconds', logfile, 1)
 
-def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, jgipath,
-        mincontiglength, norefcheck, minalignscore, minid, subprocesses, nhiddens, nlatent,
-        nepochs, batchsize, cuda, alpha, beta, dropout, lrate, batchsteps, windowsize,
-        minsuccesses, minclustersize, separator, maxclusters, minfasta, logfile):
+def run(
+    outdir: str,
+    fastapath: Optional[str],
+    tnfpath: Optional[str],
+    namespath: Optional[str],
+    lengthspath: Optional[str],
+    bampaths: Optional[List[str]],
+    rpkmpath: Optional[str],
+    jgipath: Optional[str],
+    mincontiglength: int,
+    norefcheck: bool,
+    minid: float,
+    nthreads: int,
+    nhiddens: List[int],
+    nlatent: int,
+    nepochs: int,
+    batchsize: int,
+    cuda: bool,
+    alpha: float,
+    beta: float,
+    dropout: float,
+    lrate: float,
+    batchsteps: List[int],
+    windowsize: int,
+    minsuccesses: int,
+    minclustersize: int,
+    separator: str,
+    maxclusters: int,
+    minfasta: int,
+    logfile
+):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
     log('Date and time is ' + str(datetime.datetime.now()), logfile, 1)
@@ -245,8 +326,10 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
 
     # Parse BAMs, save as npz
     refhash = None if norefcheck else vamb.vambtools.hash_refnames(contignames)
-    rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
-                      len(tnfs), minalignscore, minid, subprocesses, logfile)
+    rpkms = calc_rpkm(
+        outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
+        contiglengths, minid, nthreads, logfile
+    )
 
     # Train, save model
     mask, latent = trainvae(outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
@@ -263,11 +346,13 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     del latent
 
     if minfasta is not None:
-        write_fasta(outdir, clusterspath, fastapath, contignames, contiglengths, minfasta,
-        logfile)
+        # We have already checked fastapath is not None if minfasta is not None.
+        write_fasta(
+            outdir, clusterspath, fastapath, contignames, contiglengths, minfasta, logfile
+        )
 
     elapsed = round(time.time() - begintime, 2)
-    log('\nCompleted Vamb in {} seconds'.format(elapsed), logfile)
+    log(f'\nCompleted Vamb in {elapsed} seconds', logfile)
 
 def main():
     doc = """Vamb: Variational autoencoders for metagenomic binning.
@@ -308,15 +393,13 @@ def main():
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
 
-    inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=100,
-                         help='ignore contigs shorter than this [100]')
-    inputos.add_argument('-s', dest='minascore', metavar='', type=int, default=None,
-                         help='ignore reads with alignment score below this [None]')
+    inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=250,
+                         help='ignore contigs shorter than this [250]')
     inputos.add_argument('-z', dest='minid', metavar='', type=float, default=None,
                          help='ignore reads with nucleotide identity below this [None]')
-    inputos.add_argument('-p', dest='subprocesses', metavar='', type=int, default=DEFAULT_PROCESSES,
-                         help=('number of subprocesses to spawn '
-                              '[min(' + str(DEFAULT_PROCESSES) + ', nbamfiles)]'))
+    inputos.add_argument('-p', dest='nthreads', metavar='', type=int, default=DEFAULT_THREADS,
+                         help=('number of threads to use '
+                              '[min(' + str(DEFAULT_THREADS) + ', nbamfiles)]'))
     inputos.add_argument('--norefcheck', help='skip reference name hashing check [False]',
                          action='store_true')
     inputos.add_argument('--minfasta', dest='minfasta', metavar='', type=int, default=None,
@@ -415,8 +498,8 @@ def main():
         raise argparse.ArgumentTypeError('Minimum FASTA output size must be nonnegative')
 
     ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
-    if args.minlength < 100:
-        raise argparse.ArgumentTypeError('Minimum contig length must be at least 100')
+    if args.minlength < 250:
+        raise argparse.ArgumentTypeError('Minimum contig length must be at least 250')
 
     if args.minid is not None and (args.minid < 0 or args.minid >= 1.0):
         raise argparse.ArgumentTypeError('Minimum nucleotide ID must be in [0,1)')
@@ -424,18 +507,15 @@ def main():
     if args.minid is not None and args.bamfiles is None:
         raise argparse.ArgumentTypeError('If minid is set, RPKM must be passed as bam files')
 
-    if args.minascore is not None and args.bamfiles is None:
-        raise argparse.ArgumentTypeError('If minascore is set, RPKM must be passed as bam files')
-
-    if args.subprocesses < 1:
+    if args.nthreads < 1:
         raise argparse.ArgumentTypeError('Zero or negative subprocesses requested')
 
     ####################### CHECK VAE OPTIONS ################################
     if args.nhiddens is not None and any(i < 1 for i in args.nhiddens):
-        raise argparse.ArgumentTypeError('Minimum 1 neuron per layer, not {}'.format(min(args.hidden)))
+        raise argparse.ArgumentTypeError(f'Minimum 1 neuron per layer, not {min(args.hidden)}')
 
     if args.nlatent < 1:
-        raise argparse.ArgumentTypeError('Minimum 1 latent neuron, not {}'.format(args.latent))
+        raise argparse.ArgumentTypeError(f'Minimum 1 latent neuron, not {args.latent}')
 
     if args.alpha is not None and (args.alpha <= 0 or args.alpha >= 1):
         raise argparse.ArgumentTypeError('alpha must be above 0 and below 1')
@@ -451,10 +531,10 @@ def main():
 
     ###################### CHECK TRAINING OPTIONS ####################
     if args.nepochs < 1:
-        raise argparse.ArgumentTypeError('Minimum 1 epoch, not {}'.format(args.nepochs))
+        raise argparse.ArgumentTypeError(f'Minimum 1 epoch, not {args.nepochs}')
 
     if args.batchsize < 1:
-        raise argparse.ArgumentTypeError('Minimum batchsize of 1, not {}'.format(args.batchsize))
+        raise argparse.ArgumentTypeError(f'Minimum batchsize of 1, not {args.batchsize}')
 
     args.batchsteps = sorted(set(args.batchsteps))
     if max(args.batchsteps, default=0) >= args.nepochs:
@@ -482,10 +562,7 @@ def main():
     ###################### SET UP LAST PARAMS ############################
 
     # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
-    subprocesses = args.subprocesses
-    torch.set_num_threads(args.subprocesses)
-    if args.bamfiles is not None:
-        subprocesses = min(subprocesses, len(args.bamfiles))
+    torch.set_num_threads(args.nthreads)
 
     ################### RUN PROGRAM #########################
     try:
@@ -498,7 +575,8 @@ def main():
     logpath = os.path.join(args.outdir, 'log.txt')
 
     with open(logpath, 'w') as logfile:
-        run(args.outdir,
+        run(
+            args.outdir,
             args.fasta,
             args.tnfs,
             args.names,
@@ -508,9 +586,8 @@ def main():
             args.jgi,
             mincontiglength=args.minlength,
             norefcheck=args.norefcheck,
-            minalignscore=args.minascore,
             minid=args.minid,
-            subprocesses=subprocesses,
+            nthreads=args.nthreads,
             nhiddens=args.nhiddens,
             nlatent=args.nlatent,
             nepochs=args.nepochs,
@@ -527,7 +604,8 @@ def main():
             separator=args.separator,
             maxclusters=args.maxclusters,
             minfasta=args.minfasta,
-            logfile=logfile)
+            logfile=logfile
+        )
 
 if __name__ == '__main__':
     main()
