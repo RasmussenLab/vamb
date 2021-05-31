@@ -8,7 +8,7 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional
+from typing import Optional, Dict, Set
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -30,7 +30,7 @@ class PushArray:
         self.data = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
     def _setcapacity(self, n):
@@ -59,7 +59,7 @@ class PushArray:
         self.data[self.length:self.length+lenv] = values
         self.length += lenv
 
-    def take(self):
+    def take(self) -> _np.ndarray:
         "Return the underlying array"
         self._setcapacity(self.length)
         return self.data
@@ -70,7 +70,7 @@ class PushArray:
         if force:
             self._setcapacity(0)
 
-def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False):
+def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -> _np.ndarray:
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
 
     Inputs:
@@ -79,8 +79,9 @@ def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False):
         inplace: Do not create new array, change input array [False]
 
     Output:
-        If inplace is True: None
-        else: New normalized Numpy-array"""
+        If inplace is True: Input numpy array
+        else: New normalized Numpy-array
+    """
 
     if axis is not None and axis >= array.ndim:
         raise _np.AxisError(axis)
@@ -103,11 +104,11 @@ def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False):
     if inplace:
         array -= mean
         array /= std
-        return None
+        return array
     else:
         return (array - mean) / std
 
-def numpy_inplace_maskarray(array: _np.ndarray, mask: _np.ndarray):
+def numpy_inplace_maskarray(array: _np.ndarray, mask: _np.ndarray) -> _np.ndarray:
     """In-place masking of a Numpy array, i.e. if `mask` is a boolean mask of same
     length as `array`, then array[mask] == numpy_inplace_maskarray(array, mask),
     but does not allocate a new array.
@@ -215,30 +216,29 @@ class FastaEntry:
         stripped = masked.translate(None, b'ACGTN')
         if len(stripped) > 0:
             bad_character = chr(stripped[0])
-            msg = "Non-IUPAC DNA byte in sequence {}: '{}'"
-            raise ValueError(msg.format(header, bad_character))
+            raise ValueError(f"Non-IUPAC DNA byte in sequence {header}: '{bad_character}'")
 
         self.header = header
         self.sequence = masked
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.sequence)
 
-    def __str__(self):
-        return '>{}\n{}'.format(self.header, self.sequence.decode())
+    def __str__(self) -> str:
+        return f'>{self.header}\n{self.sequence.decode()}'
 
-    def format(self, width=60):
+    def format(self, width: int=60) -> str:
         sixtymers = range(0, len(self.sequence), width)
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
-        return '>{}\n{}'.format(self.header, spacedseq)
+        return f'>{self.header}\n{spacedseq}'
 
     def __getitem__(self, index):
         return self.sequence[index]
 
-    def __repr__(self):
-        return '<FastaEntry {}>'.format(self.header)
+    def __repr__(self) -> str:
+        return f'<FastaEntry {self.header}>'
 
-    def kmercounts(self, k):
+    def kmercounts(self, k: int) -> _np.ndarray:
         if k < 1 or k > 10:
             raise ValueError('k must be between 1 and 10 inclusive')
 
@@ -246,7 +246,7 @@ class FastaEntry:
         _kmercounts(self.sequence, k, counts)
         return counts
 
-def byte_iterfasta(filehandle, comment=b'#'):
+def byte_iterfasta(filehandle, comment: bytes=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
 
     Usage:
@@ -326,7 +326,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
         clusters = clusters.items()
 
     if max_clusters is not None and max_clusters < 1:
-        raise ValueError('max_clusters must None or at least 1, not {}'.format(max_clusters))
+        raise ValueError('max_clusters must None or at least 1, not {max_clusters}')
 
     if header is not None and len(header) > 0:
         if '\n' in header:
@@ -359,7 +359,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
 
     return clusternumber, ncontigs
 
-def read_clusters(filehandle, min_size=1):
+def read_clusters(filehandle, min_size: int=1) -> Dict[str, Set[str]]:
     """Read clusters from a file as created by function `writeclusters`.
 
     Inputs:
@@ -384,7 +384,12 @@ def read_clusters(filehandle, min_size=1):
     return contigsof
 
 
-def loadfasta(byte_iterator, keep=None, comment=b'#', compress=False):
+def loadfasta(
+    byte_iterator,
+    keep=None,
+    comment=b'#',
+    compress=False
+):
     """Loads a FASTA file into a dictionary.
 
     Usage:
@@ -411,7 +416,14 @@ def loadfasta(byte_iterator, keep=None, comment=b'#', compress=False):
 
     return entries
 
-def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsize=0):
+def write_bins(
+    directory,
+    bins: Dict[str, Set[str]],
+    fastadict: Dict[str, FastaEntry],
+    compressed: bool=False,
+    maxbins: Optional[int]=250,
+    minsize: int=0
+):
     """Writes bins as FASTA files in a directory, one file per bin.
 
     Inputs:
@@ -430,7 +442,7 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
     # If you do this on a compute cluster it can grind the entire cluster to
     # a halt and piss people off like you wouldn't believe.
     if maxbins is not None and len(bins) > maxbins:
-        raise ValueError('{} bins exceed maxbins of {}'.format(len(bins), maxbins))
+        raise ValueError(f'{len(bins)} bins exceed maxbins of {maxbins}')
 
     # Check that the directory is not a non-directory file,
     # and that its parent directory indeed exists
@@ -455,7 +467,7 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
     allcontigs -= fastadict.keys()
     if allcontigs:
         nmissing = len(allcontigs)
-        raise IndexError('{} contigs in bins missing from fastadict'.format(nmissing))
+        raise IndexError(f'{nmissing} contigs in bins missing from fastadict')
 
     # Make the directory if it does not exist - if it does, do nothing
     try:
@@ -486,7 +498,7 @@ def write_bins(directory, bins, fastadict, compressed=False, maxbins=250, minsiz
             for entry in bin:
                 print(entry.format(), file=file)
 
-def validate_input_array(array):
+def validate_input_array(array: _np.ndarray) -> _np.ndarray:
     "Returns array similar to input array but C-contiguous and with own data."
     if not array.flags['C_CONTIGUOUS']:
         array = _np.ascontiguousarray(array)
@@ -496,7 +508,7 @@ def validate_input_array(array):
     assert (array.flags['C_CONTIGUOUS'] and array.flags['OWNDATA'])
     return array
 
-def read_npz(file):
+def read_npz(file) -> _np.ndarray:
     """Loads array in .npz-format
 
     Input: Open file or path to file with npz-formatted array
@@ -568,19 +580,19 @@ def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
                 identifier = header.split()[0]
 
                 if rename:
-                    newheader = "S{}C{}".format(inpathno + 1, identifier)
+                    newheader = f"S{inpathno + 1}C{identifier}"
                 else:
                     newheader = identifier
 
                 if newheader in headers:
                     raise ValueError("Multiple sequences would be given "
-                                     "header {}.".format(newheader))
+                                     f"header {newheader}.")
                 headers.add(newheader)
 
                 entry.header = newheader
                 print(entry.format(), file=outfile)
 
-def hash_refnames(refnames):
+def hash_refnames(refnames) -> bytes:
     "Hashes an iterable of strings of reference names using MD5."
     hasher = _md5()
     for refname in refnames:
@@ -588,18 +600,17 @@ def hash_refnames(refnames):
 
     return hasher.digest()
 
-def verify_refhash(refnames, expected: bytes):
+def verify_refhash(refnames, expected: bytes) -> None:
     "Compares hash of refnames with bytes expected and errors if not the same"    
     refhash = hash_refnames(refnames)
     if refhash != expected:
-        errormsg = (
-            "Got reference name hash {}, expected {}. "
+        raise ValueError(
+            f"Got reference name hash {refhash.hex()}, expected {expected.hex()}. "
             "Make sure all BAM and FASTA headers are identical "
             "and in the same order."
-        ).format(refhash.hex(), expected.hex())
-        raise ValueError(errormsg)
+        )
 
-def load_jgi(filehandle, minlength, refhash):
+def load_jgi(filehandle, minlength: int, refhash: Optional[bytes]):
     """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
     See https://bitbucket.org/berkeleylab/metabat for more info on that program.
 
@@ -634,37 +645,39 @@ def load_jgi(filehandle, minlength, refhash):
         
         identifiers.append(fields[0])
 
-    verify_refhash(identifiers, refhash)
+    if refhash is not None:
+        verify_refhash(identifiers, refhash)
+
     result = array.take()
     result.shape = (len(result) // len(columns), len(columns))
     return validate_input_array(result)
 
-def _split_bin(binname, headers, separator, bysample=_collections.defaultdict(set)):
+def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
 
     bysample.clear()
     for header in headers:
         if not isinstance(header, str):
-            raise TypeError('Can only split named sequences, not of type {}'.format(type(header)))
+            raise TypeError(f'Can only split named sequences, not of type {type(header)}')
 
         sample, _sep, identifier = header.partition(separator)
 
         if not identifier:
-            raise KeyError("Separator '{}' not in sequence label: '{}'".format(separator, header))
+            raise KeyError(f"Separator '{separator}' not in sequence label: '{header}'")
 
         bysample[sample].add(header)
 
     for sample, splitheaders in bysample.items():
-        newbinname = "{}{}{}".format(sample, separator, binname)
+        newbinname = f"{sample}{separator}{binname}"
         yield newbinname, splitheaders
 
-def _binsplit_generator(cluster_iterator, separator):
+def _binsplit_generator(cluster_iterator, separator: str):
     "Return a generator over split bins with the function above."
     for binname, headers in cluster_iterator:
         for newbinname, splitheaders in _split_bin(binname, headers, separator):
             yield newbinname, splitheaders
 
-def binsplit(clusters, separator):
+def binsplit(clusters, separator: str):
     """Splits a set of clusters by the prefix of their names.
     The separator is a string which separated prefix from postfix of contignames. The
     resulting split clusters have the prefix and separator prepended to them.

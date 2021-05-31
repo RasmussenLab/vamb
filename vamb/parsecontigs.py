@@ -14,7 +14,7 @@ from typing import Tuple, List
 _KERNEL = _vambtools.read_npz(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                               "kernel.npz"))
 
-def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL):
+def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarray:
     "Project fourmers down in dimensionality"
     s = fourmers.sum(axis=1).reshape(-1, 1)
     s[s == 0] = 1.0
@@ -43,7 +43,7 @@ def read_contigs(filehandle, minlength: int = 100) -> Tuple[_np.ndarray, List[st
     """
 
     if minlength < 4:
-        raise ValueError('Minlength must be at least 4, not {}'.format(minlength))
+        raise ValueError(f'Minlength must be at least 4, not {minlength}')
 
     raw = _vambtools.PushArray(_np.float32)
     projected = _vambtools.PushArray(_np.float32)

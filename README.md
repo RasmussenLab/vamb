@@ -15,7 +15,7 @@ Vamb is most easily installed with pip - make sure your pip version is up to dat
 
 Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
 ```
-pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
+pip install https://github.com/RasmussenLab/vamb/archive/4.0.0.zip
 ```
 
 or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
@@ -28,7 +28,7 @@ conda install -c bioconda vamb
 
 ### Installation for advanced users:
 
-If you want to install the latest version from GitHub you can clone and install it using:
+If you want to install the latest version from GitHub, or you want to change Vamb's source code, you should install it like this:
 
 ```
 # clone the desired branch from the repository, here master
@@ -39,11 +39,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pysam`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
-
-### Windows
-
-Vamb does currently not compile on Windows because it is dependent on `pysam`, but a Windows-friendly version is hopefully on the way (see branch `v4`). Let us know if you want to run Vamb on Windows.
+If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pycoverm`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
 
@@ -85,14 +81,12 @@ minimap2 -t 8 -N 50 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/t
 4. Run Vamb:
 
 ```
-vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
+vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C
 ```
-
-Note that we have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module (see below). If you want to use this approach instead we provide an easy to use `snakemake` workflow which will do this for you.
 
 5. Apply the relevant postprocessing filters
 
-Vamb outputs every input contig, even those not binned with other contigs. Depending on your use case, the large number of small bins may not be relevant. Make sure to filter the contigs either using a binning quality control tool, by size, or by aligning the resulting bins to references.
+Vamb outputs every input contig, even those not binned with other contigs. Depending on your use case, the large number of small bins may not be relevant. Make sure to filter the contigs either using a binning quality control tool, by size, or by aligning the resulting bins to references. You can add `--minfasta 200000` to Vamb's commandline to output all bins with more than 200,000 basepairs as FASTA files.
 
 ## Snakemake workflow
 
@@ -131,9 +125,7 @@ Vamb relies on two properties of the DNA sequences to be binned:
 So before you can run Vamb, you need to have files from which Vamb can calculate these values:
 
 * TNF is calculated from a regular FASTA file of DNA sequences.
-* Depth is calculated from BAM-files of a set of reads from each sample mapped to that same FASTA file.
-
-:warning: *Important:* Vamb can use information from multi-mapping reads, but all alignments of a single read __must__ be consecutive in the BAM files. See section 4 of *Recommended workflow*.
+* Depth is calculated from _sorted_ BAM-files of a set of reads from each sample mapped to that same FASTA file.
 
 Remember that the quality of Vamb's bins are no better than the quality of the input files. If your BAM files are constructed carelessly, for example by allowing reads from distinct species to crossmap indiscriminately, your BAM files will not contain information with which Vamb can separate those species. In general, you want reads to map only to contigs within the same phylogenetic distance that you want Vamb to bin together.
 
@@ -152,7 +144,7 @@ Vamb produces the following output files:
 
 __1) Preprocess the reads and check their quality__
 
-We use AdapterRemoval combined with FastQC for this - but you can use whichever tool you think gives the best results.
+We use fastp for this - but you can use whichever tool you think gives the best results.
 
 __2) Assemble each sample individually and get the contigs out__
 
@@ -172,7 +164,7 @@ Vamb is faily memory efficient, and we have run Vamb with 1000 samples and 5.9 m
 
 __4) Map the reads to the FASTA file to obtain BAM files__
 
-:warning: *Important:* If you allow reads to map to multiple contigs, the abundance estimation will be more accurate. However, all BAM records for a single read *must* be consecutive in the BAM file, or else Vamb will miscount these alignments. This is the default order in the output of almost all aligners, but if you use BAM files sorted by alignment position and have multi-mapping reads, you must sort them by read name first.
+:warning: *Important:* Vamb only accepts BAM files sorted by coordinate. You can sort it with `samtools sort`.
 
 Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15)):
 
@@ -180,9 +172,7 @@ Be careful to choose proper parameters for your aligner - in general, if reads f
 
 :warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
 
-If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`), and/or filter for minimum alignments score using the `-s` flag (uses the `AS` optional field of the alignment.)
-
-We have found that MetaBAT2's `jgi_summarize_bam_contig_depths` program estimates BAM depths more accurate than Vamb's `parsebam` module. For the best results, we recommend [downloading MetaBAT2](https://bitbucket.org/berkeleylab/metabat/src/master/), using `jgi_summarize_bam_contig_depths` to estimate depths, and then running Vamb with `--jgi` instead of `--bamfiles`. Also consider using the `snakemake` workflow which will do this for you. 
+If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag (uses the `NM` optional field of the alignment, we recommend setting it to `0.95`). 
 
 __5) Run Vamb__
 
@@ -193,9 +183,9 @@ If you trust the alignments in your BAM files, use:
 
 where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
 
-If you don't trust your alignments, set the `-z` and `-s` flag as appropriate, depending on the properties of your aligner. For example, if I used the aligner BWA MEM, I would use:
+If you don't trust your alignments, set the `-z` flag as appropriate, depending on the properties of your aligner. For example, if I used the aligner BWA MEM, I would use:
 
-`vamb -o SEP -z 0.95 -s 30 --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`
+`vamb -o SEP -z 0.95 --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`
 
 __6) Postprocess the results__
 
