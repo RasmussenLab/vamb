@@ -1,4 +1,4 @@
-__doc__ = """Estimate RPKM (depths) from BAM files of reads mapped to contigs.
+__doc__ = """Estimate depths from BAM files of reads mapped to contigs.
 
 Usage:
 >>> bampaths = ['/path/to/bam1.bam', '/path/to/bam2.bam', '/path/to/bam3.bam']
@@ -24,7 +24,7 @@ def read_bamfiles(
 ) -> _np.ndarray:
     "Placeholder docstring - replaced after this func definition"
     # Verify values:
-    if (minlength is not None) ^ (lengths is None):
+    if (minlength is None) ^ (lengths is None):
         raise ValueError("Either none or both of minlength and lengths can be None")
 
     if minid < 0 or minid > 1:
@@ -41,6 +41,7 @@ def read_bamfiles(
 
     headers, coverage = _pycoverm.get_coverages_from_bam(
         paths, threads=nthreads, min_identity=minid,
+        # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
         trim_upper=0.1, trim_lower=0.1
     )
 
@@ -64,10 +65,10 @@ read_bamfiles.__doc__ = """Calculates mean coverage for BAM files.
 Input:
     paths: List or tuple of paths to BAM files
     refhash: Check all BAM references md5-hash to this (None = no check)
-    minlength: Ignore any references shorter than N bases
+    minlength: Ignore any references shorter than N bases (None = no length filtering)
     lengths: Array of lengths of each contig. (None = no length filtering)
     minid: Discard any reads with nucleotide identity less than this
     nthreads [{}]: Use this number of threads for coverage estimation
 
-Output: A (n_contigs x n_samples) Numpy array with RPKM
+Output: A (n_contigs x n_samples) Numpy array with depths
 """.format(DEFAULT_THREADS)

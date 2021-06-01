@@ -671,13 +671,13 @@ def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdi
         newbinname = f"{sample}{separator}{binname}"
         yield newbinname, splitheaders
 
-def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable[str]]], separator: str):
+def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable]], separator: str):
     "Return a generator over split bins with the function above."
     for binname, headers in cluster_iterator:
         for newbinname, splitheaders in _split_bin(binname, headers, separator):
             yield newbinname, splitheaders
 
-def binsplit(clusters: Union[Dict[str, Set[str]], Iterable[Tuple[str, Iterable[str]]]], separator: str):
+def binsplit(clusters: Union[Dict[str, Set[str]], Iterable[Tuple[str, Iterable]]], separator: str):
     """Splits a set of clusters by the prefix of their names.
     The separator is a string which separated prefix from postfix of contignames. The
     resulting split clusters have the prefix and separator prepended to them.

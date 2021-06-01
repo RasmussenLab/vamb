@@ -94,7 +94,7 @@ def calc_tnf(
 def calc_rpkm(
     outdir: str,
     bampaths: Optional[List[str]],
-    rpkmpath: Optional[str],
+    npzpath: Optional[str],
     mincontiglength: int,
     refhash: Optional[bytes],
     lengths: np.ndarray,
@@ -104,14 +104,14 @@ def calc_rpkm(
 ) -> np.ndarray:
 
     begintime = time.time()
-    log('\nLoading RPKM', logfile)
+    log('\nLoading depths', logfile)
     # If rpkm is given, we load directly from .npz file
-    if rpkmpath is not None:
-        log(f'Loading RPKM from npz array {rpkmpath}', logfile, 1)
-        rpkms = vamb.vambtools.read_npz(rpkmpath)
+    if npzpath is not None:
+        log(f'Loading depths from npz array {npzpath}', logfile, 1)
+        depths = vamb.vambtools.read_npz(npzpath)
 
-        if not rpkms.dtype == np.float32:
-            raise ValueError('RPKMs .npz array must be of float32 dtype')
+        if not depths.dtype == np.float32:
+            raise ValueError('Depths .npz array must be of float32 dtype')
     
     else:
         log(f'Reference hash: {refhash if refhash is None else refhash.hex()}', logfile, 1)
@@ -124,21 +124,21 @@ def calc_rpkm(
         log('\n\t'.join(bampaths), logfile, 1)
         print('', file=logfile)
 
-        rpkms = vamb.parsebam.read_bamfiles(
+        depths = vamb.parsebam.read_bamfiles(
             bampaths, refhash=refhash,
             minlength=mincontiglength,
             minid=minid, lengths=lengths, nthreads=nthreads
         )
         print('', file=logfile)
-        vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), rpkms)
+        vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), depths)
 
-    if len(rpkms) != len(lengths):
+    if len(depths) != len(lengths):
         raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
     log(f'Processed RPKM in {elapsed} seconds', logfile, 1)
 
-    return rpkms
+    return depths
 
 def trainvae(
     outdir: str,
@@ -295,14 +295,14 @@ def run(
     norefcheck: bool,
     minid: float,
     nthreads: int,
-    nhiddens: List[int],
+    nhiddens: Optional[List[int]],
     nlatent: int,
     nepochs: int,
     batchsize: int,
     cuda: bool,
-    alpha: float,
+    alpha: Optional[float],
     beta: float,
-    dropout: float,
+    dropout: Optional[float],
     lrate: float,
     batchsteps: List[int],
     windowsize: int,

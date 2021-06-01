@@ -69,6 +69,14 @@ def make_dataloader(
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
 
+    ### Copy arrays and mask them ###
+
+    # Copy if not destroy - this way we can have all following operations in-place
+    # for simplicity
+    if not destroy:
+        rpkm = rpkm.copy()
+        tnf = tnf.copy()
+
     mask = tnf.sum(axis=1) != 0
 
     # If multiple samples, also include nonzero depth as requirement for accept
@@ -81,14 +89,15 @@ def make_dataloader(
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
 
-    if destroy:
-        rpkm = _vambtools.numpy_inplace_maskarray(rpkm, mask)
-        tnf = _vambtools.numpy_inplace_maskarray(tnf, mask)
-    else:
-        # The astype operation does not copy due to "copy=False", but the masking
-        # operation does.
-        rpkm = rpkm[mask].astype(_np.float32, copy=False)
-        tnf = tnf[mask].astype(_np.float32, copy=False)
+    _vambtools.numpy_inplace_maskarray(rpkm, mask)
+    _vambtools.numpy_inplace_maskarray(tnf, mask)
+
+    ### Normalization ####
+    # Normalize samples to have same depth
+    sample_depths_sum = rpkm.sum(axis=0)
+    if _np.any(sample_depths_sum == 0):
+        raise ValueError("One or more samples have zero total depth.")
+    rpkm *= 1_000_000 / sample_depths_sum
 
     # If multiple samples, normalize to sum to 1, else zscore normalize
     if rpkm.shape[1] > 1:
@@ -96,13 +105,13 @@ def make_dataloader(
     else:
         _vambtools.zscore(rpkm, axis=0, inplace=True)
 
-    # Normalize arrays and create the Tensors (the tensors share the underlying memory)
-    # of the Numpy arrays
+    # Normalize TNF
     _vambtools.zscore(tnf, axis=0, inplace=True)
-    depthstensor = _torch.from_numpy(rpkm)
+
+    ### Create final tensors and dataloader ###
+    depthstensor = _torch.from_numpy(rpkm) # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
 
-    # Create dataloader
     n_workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor)
     dataloader = _DataLoader(
