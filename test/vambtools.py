@@ -33,7 +33,7 @@ class TestReader(unittest.TestCase):
         return None
 
     def test_reader(self):
-        for (file, f) in zip(self.files, [gzip.decompress, bz2.decompress, lzma.decompress]):
+        for file in self.files:
             with vamb.vambtools.Reader(file.name, "rb") as reader:
                 self.assertEqual(self.lines, list(reader))
 
@@ -72,44 +72,44 @@ class TestFASTAEntry(unittest.TestCase):
     def test_init(self):
         # Begins with '>'
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry(">foo", b"TAG")
+            vamb.vambtools.FastaEntry(">foo", bytearray(b"TAG"))
 
         # Begins with '#'
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry("#foo", b"AAA")
+            vamb.vambtools.FastaEntry("#foo", bytearray(b"AAA"))
 
         # With whitespace
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry(" foo", b"SWK")
+            vamb.vambtools.FastaEntry(" foo", bytearray(b"SWK"))
 
         # Contains tab
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry("contig\t", b"NNN")
+            vamb.vambtools.FastaEntry("contig\t", bytearray(b"NNN"))
 
         # Various
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry("foo", b"ATGCpN")
+            vamb.vambtools.FastaEntry("foo", bytearray(b"ATGCpN"))
 
     def test_masking(self):
         self.assertEqual(
-            vamb.vambtools.FastaEntry("foo", b"TaGkmYnAC").sequence,
-            b"TAGNNNNAC"
+            vamb.vambtools.FastaEntry("foo", bytearray(b"TaGkmYnAC")).sequence,
+            bytearray(b"TAGNNNNAC")
         )
-        self.assertEqual(vamb.vambtools.FastaEntry("foo", b"").sequence, b"")
+        self.assertEqual(vamb.vambtools.FastaEntry("foo", bytearray()).sequence, bytearray())
 
     def test_various(self):
         # Length
-        self.assertEqual(len(vamb.vambtools.FastaEntry("x", b"TAGCA")), 5)
-        self.assertEqual(len(vamb.vambtools.FastaEntry("x", b"")), 0)
-        self.assertEqual(len(vamb.vambtools.FastaEntry("x", b"TGTAmnyAncC")), 11)
+        self.assertEqual(len(vamb.vambtools.FastaEntry("x", bytearray(b"TAGCA"))), 5)
+        self.assertEqual(len(vamb.vambtools.FastaEntry("x", bytearray())), 0)
+        self.assertEqual(len(vamb.vambtools.FastaEntry("x", bytearray(b"TGTAmnyAncC"))), 11)
 
         # Str
-        self.assertEqual(str(vamb.vambtools.FastaEntry("x", b"TAGCA")), ">x\nTAGCA")
-        self.assertEqual(str(vamb.vambtools.FastaEntry("yz", b"")), ">yz\n")
-        self.assertEqual(str(vamb.vambtools.FastaEntry("1_2", b"TGTAmnyAncC")), ">1_2\nTGTANNNANCC")
+        self.assertEqual(str(vamb.vambtools.FastaEntry("x", bytearray(b"TAGCA"))), ">x\nTAGCA")
+        self.assertEqual(str(vamb.vambtools.FastaEntry("yz", bytearray())), ">yz\n")
+        self.assertEqual(str(vamb.vambtools.FastaEntry("1_2", bytearray(b"TGTAmnyAncC"))), ">1_2\nTGTANNNANCC")
 
     def test_kmercounts(self):
-        seq = vamb.vambtools.FastaEntry("", b"TTAyCAAnGAC")
+        seq = vamb.vambtools.FastaEntry("", bytearray(b"TTAyCAAnGAC"))
 
         with self.assertRaises(ValueError):
             seq.kmercounts(0)

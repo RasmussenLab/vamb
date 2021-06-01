@@ -17,19 +17,22 @@ DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
 def read_bamfiles(
     paths: List[str],
     refhash: Optional[bytes],
-    minlength: int,
+    minlength: Optional[int],
     minid: float,
     lengths: Optional[_np.ndarray],
     nthreads: int
 ) -> _np.ndarray:
     "Placeholder docstring - replaced after this func definition"
     # Verify values:
+    if (minlength is not None) ^ (lengths is None):
+        raise ValueError("Either none or both of minlength and lengths can be None")
+
     if minid < 0 or minid > 1:
         raise ValueError(f"minid must be between 0 and 1, not {minid}")
 
     # Coverage cuts off 75 bp in both sides, so if this is much lower,
     # numbers will be thrown wildly off.
-    if minlength < 250:
+    if minlength is not None and minlength < 250:
         raise ValueError(f"minlength must be at least 250, not {minlength}")
 
     for path in paths:
