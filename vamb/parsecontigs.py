@@ -8,11 +8,12 @@ Usage:
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import Tuple, List
+from typing import Tuple, List, Iterable
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
-_KERNEL = _vambtools.read_npz(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                              "kernel.npz"))
+_KERNEL = _vambtools.read_npz(
+    _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kernel.npz")
+)
 
 def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarray:
     "Project fourmers down in dimensionality"
@@ -29,7 +30,10 @@ def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
     projected.extend(projected_mat.ravel())
     raw.clear()
 
-def read_contigs(filehandle, minlength: int = 100) -> Tuple[_np.ndarray, List[str], _np.ndarray]:
+def read_contigs(
+    filehandle: Iterable[bytes],
+    minlength: int = 100
+) -> Tuple[_np.ndarray, List[str], _np.ndarray]:
     """Parses a FASTA file open in binary reading mode.
 
     Input:

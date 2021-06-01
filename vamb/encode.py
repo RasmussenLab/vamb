@@ -383,7 +383,7 @@ class VAE(_nn.Module):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths_array, tnf_array = data_loader.dataset.tensors
+        depths_array, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -400,7 +400,7 @@ class VAE(_nn.Module):
                     tnf = tnf.cuda()
 
                 # Evaluate
-                out_depths, out_tnf, mu, logsigma = self(depths, tnf)
+                _, _, mu, _ = self(depths, tnf)
 
                 if self.usecuda:
                     mu = mu.cpu()

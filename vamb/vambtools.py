@@ -8,7 +8,7 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, Iterable, Iterator, Union, Tuple, Collection, TextIO
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -25,7 +25,7 @@ class PushArray:
 
     __slots__ = ['data', 'capacity', 'length']
 
-    def __init__(self, dtype, start_capacity=1<<16):
+    def __init__(self, dtype, start_capacity: int=1<<16):
         self.capacity = start_capacity
         self.data = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
@@ -33,11 +33,11 @@ class PushArray:
     def __len__(self) -> int:
         return self.length
 
-    def _setcapacity(self, n):
+    def _setcapacity(self, n: int):
         self.data.resize(n, refcheck=False)
         self.capacity = n
 
-    def _grow(self, mingrowth):
+    def _grow(self, mingrowth: int):
         """Grow capacity by power of two between 1/8 and 1/4 of current capacity, though at
         least mingrowth"""
         growth = max(int(self.capacity * 0.125), mingrowth)
@@ -64,7 +64,7 @@ class PushArray:
         self._setcapacity(self.length)
         return self.data
 
-    def clear(self, force=False):
+    def clear(self, force: bool=False):
         "Empties the PushArray. If force is true, also truncates the underlying memory."
         self.length = 0
         if force:
@@ -151,7 +151,7 @@ class Reader:
     TEST LINE
     """
 
-    def __init__(self, filename, readmode='r'):
+    def __init__(self, filename: str, readmode: str='r'):
         if readmode not in ('r', 'rt', 'rb'):
             raise ValueError("the Reader cannot write, set mode to 'r' or 'rb'")
         if readmode == 'r':
@@ -200,13 +200,7 @@ class FastaEntry:
                                    b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
     __slots__ = ['header', 'sequence']
 
-    def __init__(self, header, sequence):
-        if not isinstance(sequence, bytearray):
-            sequence = bytearray(sequence)
-
-        if not isinstance(header, str):
-            header = str(header)
-
+    def __init__(self, header: str, sequence: bytearray):
         if len(header) > 0 and (header[0] in ('>', '#') or header[0].isspace()):
             raise ValueError('Header cannot begin with #, > or whitespace')
         if '\t' in header:
@@ -246,7 +240,7 @@ class FastaEntry:
         _kmercounts(self.sequence, k, counts)
         return counts
 
-def byte_iterfasta(filehandle, comment: bytes=b'#'):
+def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
 
     Usage:
@@ -301,8 +295,14 @@ def byte_iterfasta(filehandle, comment: bytes=b'#'):
 
     yield FastaEntry(header, bytearray().join(buffer))
 
-def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
-                 header=None, rename=True):
+def write_clusters(
+    filehandle: TextIO,
+    clusters: Union[Dict, Iterable[Tuple[str, Collection]]],
+    max_clusters:Optional[int]=None,
+    min_size: int=1,
+    header: Optional[str]=None,
+    rename: bool=True
+) -> Tuple[int, int]:
     """Writes clusters to an open filehandle.
     Inputs:
         filehandle: An open filehandle that can be written to
@@ -359,7 +359,7 @@ def write_clusters(filehandle, clusters, max_clusters=None, min_size=1,
 
     return clusternumber, ncontigs
 
-def read_clusters(filehandle, min_size: int=1) -> Dict[str, Set[str]]:
+def read_clusters(filehandle: Iterable[str], min_size: int=1) -> Dict[str, Set[str]]:
     """Read clusters from a file as created by function `writeclusters`.
 
     Inputs:
@@ -385,10 +385,10 @@ def read_clusters(filehandle, min_size: int=1) -> Dict[str, Set[str]]:
 
 
 def loadfasta(
-    byte_iterator,
-    keep=None,
-    comment=b'#',
-    compress=False
+    byte_iterator: Iterable[bytes],
+    keep: Optional[Collection]=None,
+    comment: bytes=b'#',
+    compress: bool=False
 ):
     """Loads a FASTA file into a dictionary.
 
@@ -522,7 +522,7 @@ def read_npz(file) -> _np.ndarray:
 
     return array
 
-def write_npz(file, array):
+def write_npz(file, array: _np.ndarray):
     """Writes a Numpy array to an open file or path in .npz format
 
     Inputs:
@@ -533,7 +533,7 @@ def write_npz(file, array):
     """
     _np.savez_compressed(file, array)
 
-def filtercontigs(infile, outfile, minlength=2000):
+def filtercontigs(infile: Iterable[bytes], outfile: TextIO, minlength: int=2000):
     """Creates new FASTA file with filtered contigs
 
     Inputs:
@@ -550,7 +550,7 @@ def filtercontigs(infile, outfile, minlength=2000):
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
 
-def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
+def concatenate_fasta(outfile: TextIO, inpaths: Iterable[str], minlength: int=2000, rename: bool=True):
     """Creates a new FASTA file from input paths, and optionally rename contig headers
     to the pattern "S{sample number}C{contig identifier}".
 
@@ -592,7 +592,7 @@ def concatenate_fasta(outfile, inpaths, minlength=2000, rename=True):
                 entry.header = newheader
                 print(entry.format(), file=outfile)
 
-def hash_refnames(refnames) -> bytes:
+def hash_refnames(refnames: Iterable[str]) -> bytes:
     "Hashes an iterable of strings of reference names using MD5."
     hasher = _md5()
     for refname in refnames:
@@ -600,7 +600,7 @@ def hash_refnames(refnames) -> bytes:
 
     return hasher.digest()
 
-def verify_refhash(refnames, expected: bytes) -> None:
+def verify_refhash(refnames: Iterable[str], expected: bytes) -> None:
     "Compares hash of refnames with bytes expected and errors if not the same"    
     refhash = hash_refnames(refnames)
     if refhash != expected:
@@ -610,7 +610,7 @@ def verify_refhash(refnames, expected: bytes) -> None:
             "and in the same order."
         )
 
-def load_jgi(filehandle, minlength: int, refhash: Optional[bytes]):
+def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]):
     """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
     See https://bitbucket.org/berkeleylab/metabat for more info on that program.
 
@@ -660,7 +660,7 @@ def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdi
         if not isinstance(header, str):
             raise TypeError(f'Can only split named sequences, not of type {type(header)}')
 
-        sample, _sep, identifier = header.partition(separator)
+        sample, _, identifier = header.partition(separator)
 
         if not identifier:
             raise KeyError(f"Separator '{separator}' not in sequence label: '{header}'")
@@ -671,13 +671,13 @@ def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdi
         newbinname = f"{sample}{separator}{binname}"
         yield newbinname, splitheaders
 
-def _binsplit_generator(cluster_iterator, separator: str):
+def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable[str]]], separator: str):
     "Return a generator over split bins with the function above."
     for binname, headers in cluster_iterator:
         for newbinname, splitheaders in _split_bin(binname, headers, separator):
             yield newbinname, splitheaders
 
-def binsplit(clusters, separator: str):
+def binsplit(clusters: Union[Dict[str, Set[str]], Iterable[Tuple[str, Iterable[str]]]], separator: str):
     """Splits a set of clusters by the prefix of their names.
     The separator is a string which separated prefix from postfix of contignames. The
     resulting split clusters have the prefix and separator prepended to them.
@@ -690,11 +690,8 @@ def binsplit(clusters, separator: str):
     >>> binsplit(clusters, "-")
     {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
     """
-    if iter(clusters) is clusters: # clusters is an iterator
-        return _binsplit_generator(clusters, separator)
 
-    elif isinstance(clusters, dict):
+    if isinstance(clusters, dict):
         return dict(_binsplit_generator(clusters.items(), separator))
-
     else:
-        raise TypeError("clusters must be iterator of pairs or dict")
+        return _binsplit_generator(clusters, separator)
