@@ -130,7 +130,7 @@ class TestFASTAReader(unittest.TestCase):
     def test_bad_files(self):
         # First non-comment line must be header
         with self.assertRaises(ValueError):
-            data = b"#foo\n#bar\n  \n>foo\TAG".splitlines()
+            data = b"#foo\n#bar\n  \n>foo\nTAG".splitlines()
             list(vamb.vambtools.byte_iterfasta(data))
 
         # String input
