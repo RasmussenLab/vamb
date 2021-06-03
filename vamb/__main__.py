@@ -374,8 +374,9 @@ def main():
         add_help=False)
 
     # Help
-    helpos = parser.add_argument_group(title='Help', description=None)
+    helpos = parser.add_argument_group(title='Help and version', description=None)
     helpos.add_argument('-h', '--help', help='print help and exit', action='help')
+    helpos.add_argument('--version', action='version', version=f'Vamb {".".join(map(str, vamb.__version__))}')
 
     # Positional arguments
     reqos = parser.add_argument_group(title='Output (required)', description=None)
