@@ -25,7 +25,7 @@ import vamb
 with open(args.clusterspath) as file:
     clusters = vamb.vambtools.read_clusters(file)
 
-with vamb.vambtools.Reader(args.fastapath, 'rb') as file:
+with vamb.vambtools.Reader(args.fastapath) as file:
     fastadict = vamb.vambtools.loadfasta(file)
 
 vamb.vambtools.write_bins(args.outdir, clusters, fastadict, maxbins=None, minsize=args.minsize)

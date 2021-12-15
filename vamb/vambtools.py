@@ -151,14 +151,7 @@ class Reader:
     TEST LINE
     """
 
-    def __init__(self, filename: str, readmode: str='r'):
-        if readmode not in ('r', 'rt', 'rb'):
-            raise ValueError("the Reader cannot write, set mode to 'r' or 'rb'")
-        if readmode == 'r':
-            self.readmode = 'rt'
-        else:
-            self.readmode = readmode
-
+    def __init__(self, filename: str):
         self.filename = filename
 
         with open(self.filename, 'rb') as f:
@@ -166,19 +159,19 @@ class Reader:
 
         # Gzipped files begin with the two bytes 0x1F8B
         if tuple(signature[:2]) == (0x1F, 0x8B):
-            self.filehandle = _gzip.open(self.filename, self.readmode)
+            self.filehandle = _gzip.open(self.filename, 'rb')
 
         # bzip2 files begin with the signature BZ
         elif signature[:2] == b'BZ':
-            self.filehandle = _bz2.open(self.filename, self.readmode)
+            self.filehandle = _bz2.open(self.filename, 'rb')
 
         # .XZ files begins with 0xFD377A585A0000
         elif tuple(signature[:7]) == (0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00):
-            self.filehandle = _lzma.open(self.filename, self.readmode)
+            self.filehandle = _lzma.open(self.filename, 'rb')
 
         # Else we assume it's a text file.
         else:
-            self.filehandle = open(self.filename, self.readmode)
+            self.filehandle = open(self.filename, 'rb')
 
     def close(self):
         self.filehandle.close()
@@ -244,7 +237,7 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
     """Yields FastaEntries from a binary opened fasta file.
 
     Usage:
-    >>> with Reader('/dir/fasta.fna', 'rb') as filehandle:
+    >>> with Reader('/dir/fasta.fna') as filehandle:
     ...     entries = byte_iterfasta(filehandle) # a generator
 
     Inputs:
@@ -297,7 +290,7 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
 
 def write_clusters(
     filehandle: TextIO,
-    clusters: Union[Dict, Iterable[Tuple[str, Collection]]],
+    clusters: Union[Dict[str, Collection], Iterable[Tuple[str, Collection]]],
     max_clusters:Optional[int]=None,
     min_size: int=1,
     header: Optional[str]=None,
@@ -393,7 +386,7 @@ def loadfasta(
     """Loads a FASTA file into a dictionary.
 
     Usage:
-    >>> with Reader('/dir/fasta.fna', 'rb') as filehandle:
+    >>> with Reader('/dir/fasta.fna') as filehandle:
     ...     fastadict = loadfasta(filehandle)
 
     Input:
@@ -565,7 +558,7 @@ def concatenate_fasta(outfile: TextIO, inpaths: Iterable[str], minlength: int=20
 
     headers = set()
     for (inpathno, inpath) in enumerate(inpaths):
-        with Reader(inpath, "rb") as infile:
+        with Reader(inpath) as infile:
 
             # If we rename, seq headers only have to be unique for each sample
             if rename:
