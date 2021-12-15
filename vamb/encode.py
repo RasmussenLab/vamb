@@ -81,10 +81,12 @@ def make_dataloader(
 
     # If multiple samples, also include nonzero depth as requirement for accept
     # of sequences
+    depthssum = None
     if rpkm.shape[1] > 1:
         depthssum = rpkm.sum(axis=1)
         mask &= depthssum != 0
         depthssum = depthssum[mask]
+    assert isinstance(depthssum, _np.ndarray)
 
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
