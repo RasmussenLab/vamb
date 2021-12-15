@@ -6,7 +6,9 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 :star: Vamb is benchmarked in CAMI2. Read our interpretations of the results [here.](https://github.com/github/RasmussenLab/blob/master/doc/CAMI2.md) :star:
 
-For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial.](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.html)
+Vamb has changed a lot since the pre-print at [biorxiv](https://www.biorxiv.org/content/early/2018/12/19/490078) so we really recommend reading it at Nature Biotechnology. For instance, the current version of Vamb uses "multi-split binning" which is not mentioned in the pre-print. Furthermore, we in the pre-print mention that Vamb can bin gene catalogues - this did not make it in the Nature Biotech paper, but it can still do that. For instance, on the Integrated Gene Catalogue Vamb generated 675 near complete gene-bins compared to 558 and 429 from MSPminer and Canopy, respectively.
+
+For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
 # Installation
 Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
@@ -15,7 +17,7 @@ Vamb is most easily installed with pip - make sure your pip version is up to dat
 
 Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
 ```
-pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
+pip install https://github.com/RasmussenLab/vamb/archive/v3.0.3.zip
 ```
 
 or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
