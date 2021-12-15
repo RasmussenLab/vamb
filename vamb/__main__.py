@@ -74,7 +74,7 @@ def calc_tnf(
     # Else parse FASTA files
     else:
         log(f'Loading data from FASTA file {fastapath}', logfile, 1)
-        with vamb.vambtools.Reader(fastapath, 'rb') as tnffile:
+        with vamb.vambtools.Reader(fastapath) as tnffile:
             ret = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
 
         tnfs, contignames, contiglengths = ret
@@ -105,6 +105,7 @@ def calc_rpkm(
 
     begintime = time.time()
     log('\nLoading depths', logfile)
+    depths = None
     # If rpkm is given, we load directly from .npz file
     if npzpath is not None:
         log(f'Loading depths from npz array {npzpath}', logfile, 1)
@@ -132,6 +133,7 @@ def calc_rpkm(
         print('', file=logfile)
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), depths)
 
+    assert isinstance(depths, np.ndarray)
     if len(depths) != len(lengths):
         raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
@@ -270,7 +272,7 @@ def write_fasta(
     for contigs in filtered_clusters.values():
         keep.update(set(contigs))
 
-    with vamb.vambtools.Reader(fastapath, 'rb') as file:
+    with vamb.vambtools.Reader(fastapath) as file:
         fastadict = vamb.vambtools.loadfasta(file, keep=keep)
 
     vamb.vambtools.write_bins(os.path.join(outdir, "bins"), filtered_clusters, fastadict, maxbins=None)
@@ -349,7 +351,7 @@ def run(
 
     del latent
 
-    if minfasta is not None:
+    if minfasta is not None and fastapath is not None:
         # We have already checked fastapath is not None if minfasta is not None.
         write_fasta(
             outdir, clusterspath, fastapath, contignames, contiglengths, minfasta, logfile

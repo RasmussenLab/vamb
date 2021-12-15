@@ -1,7 +1,7 @@
 __doc__ = """Calculate tetranucleotide frequency from a FASTA file.
 
 Usage:
->>> with open('/path/to/contigs.fna', 'rb') as filehandle
+>>> with open('/path/to/contigs.fna') as filehandle
 ...     tnfs, contignames, lengths = read_contigs(filehandle)
 """
 
