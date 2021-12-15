@@ -12,8 +12,9 @@ import numpy as _np
 import torch as _torch
 from collections import deque as _deque
 from math import ceil as _ceil
+from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
-from typing import Tuple, Set, Optional
+from typing import Tuple, Set, Optional, Iterable
 
 _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
@@ -25,7 +26,7 @@ _XMAX = 0.3
 # This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
 # of one point sums to approximately one
-_NORMALPDF = _DELTA_X * _torch.Tensor(
+_NORMALPDF = _DELTA_X * _Tensor(
       [2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.07588285e-07,
        1.07697600e-05, 1.48671951e-04, 1.59837411e-03, 1.33830226e-02,
        8.72682695e-02, 4.43184841e-01, 1.75283005e+00, 5.39909665e+00,
@@ -123,7 +124,7 @@ class ClusterGenerator:
         if len(matrix) < 1:
             raise ValueError('Matrix must have at least 1 observation.')
 
-    def _init_histogram_kept_mask(self, N) -> Tuple[_torch.Tensor, _torch.Tensor]:
+    def _init_histogram_kept_mask(self, N) -> Tuple[_Tensor, _Tensor]:
         "N is number of contigs"
         if _torch.__version__ >= '1.2':
             # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
@@ -212,11 +213,12 @@ class ClusterGenerator:
 
         return cluster
 
-    def _findcluster(self) -> Tuple[Cluster, int, _torch.Tensor]:
+    def _findcluster(self) -> Tuple[Cluster, int, _Tensor]:
         """Finds a cluster to output."""
         threshold, success, medoid = None, None, -1
 
         # Keep looping until we find a cluster
+        distances = None
         while threshold is None:
             # If on GPU, we need to take next seed which has not already been clusted out.
             # if not, clustered points have been removed, so we can just take next seed
@@ -257,6 +259,7 @@ class ClusterGenerator:
                     self.successes = 0
 
         # These are the points of the final cluster AFTER establishing the threshold used
+        assert isinstance(distances, _Tensor)
         points = _smaller_indices(distances, self.kept_mask, threshold, self.CUDA)
         isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
 
@@ -265,7 +268,7 @@ class ClusterGenerator:
                           threshold, isdefault, self.successes, len(self.attempts))
         return cluster, medoid, points
 
-def _calc_densities(histogram: _torch.Tensor, cuda: bool, pdf=_NORMALPDF):
+def _calc_densities(histogram: _Tensor, cuda: bool, pdf=_NORMALPDF):
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
 
@@ -281,7 +284,7 @@ def _calc_densities(histogram: _torch.Tensor, cuda: bool, pdf=_NORMALPDF):
     return densities
 
 def _find_threshold(
-    histogram: _torch.Tensor,
+    histogram: _Tensor,
     peak_valley_ratio: float,
     cuda:bool
 ) -> Tuple[Optional[float], Optional[bool]]:
@@ -351,11 +354,11 @@ def _find_threshold(
     return threshold, success
 
 def _smaller_indices(
-    tensor: _torch.Tensor,
-    kept_mask: _torch.Tensor,
+    tensor: _Tensor,
+    kept_mask: _Tensor,
     threshold: float,
     cuda: bool
-) -> _torch.Tensor:
+) -> _Tensor:
     """Get all indices where the tensor is smaller than the threshold.
     Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190"""
 
@@ -368,7 +371,7 @@ def _smaller_indices(
         torch_indices = _torch.from_numpy(indices)
         return torch_indices
 
-def _normalize(matrix: _torch.Tensor, inplace: bool = False) -> _torch.Tensor:
+def _normalize(matrix: _Tensor, inplace: bool = False) -> _Tensor:
     """Preprocess the matrix to make distance calculations faster.
     The distance functions in this module assumes input has been normalized
     and will not work otherwise.
@@ -387,19 +390,19 @@ def _normalize(matrix: _torch.Tensor, inplace: bool = False) -> _torch.Tensor:
     return matrix
 
 
-def _calc_distances(matrix: _torch.Tensor, index: int) -> _torch.Tensor:
+def _calc_distances(matrix: _Tensor, index: int) -> _Tensor:
     "Return vector of cosine distances from rows of normalized matrix to given row."
     dists = 0.5 - matrix.matmul(matrix[index])
     dists[index] = 0.0 # avoid float rounding errors
     return dists
 
 def _sample_medoid(
-    matrix: _torch.Tensor,
-    kept_mask: _torch.Tensor,
+    matrix: _Tensor,
+    kept_mask: _Tensor,
     medoid: int,
     threshold: float,
     cuda: bool
-) -> Tuple[_torch.Tensor, _torch.Tensor, float]:
+) -> Tuple[_Tensor, _Tensor, float]:
     """Returns:
     - A vector of indices to points within threshold
     - A vector of distances to all points
@@ -418,13 +421,13 @@ def _sample_medoid(
 
 
 def _wander_medoid(
-    matrix: _torch.Tensor,
-    kept_mask: _torch.Tensor,
+    matrix: _Tensor,
+    kept_mask: _Tensor,
     medoid: int,
     max_attempts: int,
     rng,
     cuda: bool
-) -> Tuple[int, _torch.Tensor]:
+) -> Tuple[int, _Tensor]:
     """Keeps sampling new points within the cluster until it has sampled
     max_attempts without getting a new set of cluster with lower average
     distance"""
@@ -469,7 +472,7 @@ def cluster(
     destroy: bool = False,
     normalized: bool = False,
     cuda: bool = False
-):
+) -> Iterable[Tuple[int, Set[int]]]:
     """Create iterable of (medoid, {point1, point2 ...}) tuples for each cluster.
 
     Inputs:

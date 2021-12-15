@@ -8,7 +8,7 @@ import numpy as _np
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Dict, Set, Iterable, Iterator, Union, Tuple, Collection, TextIO
+from typing import Optional, Dict, Set, Iterable, Iterator, Tuple, Collection, TextIO
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -290,7 +290,7 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
 
 def write_clusters(
     filehandle: TextIO,
-    clusters: Union[Dict[str, Collection], Iterable[Tuple[str, Collection]]],
+    clusters: Iterable[Tuple[str, Set[str]]],
     max_clusters:Optional[int]=None,
     min_size: int=1,
     header: Optional[str]=None,
@@ -312,11 +312,6 @@ def write_clusters(
 
     if not hasattr(filehandle, 'writable') or not filehandle.writable():
         raise ValueError('Filehandle must be a writable file')
-
-    # Special case to allows dicts even though they are not iterators of
-    # clustername, {cluster}
-    if isinstance(clusters, dict):
-        clusters = clusters.items()
 
     if max_clusters is not None and max_clusters < 1:
         raise ValueError('max_clusters must None or at least 1, not {max_clusters}')
@@ -645,7 +640,7 @@ def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]
     result.shape = (len(result) // len(columns), len(columns))
     return validate_input_array(result)
 
-def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdict(set)):
+def _split_bin(binname: str, headers: Iterable[str], separator: str, bysample=_collections.defaultdict(set)):
     "Split a single bin by the prefix of the headers"
 
     bysample.clear()
@@ -664,13 +659,13 @@ def _split_bin(binname, headers, separator: str, bysample=_collections.defaultdi
         newbinname = f"{sample}{separator}{binname}"
         yield newbinname, splitheaders
 
-def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable]], separator: str):
+def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable[str]]], separator: str):
     "Return a generator over split bins with the function above."
     for binname, headers in cluster_iterator:
         for newbinname, splitheaders in _split_bin(binname, headers, separator):
             yield newbinname, splitheaders
 
-def binsplit(clusters: Union[Dict[str, Set[str]], Iterable[Tuple[str, Iterable]]], separator: str):
+def binsplit(clusters: Iterable[Tuple[str, Iterable[str]]], separator: str):
     """Splits a set of clusters by the prefix of their names.
     The separator is a string which separated prefix from postfix of contignames. The
     resulting split clusters have the prefix and separator prepended to them.
@@ -684,7 +679,4 @@ def binsplit(clusters: Union[Dict[str, Set[str]], Iterable[Tuple[str, Iterable]]
     {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
     """
 
-    if isinstance(clusters, dict):
-        return dict(_binsplit_generator(clusters.items(), separator))
-    else:
-        return _binsplit_generator(clusters, separator)
+    return _binsplit_generator(clusters, separator)
