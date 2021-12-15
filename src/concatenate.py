@@ -19,7 +19,7 @@ parser.add_argument('-m', dest='minlength', metavar='', type=int,
 parser.add_argument('--keepnames', action='store_true', help='Do not rename sequences [False]')
 parser.add_argument('--nozip', action='store_true', help='Do not gzip output [False]')
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
     parser.print_help()
     sys.exit()
 
