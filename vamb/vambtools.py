@@ -192,14 +192,24 @@ class FastaEntry:
 
     basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
                                    b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
+    # Allow only the same identifier chars that can be in the BAM file, otherwise
+    # users will be frustrated with FASTA and BAM headers do not match.
+    # BAM only includes identifier, e.g. stuff before whitespace. So we accept anything
+    # after whitespace, but do not use it as header.
+    # This brutal regex is derived from the SAM specs, valid identifiers,
+    # but disallow leading # sign, and allow trailing whitespace + ignored description
+    regex = _re.compile(b">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$")
     __slots__ = ['header', 'sequence']
 
-    def __init__(self, header: str, sequence: bytearray):
-        if len(header) > 0 and (header[0] in ('>', '#') or header[0].isspace()):
-            raise ValueError('Header cannot begin with #, > or whitespace')
-        if '\t' in header:
-            raise ValueError('Header cannot contain a tab')
-
+    def __init__(self, headerbytes: bytes, sequence: bytearray):
+        m = self.regex.match(headerbytes)
+        if m is None:
+            raise ValueError(
+                f"Invalid header in FASTA: \"{headerbytes.decode()}\". "
+                "Must conform to identifier regex pattern of SAM specification: \""
+                ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$\""
+            )
+        header = headerbytes[1:m.span(1)[1]].decode()
         masked = sequence.translate(self.basemask, b' \t\n\r')
         stripped = masked.translate(None, b'ACGTN')
         if len(stripped) > 0:
@@ -271,7 +281,7 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'
         raise TypeError(errormsg) from None
 
-    header = _valid_fasta_header(probeline)
+    header = probeline
     buffer = list()
 
     # Iterate over lines
@@ -282,29 +292,12 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
         elif line.startswith(b'>'):
             yield FastaEntry(header, bytearray().join(buffer))
             buffer.clear()
-            header = _valid_fasta_header(line)
+            header = line
 
         else:
             buffer.append(line)
 
     yield FastaEntry(header, bytearray().join(buffer))
-
-# Allow only the same identifier chars that can be in the BAM file, otherwise
-# users will be frustrated with FASTA and BAM headers do not match.
-# BAM only includes identifier, e.g. stuff before whitespace. So we accept anything
-# after whitespace, but do not use it as header.
-def _valid_fasta_header(
-    bts: bytes,
-    regex=_re.compile(b">([0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$")
-) -> str:
-    m = regex.match(bts)
-    if m is None:
-        raise ValueError(
-            f"Invalid header in FASTA file: \"{bts}\". "
-            "Must conform to identifier regex pattern of SAM specification: \""
-            ">([0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$\""
-        )
-    return bts[1:m.span(1)[1]].decode()
 
 def write_clusters(
     filehandle: TextIO,
