@@ -26,7 +26,7 @@ from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
-from typing import Tuple, List, Set, Optional
+from typing import BinaryIO, Optional, TextIO
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
@@ -37,7 +37,7 @@ def make_dataloader(
     batchsize:int=256,
     destroy:bool=False,
     cuda:bool=False
-) -> Tuple[_DataLoader, _np.ndarray]:
+) -> tuple[_DataLoader, _np.ndarray]:
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -128,7 +128,7 @@ class VAE(_nn.Module):
 
     Instantiate with:
         nsamples: Number of samples in abundance matrix
-        nhiddens: List of n_neurons in the hidden layers [None=Auto]
+        nhiddens: list of n_neurons in the hidden layers [None=Auto]
         nlatent: Number of neurons in the latent layer [32]
         alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
         beta: Multiply KLD by the inverse of this value [200]
@@ -148,7 +148,7 @@ class VAE(_nn.Module):
     def __init__(
         self,
         nsamples: int,
-        nhiddens: Optional[List[int]]=None,
+        nhiddens: Optional[list[int]]=None,
         nlatent:int=32,
         alpha:Optional[float]=None,
         beta:float=200.0,
@@ -299,7 +299,7 @@ class VAE(_nn.Module):
         tnf_out: _torch.Tensor,
         mu: _torch.Tensor,
         logsigma: _torch.Tensor
-    ) -> Tuple[_torch.Tensor, _torch.Tensor, _torch.Tensor, _torch.Tensor]:
+    ) -> tuple[_torch.Tensor, _torch.Tensor, _torch.Tensor, _torch.Tensor]:
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
@@ -322,7 +322,7 @@ class VAE(_nn.Module):
         data_loader: _DataLoader,
         epoch: int,
         optimizer,
-        batchsteps: List[int],
+        batchsteps: list[int],
         logfile
     ):
         self.train()
@@ -479,9 +479,9 @@ class VAE(_nn.Module):
         dataloader: _DataLoader,
         nepochs: int=500,
         lrate: float=1e-3,
-        batchsteps: Optional[List[int]]=[25, 75, 150, 300],
-        logfile=None,
-        modelfile=None
+        batchsteps: Optional[list[int]]=[25, 75, 150, 300],
+        logfile: Optional[TextIO]=None,
+        modelfile: Optional[str]=None
     ):
         """Train the autoencoder from depths array and tnf array.
 
