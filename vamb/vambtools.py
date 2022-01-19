@@ -484,7 +484,7 @@ def write_bins(
             entry = fastadict[contig]
             if compressed:
                 uncompressed = bytearray(_gzip.decompress(entry.sequence))
-                entry = FastaEntry(entry.header, uncompressed)
+                entry = FastaEntry(entry.header.encode(), uncompressed)
             bin.append(entry)
 
         # Skip bin if it's too small
