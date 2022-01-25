@@ -22,7 +22,7 @@ SETUP_METADATA = \
                                language="c")],
     "install_requires": ["numpy~=1.20", "torch~=1.8", "pycoverm~=0.3"],
     "setup_requires": ['Cython~=0.29.0', "setuptools~=56.0.0"],
-    "python_requires": "~=3.8",
+    "python_requires": "~=3.9",
     "classifiers":[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
