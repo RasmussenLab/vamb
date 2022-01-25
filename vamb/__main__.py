@@ -264,6 +264,7 @@ def write_fasta(
 
     log('\nWriting FASTA files', logfile)
     log('Minimum FASTA size: {minfasta}', logfile, 1)
+    assert len(contignames) == len(contiglengths)
 
     lengthof = dict(zip(contignames, contiglengths))
     filtered_clusters = dict()
