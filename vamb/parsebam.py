@@ -9,13 +9,13 @@ import pycoverm as _pycoverm
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import List, Optional
+from typing import Optional
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
 
 def read_bamfiles(
-    paths: List[str],
+    paths: list[str],
     refhash: Optional[bytes],
     minlength: Optional[int],
     minid: float,

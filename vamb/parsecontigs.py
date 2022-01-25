@@ -8,7 +8,7 @@ Usage:
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import Tuple, List, Iterable
+from typing import Iterable
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL = _vambtools.read_npz(
@@ -33,7 +33,7 @@ def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
 def read_contigs(
     filehandle: Iterable[bytes],
     minlength: int = 100
-) -> Tuple[_np.ndarray, List[str], _np.ndarray]:
+) -> tuple[_np.ndarray, list[str], _np.ndarray]:
     """Parses a FASTA file open in binary reading mode.
 
     Input:
