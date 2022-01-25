@@ -8,7 +8,7 @@ import argparse
 import torch
 import datetime
 import time
-from typing import List, Optional, Tuple
+from typing import Optional
 
 _ncpu = os.cpu_count()
 if _ncpu is None:
@@ -43,7 +43,7 @@ def calc_tnf(
     lengthspath: Optional[str],
     mincontiglength: int,
     logfile
-) -> Tuple[np.ndarray, List[str], np.ndarray]:
+) -> tuple[np.ndarray, list[str], np.ndarray]:
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
     log(f'Minimum sequence length: {mincontiglength}', logfile, 1)
@@ -89,11 +89,12 @@ def calc_tnf(
     log(f'Kept {nbases} bases in {ncontigs} sequences', logfile, 1)
     log(f'Processed TNF in {elapsed} seconds', logfile, 1)
 
+    assert len(tnfs) == len(contignames) == len(contiglengths)
     return tnfs, contignames, contiglengths
 
 def calc_rpkm(
     outdir: str,
-    bampaths: Optional[List[str]],
+    bampaths: Optional[list[str]],
     npzpath: Optional[str],
     mincontiglength: int,
     refhash: Optional[bytes],
@@ -140,13 +141,16 @@ def calc_rpkm(
     elapsed = round(time.time() - begintime, 2)
     log(f'Processed RPKM in {elapsed} seconds', logfile, 1)
 
+    if bampaths is not None:
+        assert depths.shape[1] == len(bampaths)
+
     return depths
 
 def trainvae(
     outdir: str,
     rpkms: np.ndarray,
     tnfs: np.ndarray,
-    nhiddens: Optional[List[int]], # set automatically if None
+    nhiddens: Optional[list[int]], # set automatically if None
     nlatent: int,
     alpha: Optional[float], # set automatically if None
     beta: float,
@@ -155,12 +159,14 @@ def trainvae(
     batchsize: int,
     nepochs: int,
     lrate: float,
-    batchsteps: List[int],
+    batchsteps: list[int],
     logfile
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
 
     begintime = time.time()
     log('\nCreating and training VAE', logfile)
+
+    assert len(rpkms) == len(tnfs)
 
     nsamples = rpkms.shape[1]
     vae = vamb.encode.VAE(
@@ -172,6 +178,7 @@ def trainvae(
     dataloader, mask = vamb.encode.make_dataloader(
         rpkms, tnfs, batchsize, destroy=True, cuda=cuda
     )
+    assert len(mask) == len(tnfs)
     log('Created dataloader and mask', logfile, 1)
     vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
     n_discarded = len(mask) - mask.sum()
@@ -199,7 +206,7 @@ def trainvae(
 def cluster(
     clusterspath: str,
     latent: np.ndarray,
-    contignames: List[str], 
+    contignames: list[str], 
     windowsize: int,
     minsuccesses: int,
     maxclusters: int,
@@ -220,19 +227,21 @@ def cluster(
         logfile, 1)
 
     it = vamb.cluster.cluster(
-        latent, contignames, destroy=True, windowsize=windowsize,
+        latent, destroy=True, windowsize=windowsize,
         normalized=False, minsuccesses=minsuccesses, cuda=cuda
     )
 
-    renamed = ((str(i+1), c) for (i, (_n,c)) in enumerate(it))
+    renamed = ((str(i+1), {contignames[m] for m in ms}) for (i, (_n,ms)) in enumerate(it))
 
     # Binsplit if given a separator
     if separator is not None:
-        renamed = vamb.vambtools.binsplit(renamed, separator)
+        maybe_split = vamb.vambtools.binsplit(renamed, separator)
+    else:
+        maybe_split = renamed
 
     with open(clusterspath, 'w') as clustersfile:
         clusternumber, ncontigs = vamb.vambtools.write_clusters(
-            clustersfile, renamed, max_clusters=maxclusters,
+            clustersfile, maybe_split, max_clusters=maxclusters,
             min_size=minclustersize, rename=False
         )
 
@@ -246,7 +255,7 @@ def write_fasta(
     outdir: str,
     clusterspath: str,
     fastapath: str,
-    contignames: List[str],
+    contignames: list[str],
     contiglengths: np.ndarray,
     minfasta: int,
     logfile
@@ -291,13 +300,13 @@ def run(
     tnfpath: Optional[str],
     namespath: Optional[str],
     lengthspath: Optional[str],
-    bampaths: Optional[List[str]],
+    bampaths: Optional[list[str]],
     rpkmpath: Optional[str],
     mincontiglength: int,
     norefcheck: bool,
     minid: float,
     nthreads: int,
-    nhiddens: Optional[List[int]],
+    nhiddens: Optional[list[int]],
     nlatent: int,
     nepochs: int,
     batchsize: int,
@@ -306,7 +315,7 @@ def run(
     beta: float,
     dropout: Optional[float],
     lrate: float,
-    batchsteps: List[int],
+    batchsteps: list[int],
     windowsize: int,
     minsuccesses: int,
     minclustersize: int,
@@ -332,15 +341,19 @@ def run(
         outdir, bampaths, rpkmpath, mincontiglength, refhash,
         contiglengths, minid, nthreads, logfile
     )
+    assert len(rpkms) == len(tnfs)
 
     # Train, save model
     mask, latent = trainvae(
         outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
         dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile
     )
+    assert len(mask) == len(tnfs)
 
     del tnfs, rpkms
     contignames = [c for c, m in zip(contignames, mask) if m]
+    contiglengths = contiglengths[mask]
+    assert len(contignames) == len(contiglengths) == len(latent)
 
     # Cluster, save tsv file
     clusterspath = os.path.join(outdir, 'clusters.tsv')

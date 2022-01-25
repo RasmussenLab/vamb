@@ -14,7 +14,7 @@ from collections import deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
-from typing import Tuple, Set, Optional, Iterable
+from typing import Optional, Iterable
 
 _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
@@ -52,11 +52,8 @@ class Cluster:
     def __repr__(self) -> str:
         return f'<Cluster of medoid {self.medoid}, {len(self.members)} members>'
 
-    def as_tuple(self, labels=None) -> Tuple[int, Set[int]]:
-        if labels is None:
-            return (self.medoid, {i for i in self.members})
-        else:
-            return (labels[self.medoid], {labels[i] for i in self.members})
+    def as_tuple(self) -> tuple[int, set[int]]:
+        return (self.medoid, {i for i in self.members})
 
     def dump(self) -> str:
         return (
@@ -124,7 +121,7 @@ class ClusterGenerator:
         if len(matrix) < 1:
             raise ValueError('Matrix must have at least 1 observation.')
 
-    def _init_histogram_kept_mask(self, N) -> Tuple[_Tensor, _Tensor]:
+    def _init_histogram_kept_mask(self, N) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
         if _torch.__version__ >= '1.2':
             # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
@@ -213,7 +210,7 @@ class ClusterGenerator:
 
         return cluster
 
-    def _findcluster(self) -> Tuple[Cluster, int, _Tensor]:
+    def _findcluster(self) -> tuple[Cluster, int, _Tensor]:
         """Finds a cluster to output."""
         threshold, success, medoid = None, None, -1
 
@@ -287,7 +284,7 @@ def _find_threshold(
     histogram: _Tensor,
     peak_valley_ratio: float,
     cuda:bool
-) -> Tuple[Optional[float], Optional[bool]]:
+) -> tuple[Optional[float], Optional[bool]]:
     """Find a threshold distance, where where is a dip in point density
     that separates an initial peak in densities from the larger bulk around 0.5.
     Returns (threshold, success), where succes is False if no threshold could
@@ -402,7 +399,7 @@ def _sample_medoid(
     medoid: int,
     threshold: float,
     cuda: bool
-) -> Tuple[_Tensor, _Tensor, float]:
+) -> tuple[_Tensor, _Tensor, float]:
     """Returns:
     - A vector of indices to points within threshold
     - A vector of distances to all points
@@ -427,7 +424,7 @@ def _wander_medoid(
     max_attempts: int,
     rng,
     cuda: bool
-) -> Tuple[int, _Tensor]:
+) -> tuple[int, _Tensor]:
     """Keeps sampling new points within the cluster until it has sampled
     max_attempts without getting a new set of cluster with lower average
     distance"""
@@ -465,19 +462,17 @@ def _wander_medoid(
 
 def cluster(
     matrix: _np.ndarray,
-    labels=None,
     maxsteps: int = 25, 
     windowsize: int = 200,
     minsuccesses: int = 20,
     destroy: bool = False,
     normalized: bool = False,
     cuda: bool = False
-) -> Iterable[Tuple[int, Set[int]]]:
+) -> Iterable[tuple[int, set[int]]]:
     """Create iterable of (medoid, {point1, point2 ...}) tuples for each cluster.
 
     Inputs:
         matrix: A (obs x features) Numpy matrix of data type numpy.float32
-        labels: None or list of labels of points [None = range(len(matrix))]
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         windowsize: Length of window to count successes [200]
         minsuccesses: Minimum acceptable number of successes [15]
@@ -487,12 +482,10 @@ def cluster(
 
     Output: Generator of (medoid, {point1, point2 ...}) tuples for each cluster.
     """
-    if labels is not None and len(matrix) != len(labels):
-        raise ValueError(f"Got {len(labels)} labels for {len(matrix)} points")
 
     it = ClusterGenerator(matrix, maxsteps, windowsize, minsuccesses, destroy, normalized, cuda)
     for cluster in it:
-        yield cluster.as_tuple(labels)
+        yield cluster.as_tuple()
 
 def pairs(clustergenerator, labels):
     """Create an iterable of (N, {label1, label2 ...}) for each

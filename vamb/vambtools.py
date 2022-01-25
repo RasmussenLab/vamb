@@ -9,7 +9,8 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Dict, Set, Iterable, Iterator, Tuple, Collection, TextIO
+from collections.abc import Mapping
+from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -198,7 +199,7 @@ class FastaEntry:
     # after whitespace, but do not use it as header.
     # This brutal regex is derived from the SAM specs, valid identifiers,
     # but disallow leading # sign, and allow trailing whitespace + ignored description
-    regex = _re.compile(b">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$")
+    regex = _re.compile(b">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$")
     __slots__ = ['header', 'sequence']
 
     def __init__(self, headerbytes: bytes, sequence: bytearray):
@@ -207,7 +208,7 @@ class FastaEntry:
             raise ValueError(
                 f"Invalid header in FASTA: \"{headerbytes.decode()}\". "
                 "Must conform to identifier regex pattern of SAM specification: \""
-                ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\s.*)?$\""
+                ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$\""
             )
         header = headerbytes[1:m.span(1)[1]].decode()
         masked = sequence.translate(self.basemask, b' \t\n\r')
@@ -301,12 +302,12 @@ def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
 
 def write_clusters(
     filehandle: TextIO,
-    clusters: Iterable[Tuple[str, Set[str]]],
+    clusters: Iterable[tuple[str, set[str]]],
     max_clusters:Optional[int]=None,
     min_size: int=1,
     header: Optional[str]=None,
     rename: bool=True
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Writes clusters to an open filehandle.
     Inputs:
         filehandle: An open filehandle that can be written to
@@ -358,7 +359,7 @@ def write_clusters(
 
     return clusternumber, ncontigs
 
-def read_clusters(filehandle: Iterable[str], min_size: int=1) -> Dict[str, Set[str]]:
+def read_clusters(filehandle: Iterable[str], min_size: int=1) -> dict[str, set[str]]:
     """Read clusters from a file as created by function `writeclusters`.
 
     Inputs:
@@ -388,7 +389,7 @@ def loadfasta(
     keep: Optional[Collection]=None,
     comment: bytes=b'#',
     compress: bool=False
-):
+) -> dict[str, FastaEntry]:
     """Loads a FASTA file into a dictionary.
 
     Usage:
@@ -417,8 +418,8 @@ def loadfasta(
 
 def write_bins(
     directory,
-    bins: Dict[str, Set[str]],
-    fastadict: Dict[str, FastaEntry],
+    bins: dict[str, set[str]],
+    fastadict: dict[str, FastaEntry],
     compressed: bool=False,
     maxbins: Optional[int]=250,
     minsize: int=0
@@ -609,7 +610,7 @@ def verify_refhash(refnames: Iterable[str], expected: bytes) -> None:
             "and in the same order."
         )
 
-def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]):
+def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]) -> _np.ndarray:
     """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
     See https://bitbucket.org/berkeleylab/metabat for more info on that program.
 
@@ -651,7 +652,12 @@ def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]
     result.shape = (len(result) // len(columns), len(columns))
     return validate_input_array(result)
 
-def _split_bin(binname: str, headers: Iterable[str], separator: str, bysample=_collections.defaultdict(set)):
+def _split_bin(
+    binname: str,
+    headers: Iterable[str],
+    separator: str,
+    bysample: _collections.defaultdict =_collections.defaultdict(set)
+) -> Generator[tuple[str, set[str]], None, None]:
     "Split a single bin by the prefix of the headers"
 
     bysample.clear()
@@ -670,13 +676,11 @@ def _split_bin(binname: str, headers: Iterable[str], separator: str, bysample=_c
         newbinname = f"{sample}{separator}{binname}"
         yield newbinname, splitheaders
 
-def _binsplit_generator(cluster_iterator: Iterable[Tuple[str, Iterable[str]]], separator: str):
-    "Return a generator over split bins with the function above."
-    for binname, headers in cluster_iterator:
-        for newbinname, splitheaders in _split_bin(binname, headers, separator):
-            yield newbinname, splitheaders
 
-def binsplit(clusters: Iterable[Tuple[str, Iterable[str]]], separator: str):
+def binsplit(
+    clusters: Iterable[tuple[str, Iterable[str]]],
+    separator: str
+) -> Generator[tuple[str, set[str]], None, None]:
     """Splits a set of clusters by the prefix of their names.
     The separator is a string which separated prefix from postfix of contignames. The
     resulting split clusters have the prefix and separator prepended to them.
@@ -690,4 +694,6 @@ def binsplit(clusters: Iterable[Tuple[str, Iterable[str]]], separator: str):
     {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
     """
 
-    return _binsplit_generator(clusters, separator)
+    for binname, headers in clusters:
+        for newbinname, splitheaders in _split_bin(binname, headers, separator):
+            yield newbinname, splitheaders
