@@ -124,14 +124,13 @@ def calc_rpkm(
         log(f'Min contig length: {mincontiglength}', logfile, 1)
         log('\nOrder of columns is:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
-        print('', file=logfile)
 
         depths = vamb.parsebam.read_bamfiles(
             bampaths, refhash=refhash,
             minlength=mincontiglength,
             minid=minid, lengths=lengths, nthreads=nthreads
         )
-        print('', file=logfile)
+
         vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), depths)
 
     assert isinstance(depths, np.ndarray)
@@ -139,6 +138,7 @@ def calc_rpkm(
         raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
 
     elapsed = round(time.time() - begintime, 2)
+    print('', file=logfile)
     log(f'Processed RPKM in {elapsed} seconds', logfile, 1)
 
     if bampaths is not None:
@@ -178,7 +178,6 @@ def trainvae(
     dataloader, mask = vamb.encode.make_dataloader(
         rpkms, tnfs, batchsize, destroy=True, cuda=cuda
     )
-    assert len(mask) == len(tnfs)
     log('Created dataloader and mask', logfile, 1)
     vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
     n_discarded = len(mask) - mask.sum()
@@ -349,7 +348,6 @@ def run(
         outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
         dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile
     )
-    assert len(mask) == len(tnfs)
 
     del tnfs, rpkms
     contignames = [c for c, m in zip(contignames, mask) if m]
@@ -375,7 +373,9 @@ def run(
     log(f'\nCompleted Vamb in {elapsed} seconds', logfile)
 
 def main():
-    doc = """Vamb: Variational autoencoders for metagenomic binning.
+    doc = f"""Vamb: Variational autoencoders for metagenomic binning.
+    
+    Version: {'.'.join([str(i) for i in vamb.__version__])}
 
     Default use, good for most datasets:
     vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
