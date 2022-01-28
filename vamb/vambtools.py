@@ -9,7 +9,6 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from collections.abc import Mapping
 from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator
 
 class PushArray:
