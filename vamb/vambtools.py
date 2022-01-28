@@ -368,7 +368,7 @@ def read_clusters(filehandle, min_size=1):
         if not stripped or stripped[0] == '#':
             continue
 
-        clustername, contigname = stripped.split('\t')
+        clustername, contigname = line.split('\t')
         contigsof[clustername].add(contigname)
 
     contigsof = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}
