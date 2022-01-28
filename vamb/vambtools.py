@@ -206,8 +206,8 @@ class FastaEntry:
         m = self.regex.match(headerbytes)
         if m is None:
             raise ValueError(
-                f"Invalid header in FASTA: \"{headerbytes.decode()}\". "
-                "Must conform to identifier regex pattern of SAM specification: \""
+                f"Invalid header line in FASTA: \"{headerbytes.decode()}\". "
+                "\nMust conform to identifier regex pattern of SAM specification: \""
                 ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$\""
             )
         header = headerbytes[1:m.span(1)[1]].decode()
@@ -245,7 +245,10 @@ class FastaEntry:
         _kmercounts(self.sequence, k, counts)
         return counts
 
-def byte_iterfasta(filehandle: Iterable[bytes], comment: bytes=b'#'):
+def byte_iterfasta(
+    filehandle: Iterable[bytes],
+    comment: bytes=b'#'
+) -> Iterator[FastaEntry]:
     """Yields FastaEntries from a binary opened fasta file.
 
     Usage:

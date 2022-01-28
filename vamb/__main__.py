@@ -85,6 +85,13 @@ def calc_tnf(
     ncontigs = len(contiglengths)
     nbases = contiglengths.sum()
 
+    if len(set(contignames)) != len(contignames):
+        raise ValueError(
+            'Sequence names must be unique, but are not. '
+            'Vamb only uses the identifier (e.g. header before whitespace) as '
+            'sequence identifiers. Verify identifier uniqueness.'
+        )
+
     print('', file=logfile)
     log(f'Kept {nbases} bases in {ncontigs} sequences', logfile, 1)
     log(f'Processed TNF in {elapsed} seconds', logfile, 1)
