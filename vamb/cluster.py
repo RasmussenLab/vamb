@@ -15,6 +15,7 @@ from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
 from typing import Optional, Iterable
+from collections.abc import Sequence
 
 _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
@@ -142,8 +143,16 @@ class ClusterGenerator:
 
         return histogram, kept_mask
 
-    def __init__(self, matrix, maxsteps=25, windowsize=200, minsuccesses=20, destroy=False,
-                normalized=False, cuda=False):
+    def __init__(
+        self,
+        matrix: _np.ndarray,
+        maxsteps:int=25,
+        windowsize:int=200,
+        minsuccesses:int=20,
+        destroy:bool=False,
+        normalized:bool=False,
+        cuda:bool=False
+    ):
         self._check_params(matrix, maxsteps, windowsize, minsuccesses)
         if not destroy:
             matrix = matrix.copy()
@@ -153,21 +162,21 @@ class ClusterGenerator:
         _np.random.RandomState(0).shuffle(matrix)
         indices = _np.random.RandomState(0).permutation(len(matrix))
         indices = _torch.from_numpy(indices)
-        matrix = _torch.from_numpy(matrix)
+        torch_matrix = _torch.from_numpy(matrix)
 
         if not normalized:
-            _normalize(matrix, inplace=True)
+            _normalize(torch_matrix, inplace=True)
 
         # Move to GPU
         if cuda:
-            matrix = matrix.cuda()
+            torch_matrix = torch_matrix.cuda()
 
         self.MAXSTEPS = maxsteps
         self.MINSUCCESSES = minsuccesses
         self.CUDA = cuda
         self.RNG = _random.Random(0)
 
-        self.matrix = matrix
+        self.matrix = torch_matrix
         # This refers to the indices of the original matrix. As we remove points, these
         # indices do not correspond to merely range(len(matrix)) anymore.
         self.indices = indices
@@ -265,7 +274,7 @@ class ClusterGenerator:
                           threshold, isdefault, self.successes, len(self.attempts))
         return cluster, medoid, points
 
-def _calc_densities(histogram: _Tensor, cuda: bool, pdf=_NORMALPDF):
+def _calc_densities(histogram: _Tensor, cuda: bool, pdf=_NORMALPDF) -> _Tensor:
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
 
@@ -487,7 +496,10 @@ def cluster(
     for cluster in it:
         yield cluster.as_tuple()
 
-def pairs(clustergenerator, labels):
+def pairs(
+    clustergenerator: ClusterGenerator,
+    labels: Sequence[str]
+) -> Iterable[tuple[str, set[str]]]:
     """Create an iterable of (N, {label1, label2 ...}) for each
     cluster in a ClusterGenerator, where N is "1", "2", "3", etc.
     Useful to pass to e.g. vambtools.writer_clusters.
@@ -505,4 +517,7 @@ def pairs(clustergenerator, labels):
             f"but was given only {len(labels)} labels"
         )
 
-    return ((str(i+1), c.as_tuple(labels)[1]) for (i, c) in enumerate(clustergenerator))
+    return (
+        (str(i+1), {labels[j] for j in c.as_tuple()[1]})
+        for (i, c) in enumerate(clustergenerator)
+    )
