@@ -335,7 +335,7 @@ class VAE(_nn.Module):
 
         if epoch in batchsteps:
             data_loader = _DataLoader(dataset=data_loader.dataset,
-                                      batch_size=data_loader.batch_size * 2,
+                                      batch_size=data_loader.batch_size * 2, # type: ignore
                                       shuffle=True,
                                       drop_last=True,
                                       num_workers=data_loader.num_workers,
@@ -514,7 +514,7 @@ class VAE(_nn.Module):
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError('Max batchsteps must not equal or exceed nepochs')
             last_batchsize = dataloader.batch_size * 2**len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:
+            if len(dataloader.dataset) < last_batchsize: # type: ignore
                 raise ValueError('Last batch size exceeds dataset length')
             batchsteps_set = set(batchsteps)
 
