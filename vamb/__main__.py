@@ -8,7 +8,7 @@ import argparse
 import torch
 import datetime
 import time
-from typing import Optional
+from typing import Optional, TextIO
 
 _ncpu = os.cpu_count()
 if _ncpu is None:
@@ -42,7 +42,7 @@ def calc_tnf(
     namespath: Optional[str],
     lengthspath: Optional[str],
     mincontiglength: int,
-    logfile
+    logfile: TextIO
 ) -> tuple[np.ndarray, list[str], np.ndarray]:
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
@@ -108,7 +108,7 @@ def calc_rpkm(
     lengths: np.ndarray,
     minid: float,
     nthreads: int,
-    logfile
+    logfile: TextIO
 ) -> np.ndarray:
 
     begintime = time.time()
@@ -167,7 +167,7 @@ def trainvae(
     nepochs: int,
     lrate: float,
     batchsteps: list[int],
-    logfile
+    logfile: TextIO
 ) -> tuple[np.ndarray, np.ndarray]:
 
     begintime = time.time()
@@ -219,7 +219,7 @@ def cluster(
     minclustersize: int,
     separator: str,
     cuda: bool,
-    logfile
+    logfile: TextIO
 ) -> None:
     begintime = time.time()
 
@@ -237,6 +237,7 @@ def cluster(
         normalized=False, minsuccesses=minsuccesses, cuda=cuda
     )
 
+    # Iterator of tuple[clusternumber, set[contigs...]]
     renamed = ((str(i+1), {contignames[m] for m in ms}) for (i, (_n,ms)) in enumerate(it))
 
     # Binsplit if given a separator
@@ -264,7 +265,7 @@ def write_fasta(
     contignames: list[str],
     contiglengths: np.ndarray,
     minfasta: int,
-    logfile
+    logfile: TextIO
 ) -> None:
     begintime = time.time()
 
@@ -329,7 +330,7 @@ def run(
     separator: str,
     maxclusters: int,
     minfasta: int,
-    logfile
+    logfile: TextIO
 ):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)

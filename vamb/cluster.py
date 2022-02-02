@@ -40,7 +40,16 @@ _NORMALPDF = _DELTA_X * _Tensor(
 class Cluster:
     __slots__ = ['medoid', 'seed', 'members', 'pvr', 'radius', 'isdefault', 'successes', 'attempts']
 
-    def __init__(self, medoid, seed, members, pvr, radius, isdefault, successes, attempts):
+    def __init__(self,
+        medoid: int,
+        seed: int,
+        members: _np.ndarray,
+        pvr: float,
+        radius: float,
+        isdefault: bool,
+        successes: int,
+        attempts: int
+    ):
         self.medoid = medoid
         self.seed = seed
         self.members = members
@@ -104,7 +113,7 @@ class ClusterGenerator:
   successes:    {self.successes}/{len(self.attempts)}
 """
 
-    def _check_params(self, matrix, maxsteps, windowsize, minsuccesses) -> None:
+    def _check_params(self, matrix: _np.ndarray, maxsteps: int, windowsize: int, minsuccesses: int) -> None:
         """Checks matrix, and maxsteps."""
 
         if matrix.dtype != _np.float32:
@@ -122,7 +131,7 @@ class ClusterGenerator:
         if len(matrix) < 1:
             raise ValueError('Matrix must have at least 1 observation.')
 
-    def _init_histogram_kept_mask(self, N) -> tuple[_Tensor, _Tensor]:
+    def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
         if _torch.__version__ >= '1.2':
             # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
@@ -269,9 +278,11 @@ class ClusterGenerator:
         points = _smaller_indices(distances, self.kept_mask, threshold, self.CUDA)
         isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
 
-        cluster = Cluster(self.indices[medoid].item(), self.seed, self.indices[points].numpy(),
-                        self.peak_valley_ratio,
-                          threshold, isdefault, self.successes, len(self.attempts))
+        cluster = Cluster(
+            self.indices[medoid].item(), # type: ignore (PyTorch does not yet have type checking)
+            self.seed, self.indices[points].numpy(), self.peak_valley_ratio,
+            threshold, isdefault, self.successes, len(self.attempts)
+        )
         return cluster, medoid, points
 
 def _calc_densities(histogram: _Tensor, cuda: bool, pdf=_NORMALPDF) -> _Tensor:
