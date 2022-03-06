@@ -81,7 +81,7 @@ concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fas
 
 ```
 minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
-minimap2 -t 8 -N 50 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
+minimap2 -t 8 -N 5 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
 ```
 
 4. Run Vamb:
@@ -178,7 +178,10 @@ __4) Map the reads to the FASTA file to obtain BAM files__
 
 Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15)):
 
-```minimap2 -T almeida.fna -t 28 -N 5 -ax sr almeida.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam```
+```
+minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
+minimap2 -t 28 -N 5 -ax sr catalogue.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam
+```
 
 :warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
 

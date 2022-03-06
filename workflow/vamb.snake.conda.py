@@ -110,7 +110,7 @@ rule minimap:
     conda:
         "envs/minimap2.yaml"
     shell:
-        '''minimap2 -t {threads} -ax sr {input.mmi} {input.fq} | grep -v "^@" | cat {input.dict} - | samtools view -F 3584 -b - > {output.bam} 2>{log}'''
+        '''minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5 | grep -v "^@" | cat {input.dict} - | samtools view -F 3584 -b - > {output.bam} 2>{log}'''
 
 rule sort:
     input:
