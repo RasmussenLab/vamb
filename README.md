@@ -10,7 +10,7 @@ Vamb has changed a lot since the pre-print at [biorxiv](https://www.biorxiv.org/
 
 For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the tutorial file (`doc/tutorial.html`)
 
-**If you are interested in phages you can use Phamb after running Vamb to identify them! [Paper](https://www.nature.com/articles/s41467-022-28581-5) and [GitHub](https://github.com/RasmussenLab/phamb).
+**If you are interested in phages you can use Phamb after running Vamb to identify them! [Paper](https://www.nature.com/articles/s41467-022-28581-5) and [GitHub](https://github.com/RasmussenLab/phamb).**
 
 # Installation
 Vamb is most easily installed with pip - make sure your pip version is up to date, as it won't work with ancient versions (v. <= 9).
