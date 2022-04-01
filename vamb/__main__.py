@@ -312,6 +312,7 @@ def run(
     rpkmpath: Optional[str],
     mincontiglength: int,
     norefcheck: bool,
+    noencode: bool,
     minid: float,
     nthreads: int,
     nhiddens: Optional[list[int]],
@@ -350,6 +351,11 @@ def run(
         contiglengths, minid, nthreads, logfile
     )
     assert len(rpkms) == len(tnfs)
+
+    if noencode:
+        elapsed = round(time.time() - begintime, 2)
+        log(f'\nNoencode set, skipping encoding and clustering.\n\nCompleted Vamb in {elapsed} seconds', logfile)
+        return None
 
     # Train, save model
     mask, latent = trainvae(
@@ -432,6 +438,8 @@ def main():
                          action='store_true')
     inputos.add_argument('--minfasta', dest='minfasta', metavar='', type=int, default=None,
                          help='minimum bin size to output as fasta [None = no files]')
+    inputos.add_argument('--noencode', help='Output tnfs and abundances only, do not encode or cluster [False]',
+                         action='store_true')
 
     # VAE arguments
     vaeos = parser.add_argument_group(title='VAE options', description=None)
@@ -616,6 +624,7 @@ def main():
             args.rpkm,
             mincontiglength=args.minlength,
             norefcheck=args.norefcheck,
+            noencode=args.noencode,
             minid=args.minid,
             nthreads=args.nthreads,
             nhiddens=args.nhiddens,
