@@ -66,10 +66,8 @@ class PushArray:
         return self.data
 
     def clear(self, force: bool=False):
-        "Empties the PushArray. If force is true, also truncates the underlying memory."
+        "Empties the PushArray. Does not clear the underlying memory"
         self.length = 0
-        if force:
-            self._setcapacity(0)
 
 def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -> _np.ndarray:
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -84,7 +82,7 @@ def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -
         else: New normalized Numpy-array
     """
 
-    if axis is not None and axis >= array.ndim:
+    if axis is not None and (axis >= array.ndim or axis < 0):
         raise _np.AxisError(axis)
 
     if inplace and not _np.issubdtype(array.dtype, _np.floating):
@@ -229,9 +227,6 @@ class FastaEntry:
         sixtymers = range(0, len(self.sequence), width)
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
         return f'>{self.header}\n{spacedseq}'
-
-    def __getitem__(self, index):
-        return self.sequence[index]
 
     def __repr__(self) -> str:
         return f'<FastaEntry {self.header}>'
