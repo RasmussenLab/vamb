@@ -290,7 +290,7 @@ def write_fasta(
         keep.update(set(contigs))
 
     with vamb.vambtools.Reader(fastapath) as file:
-        fastadict = vamb.vambtools.loadfasta(file, keep=keep)
+        fastadict = vamb.vambtools.loadfasta(file, keep=keep, compress=True)
 
     vamb.vambtools.write_bins(os.path.join(outdir, "bins"), filtered_clusters, fastadict, maxbins=None)
 

@@ -407,7 +407,7 @@ def loadfasta(
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
             if compress:
-                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=2))
+                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=0))
 
             entries[entry.header] = entry
 
