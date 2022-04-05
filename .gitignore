@@ -2,6 +2,7 @@
 __pycache__
 *.o
 src/_vambtools.cpp
+**.c
 .eggs
 *~
 vamb.egg-info
