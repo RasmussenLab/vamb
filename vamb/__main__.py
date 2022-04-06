@@ -292,7 +292,13 @@ def write_fasta(
     with vamb.vambtools.Reader(fastapath) as file:
         fastadict = vamb.vambtools.loadfasta(file, keep=keep, compress=True)
 
-    vamb.vambtools.write_bins(os.path.join(outdir, "bins"), filtered_clusters, fastadict, maxbins=None)
+    vamb.vambtools.write_bins(
+        os.path.join(outdir, "bins"),
+        filtered_clusters,
+        fastadict,
+        compressed=True,
+        maxbins=None
+    )
 
     ncontigs = sum(map(len, filtered_clusters.values()))
     nfiles = len(filtered_clusters)
