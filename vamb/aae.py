@@ -11,70 +11,110 @@ from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-from .data_loader_aae import make_dataloader 
+#from .data_loader_aae import make_dataloader 
 import random
-from .calc_loss import calc_loss
+#from .calc_loss import calc_loss
 from datetime import datetime
-
+from torch.utils.data import DataLoader as _DataLoader
 torch.manual_seed(0)
 
 
 ############################################################################# MODEL ###########################################################
-## Encoder
-class Encoder(nn.Module):
-    def __init__(self, h_n, ld,y_len, nsamples=0, _cuda=False):
-        super(Encoder, self).__init__()
+class AAE(nn.Module):
+    def __init__(self,nsamples, nhiddens, nlatent_l, nlatent_y , sl, slr, alpha, _cuda):
         if nsamples == None:
             raise ValueError('Number of samples  should be provided to define the encoder input layer as well as the categorical latent dimension, not {}'.format(nsamples))
         
+        super(AAE, self).__init__()
+        if alpha is None:
+            alpha = 0.15 if nsamples > 1 else 0.50
+
         self.nsamples= nsamples
         input_len = 103 + self.nsamples
-        self.h_n = h_n
-        self.ld = ld
-        self.y_len = y_len
+        self.h_n = nhiddens
+        self.ld = nlatent_l
+        self.y_len = nlatent_y
         self.input_len = int(input_len)
-        self._cuda = _cuda 
-        
-        self.model = nn.Sequential(
+        self.sl = sl
+        self.slr= slr
+        self.alpha=alpha
+        self.usecuda = _cuda 
+
+         
+
+        # encoder
+        self.encoder = nn.Sequential(
             nn.Linear(self.input_len, self.h_n),
             nn.BatchNorm1d(self.h_n),
             nn.LeakyReLU(),
             nn.Linear(self.h_n, self.h_n),
             nn.BatchNorm1d(self.h_n),
             nn.LeakyReLU(),
-           )
-        
+        )
+        # latent layers
         self.mu = nn.Linear(self.h_n, self.ld)
         self.logvar = nn.Linear(self.h_n, self.ld) 
         self.y_vector = nn.Linear(self.h_n,self.y_len)
+
+        # decoder                
+        self.decoder = nn.Sequential(
+            nn.Linear(int(self.ld + self.y_len), self.h_n),
+            nn.BatchNorm1d(self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, self.h_n),
+            nn.BatchNorm1d(self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, self.input_len), 
+        )        
+
+        # discriminator z    
+        self.discriminator_z = nn.Sequential(
+            nn.Linear(self.ld, self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, int(self.h_n/2)),
+            nn.LeakyReLU(),
+            nn.Linear(int(self.h_n/2), 1),
+            nn.Sigmoid(),
+        )
+
+        # discriminator Y
+        self.discriminator_y = nn.Sequential(
+            nn.Linear(self.y_len, self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, int(self.h_n/2)),
+            nn.LeakyReLU(),
+            nn.Linear(int(self.h_n/2), 1),
+            nn.Sigmoid(),
+        )
+    
+        if _cuda:
+            self.cuda()
+
+    ## Reparametrisation trick
+    def _reparameterization(self, mu, logvar):    
         
-    # Reparametrization trick to enble training sampling from the Z latent space
-    def reparameterization(self, mu, logvar):    
-        
-        Tensor = torch.cuda.FloatTensor if self._cuda is True else torch.FloatTensor
+        Tensor = torch.cuda.FloatTensor if self.usecuda is True else torch.FloatTensor
        
         std = torch.exp(logvar / 2)
         sampled_z = Variable(Tensor(np.random.normal(0, 1, (mu.size(0), self.ld))))  
         
-        if self._cuda:
+        if self.usecuda:
             sampled_z = sampled_z.cuda()
         z = sampled_z * std + mu
         
         return z
 
-    def forward(self, depths, tnfs):
+    ## Encoder
+    def _encode(self,depths, tnfs):        
         _input = torch.cat((depths,tnfs),1)
-        x = self.model(_input)
+        x = self.encoder(_input)
         mu = self.mu(x)
-        
         logvar = self.logvar(x)
-        
-        z = self.reparameterization(mu, logvar)
         _y = self.y_vector(x)
-        
         y = F.softmax(_y, dim=1) 
         
-        return z,y,mu
+        return mu,logvar, y
+        
     
     def y_length(self):
         return self.y_len
@@ -84,33 +124,11 @@ class Encoder(nn.Module):
     def samples_num(self):
         return self.nsamples
 
-## Decoder
-class Decoder(nn.Module):
-    def __init__(self, h_n, ld, y_len, nsamples=0):
-        super(Decoder, self).__init__()
-        
-        if nsamples == 0:
-            raise ValueError('Number of samples should be provided to define the decoder output layer as well as the categorical latent dimension, not {}'.format(nsamples))
-        self.nsamples= nsamples
-        self.input_len = int(103 + nsamples)
-        
-        self.h_n = h_n
-        self.ld = ld
-        self.y_len = y_len
-        
-        self.model = nn.Sequential(
-            nn.Linear(int(self.ld + self.y_len), self.h_n),
-            nn.BatchNorm1d(self.h_n),
-            nn.LeakyReLU(),
-            nn.Linear(self.h_n, self.h_n),
-            nn.BatchNorm1d(self.h_n),
-            nn.LeakyReLU(),
-            nn.Linear(self.h_n, self.input_len), 
-        )
-    def forward(self, z, y):
+    ## Decoder
+    def _decode(self, z, y):
         z_y = torch.cat((z,y),1)
 
-        reconstruction = self.model(z_y)
+        reconstruction = self.decoder(z_y)
         
         _depths_out, tnf_out = (reconstruction[:,:self.nsamples],
                 reconstruction[:,self.nsamples:])
@@ -118,433 +136,351 @@ class Decoder(nn.Module):
         depths_out = F.softmax(_depths_out, dim=1)
         
         return reconstruction, depths_out, tnf_out
-    
-
-## Discriminator Z space (continuous latent space defined by mu and sigma layers)
-class Discriminator_z(nn.Module):
-    def __init__(self, h_n , ld ):
-        super(Discriminator_z, self).__init__()
         
-        self.h_n = h_n
-        self.ld = ld
-       
-        self.model = nn.Sequential(
-            nn.Linear(self.ld, self.h_n),
-            nn.LeakyReLU(),
-            nn.Linear(self.h_n, int(self.h_n/2)),
-            nn.LeakyReLU(),
-            nn.Linear(int(self.h_n/2), 1),
-            nn.Sigmoid(),
-        )
 
-    def forward(self, z):
-        validity = self.model(z)
+    ## Discriminator Z space (continuous latent space defined by mu and sigma layers)
+    def _discriminator_z(self, z):
+        validity = self.discriminator_z(z)
         return validity
 
-## Discriminator Z space (continuous latent space defined by mu and sigma layers)
+    ## Discriminator Y space (categorical latent space defined by Y layer)
 
-class Discriminator_y(nn.Module):
-    def __init__(self, h_n, y_len, nsamples=0):
-        super(Discriminator_y, self).__init__()
-        if nsamples == None:
-            raise ValueError('Number of samples should be provided to define the decoder output layer, not {}'.format(nsamples))
-        input_len = 103 + nsamples
-        self.h_n = h_n
-        self.y_len = y_len
-        
-        self.model = nn.Sequential(
-            nn.Linear(self.y_len, self.h_n),
-            nn.LeakyReLU(),
-            nn.Linear(self.h_n, int(self.h_n/2)),
-            nn.LeakyReLU(),
-            nn.Linear(int(self.h_n/2), 1),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, y):
-        validity = self.model(y)
+    def _discriminator_y(self, y):
+        validity = self.discriminator_y(y)
         return validity
 
-########### funciton that retrieves the clusters from Y latents
-
-def get_latents_y(encoder,contignames ,Dataloader,Cuda,last_epoch=False):
-    """ Retrieve the categorical latent representation (y) and the contiouous latents (l) of the inputs 
-        
-        Inputs: dataloader that provides the batches of tnfs and depths
-        Output: y_clusters, y_clusters_dict ({clust_id : [contigs]}) , z_latents array and mask  """
-        
-    dataloader,mask = Dataloader
-    index_i=0
-    time0=time.time()
-    latent_matrix=np.zeros((1,283),dtype='float32')
-    clust_y_dict = dict()
-    
-    for i, (depths_in, tnfs_in) in enumerate(dataloader):
-        if Cuda == True:
-            depths_in = depths_in.cuda()
-            tnfs_in = tnfs_in.cuda()
-        encoder.eval()
-        
-        with torch.no_grad():
-            if last_epoch is True:
-                _, y_sample, mu = encoder(depths_in,tnfs_in)
-           
-            else:
-                y_sample = encoder(depths_in,tnfs_in)[1]
-         
-        if Cuda:
-            Ys = y_sample.cpu().detach().numpy()
-            if last_epoch is True:
-                latent_matrix = np.append(latent_matrix,mu.cpu().detach().numpy(),0)
+    def calc_loss(self,depths_in, depths_out, tnf_in, tnf_out):
+    # If multiple samples, use cross entropy, else use SSE for abundance
+        if self.nsamples > 1:
+            # Add 1e-9 to depths_out to avoid numerical instability.
+            ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
+            ce_weight = (1-self.alpha) / log(self.nsamples)
         else:
-            Ys = y_sample.detach().numpy()
-            if last_epoch is True:
-                latent_matrix = np.append(latent_matrix,mu.detach().numpy(),0)
-        del y_sample
-        
-        for t in Ys:
-            contig_name = contignames[index_i]
-            contig_cluster = np.argmax(t)+1
-            #contig_cluster_str = 'cluster_'+str(contig_cluster)
-            contig_cluster_str = str(contig_cluster)
+            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
+            ce_weight = 1 - self.alpha
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
+        sse_weight =self.alpha/(tnf_in.shape[1]*2)
+        loss = ce * ce_weight + sse * sse_weight
+        return loss, ce, sse
+
+    def forward(self, depths_in, tnfs_in, z_prior, y_prior,labels_prior, labels_latent):
+        #if self.train():
+        mu,logvar,y_latent = self._encode(depths_in, tnfs_in)
+
+        z_latent = self._reparameterization(mu,logvar)
+
+        reconstruction, depths_out, tnfs_out = self._decode(z_latent,y_latent)
+
+        d_z_latent = self._discriminator_z(z_latent)
+        d_y_latent = self._discriminator_y(y_latent)
+
+
+        # Loss measures generator's ability to reconstruct the input
+        vae_loss,ce,sse = self.calc_loss(depths_in, depths_out, tnfs_in, tnfs_out)
+
+        # second g_loss part measures generator ability to fool the discriminator
+        g_loss_adv_z = torch.nn.functional.binary_cross_entropy(d_z_latent, labels_prior)
+        g_loss_adv_y = torch.nn.functional.binary_cross_entropy(d_y_latent, labels_prior)
+
+        g_loss =  (1-self.sl) * vae_loss + (self.sl*self.slr) * g_loss_adv_z + (self.sl*(1-self.slr))* g_loss_adv_y
+
+        prior_z_loss = torch.nn.functional.binary_cross_entropy(self.discriminator_z(z_prior), labels_prior)
+        latent_z_loss = torch.nn.functional.binary_cross_entropy(self.discriminator_z(z_latent.detach()), labels_latent)
+
+        #real_z_loss = adversarial_loss(discriminator_z(z_prior), valid)
+        #fake_z_loss = adversarial_loss(discriminator_z(z_fake.detach()), fake)
+        d_z_loss = 0.5 * (prior_z_loss + latent_z_loss)
+
+        # Measure discriminator's ability to classify real from generated samples
+        prior_y_loss = torch.nn.functional.binary_cross_entropy(self.discriminator_y(y_prior), labels_prior)
+        latent_y_loss = torch.nn.functional.binary_cross_entropy(self.discriminator_y(y_latent.detach()), labels_latent)
+
+
+        #real_y_loss = adversarial_loss(discriminator_y(y_prior), valid)
+        #fake_y_loss = adversarial_loss(discriminator_y(y_fake.detach()), fake)
+        d_y_loss = 0.5 * (prior_y_loss + latent_y_loss)
+
+        return mu,z_latent,y_latent,vae_loss,ce, sse ,g_loss_adv_z,g_loss_adv_y,g_loss, d_z_loss, d_y_loss
+
+    ########### funciton that retrieves the clusters from Y latents
+    def get_latents(
+        self,
+        contignames,
+        data_loader,
+        last_epoch=True):
+        """ Retrieve the categorical latent representation (y) and the contiouous latents (l) of the inputs 
+            
+            Inputs: 
+                dataloader 
+                contignames
+                last_epoch
+
+                 
+            Output: 
+                y_clusters_dict ({clust_id : [contigs]}) 
+                l_latents array  """
+
+        self.eval()
+
+        time0=time.time()
            
-            if contig_cluster_str not in clust_y_dict.keys():
-                clust_y_dict[contig_cluster_str] = set()
-
-            #else:
-            clust_y_dict[contig_cluster_str].add(contig_name)
-            
-            index_i += 1
-        del Ys
-        encoder.train()
-    #print(clust_y_dict.items())
-    if last_epoch is True:
-        latent_array=latent_matrix[1:,:]
-        return clust_y_dict ,latent_array, mask 
-    
-    time1=time.time()
-    time_Y=np.round(time1-time0)
-    
-# ----------
-#  Training
-# ----------
-
-def train_model( encoder, decoder, discr_z, discr_y, depths, tnfs, contignames, batchsize, n_epochs, batchsteps, _cuda, s_l = 0.00964 , s_l_r = 0.5, T = 0.15, save_checkpoint = 25, modelfile=None ,alpha=0.15, logfile=None):
-
-    Tensor = torch.cuda.FloatTensor if _cuda else torch.FloatTensor    
-    ld=encoder.z_length()
-    y_len=encoder.y_length()
-    num_samples=encoder.samples_num()
-    ncontigs = tnfs.shape[0]
-    batchsteps_set = set(batchsteps)
-
-    ##### ADVERSARIAL LOSS (reconstruction loss loaded from calc_loss.py)
-    # Use binary cross-entropy loss for D_Z and D_Y
-    adversarial_loss = torch.nn.BCELoss()
-
-    # Initialize generator and discriminator
-    
-    if logfile is not None:
-        print('\tNetwork properties:', file=logfile)
-        print('\tCUDA:', _cuda, file=logfile)
-        print('\tAlpha:', alpha, file=logfile)
-        print('\tY length:', y_len, file=logfile)
-        print('\tl length:', ld, file=logfile)
-        print('\n\tTraining properties:', file=logfile)
-        print('\tN epochs:', n_epochs, file=logfile)
-        print('\tStarting batch size:', batchsize, file=logfile)
-        batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
-        print('\tBatchsteps:', batchsteps_string, file=logfile)
-        print('\tN sequences:', ncontigs, file=logfile)
-        print('\tN samples:', num_samples, file=logfile, end='\n\n')
-
+        new_data_loader = _DataLoader(dataset=data_loader.dataset,
+                batch_size=data_loader.batch_size,
+                shuffle=False,
+                drop_last=False,
+                num_workers=1,
+                pin_memory=data_loader.pin_memory)
         
-
-    ## Use cuda if available
-    if _cuda:
-        print(type(encoder.cuda))
-        encoder.cuda()
-        decoder.cuda()
-        discr_z.cuda()
-        discr_y.cuda()
-        adversarial_loss.cuda()
-
-    #### Optimizers
-    optimizer_E = torch.optim.Adam(encoder.parameters(), lr=1e-3 )
-    optimizer_D = torch.optim.Adam(decoder.parameters(), lr=1e-3 )
-    optimizer_D_z = torch.optim.Adam(discr_z.parameters(), lr=1e-3 )
-    optimizer_D_y = torch.optim.Adam(discr_y.parameters(), lr=1e-3 )
-
-    
-    G_loss_epochs=[]
-    D_loss_z_epochs=[]
-    D_loss_y_epochs=[]
-    V_loss_epochs=[]
-    G_loss_adv_Z_epochs=[]
-    G_loss_adv_Y_epochs=[]
-
-    #print('Training model\n')
-    
-    dataloader_e= make_dataloader(depths,tnfs,batchsize,Shuffle=True,Cuda=_cuda)
-    
-    #epochs_num=len(dataloader_e[0])
-    
-    for epoch_i in range(n_epochs):
-        if epoch_i in batchsteps:
-            batchsize *=2
-            dataloader_e= make_dataloader(depths,tnfs,batchsize,Shuffle=True,Cuda=_cuda)
-
-            #epochs_num=len(dataloader_e[0])
-
-        time_e0=time.time()
-        
-        G_loss_e, D_z_loss_e, D_y_loss_e, V_loss_e, G_loss_adv_Z_e, G_loss_adv_Y_e,CE_e, SSE_e, NC_S_list_e = 0, 0, 0, 0, 0, 0, 0, 0, []
-       
-        total_batches_inthis_epoch = len(dataloader_e[0])
-        time_epoch_0=time.time()
-
-        for i, (depths_in, tnfs_in) in enumerate(dataloader_e[0]): 
-            
-            time_0=time.time()
-            I=torch.cat((depths_in,tnfs_in),dim=1)
-            
-            # Adversarial ground truths
-            
-            valid = Variable(Tensor(I.shape[0], 1).fill_(1.0), requires_grad=False)
-            fake = Variable(Tensor(I.shape[0], 1).fill_(0.0), requires_grad=False)
-            
-            # Sample noise as discriminator Z ground truth
-            
-            if _cuda:
-                z_true = torch.cuda.FloatTensor(I.shape[0], ld).normal_()
-            
-            else:
-                z_true = Variable(Tensor(np.random.normal(0, 1, (I.shape[0], ld))))
-            
-            if _cuda:
-                z_true.cuda()
-            
-            # Sample noise as discriminator ground truth
+        depths_array, tnf_array = data_loader.dataset.tensors
+        length = len(depths_array)
+        latent = np.empty((length, self.ld), dtype=np.float32)
+        index_contigname=0
+        row=0
+        #latent_matrix=np.zeros((,self.ld),dtype='float32')
+        clust_y_dict = dict()
+        with torch.no_grad():
            
-            if _cuda:
-                ohc = RelaxedOneHotCategorical(torch.tensor([T],device='cuda'),torch.ones([I.shape[0],y_len],device='cuda'))
-            else:
-                ohc = RelaxedOneHotCategorical(T,torch.ones([I.shape[0],y_len]))
-            
-            y_true = ohc.sample()
-            
-            if _cuda:
-                y_true = y_true.cuda()
-            
-            time_1=time.time()
-            
-            del ohc
-            # -----------------
-            #  Train Generator
-            # -----------------
-
-            optimizer_E.zero_grad()
-            optimizer_D.zero_grad()
-            
-            # get the output of the discriminators
-
-            if _cuda == True:
-                depths_in=depths_in.cuda()
-                tnfs_in=tnfs_in.cuda()
-            
-            # get encodings, i.e. latents
-
-            z,y,mu = encoder(depths_in,tnfs_in)
-            # get reconstruciton
-
-            decoded_z,depths_out,tnfs_out= decoder(z,y)
-            
-            # get discriminators ouptup given the above encodings
-
-            d_z_fake = discr_z(z)
-            d_y_fake = discr_y(y)
-
-            
-            # Loss measures generator's ability to reconstruct the input        
-            vae_loss,ce,sse = calc_loss(depths_in, depths_out, tnfs_in, tnfs_out,num_samples)
-            
-            # second g_loss part measures generator ability to fool the discriminator
-            
-            g_loss_adv_z = adversarial_loss(d_z_fake, valid)
-            g_loss_adv_z = adversarial_loss(discr_z(z), valid) # already done 3 lines above!! 
-            g_loss_adv_y = adversarial_loss(discr_y(y), valid) 
-
-            g_loss =  (1-s_l) * vae_loss + (s_l*s_l_r) * g_loss_adv_z + (s_l*(1-s_l_r))* adversarial_loss(d_y_fake, valid) # possible bug, might affect the gradient computation!! use the g_loss_adv_y instead of adverarial_loss again! 
-
-            g_loss.backward()
-            optimizer_E.step() # comment one of these and check the reconstruction loss, if it increasese it is learning 
-            optimizer_D.step()
-            time_2=time.time()
-            
-            # ----------------------
-            #  Train Discriminator z
-            # ----------------------
-            
-            optimizer_D_z.zero_grad()
-            z_fake = encoder(depths_in,tnfs_in)[0]#  I already have this one above!
-
+            for depths_in, tnfs_in in new_data_loader:
+                if self.usecuda:
+                    depths_in = depths_in.cuda()
+                    tnfs_in = tnfs_in.cuda()
                 
-            # Measure discriminator's ability to classify real from generated samples
-            # merge inputs and labels so I only call once and don't compute by 0.5 
-            real_z_loss = adversarial_loss(discr_z(z_true), valid)
-            fake_z_loss = adversarial_loss(discr_z(z_fake.detach()), fake)
-            d_z_loss = 0.5 * (real_z_loss + fake_z_loss)
-            
-            d_z_loss.backward()
-            optimizer_D_z.step()
-            time_3=time.time()
+                if last_epoch is True:
+                    mu, _ ,y_sample = self._encode(depths_in,tnfs_in)
+                else:
+                    y_sample = self._encode(depths_in,tnfs_in)[2]
+                
+                if self.usecuda:
+                    Ys = y_sample.cpu().detach().numpy()
+                    if last_epoch is True:
+                        mu = mu.cpu().detach().numpy()
+                        latent[row:row + len(mu)]=mu
+                        row += len(mu)
+                else:
+                    Ys = y_sample.detach().numpy()
+                    if last_epoch is True:
+                        mu = mu.detach().numpy()
+                        latent[row:row + len(mu)]=mu
+                        row += len(mu)
+                del y_sample
+                
+                for _y in Ys:
+                    contig_name = contignames[index_contigname]
+                    contig_cluster = np.argmax(_y)+1
+                    #contig_cluster_str = 'cluster_'+str(contig_cluster)
+                    contig_cluster_str = str(contig_cluster)
+                
+                    if contig_cluster_str not in clust_y_dict.keys():
+                        clust_y_dict[contig_cluster_str] = set()
 
-            # ----------------------
-            #  Train Discriminator y
-            # ----------------------
+                    #else:
+                    clust_y_dict[contig_cluster_str].add(contig_name)
+                    
+                    index_contigname += 1
+                del Ys
+                self.train()
             
-            optimizer_D_y.zero_grad()
-            y_fake = encoder(depths_in,tnfs_in)[1]
+            #print(clust_y_dict.items())
+            if last_epoch is True:
+                return clust_y_dict ,latent 
+        
+        time1=time.time()
+        time_Y=np.round(time1-time0)
+    
+    # ----------
+    #  Training
+    # ----------
 
-            # Measure discriminator's ability to classify real from generated samples
-            real_y_loss = adversarial_loss(discr_y(y_true), valid)
-            fake_y_loss = adversarial_loss(discr_y(y_fake.detach()), fake)
-            d_y_loss = 0.5 * (real_y_loss + fake_y_loss)
-            
-            d_y_loss.backward()
-            optimizer_D_y.step()
-            
-            time_4=time.time()
-            
-            time_sampling=round(time_1-time_0,4)
-            time_G=round(time_1-time_0,4)
-            time_Dz=round(time_2-time_1,4)
-            time_Dy=round(time_3-time_2,4)  
-            time_batch=round(time_4-time_0,4)
+    def trainmodel(self,
+        data_loader,
+        nepochs, 
+        batchsteps,
+        T,
+        lr,
+        modelfile=None ,
+        logfile=None
+        ):
 
-            G_loss_e+=(float(g_loss.item()))
-            V_loss_e+=(float(vae_loss.item()))
-            D_z_loss_e+=(float(d_z_loss.item()))
-            D_y_loss_e+=(float(d_y_loss.item()))
-            CE_e += (float(ce.item()))
-            SSE_e += (float(sse.item()))
+        Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor    
+        batchsteps_set = set(batchsteps)
+        ncontigs,nsamples = data_loader.dataset.tensors[0].shape
 
-        time_epoch_1=time.time()
-        time_e = np.round((time_epoch_1 -time_epoch_0)/60,3)
-
+        # Initialize generator and discriminator
+        
         if logfile is not None:
-            print('\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dl loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}'.format(
-                  epoch_i + 1,
-                  G_loss_e / total_batches_inthis_epoch,
-                  V_loss_e / total_batches_inthis_epoch,
-                  CE_e / total_batches_inthis_epoch,
-                  SSE_e / total_batches_inthis_epoch,
-                  D_z_loss_e / total_batches_inthis_epoch,
-                  D_y_loss_e / total_batches_inthis_epoch,
-                  batchsize,
-                  time_e,
-                  ), file=logfile)
-            logfile.flush()
+            print('\tNetwork properties:', file=logfile)
+            print('\tCUDA:', self.usecuda, file=logfile)
+            print('\tAlpha:', self.alpha, file=logfile)
+            print('\tY length:', self.y_len, file=logfile)
+            print('\tl length:', self.ld, file=logfile)
+            print('\n\tTraining properties:', file=logfile)
+            print('\tN epochs:', nepochs, file=logfile)
+            print('\tStarting batch size:', data_loader.batch_size, file=logfile)
+            batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
+            print('\tBatchsteps:', batchsteps_string, file=logfile)
+            print('\tN sequences:', ncontigs, file=logfile)
+            print('\tN samples:', self.nsamples, file=logfile, end='\n\n')
 
-        # Save Y clusters at epohc i 
-        if (epoch_i+1)  == n_epochs  :
             
-            batch_size_val = min(50000,depths.shape[0])     
-            dataloader_val = make_dataloader(depths, tnfs, batch_size_val, Cuda=_cuda, Shuffle=False, Drop_last=False)
-            path_clust = modelfile.replace("aae_model.pt","aae_y_clusters.tsv")
-            clust_y_dict, latent,mask =  get_latents_y(encoder,contignames, Dataloader = dataloader_val , Cuda=_cuda ,last_epoch=True)
+        # we need to separate the paramters due to the adversarial training
+        
+        disc_z_params = []
+        disc_y_params = []
+        gen_params = []
+        for name, param in self.named_parameters():
+            if 'discriminator_z' in name:
+                disc_z_params.append(param)
+            elif 'discriminator_y' in name:
+                disc_y_params.append(param)
+            else:
+                gen_params.append(param)
 
-        #else:
-            #path_clust = modelfile.replace("model.pt","clusters_y_along_training/e_"+str(epoch_i+1)+"_aamb_y_clusters.tsv")
-
-            #get_latents_y(encoder,contignames ,Dataloader = dataloader_val, path_clu_Y=path_clust,Cuda=cuda)
-       
-        # compute clusetring metrics
-        #NC_S,NC_Sp,NC_G = benchmark(path_clust+'_clusters.tsv',dataset,0.9,0.9) # set to 0.9 0.9 so we can compare it with ../thesis_aae/Logs/grid_2.2.0.1_RS_Complete_results 
-        #NC_S_list_e.append(NC_S)
-        #print('NC Strains=', NC_S ,' NC Spec=', NC_Sp, 'NC Gen=', NC_G)
-        
-        #with open (train_results_file, 'a') as file_obj:
-        #    file_obj.write("\n"+str((NC_S))+' '+ str(NC_Sp)+ ' '+ str(NC_G)+' ' +str(round(np.mean(V_loss),3)) +' '+str(np.round(np.mean(D_z_loss),3))+' '+str(np.round(np.mean(D_y_loss),3)) +' ' +str(round(s_l,5)))
-        
-        # print epoch time to log file
-        time_e1=time.time()
-        time_e=round((time_e1-time_e0)/60,2)
-        
-        #os.system('echo -e ' + train_data + '_e_' + str(epoch_i+1) + ' '+ str(time_e)+ ' >> '+log_file)
-        #with open (log_file, 'a') as file_obj:
-        #    file_obj.write("\nEpoch "+str(epoch_i+1)+', '+ str(time_e) +" minutes")
-        
-        #V_loss_e = np.round(np.mean(V_loss[-i:]),3)
-        #D_z_loss_e= np.round(np.mean(D_z_loss[-i:]),3)
-        #D_y_loss_e = np.round(np.mean(D_y_loss[-i:]),4)
-        #losses_epoch_string = str(V_loss_epoch) + '\t' + str(D_z_loss_epoch) + '\t' + str(D_y_loss_epoch)
-        
-        #with open (loss_file, 'a') as file_obj:
-        #    file_obj.write("\n"+losses_epoch_string)
-           
-        
-        #G_loss += G_loss_e 
-        #D_z_loss += D_z_loss_e 
-        #D_y_loss += D_y_loss_e 
-        #V_loss += V_loss_e 
-        #G_loss_adv_Z += G_loss_adv_Z_e 
-        #G_loss_adv_Y += G_loss_adv_Y_e 
-        #NC_S_list += NC_S_list_e
+        #### Optimizers
+        optimizer_ED = torch.optim.Adam(gen_params, lr=lr )
+        optimizer_D_z = torch.optim.Adam(disc_z_params, lr=lr )
+        optimizer_D_y = torch.optim.Adam(disc_y_params, lr=lr )
 
         
-        #G_loss_epochs.append(np.mean(G_loss_e))
-        #D_loss_z_epochs.append(np.mean(D_z_loss_e))
-        #D_loss_y_epochs.append(np.mean(D_y_loss_e))
-        #V_loss_epochs.append(np.mean(V_loss_e))
-        #G_loss_adv_Z_epochs.append(np.mean(G_loss_adv_Z_e))
-        #G_loss_adv_Y_epochs.append(np.mean(G_loss_adv_Y_e))
+        #dataloader_e= make_dataloader(depths,tnfs,batchsize,Shuffle=True,Cuda=_cuda)
+        
+        
+        for epoch_i in range(nepochs):
+            if epoch_i in batchsteps:
+                data_loader = _DataLoader(dataset=data_loader.dataset,
+                                batch_size=data_loader.batch_size * 2,
+                                shuffle=True,
+                                drop_last=True,
+                                num_workers=data_loader.num_workers,
+                                pin_memory=data_loader.pin_memory
+                                )
+                                
 
+                #epochs_num=len(dataloader_e[0])
 
-        if (1+epoch_i) % save_checkpoint == 0:
+            time_e0=time.time()
+            
+            ED_loss_e, D_z_loss_e, D_y_loss_e, V_loss_e, G_loss_adv_Z_e, G_loss_adv_Y_e,CE_e, SSE_e, NC_S_list_e = 0, 0, 0, 0, 0, 0, 0, 0, []
+        
+            total_batches_inthis_epoch = len(data_loader)
+            time_epoch_0=time.time()
+
+            for depths_in, tnfs_in in data_loader: 
+                
+                time_0=time.time()
+                I=torch.cat((depths_in,tnfs_in),dim=1)
+                
+                # Adversarial ground truths
+                
+                labels_prior = Variable(Tensor(I.shape[0], 1).fill_(1.0), requires_grad=False)
+                labels_latent = Variable(Tensor(I.shape[0], 1).fill_(0.0), requires_grad=False)
+                
+                # Sample noise as discriminator Z,Y ground truth
+                
+                if self.usecuda:
+                    z_prior = torch.cuda.FloatTensor(I.shape[0], self.ld).normal_()
+                    z_prior.cuda()
+                    ohc = RelaxedOneHotCategorical(torch.tensor([T],device='cuda'),torch.ones([I.shape[0],self.y_len],device='cuda'))
+                    y_prior = ohc.sample()
+                    y_prior = y_prior.cuda()
+
+                else:
+                    z_prior = Variable(Tensor(np.random.normal(0, 1, (I.shape[0], self.ld))))
+                    ohc = RelaxedOneHotCategorical(T,torch.ones([I.shape[0],self.y_len]))
+                    y_prior = ohc.sample()
+
+                time_1=time.time()
+                
+                del ohc
+                
+                if self.usecuda :
+                    depths_in=depths_in.cuda()
+                    tnfs_in=tnfs_in.cuda()
+
+                # Forward pass
+                _,z_latent,y_latent,vae_loss,ce, sse ,ed_loss_adv_z,ed_loss_adv_y,ed_loss, d_z_loss, d_y_loss = self(depths_in, tnfs_in, z_prior, y_prior,labels_prior, labels_latent)
+                
+                # -----------------
+                #  Train Generator
+                # -----------------
+                optimizer_ED.zero_grad()
+                ed_loss.backward()
+                optimizer_ED.step()
+                time_2=time.time()
+                
+                # ----------------------
+                #  Train Discriminator z
+                # ----------------------
+                
+                optimizer_D_z.zero_grad()
+                d_z_loss.backward()
+                optimizer_D_z.step()
+                time_3=time.time()
+
+                # ----------------------
+                #  Train Discriminator y
+                # ----------------------
+                
+                optimizer_D_y.zero_grad()
+                d_y_loss.backward()
+                optimizer_D_y.step()
+                
+                time_4=time.time()
+                
+                # Times
+                time_sampling=round(time_1-time_0,4)
+                time_ED=round(time_1-time_0,4)
+                time_Dz=round(time_2-time_1,4)
+                time_Dy=round(time_3-time_2,4)  
+                time_batch=round(time_4-time_0,4)
+
+                ED_loss_e+=(float(ed_loss.item()))
+                V_loss_e+=(float(vae_loss.item()))
+                D_z_loss_e+=(float(d_z_loss.item()))
+                D_y_loss_e+=(float(d_y_loss.item()))
+                CE_e += (float(ce.item()))
+                SSE_e += (float(sse.item()))
+
+            time_epoch_1=time.time()
+            time_e = np.round((time_epoch_1 -time_epoch_0)/60,3)
+            
+            # print trainning losses/others into log file 
+            if logfile is not None:
+                print('\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dl loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}'.format(
+                    epoch_i + 1,
+                    ED_loss_e / total_batches_inthis_epoch,
+                    V_loss_e / total_batches_inthis_epoch,
+                    CE_e / total_batches_inthis_epoch,
+                    SSE_e / total_batches_inthis_epoch,
+                    D_z_loss_e / total_batches_inthis_epoch,
+                    D_y_loss_e / total_batches_inthis_epoch,
+                    data_loader.batch_size,
+                    time_e,
+                    ), file=logfile)
+                logfile.flush()
+
+            # save model  
             if modelfile is not None:
-                try:
-
+                try: 
                     checkpoint = {
-                            'encoder' : encoder.state_dict(),
-                            'decoder': decoder.state_dict(),
-                            'discriminator_z': discriminator_z.state_dict(),
-                            'discriminator_y': discriminator_y.state_dict(),
-                            'optimizer_E': optimizer_E.state_dict(),
-                            'optimizer_D': optimizer_D.state_dict(),
+                            'state' : self.state_dict(),
+                            'optimizer_ED': optimizer_ED.state_dict(),
                             'optimizer_D_z': optimizer_D_z.state_dict(),
                             'optimizer_D_y': optimizer_D_y.state_dict(),
-                            'nsamples': num_samples,
-                            'alpha' : alpha,
+                            'nsamples': self.num_samples,
+                            'alpha' : self.alpha,
+                            'nhiddens': self.h_n,
+                            'nlatent_l': self.ld,
+                            'nlatent_y': self.y_len,
+                            'sl': self.sl,
+                            'slr': self.slr,
+                            'temp': self.T
                             }
                     torch.save(checkpoint,modelfile)
+        
                 except:
                     pass
-            
-        if modelfile is not None:
-            try: 
-                checkpoint = {
-                        'encoder' : encoder.state_dict(),
-                        'decoder': decoder.state_dict(),
-                        'discriminator_z': discriminator_z.state_dict(),
-                        'discriminator_y': discriminator_y.state_dict(),
-                        'optimizer_E': optimizer_E.state_dict(),
-                        'optimizer_D': optimizer_D.state_dict(),
-                        'optimizer_D_z': optimizer_D_z.state_dict(),
-                        'optimizer_D_y': optimizer_D_y.state_dict(),
-                        'nsamples': num_samples,
-                        'alpha' : alpha,
-                        }
-                torch.save(checkpoint,modelfile)
-    
-            except:
-                pass
 
-    
+        
 
-    return clust_y_dict, latent, mask 
-
-
-
-
+        return None 
 
