@@ -9,7 +9,8 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator
+from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator, Union
+from pathlib import PurePath as _PurePath
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -414,7 +415,7 @@ def loadfasta(
     return entries
 
 def write_bins(
-    directory,
+    directory: Union[str, _PurePath],
     bins: dict[str, set[str]],
     fastadict: dict[str, FastaEntry],
     compressed: bool=False,
@@ -450,7 +451,7 @@ def write_bins(
         raise NotADirectoryError(parentdir)
 
     if _os.path.isfile(abspath):
-        raise NotADirectoryError(abspath)
+        raise FileExistsError(abspath)
 
     if minsize < 0:
         raise ValueError("Minsize must be nonnegative")
@@ -606,48 +607,6 @@ def verify_refhash(refnames: Iterable[str], expected: bytes) -> None:
             "Make sure all BAM and FASTA headers are identical "
             "and in the same order."
         )
-
-def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]) -> _np.ndarray:
-    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
-    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
-
-    Usage:
-        with open('/path/to/jgi_depths.tsv') as file:
-            depths = load_jgi(file, 1000, my_hash)
-    Input:
-        filehandle: File handle of open output depth file
-        minlength: Minimum contig length to keep
-        refhash: Hash of references to compare against (None = no check)
-    Output:
-        N_contigs x N_samples Numpy matrix of dtype float32
-    """
-    header = next(filehandle)
-    fields = header.strip().split('\t')
-    if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
-        raise ValueError('Input file format error: First columns should be "contigName,"'
-        '"contigLen" and "totalAvgDepth"')
-
-    columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
-    array = PushArray(_np.float32)
-    identifiers = list()
-
-    for row in filehandle:
-        fields = row.split('\t')
-        # We use float because very large numbers will be printed in scientific notation
-        if float(fields[1]) < minlength:
-            continue
-
-        for col in columns:
-            array.append(float(fields[col]))
-        
-        identifiers.append(fields[0])
-
-    if refhash is not None:
-        verify_refhash(identifiers, refhash)
-
-    result = array.take()
-    result.shape = (len(result) // len(columns), len(columns))
-    return validate_input_array(result)
 
 def _split_bin(
     binname: str,
