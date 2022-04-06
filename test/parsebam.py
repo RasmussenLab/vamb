@@ -1,61 +1,77 @@
-import sys
 import os
-import pysam
+import unittest
 import numpy as np
-import shutil
 
-parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-sys.path.append(parentdir)
 import vamb
 
-inpaths = [os.path.join(parentdir, 'test', 'data', i) for i in ('one.bam', 'two.bam', 'three.bam')]
 
-file = pysam.AlignmentFile(inpaths[0])
-records = list(file)
-file.close()
+PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATADIR = os.path.join(PARENTDIR, "test", "data", "bam")
 
-# First some simple tests
-assert [records[i].get_tag('AS') for i in range(10)] == [84, 93, 145, 151, 149, 151, 121, 151, 50, 130]
 
-# Check _filter_segments work
-file = pysam.AlignmentFile(inpaths[0])
-above = sum(1 for i in (vamb.parsebam._filter_segments(file, minscore=100, minid=None)))
-file.close()
+class TestParseBam(unittest.TestCase):
+    files = [os.path.join(DATADIR, i) for i in os.listdir(DATADIR)]
+    lens = [
+        2271, 3235, 3816, 2625, 2716,
+        4035, 3001, 2583, 5962, 3774,
+        2150, 2161, 2218, 2047, 5772,
+        2633, 3400, 3502, 2103, 4308,
+        3061, 2464, 4099, 2640, 2449
+    ]
 
-assert above == 357
+    def test_refhash(self):
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles(self.files, b"", None, 0.97, None, 1)
 
-# Check _filter_segments raises an error on missing AS tag
-file = pysam.AlignmentFile(os.path.join(parentdir, 'test', 'data', 'bad.bam'))
-error_iterator = vamb.parsebam._filter_segments(file, minscore=100, minid=None)
+    def test_badfile(self):
+        with self.assertRaises(FileNotFoundError):
+            vamb.parsebam.read_bamfiles(["nofile"], None, None, 0.97, None, 1)
 
-try:
-    next(error_iterator)
-except KeyError:
-    pass
-else:
-    raise AssertionError("Should have raised KeyError")
+    def test_inconsistent_args(self):
+        # Minlength, but no lengths given
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles(self.files, None, 2500, 0.97, None, 1)
 
-# With minscore = None, it shouldn't need to check AS tag
-ok_iterator = vamb.parsebam._filter_segments(file, minscore=None, minid=None)
-records_minus_one = sum(1 for i in ok_iterator)
-assert records_minus_one == 21
+        # Lengths, but no minlength given
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles(self.files, None, None, 0.97, np.array([50]), 1)
 
-file.close()
+        # Too low minlength
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles(self.files, None, 50, 0.97, np.array([50]), 1)
 
-# Check _get_contig_rpkms work
-# target_rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
-# p, arr, length = vamb.parsebam._get_contig_rpkms(inpaths[0], outpath=None, minscore=50, minlength=100, minid=None)
-#
-# assert p == inpaths[0]
-# assert len(arr) == length
-# assert np.all(abs(arr - target_rpkm[:,0]) < 1e-8)
-#
-# # Check _read_bamfiles work
-# inpaths = [os.path.join(parentdir, 'test', 'data', x + '.bam') for x in ('one', 'two', 'three')]
-# rpkm = vamb.parsebam.read_bamfiles(inpaths, minscore=50, minlength=100, minid=None)
-# assert np.all(abs(rpkm - target_rpkm) < 1e-8)
-#
-# rpkm = vamb.parsebam.read_bamfiles(inpaths, dumpdirectory='/tmp/dumpdirectory', minscore=50, minlength=100, minid=None)
-# assert np.all(abs(rpkm - target_rpkm) < 1e-8)
-# shutil.rmtree('/tmp/dumpdirectory')
+        # Minid too high
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles(self.files, None, None, 1.01, None, 1)
+
+    def test_wrong_lengths(self):
+        with self.assertRaises(ValueError):
+            vamb.parsebam.read_bamfiles([self.files[0]], None, 2500, 0.97, [3000, 1000], 1)
+
+
+    @classmethod
+    def setUpClass(cls):
+        cls.arr = vamb.parsebam.read_bamfiles(
+            cls.files,
+            bytes.fromhex("129db373e4a0dd86cc3217aa9af7b1c2"),
+            None,
+            0.0,
+            None,
+            3
+        )
+
+    def test_parse(self):
+        self.assertEqual(self.arr.shape, (25, 3))
+        self.assertEqual(self.arr.dtype, np.float32)
+
+    def test_minlength(self):
+        length = 3502
+        arr = vamb.parsebam.read_bamfiles(
+            self.files, None, length, 0.0, self.lens, 3)
+        mask = [i >= length for i in self.lens]
+        self.assertTrue(np.all(self.arr[mask] == arr))
+
+    def test_minid(self):
+        arr = vamb.parsebam.read_bamfiles(
+            self.files, None, None, 0.95, None, 3)
+        self.assertTrue(np.any(arr < self.arr))

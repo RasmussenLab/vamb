@@ -36,6 +36,9 @@ def read_bamfiles(
         raise ValueError(f"minlength must be at least 250, not {minlength}")
 
     for path in paths:
+        if not _os.path.isfile(path):
+            raise FileNotFoundError(path)
+
         if not _pycoverm.is_bam_sorted(path):
             raise ValueError(f"Path {path} is not sorted by reference.")
 
@@ -45,8 +48,10 @@ def read_bamfiles(
         trim_upper=0.1, trim_lower=0.1
     )
 
+    assert len(headers) == len(coverage)
+    assert coverage.shape[1] == len(paths)
+
     # Filter length
-    headers = list(headers)
     if lengths is not None:
         if len(lengths) != len(headers):
             raise ValueError("Lengths of headers and lengths does not match.")

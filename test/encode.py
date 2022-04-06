@@ -1,106 +1,202 @@
-import sys
-import os
+from sys import stdout
+import unittest
 import numpy as np
 import torch
+import tempfile
+import io
 
-parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parentdir)
 import vamb
 
-# Test making the dataloader
-tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
-rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
-dataloader, mask = vamb.encode.make_dataloader(rpkm, tnf)
 
-assert np.all(mask == np.array([False, False, False, False,  True,  True, False,  True, False,
-        True,  True, False,  True,  True, False,  True,  True, False,
-       False, False, False, False,  True,  True,  True, False, False,
-       False,  True, False,  True, False, False,  True,  True,  True,
-       False,  True,  True,  True, False, False,  True, False,  True,
-        True, False, False,  True,  True,  True,  True,  True, False,
-       False,  True, False, False, False,  True,  True,  True, False,
-       False, False, False, False, False,  True, False, False,  True,
-        True,  True,  True,  True,  True,  True,  True, False,  True,
-       False,  True,  True,  True, False, False, False, False, False,
-       False,  True,  True, False,  True,  True,  True,  True,  True,
-        True,  True,  True,  True,  True,  True, False, False,  True,
-        True,  True, False,  True,  True,  True, False,  True, False,
-       False, False, False, False, False, False, False, False, False,
-        True,  True, False,  True,  True, False, False,  True, False,
-        True, False,  True, False, False, False, False, False, False,
-       False, False, False, False, False, False, False,  True, False,
-       False, False, False, False, False]))
+class TestDataLoader(unittest.TestCase):
+    tnfs = np.random.random((111, 103)).astype(np.float32)
+    rpkm = np.random.random((111, 14)).astype(np.float32)
 
-assert len(dataloader) == sum(mask) // dataloader.batch_size
+    def nearly_same(self, A, B):
+        self.assertTrue(np.all(np.abs(A - B) < 1e-6))
 
-# Dataloader fails with too large batchsize
-try:
-    dataloader, mask = vamb.encode.make_dataloader(rpkm, tnf, batchsize=128)
-except ValueError as e:
-    assert e.args == ('Fewer sequences left after filtering than the batch size.',)
-else:
-    raise AssertionError('Should have raised ArgumentError when instantiating dataloader')
+    def not_nearly_same(self, A, B):
+        self.assertTrue(np.any(np.abs(A - B) > 1e-6))
 
-try:
-    dataloader, mask = vamb.encode.make_dataloader(rpkm.flatten(), tnf, batchsize=128)
-except ValueError as e:
-    assert e.args == ('Lengths of RPKM and TNF must be the same',)
-else:
-    raise AssertionError('Should have raised ArgumentError when instantiating dataloader')
+    def test_bad_args(self):
+        # Bad rpkm
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader([[1, 2, 3]], self.tnfs, batchsize=32)
 
-# Normalization
-assert not np.all(np.abs(np.mean(tnf, axis=0)) < 1e-4) # not normalized
-assert not np.all(np.abs(np.sum(rpkm, axis=1) - 1) < 1e-5) # not normalized
+        # bad tnfs
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader(self.rpkm, [[1, 2, 3]], batchsize=32)
 
-assert np.all(np.abs(np.mean(dataloader.dataset.tensors[1].numpy(), axis=0)) < 1e-4) # normalized
-assert np.all(np.abs(np.sum(dataloader.dataset.tensors[0].numpy(), axis=1) - 1) < 1e-5) # normalized
+        # Bad batchsize
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader(self.rpkm, self.tnfs, batchsize=0)
 
-dataloader2, mask2 = vamb.encode.make_dataloader(rpkm, tnf, destroy=True)
+        # Differing lengths
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader(
+                np.random.random((len(self.rpkm) - 1)).astype(np.float32),
+                self.tnfs,
+                batchsize=32
+            )
 
-assert np.all(mask == mask2)
-assert np.all(np.mean(tnf, axis=0) < 1e-4) # normalized
-assert np.all(np.abs(np.sum(rpkm, axis=1) - 1) < 1e-5) # normalized
+        # Bad dtype
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader(
+                self.rpkm.astype(np.float64),
+                self.tnfs,
+                batchsize=32
+            )
 
-# Can instantiate the VAE
-vae = vamb.encode.VAE(nsamples=3)
+        # Batchsize is too large
+        with self.assertRaises(ValueError):
+            vamb.encode.make_dataloader(self.rpkm, self.tnfs, batchsize=256)
 
-# Training model works in general
-tnf = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_tnf.npz'))
-rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
-dataloader, mask = vamb.encode.make_dataloader(rpkm, tnf, batchsize=16)
-vae.trainmodel(dataloader, batchsteps=[5, 10], nepochs=15)
-vae.trainmodel(dataloader, batchsteps=None, nepochs=15)
+    def test_destroy(self):
+        copy_rpkm = self.rpkm.copy()
+        copy_tnfs = self.tnfs.copy()
 
-# Training model fails with weird batch steps
-try:
-    vae.trainmodel(dataloader, batchsteps=[5, 10, 15, 20], nepochs=25)
-except ValueError as e:
-    assert e.args == ('Last batch size exceeds dataset length',)
-else:
-    raise AssertionError('Should have raised ArgumentError when having too high batch size')
+        (dl, mask) = vamb.encode.make_dataloader(
+            self.rpkm, self.tnfs, batchsize=32)
+        self.nearly_same(self.rpkm, copy_rpkm)
+        self.nearly_same(self.tnfs, copy_tnfs)
 
-try:
-    vae.trainmodel(dataloader, batchsteps=[5, 10], nepochs=10)
-except ValueError as e:
-    assert e.args == ('Max batchsteps must not equal or exceed nepochs',)
-else:
-    raise AssertionError('Should have raised ArgumentError when having too high batchsteps')
+        (dl, mask) = vamb.encode.make_dataloader(
+            copy_rpkm, copy_tnfs, batchsize=32, destroy=True)
+        self.not_nearly_same(self.rpkm, copy_rpkm)
+        self.not_nearly_same(self.tnfs, copy_tnfs)
 
-# Loading saved VAE and encoding
-modelpath = os.path.join(parentdir, 'test', 'data', 'model.pt')
-vae = vamb.encode.VAE.load(modelpath)
+    def test_normalized(self):
+        copy_rpkm = self.rpkm.copy()
+        copy_tnfs = self.tnfs.copy()
 
-target_latent = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_latent.npz'))
+        (dl, mask) = vamb.encode.make_dataloader(
+            copy_rpkm, copy_tnfs, batchsize=32, destroy=True)
 
-latent = vae.encode(dataloader)
+        # TNFS: Mean of zero, std of one
+        self.nearly_same(np.mean(copy_tnfs, axis=0),
+                         np.zeros(copy_tnfs.shape[1]))
+        self.nearly_same(np.std(copy_tnfs, axis=0),
+                         np.ones(copy_tnfs.shape[1]))
 
-assert np.all(np.abs(latent - target_latent) < 1e-4)
+        # RPKM: Sum to 1, all zero or above
+        # print(copy_rpkm)
+        self.nearly_same(np.sum(copy_rpkm, axis=1),
+                         np.ones(copy_rpkm.shape[0]))
+        self.assertTrue(np.all(copy_rpkm >= 0.0))
 
-# Encoding also withs with a minibatch of one
-inputs = dataloader.dataset.tensors
-inputs = inputs[0][:65], inputs[1][:65]
-ds = torch.utils.data.dataset.TensorDataset(inputs[0], inputs[1])
-new_dataloader = torch.utils.data.DataLoader(dataset=ds, batch_size=64, shuffle=False, num_workers=1,)
+    def test_mask(self):
+        copy_rpkm = self.rpkm.copy()
+        copy_tnfs = self.tnfs.copy()
+        mask = np.ones(len(copy_rpkm)).astype(bool)
 
-latent = vae.encode(new_dataloader)
-assert np.all(np.abs(latent - target_latent[:65]) < 1e-4)
+        for bad_tnf in [0, 4, 9]:
+            copy_tnfs[bad_tnf, :] = 0
+            mask[bad_tnf] = False
+
+        for bad_rpkm in [1, 4, 11, 19]:
+            copy_rpkm[bad_rpkm, :] = 0
+            mask[bad_rpkm] = False
+
+        (dl, mask2) = vamb.encode.make_dataloader(
+            copy_rpkm, copy_tnfs, batchsize=32)
+
+        self.assertTrue(np.all(mask == mask2))
+
+    def test_single_sample(self):
+        single_rpkm = self.rpkm[:, [0]]
+        (dl, mask) = vamb.encode.make_dataloader(
+            single_rpkm, self.tnfs.copy(), batchsize=32, destroy=True)
+        self.assertLess(np.abs(np.mean(single_rpkm)), 1e-6)
+        self.assertLess(abs(np.std(single_rpkm) - 1), 1e-6)
+
+    def test_iter(self):
+        bs = 32
+        (dl, mask) = vamb.encode.make_dataloader(
+            self.rpkm, self.tnfs, batchsize=bs)
+
+        # Check right element type
+        for M in next(iter(dl)):
+            self.assertEqual(M.dtype, torch.float32)
+            self.assertEqual(M.shape[0], bs)
+
+        # Check it iterates the right order (rpkm, tnfs)
+        rpkm, tnfs = next(iter(dl))
+        self.nearly_same(np.sum(rpkm.numpy(), axis=1), np.ones(bs))
+
+    def test_randomized(self):
+        (dl, mask) = vamb.encode.make_dataloader(
+            self.rpkm, self.tnfs, batchsize=64)
+        rpkm, tnfs = next(iter(dl))
+
+        # Test that first batch is not just the first 64 elements.
+        # Could happen, but vanishingly unlikely.
+        self.assertTrue(np.any(np.abs(tnfs.numpy() - self.tnfs[:64]) > 1e-3))
+
+
+class TestVAE(unittest.TestCase):
+    tnfs = np.random.random((111, 103)).astype(np.float32)
+    rpkm = np.random.random((111, 14)).astype(np.float32)
+
+    def test_bad_args(self):
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(-1)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, nlatent=0)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, nhiddens=[128, 0])
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, alpha=0.0)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, alpha=1.0)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, beta=0.0)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, dropout=1.0)
+
+        with self.assertRaises(ValueError):
+            vamb.encode.VAE(5, dropout=-0.001)
+
+    def test_loss_falls(self):
+        vae = vamb.encode.VAE(self.rpkm.shape[1])
+        rpkm_copy = self.rpkm.copy()
+        tnfs_copy = self.tnfs.copy()
+        dl, mask = vamb.encode.make_dataloader(
+            rpkm_copy, tnfs_copy, batchsize=16, destroy=True)
+        di = torch.Tensor(rpkm_copy)
+        ti = torch.Tensor(tnfs_copy)
+        do, to, mu, lsigma = vae(di, ti)
+        start_loss = vae.calc_loss(di, do, ti, to, mu, lsigma)[0].data.item()
+        iobuffer = io.StringIO()
+
+        with tempfile.TemporaryFile() as file:
+            # Loss drops with training
+            vae.trainmodel(dl, nepochs=3, batchsteps=[
+                           1, 2], logfile=iobuffer, modelfile=file)
+            do, to, mu, lsigma = vae(di, ti)
+            end_loss = vae.calc_loss(di, do, ti, to, mu, lsigma)[0].data.item()
+            self.assertLess(end_loss, start_loss)
+
+            # Also test save/load
+            before_encoding = vae.encode(dl)
+            file.flush()
+            file.seek(0)
+            vae_2 = vamb.encode.VAE.load(file)
+
+        after_encoding = vae_2.encode(dl)
+        self.assertTrue(
+            np.all(np.abs(before_encoding - after_encoding) < 1e-6))
+
+    def test_encoding(self):
+        nlatent = 15
+        vae = vamb.encode.VAE(self.rpkm.shape[1], nlatent=nlatent)
+        dl, mask = vamb.encode.make_dataloader(
+            self.rpkm, self.tnfs, batchsize=32)
+        encoding = vae.encode(dl)
+        self.assertEqual(encoding.dtype, np.float32)
+        self.assertEqual(encoding.shape, (len(self.rpkm), nlatent))
