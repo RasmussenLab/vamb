@@ -244,7 +244,9 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
                                                 lengthspath, mincontiglength, logfile)
 
     # Parse BAMs, save as npz
-    refhash = None if norefcheck else vamb.vambtools._hash_refnames(contignames)
+    refhash = None if norefcheck else vamb.vambtools._hash_refnames(
+        (name.split(maxsplit=1)[0] for name in contignames)
+    )
     rpkms = calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash,
                       len(tnfs), minalignscore, minid, subprocesses, logfile)
 
