@@ -21,7 +21,7 @@ General workflow:
 
 __authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
 __licence__ = 'MIT'
-__version__ = (3, 0, 3)
+__version__ = (3, 0, 4)
 
 import sys as _sys
 if _sys.version_info[:2] < (3, 5):
