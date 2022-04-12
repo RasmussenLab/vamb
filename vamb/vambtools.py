@@ -84,7 +84,7 @@ def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -
     """
 
     if axis is not None and (axis >= array.ndim or axis < 0):
-        raise _np.AxisError(axis)
+        raise _np.AxisError(str(axis))
 
     if inplace and not _np.issubdtype(array.dtype, _np.floating):
         raise TypeError('Cannot convert a non-float array to zscores')
@@ -597,16 +597,6 @@ def hash_refnames(refnames: Iterable[str]) -> bytes:
         hasher.update(refname.encode().rstrip())
 
     return hasher.digest()
-
-def verify_refhash(refnames: Iterable[str], expected: bytes) -> None:
-    "Compares hash of refnames with bytes expected and errors if not the same"    
-    refhash = hash_refnames(refnames)
-    if refhash != expected:
-        raise ValueError(
-            f"Got reference name hash {refhash.hex()}, expected {expected.hex()}. "
-            "Make sure all BAM and FASTA headers are identical "
-            "and in the same order."
-        )
 
 def _split_bin(
     binname: str,

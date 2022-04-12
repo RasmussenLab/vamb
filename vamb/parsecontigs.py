@@ -8,12 +8,13 @@ Usage:
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import Iterable
+from typing import Iterable, BinaryIO, Union, TypeVar, Sequence
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL = _vambtools.read_npz(
     _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kernel.npz")
 )
+
 
 def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarray:
     "Project fourmers down in dimensionality"
@@ -23,6 +24,7 @@ def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarra
     fourmers += -(1/256)
     return _np.dot(fourmers, kernel)
 
+
 def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
     "Move data from raw PushArray to projected PushArray, converting it."
     raw_mat = raw.take().reshape(-1, 256)
@@ -30,50 +32,165 @@ def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
     projected.extend(projected_mat.ravel())
     raw.clear()
 
-def read_contigs(
-    filehandle: Iterable[bytes],
-    minlength: int = 100
-) -> tuple[_np.ndarray, list[str], _np.ndarray]:
-    """Parses a FASTA file open in binary reading mode.
 
-    Input:
-        filehandle: Filehandle open in binary mode of a FASTA file
-        minlength: Ignore any references shorter than N bases [100]
+class CompositionMetaData:
+    """A class containing metadata of sequence composition.
+    Current fields are:
+    * identifiers: A Numpy array of objects, str identifiers of kept sequences
+    * lengths: A Numpy vector of 32-bit uint lengths of kept sequences
+    * mask: A boolean Numpy vector of which sequences were kept in original file
+    * refhash: A bytes object representing the hash of the identifiers
+    * minlength: The minimum contig length used for filtering
+    """
+    __slots__ = ['identifiers', 'lengths', 'mask', 'refhash', 'minlength']
 
-    Outputs:
-        tnfs: An (n_FASTA_entries x 103) matrix of tetranucleotide freq.
-        contignames: A list of contig headers
-        lengths: A Numpy array of contig lengths
+    def __init__(self, identifiers: _np.ndarray, lengths: _np.ndarray, mask: _np.ndarray, minlength: int):
+        assert len(identifiers) == len(lengths)
+        assert identifiers.dtype == _np.dtype('O')
+        assert _np.issubdtype(lengths.dtype, _np.integer)
+        assert mask.dtype == bool
+        assert mask.sum() == len(lengths)
+        assert lengths.min(initial=minlength) >= minlength
+
+        if len(set(identifiers)) < len(identifiers):
+            raise ValueError(
+                'Sequence names must be unique, but are not. '
+                'Vamb only uses the identifier (e.g. header before whitespace) as '
+                'sequence identifiers. Verify identifier uniqueness.'
+            )
+
+        self.identifiers = identifiers
+        self.lengths = lengths
+        self.mask = mask
+        self.minlength = minlength
+        self.refhash = _vambtools.hash_refnames(identifiers)
+
+    @property
+    def nseqs(self):
+        "Number of sequences after filtering"
+        return len(self.identifiers)
+
+    def filter_mask(self, mask: Sequence[bool]):
+        "Filter contigs given a mask whose length should be nseqs"
+        assert len(mask) == self.nseqs
+        ind = 0
+        for i in range(len(self.mask)):
+            if self.mask[i]:
+                self.mask[i] &= mask[ind]
+                ind += 1
+
+        self.identifiers = self.identifiers[mask]
+        self.lengths = self.lengths[mask]
+        self.refhash = _vambtools.hash_refnames(self.identifiers)
+
+    def filter_min_length(self, length: int):
+        "Set or reset minlength of this object"
+        if length < self.minlength:
+            return None
+
+        self.filter_mask(self.lengths >= self.minlength)
+        self.minlength = length
+
+
+C = TypeVar('C', bound='Composition')
+
+
+class Composition:
+    """A class containing a CompositionMetaData and its TNF matrix.
+    Current fields are:
+    * metadata: A CompositionMetaData object
+    * matrix: The composition matrix itself
     """
 
-    if minlength < 4:
-        raise ValueError(f'Minlength must be at least 4, not {minlength}')
+    __slots__ = ['metadata', 'matrix']
 
-    raw = _vambtools.PushArray(_np.float32)
-    projected = _vambtools.PushArray(_np.float32)
-    lengths = _vambtools.PushArray(_np.int32)
-    contignames = list()
+    def __init__(self, metadata: CompositionMetaData, matrix: _np.ndarray):
+        assert matrix.dtype == _np.float32
+        assert matrix.shape == (metadata.nseqs, 103)
 
-    entries = _vambtools.byte_iterfasta(filehandle)
+        self.metadata = metadata
+        self.matrix = matrix
 
-    for entry in entries:
-        if len(entry) < minlength:
-            continue
+    def count_bases(self) -> int:
+        return self.metadata.lengths.sum()
 
-        raw.extend(entry.kmercounts(4))
+    @property
+    def nseqs(self) -> int:
+        return self.metadata.nseqs
 
-        if len(raw) > 256000:
-            _convert(raw, projected)
+    def save(self, io: Union[str, BinaryIO]):
+        _np.savez_compressed(
+            io,
+            matrix=self.matrix,
+            identifiers=self.metadata.identifiers,
+            lengths=self.metadata.lengths,
+            mask=self.metadata.mask,
+            minlength=self.metadata.minlength
+        )
 
-        lengths.append(len(entry))
-        contignames.append(entry.header)
+    @classmethod
+    def load(cls, io: Union[str, BinaryIO]):
+        arrs = _np.load(io, allow_pickle=True)
+        metadata = CompositionMetaData(
+            _vambtools.validate_input_array(arrs['identifiers']),
+            _vambtools.validate_input_array(arrs['lengths']),
+            _vambtools.validate_input_array(arrs['mask']),
+            arrs['minlength'].item()
+        )
+        return cls(metadata, _vambtools.validate_input_array(arrs['matrix']))
 
-    # Convert rest of contigs
-    _convert(raw, projected)
-    tnfs_arr = projected.take()
+    def filter_min_length(self, len: int):
+        mask = self.metadata.lengths >= len
+        self.metadata.filter_mask(mask)
+        _vambtools.numpy_inplace_maskarray(self.matrix, mask)
 
-    # Don't use reshape since it creates a new array object with shared memory
-    tnfs_arr.shape = (len(tnfs_arr)//103, 103)
-    lengths_arr = lengths.take()
+    @classmethod
+    def from_file(cls: type[C], filehandle: Iterable[bytes], minlength: int = 100) -> C:
+        """Parses a FASTA file open in binary reading mode, returning Composition.
 
-    return tnfs_arr, contignames, lengths_arr
+        Input:
+            filehandle: Filehandle open in binary mode of a FASTA file
+            minlength: Ignore any references shorter than N bases [100]
+        """
+
+        if minlength < 4:
+            raise ValueError(f'Minlength must be at least 4, not {minlength}')
+
+        raw = _vambtools.PushArray(_np.float32)
+        projected = _vambtools.PushArray(_np.float32)
+        lengths = _vambtools.PushArray(_np.int32)
+        mask = bytearray()  # we convert to Numpy at end
+        contignames = list()
+
+        entries = _vambtools.byte_iterfasta(filehandle)
+
+        for entry in entries:
+            skip = len(entry) < minlength
+            mask.append(not skip)
+
+            if skip:
+                continue
+
+            raw.extend(entry.kmercounts(4))
+
+            if len(raw) > 256000:
+                _convert(raw, projected)
+
+            lengths.append(len(entry))
+            contignames.append(entry.header)
+
+        # Convert rest of contigs
+        _convert(raw, projected)
+        tnfs_arr = projected.take()
+
+        # Don't use reshape since it creates a new array object with shared memory
+        tnfs_arr.shape = (len(tnfs_arr)//103, 103)
+        lengths_arr = lengths.take()
+
+        metadata = CompositionMetaData(
+            _np.array(contignames, dtype=object),
+            lengths_arr,
+            _np.array(mask, dtype=bool),
+            minlength
+        )
+        return cls(metadata, tnfs_arr)
