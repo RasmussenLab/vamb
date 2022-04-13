@@ -101,6 +101,7 @@ def make_dataloader(
 
     # If multiple samples, normalize to sum to 1, else zscore normalize
     if rpkm.shape[1] > 1:
+        assert depthssum is not None # we set it so just above
         rpkm /= depthssum.reshape((-1, 1))
     else:
         _vambtools.zscore(rpkm, axis=0, inplace=True)

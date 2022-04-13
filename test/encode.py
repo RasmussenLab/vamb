@@ -13,10 +13,10 @@ class TestDataLoader(unittest.TestCase):
     rpkm = np.random.random((111, 14)).astype(np.float32)
 
     def nearly_same(self, A, B):
-        self.assertTrue(np.all(np.abs(A - B) < 1e-6))
+        self.assertTrue(np.all(np.abs(A - B) < 1e-5))
 
     def not_nearly_same(self, A, B):
-        self.assertTrue(np.any(np.abs(A - B) > 1e-6))
+        self.assertTrue(np.any(np.abs(A - B) > 1e-4))
 
     def test_bad_args(self):
         # Bad rpkm

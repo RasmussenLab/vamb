@@ -12,16 +12,11 @@ import string
 import torch
 
 import vamb
+import testtools
 
 PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATADIR = os.path.join(PARENTDIR, "test", "data")
 
-def make_randseq(len):
-    name = random.choice(string.ascii_uppercase) + ''.join(random.choice(string.ascii_lowercase))
-    seq = "".join(
-        random.choices("acgtACGTNnyws", weights=[1.0] * 8 + [0.1] * 5, k=len)
-    )
-    return vamb.vambtools.FastaEntry(b'>' + name.encode(), bytearray(seq.encode()))
 
 class TestReader(unittest.TestCase):
     def setUp(self):
@@ -176,7 +171,7 @@ class TestFASTAEntry(unittest.TestCase):
             "".join(ncs): idx
             for (idx, ncs) in enumerate(itertools.product("ACGT", repeat=4))
         }
-        seq = make_randseq(1000)
+        seq = testtools.make_randseq(random.Random(), 900, 1100)
         sequence = seq.sequence.decode()
         manual_counts = np.zeros(256, dtype=int)
         for i in range(len(sequence) - 3):
@@ -434,7 +429,7 @@ class TestWriteClusters(unittest.TestCase):
 
 class TestLoadFasta(unittest.TestCase):
     def test_round_trip(self):
-        recs = [make_randseq(random.randrange(10, 30)) for i in range(10)]
+        recs = [testtools.make_randseq(random.Random(), 10, 30) for i in range(10)]
         bytesio = io.BytesIO()
 
         bytesio.write(b"#header\n")
@@ -448,7 +443,7 @@ class TestLoadFasta(unittest.TestCase):
         bytesio.seek(0)
         fna_2 = vamb.vambtools.loadfasta(bytesio, compress=True)
         for i in fna_2.values():
-            i.sequence = gzip.decompress(i.sequence)
+            i.sequence = bytearray(gzip.decompress(i.sequence))
 
         self.assertEqual({str(i) for i in recs}, {str(i) for i in fna_1.values()})
         self.assertEqual({str(i) for i in recs}, {str(i) for i in fna_2.values()})
@@ -467,7 +462,7 @@ class TestWriteBins(unittest.TestCase):
             binname = ''.join(random.choices(string.ascii_letters, k=12))
             bins[binname] = set()
             for j in range(random.randrange(3,7)):
-                seq = make_randseq(random.randrange(100, 250))
+                seq = testtools.make_randseq(random.Random(), 100, 250)
                 fastadict[seq.header] = seq
                 bins[binname].add(seq.header)
 

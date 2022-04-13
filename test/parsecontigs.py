@@ -5,34 +5,18 @@ import string
 import numpy as np
 
 import vamb
+import testtools
 from vamb.parsecontigs import Composition, CompositionMetaData
 
 class TestReadContigs(unittest.TestCase):
     records = []
     io = io.BytesIO()
-    chars = string.ascii_letters + string.digits
-    symbols = np.array(bytearray(b"acgtACGTnNywsdbK"))
-    weights = np.array([0.12] * 8 + [0.005] * 8)
 
     @classmethod
     def setUpClass(cls):
+        rng = random.Random()
         for i in range(random.randrange(1400, 1500)):
-            name = (
-                b">"
-                + "".join(
-                    random.choices(cls.chars, k=random.randrange(12, 20))
-                ).encode()
-                + b" "
-                + "".join(
-                    random.choices(cls.chars, k=random.randrange(1, 10))
-                ).encode()
-            )
-            seq = bytearray(
-                np.random.choice(
-                    cls.symbols, p=cls.weights, size=random.randrange(400, 600)
-                )
-            )
-            cls.records.append(vamb.vambtools.FastaEntry(name, seq))
+            cls.records.append(testtools.make_randseq(rng, 400, 600))
 
         for i in cls.records:
             cls.io.write(i.format().encode())
