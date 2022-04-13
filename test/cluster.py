@@ -1,7 +1,9 @@
 import unittest
 import numpy as np
+from hashlib import md5
 import random
 import string
+import time
 
 import vamb
 
@@ -52,10 +54,37 @@ class TestClusterer(unittest.TestCase):
     def test_detruction(self):
         copy = self.data.copy()
         clstr = vamb.cluster.ClusterGenerator(self.data)
-        self.assertTrue(np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
+        self.assertTrue(
+            np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
         clstr = vamb.cluster.ClusterGenerator(copy, destroy=True)
         self.assertTrue(np.all(np.abs(copy - clstr.matrix.numpy()) < 1e-6))
-        self.assertTrue(np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
+        self.assertTrue(
+            np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
+
+    @staticmethod
+    def xor_rows_hash(matrix):
+        m = np.frombuffer(matrix.copy().data, dtype=np.uint32)
+        m.shape = matrix.shape
+        v = m[0]
+        for i in range(1, len(m)):
+            v ^= m[i]
+        return md5(v).digest().hex()
+
+    def test_normalization(self):
+        hash_before = md5(self.data.data.tobytes()).digest().hex()
+        gen = vamb.cluster.ClusterGenerator(self.data)
+        self.assertEqual(hash_before, md5(
+            self.data.data.tobytes()).digest().hex())
+        cp = self.data.copy()
+        gen = vamb.cluster.ClusterGenerator(cp, destroy=True)
+        hash_after = md5(cp.data.tobytes()).digest().hex()
+        self.assertNotEqual(hash_before, hash_after)
+
+        # Rows are permuted by the clusterer. We use xor to check the rows
+        # are still essentially the same.
+        before_xor = self.xor_rows_hash(cp)
+        gen = vamb.cluster.ClusterGenerator(cp, destroy=True, normalized=True)
+        self.assertEqual(before_xor, self.xor_rows_hash(cp))
 
     def test_cluster(self):
         x = next(vamb.cluster.ClusterGenerator(self.data))
@@ -67,11 +96,19 @@ class TestClusterer(unittest.TestCase):
 
 
 class TestPairs(unittest.TestCase):
-    data = np.random.random((1024, 40)).astype(np.float32)
+    n_samples = 1024
+    data = np.random.random((n_samples, 40)).astype(np.float32)
 
     @staticmethod
     def randstring(len):
         return "".join(random.choices(string.ascii_letters, k=len))
+
+    def test_too_few_names(self):
+        clstr = vamb.cluster.ClusterGenerator(self.data)
+        nameset = {self.randstring(10) for i in range(len(self.data) - 1)}
+        with self.assertRaises(ValueError):
+            list(vamb.cluster.pairs(clstr, list(nameset)))
+
 
     def test_pairs(self):
         clstr = vamb.cluster.ClusterGenerator(self.data)

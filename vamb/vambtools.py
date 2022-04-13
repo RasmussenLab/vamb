@@ -9,7 +9,7 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator, Union
+from typing import Optional, Iterable, Iterator, Collection, IO, Generator, Union
 from pathlib import PurePath as _PurePath
 
 class PushArray:
@@ -299,7 +299,7 @@ def byte_iterfasta(
     yield FastaEntry(header, bytearray().join(buffer))
 
 def write_clusters(
-    filehandle: TextIO,
+    filehandle: IO[str],
     clusters: Iterable[tuple[str, set[str]]],
     max_clusters:Optional[int]=None,
     min_size: int=1,
@@ -531,7 +531,7 @@ def write_npz(file, array: _np.ndarray):
     """
     _np.savez_compressed(file, array)
 
-def filtercontigs(infile: Iterable[bytes], outfile: TextIO, minlength: int=2000):
+def filtercontigs(infile: Iterable[bytes], outfile: IO[str], minlength: int=2000):
     """Creates new FASTA file with filtered contigs
 
     Inputs:
@@ -548,7 +548,7 @@ def filtercontigs(infile: Iterable[bytes], outfile: TextIO, minlength: int=2000)
         if len(entry) > minlength:
             print(entry.format(), file=outfile)
 
-def concatenate_fasta(outfile: TextIO, inpaths: Iterable[str], minlength: int=2000, rename: bool=True):
+def concatenate_fasta(outfile: IO[str], inpaths: Iterable[str], minlength: int=2000, rename: bool=True):
     """Creates a new FASTA file from input paths, and optionally rename contig headers
     to the pattern "S{sample number}C{contig identifier}".
 

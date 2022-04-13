@@ -27,6 +27,17 @@ class TestParseBam(unittest.TestCase):
         with self.assertRaises(ValueError):
             vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cp, True, 0.97, 1)
 
+    def test_bad_metadata_mask(self):
+        m = self.comp_metadata
+
+        # If last element of mask is False, then the invariants of CompositionMetaData will
+        # not hold after removing the last element of its mask, and that is NOT what we
+        # are testing here.
+        assert m.mask[-1]
+        cp = CompositionMetaData(m.identifiers[:-1], m.lengths[:-1], m.mask[:-1], m.minlength)
+        with self.assertRaises(ValueError):
+            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cp, True, 0.97, 1)
+
     def test_badfile(self):
         with self.assertRaises(FileNotFoundError):
             vamb.parsebam.Abundance.from_files(["noexist"], self.comp_metadata, True, 0.97, 1)
@@ -38,6 +49,7 @@ class TestParseBam(unittest.TestCase):
 
     def test_parse(self):
         self.assertEqual(self.abundance.matrix.shape, (25, 3))
+        self.assertEqual(self.abundance.nseqs, 25)
         self.assertEqual(self.abundance.matrix.dtype, np.float32)
 
     def test_minid(self):
