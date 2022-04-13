@@ -9,7 +9,8 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Iterable, Iterator, Collection, IO, Generator, Union
+from collections.abc import Iterable, Iterator, Collection, Generator
+from typing import Optional, IO, Union
 from pathlib import PurePath as _PurePath
 
 class PushArray:
@@ -28,8 +29,8 @@ class PushArray:
     __slots__ = ['data', 'capacity', 'length']
 
     def __init__(self, dtype, start_capacity: int=1<<16):
-        self.capacity = start_capacity
-        self.data = _np.empty(self.capacity, dtype=dtype)
+        self.capacity: int = start_capacity
+        self.data: _np.ndarray = _np.empty(self.capacity, dtype=dtype)
         self.length = 0
 
     def __len__(self) -> int:
@@ -179,7 +180,7 @@ class Reader:
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, _type, _value, _traceback):
         self.close()
 
     def __iter__(self):
@@ -281,7 +282,7 @@ def byte_iterfasta(
         raise TypeError(errormsg) from None
 
     header = probeline
-    buffer = list()
+    buffer: list[bytes] = list()
 
     # Iterate over lines
     for line in line_iterator:
@@ -366,7 +367,7 @@ def read_clusters(filehandle: Iterable[str], min_size: int=1) -> dict[str, set[s
 
     Output: A {clustername: set(contigs)} dict"""
 
-    contigsof = _collections.defaultdict(set)
+    contigsof: _collections.defaultdict[str, set[str]] = _collections.defaultdict(set)
 
     for line in filehandle:
         stripped = line.strip()
@@ -377,14 +378,14 @@ def read_clusters(filehandle: Iterable[str], min_size: int=1) -> dict[str, set[s
         clustername, contigname = stripped.split('\t')
         contigsof[clustername].add(contigname)
 
-    contigsof = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}
+    contigsof_dict = {cl: co for cl, co in contigsof.items() if len(co) >= min_size}
 
-    return contigsof
+    return contigsof_dict
 
 
 def loadfasta(
     byte_iterator: Iterable[bytes],
-    keep: Optional[Collection]=None,
+    keep: Optional[Collection[str]]=None,
     comment: bytes=b'#',
     compress: bool=False
 ) -> dict[str, FastaEntry]:
@@ -403,7 +404,7 @@ def loadfasta(
     Output: {header: FastaEntry} dict
     """
 
-    entries = dict()
+    entries: dict[str, FastaEntry] = dict()
 
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
@@ -457,7 +458,7 @@ def write_bins(
         raise ValueError("Minsize must be nonnegative")
 
     # Check that all contigs in all bins are in the fastadict
-    allcontigs = set()
+    allcontigs: set[str] = set()
 
     for contigs in bins.values():
         allcontigs.update(set(contigs))
@@ -478,7 +479,7 @@ def write_bins(
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
         # Load bin into a list, decompress that bin if necessary
-        bin = []
+        bin: list[FastaEntry] = []
         for contig in contigs:
             entry = fastadict[contig]
             if compressed:
@@ -561,7 +562,7 @@ def concatenate_fasta(outfile: IO[str], inpaths: Iterable[str], minlength: int=2
     Output: None
     """
 
-    headers = set()
+    headers: set[str] = set()
     for (inpathno, inpath) in enumerate(inpaths):
         with Reader(inpath) as infile:
 
@@ -602,13 +603,13 @@ def _split_bin(
     binname: str,
     headers: Iterable[str],
     separator: str,
-    bysample: _collections.defaultdict =_collections.defaultdict(set)
+    bysample: _collections.defaultdict[str, set[str]] =_collections.defaultdict(set)
 ) -> Generator[tuple[str, set[str]], None, None]:
     "Split a single bin by the prefix of the headers"
 
     bysample.clear()
     for header in headers:
-        if not isinstance(header, str):
+        if not isinstance(header, str): # type: ignore
             raise TypeError(f'Can only split named sequences, not of type {type(header)}')
 
         sample, _, identifier = header.partition(separator)

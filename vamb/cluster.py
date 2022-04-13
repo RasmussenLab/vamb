@@ -14,8 +14,8 @@ from collections import deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
-from typing import Optional, Iterable
-from collections.abc import Sequence
+from typing import Optional
+from collections.abc import Sequence, Iterable
 
 _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
@@ -180,10 +180,10 @@ class ClusterGenerator:
         if cuda:
             torch_matrix = torch_matrix.cuda()
 
-        self.MAXSTEPS = maxsteps
-        self.MINSUCCESSES = minsuccesses
-        self.CUDA = cuda
-        self.RNG = _random.Random(0)
+        self.MAXSTEPS: int = maxsteps
+        self.MINSUCCESSES: int = minsuccesses
+        self.CUDA: bool = cuda
+        self.RNG: _random.Random = _random.Random(0)
 
         self.matrix = torch_matrix
         # This refers to the indices of the original matrix. As we remove points, these
@@ -192,7 +192,7 @@ class ClusterGenerator:
         self.seed = -1
         self.nclusters = 0
         self.peak_valley_ratio = 0.1
-        self.attempts = _deque(maxlen=windowsize)
+        self.attempts: _deque[bool] = _deque(maxlen=windowsize)
         self.successes = 0
 
         histogram, kept_mask = self._init_histogram_kept_mask(len(indices))
@@ -442,7 +442,7 @@ def _wander_medoid(
     kept_mask: _Tensor,
     medoid: int,
     max_attempts: int,
-    rng,
+    rng: _random.Random,
     cuda: bool
 ) -> tuple[int, _Tensor]:
     """Keeps sampling new points within the cluster until it has sampled

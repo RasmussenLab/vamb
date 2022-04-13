@@ -518,7 +518,8 @@ class VAE(_nn.Module):
             batchsteps_set = set(batchsteps)
 
         # Get number of features
-        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
+        # Following line is un-inferrable due to typing problems with DataLoader
+        ncontigs, nsamples = dataloader.dataset.tensors[0].shape # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
 
         if logfile is not None:
