@@ -9,7 +9,8 @@ import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from hashlib import md5 as _md5
-from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator
+from typing import Optional, Iterable, Iterator, Collection, TextIO, Generator, Union
+from pathlib import PurePath as _PurePath
 
 class PushArray:
     """Data structure that allows efficient appending and extending a 1D Numpy array.
@@ -66,10 +67,8 @@ class PushArray:
         return self.data
 
     def clear(self, force: bool=False):
-        "Empties the PushArray. If force is true, also truncates the underlying memory."
+        "Empties the PushArray. Does not clear the underlying memory"
         self.length = 0
-        if force:
-            self._setcapacity(0)
 
 def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -> _np.ndarray:
     """Calculates zscore for an array. A cheap copy of scipy.stats.zscore.
@@ -84,8 +83,8 @@ def zscore(array : _np.ndarray, axis: Optional[int]=None, inplace: bool=False) -
         else: New normalized Numpy-array
     """
 
-    if axis is not None and axis >= array.ndim:
-        raise _np.AxisError(axis)
+    if axis is not None and (axis >= array.ndim or axis < 0):
+        raise _np.AxisError(str(axis))
 
     if inplace and not _np.issubdtype(array.dtype, _np.floating):
         raise TypeError('Cannot convert a non-float array to zscores')
@@ -229,9 +228,6 @@ class FastaEntry:
         sixtymers = range(0, len(self.sequence), width)
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
         return f'>{self.header}\n{spacedseq}'
-
-    def __getitem__(self, index):
-        return self.sequence[index]
 
     def __repr__(self) -> str:
         return f'<FastaEntry {self.header}>'
@@ -412,14 +408,14 @@ def loadfasta(
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
             if compress:
-                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=2))
+                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=0))
 
             entries[entry.header] = entry
 
     return entries
 
 def write_bins(
-    directory,
+    directory: Union[str, _PurePath],
     bins: dict[str, set[str]],
     fastadict: dict[str, FastaEntry],
     compressed: bool=False,
@@ -455,7 +451,7 @@ def write_bins(
         raise NotADirectoryError(parentdir)
 
     if _os.path.isfile(abspath):
-        raise NotADirectoryError(abspath)
+        raise FileExistsError(abspath)
 
     if minsize < 0:
         raise ValueError("Minsize must be nonnegative")
@@ -601,58 +597,6 @@ def hash_refnames(refnames: Iterable[str]) -> bytes:
         hasher.update(refname.encode().rstrip())
 
     return hasher.digest()
-
-def verify_refhash(refnames: Iterable[str], expected: bytes) -> None:
-    "Compares hash of refnames with bytes expected and errors if not the same"    
-    refhash = hash_refnames(refnames)
-    if refhash != expected:
-        raise ValueError(
-            f"Got reference name hash {refhash.hex()}, expected {expected.hex()}. "
-            "Make sure all BAM and FASTA headers are identical "
-            "and in the same order."
-        )
-
-def load_jgi(filehandle: Iterator[str], minlength: int, refhash: Optional[bytes]) -> _np.ndarray:
-    """Load depths from the --outputDepth of jgi_summarize_bam_contig_depths.
-    See https://bitbucket.org/berkeleylab/metabat for more info on that program.
-
-    Usage:
-        with open('/path/to/jgi_depths.tsv') as file:
-            depths = load_jgi(file, 1000, my_hash)
-    Input:
-        filehandle: File handle of open output depth file
-        minlength: Minimum contig length to keep
-        refhash: Hash of references to compare against (None = no check)
-    Output:
-        N_contigs x N_samples Numpy matrix of dtype float32
-    """
-    header = next(filehandle)
-    fields = header.strip().split('\t')
-    if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
-        raise ValueError('Input file format error: First columns should be "contigName,"'
-        '"contigLen" and "totalAvgDepth"')
-
-    columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
-    array = PushArray(_np.float32)
-    identifiers = list()
-
-    for row in filehandle:
-        fields = row.split('\t')
-        # We use float because very large numbers will be printed in scientific notation
-        if float(fields[1]) < minlength:
-            continue
-
-        for col in columns:
-            array.append(float(fields[col]))
-        
-        identifiers.append(fields[0])
-
-    if refhash is not None:
-        verify_refhash(identifiers, refhash)
-
-    result = array.take()
-    result.shape = (len(result) // len(columns), len(columns))
-    return validate_input_array(result)
 
 def _split_bin(
     binname: str,

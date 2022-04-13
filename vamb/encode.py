@@ -24,7 +24,7 @@ from torch import nn as _nn
 from torch import Tensor
 from torch.optim import Adam as _Adam
 from torch.nn.functional import softmax as _softmax
-from torch.utils.data import DataLoader as _DataLoader, dataloader
+from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
 from typing import Optional, TextIO
@@ -71,23 +71,27 @@ def make_dataloader(
         raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
 
     ### Copy arrays and mask them ###
-
     # Copy if not destroy - this way we can have all following operations in-place
     # for simplicity
     if not destroy:
         rpkm = rpkm.copy()
         tnf = tnf.copy()
 
-    mask = tnf.sum(axis=1) != 0
+    # Normalize samples to have same depth
+    sample_depths_sum = rpkm.sum(axis=0)
+    if _np.any(sample_depths_sum == 0):
+        raise ValueError("One or more samples have zero total depth.")
+    rpkm *= 1_000_000 / sample_depths_sum
 
     # If multiple samples, also include nonzero depth as requirement for accept
     # of sequences
+    mask = tnf.sum(axis=1) != 0
     depthssum = None
     if rpkm.shape[1] > 1:
         depthssum = rpkm.sum(axis=1)
         mask &= depthssum != 0
         depthssum = depthssum[mask]
-    assert isinstance(depthssum, _np.ndarray)
+        assert isinstance(depthssum, _np.ndarray)
 
     if mask.sum() < batchsize:
         raise ValueError('Fewer sequences left after filtering than the batch size.')
@@ -95,15 +99,9 @@ def make_dataloader(
     _vambtools.numpy_inplace_maskarray(rpkm, mask)
     _vambtools.numpy_inplace_maskarray(tnf, mask)
 
-    ### Normalization ####
-    # Normalize samples to have same depth
-    sample_depths_sum = rpkm.sum(axis=0)
-    if _np.any(sample_depths_sum == 0):
-        raise ValueError("One or more samples have zero total depth.")
-    rpkm *= 1_000_000 / sample_depths_sum
-
     # If multiple samples, normalize to sum to 1, else zscore normalize
     if rpkm.shape[1] > 1:
+        assert depthssum is not None # we set it so just above
         rpkm /= depthssum.reshape((-1, 1))
     else:
         _vambtools.zscore(rpkm, axis=0, inplace=True)
@@ -376,6 +374,7 @@ class VAE(_nn.Module):
 
             logfile.flush()
 
+        self.eval()
         return data_loader
 
     def encode(self, data_loader) -> _np.ndarray:

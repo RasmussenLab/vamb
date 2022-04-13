@@ -1,61 +1,59 @@
-import sys
 import os
-import pysam
+import unittest
+import io
 import numpy as np
-import shutil
 
-parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-sys.path.append(parentdir)
 import vamb
+import testtools
+from vamb.parsecontigs import CompositionMetaData
 
-inpaths = [os.path.join(parentdir, 'test', 'data', i) for i in ('one.bam', 'two.bam', 'three.bam')]
+class TestParseBam(unittest.TestCase):
 
-file = pysam.AlignmentFile(inpaths[0])
-records = list(file)
-file.close()
+    @classmethod
+    def setUpClass(cls):
+        cls.comp_metadata = CompositionMetaData(
+            np.array(testtools.BAM_NAMES, dtype=object),
+            np.array(testtools.BAM_SEQ_LENS),
+            np.ones(len(testtools.BAM_SEQ_LENS), dtype=bool),
+            2000
+        )
 
-# First some simple tests
-assert [records[i].get_tag('AS') for i in range(10)] == [84, 93, 145, 151, 149, 151, 121, 151, 50, 130]
+        cls.abundance = vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cls.comp_metadata, True, 0.0, 3)
 
-# Check _filter_segments work
-file = pysam.AlignmentFile(inpaths[0])
-above = sum(1 for i in (vamb.parsebam._filter_segments(file, minscore=100, minid=None)))
-file.close()
+    def test_refhash(self):
+        m = self.comp_metadata
+        cp = CompositionMetaData(m.identifiers, m.lengths, m.mask, m.minlength)
+        cp.refhash = b"a" * 32 # write bad refhash
+        with self.assertRaises(ValueError):
+            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cp, True, 0.97, 1)
 
-assert above == 357
+    def test_badfile(self):
+        with self.assertRaises(FileNotFoundError):
+            vamb.parsebam.Abundance.from_files(["noexist"], self.comp_metadata, True, 0.97, 1)
 
-# Check _filter_segments raises an error on missing AS tag
-file = pysam.AlignmentFile(os.path.join(parentdir, 'test', 'data', 'bad.bam'))
-error_iterator = vamb.parsebam._filter_segments(file, minscore=100, minid=None)
+    # Minid too high
+    def test_minid_off(self):
+        with self.assertRaises(ValueError):
+            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, self.comp_metadata, True, 1.01, 1)
 
-try:
-    next(error_iterator)
-except KeyError:
-    pass
-else:
-    raise AssertionError("Should have raised KeyError")
+    def test_parse(self):
+        self.assertEqual(self.abundance.matrix.shape, (25, 3))
+        self.assertEqual(self.abundance.matrix.dtype, np.float32)
 
-# With minscore = None, it shouldn't need to check AS tag
-ok_iterator = vamb.parsebam._filter_segments(file, minscore=None, minid=None)
-records_minus_one = sum(1 for i in ok_iterator)
-assert records_minus_one == 21
+    def test_minid(self):
+        abundance = vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, self.comp_metadata, True, 0.95, 3)
+        self.assertTrue(np.any(abundance.matrix < self.abundance.matrix))
 
-file.close()
+    def test_save_load(self):
+        buf = io.BytesIO()
+        self.abundance.save(buf)
+        buf.seek(0)
 
-# Check _get_contig_rpkms work
-# target_rpkm = vamb.vambtools.read_npz(os.path.join(parentdir, 'test', 'data', 'target_rpkm.npz'))
-# p, arr, length = vamb.parsebam._get_contig_rpkms(inpaths[0], outpath=None, minscore=50, minlength=100, minid=None)
-#
-# assert p == inpaths[0]
-# assert len(arr) == length
-# assert np.all(abs(arr - target_rpkm[:,0]) < 1e-8)
-#
-# # Check _read_bamfiles work
-# inpaths = [os.path.join(parentdir, 'test', 'data', x + '.bam') for x in ('one', 'two', 'three')]
-# rpkm = vamb.parsebam.read_bamfiles(inpaths, minscore=50, minlength=100, minid=None)
-# assert np.all(abs(rpkm - target_rpkm) < 1e-8)
-#
-# rpkm = vamb.parsebam.read_bamfiles(inpaths, dumpdirectory='/tmp/dumpdirectory', minscore=50, minlength=100, minid=None)
-# assert np.all(abs(rpkm - target_rpkm) < 1e-8)
-# shutil.rmtree('/tmp/dumpdirectory')
+        # Bad refhash
+        with self.assertRaises(ValueError):
+            abundance2 = vamb.parsebam.Abundance.load(buf, b'a'*32)
+
+        buf.seek(0)
+        abundance2 = vamb.parsebam.Abundance.load(buf, self.abundance.refhash)
+        self.assertTrue(np.all(abundance2.matrix == self.abundance.matrix))
+        self.assertEqual(abundance2.refhash, self.abundance.refhash)
