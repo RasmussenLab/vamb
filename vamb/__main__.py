@@ -8,7 +8,7 @@ import argparse
 import torch
 import datetime
 import time
-from typing import Optional, TextIO
+from typing import Optional, TextIO, Any
 
 _ncpu = os.cpu_count()
 if _ncpu is None:
@@ -38,120 +38,79 @@ def log(string: str, logfile, indent: int=0):
 def calc_tnf(
     outdir: str,
     fastapath: Optional[str],
-    tnfpath: Optional[str],
-    namespath: Optional[str],
-    lengthspath: Optional[str],
+    npzpath: Optional[str],
     mincontiglength: int,
     logfile: TextIO
-) -> tuple[np.ndarray, list[str], np.ndarray]:
+) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
     log(f'Minimum sequence length: {mincontiglength}', logfile, 1)
-    # If no path to FASTA is given, we load TNF from .npz files
-    if fastapath is None:
-        log(f'Loading TNF from npz array {tnfpath}', logfile, 1)
-        tnfs = vamb.vambtools.read_npz(tnfpath)
-        log(f'Loading contignames from npz array {namespath}', logfile, 1)
-        contignames = vamb.vambtools.read_npz(namespath)
-        log(f'Loading contiglengths from npz array {lengthspath}', logfile, 1)
-        contiglengths = vamb.vambtools.read_npz(lengthspath)
-
-        if not tnfs.dtype == np.float32:
-            raise ValueError('TNFs .npz array must be of float32 dtype')
-
-        if not np.issubdtype(contiglengths.dtype, np.integer):
-            raise ValueError('contig lengths .npz array must be of an integer dtype')
-
-        if not (len(tnfs) == len(contignames) == len(contiglengths)):
-            raise ValueError('Not all of TNFs, names and lengths are same length')
-
-        # Discard any sequence with a length below mincontiglength
-        mask = contiglengths >= mincontiglength
-        tnfs = tnfs[mask]
-        contignames = list(contignames[mask])
-        contiglengths = contiglengths[mask]
-
-    # Else parse FASTA files
+    
+    if npzpath is not None:
+        log(f'Loading composition from npz {npzpath}', logfile, 1)
+        composition = vamb.parsecontigs.Composition.load(npzpath)
+        composition.filter_min_length(mincontiglength)
     else:
+        assert fastapath is not None
         log(f'Loading data from FASTA file {fastapath}', logfile, 1)
-        with vamb.vambtools.Reader(fastapath) as tnffile:
-            ret = vamb.parsecontigs.read_contigs(tnffile, minlength=mincontiglength)
-
-        tnfs, contignames, contiglengths = ret
-        vamb.vambtools.write_npz(os.path.join(outdir, 'tnf.npz'), tnfs)
-        vamb.vambtools.write_npz(os.path.join(outdir, 'lengths.npz'), contiglengths)
+        with vamb.vambtools.Reader(fastapath) as file:
+            composition = vamb.parsecontigs.Composition.from_file(file, minlength=mincontiglength)
+        composition.save(os.path.join(outdir, 'composition.npz'))
 
     elapsed = round(time.time() - begintime, 2)
-    ncontigs = len(contiglengths)
-    nbases = contiglengths.sum()
-
-    if len(set(contignames)) != len(contignames):
-        raise ValueError(
-            'Sequence names must be unique, but are not. '
-            'Vamb only uses the identifier (e.g. header before whitespace) as '
-            'sequence identifiers. Verify identifier uniqueness.'
-        )
-
     print('', file=logfile)
-    log(f'Kept {nbases} bases in {ncontigs} sequences', logfile, 1)
+    log(f'Kept {composition.count_bases()} bases in {composition.nseqs} sequences', logfile, 1)
     log(f'Processed TNF in {elapsed} seconds', logfile, 1)
 
-    assert len(tnfs) == len(contignames) == len(contiglengths)
-    return tnfs, contignames, contiglengths
+    return composition
 
 def calc_rpkm(
     outdir: str,
     bampaths: Optional[list[str]],
     npzpath: Optional[str],
-    mincontiglength: int,
-    refhash: Optional[bytes],
-    lengths: np.ndarray,
+    comp_metadata: vamb.parsecontigs.CompositionMetaData,
+    verify_refhash: bool,
     minid: float,
     nthreads: int,
     logfile: TextIO
-) -> np.ndarray:
+) -> vamb.parsebam.Abundance:
 
     begintime = time.time()
     log('\nLoading depths', logfile)
-    depths = None
+    log(f'Reference hash: {comp_metadata.refhash.hex() if verify_refhash else "None"}', logfile, 1)
+
     # If rpkm is given, we load directly from .npz file
     if npzpath is not None:
         log(f'Loading depths from npz array {npzpath}', logfile, 1)
-        depths = vamb.vambtools.read_npz(npzpath)
-
-        if not depths.dtype == np.float32:
-            raise ValueError('Depths .npz array must be of float32 dtype')
+        abundance = vamb.parsebam.Abundance.load(
+            npzpath,
+            comp_metadata.refhash if verify_refhash else None
+        )
+        # I don't want this check in any constructors of abundance, since the constructors
+        # should be able to skip this check in case comp and abundance are independent.
+        # But when running the main Vamb workflow, we need to assert this.
+        if abundance.nseqs != comp_metadata.nseqs:
+            assert not verify_refhash
+            raise ValueError(
+                f"Loaded abundance has {abundance.nseqs} sequences, "
+                f"but composition has {comp_metadata.nseqs}."
+            )
     
     else:
-        log(f'Reference hash: {refhash if refhash is None else refhash.hex()}', logfile, 1)
-
-    if bampaths is not None:
+        assert bampaths is not None
         log(f'Parsing {len(bampaths)} BAM files with {nthreads} threads', logfile, 1)
-        log(f'Min identity: {minid}', logfile, 1)
-        log(f'Min contig length: {mincontiglength}', logfile, 1)
-        log('\nOrder of columns is:', logfile, 1)
+        log(f'Min identity: {minid}\n', logfile, 1)
+        log('Order of columns is:', logfile, 1)
         log('\n\t'.join(bampaths), logfile, 1)
 
-        depths = vamb.parsebam.read_bamfiles(
-            bampaths, refhash=refhash,
-            minlength=mincontiglength,
-            minid=minid, lengths=lengths, nthreads=nthreads
-        )
-
-        vamb.vambtools.write_npz(os.path.join(outdir, 'rpkm.npz'), depths)
-
-    assert isinstance(depths, np.ndarray)
-    if len(depths) != len(lengths):
-        raise ValueError("Length of TNFs and length of RPKM does not match. Verify the inputs")
+        abundance = vamb.parsebam.Abundance.from_files(bampaths, comp_metadata, verify_refhash, minid, nthreads)
+        abundance.save(os.path.join(outdir, 'abundance.npz'))
 
     elapsed = round(time.time() - begintime, 2)
     print('', file=logfile)
     log(f'Processed RPKM in {elapsed} seconds', logfile, 1)
 
-    if bampaths is not None:
-        assert depths.shape[1] == len(bampaths)
-
-    return depths
+    return abundance
 
 def trainvae(
     outdir: str,
@@ -290,9 +249,15 @@ def write_fasta(
         keep.update(set(contigs))
 
     with vamb.vambtools.Reader(fastapath) as file:
-        fastadict = vamb.vambtools.loadfasta(file, keep=keep)
+        fastadict = vamb.vambtools.loadfasta(file, keep=keep, compress=True)
 
-    vamb.vambtools.write_bins(os.path.join(outdir, "bins"), filtered_clusters, fastadict, maxbins=None)
+    vamb.vambtools.write_bins(
+        os.path.join(outdir, "bins"),
+        filtered_clusters,
+        fastadict,
+        compressed=True,
+        maxbins=None
+    )
 
     ncontigs = sum(map(len, filtered_clusters.values()))
     nfiles = len(filtered_clusters)
@@ -305,9 +270,7 @@ def write_fasta(
 def run(
     outdir: str,
     fastapath: Optional[str],
-    tnfpath: Optional[str],
-    namespath: Optional[str],
-    lengthspath: Optional[str],
+    compositionpath: Optional[str],
     bampaths: Optional[list[str]],
     rpkmpath: Optional[str],
     mincontiglength: int,
@@ -339,18 +302,14 @@ def run(
     begintime = time.time()
 
     # Get TNFs, save as npz
-    tnfs, contignames, contiglengths = calc_tnf(
-        outdir, fastapath, tnfpath, namespath,
-        lengthspath, mincontiglength, logfile
+    composition = calc_tnf(
+        outdir, fastapath, compositionpath, mincontiglength, logfile
     )
 
     # Parse BAMs, save as npz
-    refhash = None if norefcheck else vamb.vambtools.hash_refnames(contignames)
-    rpkms = calc_rpkm(
-        outdir, bampaths, rpkmpath, mincontiglength, refhash,
-        contiglengths, minid, nthreads, logfile
+    abundance = calc_rpkm(
+        outdir, bampaths, rpkmpath, composition.metadata, not norefcheck, minid, nthreads, logfile
     )
-    assert len(rpkms) == len(tnfs)
 
     if noencode:
         elapsed = round(time.time() - begintime, 2)
@@ -359,20 +318,22 @@ def run(
 
     # Train, save model
     mask, latent = trainvae(
-        outdir, rpkms, tnfs, nhiddens, nlatent, alpha, beta,
+        outdir, abundance.matrix, composition.matrix, nhiddens, nlatent, alpha, beta,
         dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile
     )
 
-    del tnfs, rpkms
-    contignames = [c for c, m in zip(contignames, mask) if m]
-    contiglengths = contiglengths[mask]
-    assert len(contignames) == len(contiglengths) == len(latent)
+    # Free up memory
+    comp_metadata = composition.metadata
+    del composition, abundance
+
+    comp_metadata.filter_mask(mask) # type: ignore (typing doesn't work properly with numpy arrays yet)
+    assert comp_metadata.nseqs == len(latent)
 
     # Cluster, save tsv file
     clusterspath = os.path.join(outdir, 'clusters.tsv')
     cluster(
-        clusterspath, latent, contignames, windowsize, minsuccesses, maxclusters,
-            minclustersize, separator, cuda, logfile
+        clusterspath, latent, comp_metadata.identifiers, windowsize, minsuccesses,
+        maxclusters, minclustersize, separator, cuda, logfile
     )
 
     del latent
@@ -380,7 +341,7 @@ def run(
     if minfasta is not None and fastapath is not None:
         # We have already checked fastapath is not None if minfasta is not None.
         write_fasta(
-            outdir, clusterspath, fastapath, contignames, contiglengths, minfasta, logfile
+            outdir, clusterspath, fastapath, comp_metadata.identifiers, comp_metadata.lengths, minfasta, logfile
         )
 
     elapsed = round(time.time() - begintime, 2)
@@ -415,9 +376,7 @@ def main():
     # TNF arguments
     tnfos = parser.add_argument_group(title='TNF input (either fasta or all .npz files required)')
     tnfos.add_argument('--fasta', metavar='', help='path to fasta file')
-    tnfos.add_argument('--tnfs', metavar='', help='path to .npz of TNF')
-    tnfos.add_argument('--names', metavar='', help='path to .npz of names of sequences')
-    tnfos.add_argument('--lengths', metavar='', help='path to .npz of seq lengths')
+    tnfos.add_argument('--composition', metavar='', help='path to .npz of composition')
 
     # RPKM arguments
     rpkmos = parser.add_argument_group(title='RPKM input (either BAMs or .npz required)')
@@ -499,18 +458,12 @@ def main():
         raise NotADirectoryError(parentdir)
 
     # Make sure only one TNF input is there
-    if args.fasta is None:
-        for path in args.tnfs, args.names, args.lengths:
-            if path is None:
-                raise argparse.ArgumentTypeError('Must specify either FASTA or the three .npz inputs')
-            if not os.path.isfile(path):
-                raise FileNotFoundError(path)
-    else:
-        for path in args.tnfs, args.names, args.lengths:
-            if path is not None:
-                raise argparse.ArgumentTypeError('Must specify either FASTA or the three .npz inputs')
-        if not os.path.isfile(args.fasta):
-            raise FileNotFoundError('Not an existing non-directory file: ' + args.fasta)
+    if not (args.composition is None) ^ (args.fasta is None):
+        raise argparse.ArgumentTypeError('Must specify either FASTA or composition path')
+
+    for path in (args.fasta, args.composition):
+        if path is not None and not os.path.isfile(path):
+            raise FileNotFoundError(path)
 
     # Make sure only one RPKM input is there
     if sum(i is not None for i in (args.bamfiles, args.rpkm)) != 1:
@@ -617,9 +570,7 @@ def main():
         run(
             args.outdir,
             args.fasta,
-            args.tnfs,
-            args.names,
-            args.lengths,
+            args.composition,
             args.bamfiles,
             args.rpkm,
             mincontiglength=args.minlength,

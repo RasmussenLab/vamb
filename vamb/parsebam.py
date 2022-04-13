@@ -8,67 +8,108 @@ Usage:
 import pycoverm as _pycoverm
 import os as _os
 import numpy as _np
+from vamb.parsecontigs import CompositionMetaData
 import vamb.vambtools as _vambtools
-from typing import Optional
+from typing import Optional, TypeVar, Union, BinaryIO
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
 
-def read_bamfiles(
-    paths: list[str],
-    refhash: Optional[bytes],
-    minlength: Optional[int],
-    minid: float,
-    lengths: Optional[_np.ndarray],
-    nthreads: int
-) -> _np.ndarray:
-    "Placeholder docstring - replaced after this func definition"
-    # Verify values:
-    if (minlength is None) ^ (lengths is None):
-        raise ValueError("Either none or both of minlength and lengths can be None")
+A = TypeVar('A', bound='Abundance')
 
-    if minid < 0 or minid > 1:
-        raise ValueError(f"minid must be between 0 and 1, not {minid}")
 
-    # Coverage cuts off 75 bp in both sides, so if this is much lower,
-    # numbers will be thrown wildly off.
-    if minlength is not None and minlength < 250:
-        raise ValueError(f"minlength must be at least 250, not {minlength}")
+class Abundance:
+    "Object representing contig abundance. Contains a matrix and refhash."
 
-    for path in paths:
-        if not _pycoverm.is_bam_sorted(path):
-            raise ValueError(f"Path {path} is not sorted by reference.")
+    __slots__ = ['matrix', 'refhash']
 
-    headers, coverage = _pycoverm.get_coverages_from_bam(
-        paths, threads=nthreads, min_identity=minid,
-        # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
-        trim_upper=0.1, trim_lower=0.1
-    )
+    def __init__(self, matrix: _np.ndarray, refhash: bytes):
+        assert matrix.dtype == _np.float32
+        assert matrix.ndim == 2
 
-    # Filter length
-    headers = list(headers)
-    if lengths is not None:
-        if len(lengths) != len(headers):
-            raise ValueError("Lengths of headers and lengths does not match.")
-        mask = _np.array(list(map(lambda x: x >= minlength, lengths)), dtype=bool)
-        headers = [h for (h,m) in zip(headers, mask) if m]
-        _vambtools.numpy_inplace_maskarray(coverage, mask)
+        self.matrix = matrix
+        self.refhash = refhash
 
-    # Check refhash
-    if refhash is not None:
-        _vambtools.verify_refhash(headers, refhash)
+    @property
+    def nseqs(self) -> int:
+        return len(self.matrix)
 
-    return coverage
+    def verify_refhash(self, refhash: bytes) -> None:
+        if self.refhash != refhash:
+            raise ValueError(
+                f"BAM files reference name hash to {self.refhash.hex()}, "
+                f"expected {refhash.hex()}. "
+                "Make sure all BAM and FASTA headers are identical "
+                "and in the same order."
+            )
 
-read_bamfiles.__doc__ = """Calculates mean coverage for BAM files.
+    def save(self, io: Union[str, BinaryIO]):
+        _np.savez_compressed(io, matrix=self.matrix, refhash=self.refhash)
 
-Input:
-    paths: List or tuple of paths to BAM files
-    refhash: Check all BAM references md5-hash to this (None = no check)
-    minlength: Ignore any references shorter than N bases (None = no length filtering)
-    lengths: Array of lengths of each contig. (None = no length filtering)
-    minid: Discard any reads with nucleotide identity less than this
-    nthreads [{}]: Use this number of threads for coverage estimation
+    @classmethod
+    def load(
+        cls: type[A],
+        io: Union[str, BinaryIO],
+        refhash: Optional[bytes]
+    ) -> A:
+        arrs = _np.load(io, allow_pickle=True)
+        abundance = cls(_vambtools.validate_input_array(
+            arrs['matrix']), arrs["refhash"].item())
+        if refhash is not None:
+            abundance.verify_refhash(refhash)
 
-Output: A (n_contigs x n_samples) Numpy array with depths
-""".format(DEFAULT_THREADS)
+        return abundance
+
+    @classmethod
+    def from_files(
+        cls: type[A],
+        paths: list[str],
+        comp_metadata: CompositionMetaData,
+        verify_refhash: bool,
+        minid: float,
+        nthreads: int
+    ) -> A:
+        """Input:
+        paths: List of paths to BAM files
+        comp_metadata: CompositionMetaData of sequence catalogue used to make BAM files
+        verify_refhash: Whether to verify composition and BAM references are the same
+        minid: Discard any reads with nucleotide identity less than this
+        nthreads: Use this number of threads for coverage estimation
+        """
+        if minid < 0 or minid > 1:
+            raise ValueError(f"minid must be between 0 and 1, not {minid}")
+
+        for path in paths:
+            if not _os.path.isfile(path):
+                raise FileNotFoundError(path)
+
+            if not _pycoverm.is_bam_sorted(path):
+                raise ValueError(f"Path {path} is not sorted by reference.")
+
+        headers, coverage = _pycoverm.get_coverages_from_bam(
+            paths, threads=nthreads, min_identity=minid,
+            # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
+            trim_upper=0.1, trim_lower=0.1
+        )
+
+        assert len(headers) == len(coverage)
+        assert coverage.shape[1] == len(paths)
+
+        # Filter length, using comp_metadata's mask, which has been set by minlength
+        if len(comp_metadata.mask) != len(headers):
+            raise ValueError(
+                f"CompositionMetaData was created with {len(comp_metadata.mask)} sequences, "
+                f"but number of refs in BAM files are {len(headers)}."
+            )
+
+        headers = [h for (h, m) in zip(headers, comp_metadata.mask) if m]
+        _vambtools.numpy_inplace_maskarray(coverage, comp_metadata.mask)
+
+        refhash = _vambtools.hash_refnames(headers)
+        abundance = cls(coverage, refhash)
+
+        # Check refhash
+        if verify_refhash:
+            abundance.verify_refhash(comp_metadata.refhash)
+
+        return abundance
