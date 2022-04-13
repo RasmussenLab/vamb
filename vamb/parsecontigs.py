@@ -8,10 +8,11 @@ Usage:
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import Iterable, IO, Union, TypeVar, Sequence
+from collections.abc import Iterable, Sequence
+from typing import IO, Union, TypeVar
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
-_KERNEL = _vambtools.read_npz(
+_KERNEL: _np.ndarray = _vambtools.read_npz(
     _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kernel.npz")
 )
 
@@ -66,7 +67,7 @@ class CompositionMetaData:
         self.refhash = _vambtools.hash_refnames(identifiers)
 
     @property
-    def nseqs(self):
+    def nseqs(self) -> int:
         "Number of sequences after filtering"
         return len(self.identifiers)
 
@@ -160,7 +161,7 @@ class Composition:
         projected = _vambtools.PushArray(_np.float32)
         lengths = _vambtools.PushArray(_np.int32)
         mask = bytearray()  # we convert to Numpy at end
-        contignames = list()
+        contignames: list[str] = list()
 
         entries = _vambtools.byte_iterfasta(filehandle)
 

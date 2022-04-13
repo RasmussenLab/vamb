@@ -31,6 +31,18 @@ class TestClusterer(unittest.TestCase):
         with self.assertRaises(ValueError):
             vamb.cluster.ClusterGenerator(np.random.random((0, 40)))
 
+    # In the code, in __init__ of the cluster generator, the input matrix
+    # is shuffled, and an index array is permuted to keep track of which
+    # indices was which.
+    # This depends on the implementation of shuffling and permute being
+    # the same, which I test here.
+    def test_shuffling(self):
+        cp = self.data.copy()
+        np.random.RandomState(0).shuffle(cp)
+        indices = np.random.RandomState(0).permutation(len(cp))
+        cplike = self.data[indices]
+        self.assertTrue(np.all(cplike == cp))
+
     def test_basics(self):
         clstr = vamb.cluster.ClusterGenerator(self.data)
         self.assertIs(clstr, iter(clstr))

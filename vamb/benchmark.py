@@ -56,12 +56,19 @@ Usage:
 >>> bins.print_matrix(rank=1)
 """
 
-import collections as _collections
-from operator import add as _add
+from collections import Counter, defaultdict
 from itertools import product as _product
 import sys as _sys
 from math import sqrt as _sqrt
 import vamb.vambtools as _vambtools
+from collections.abc import Iterable, Collection, Generator, Sequence, Mapping
+from typing import Optional, TypeVar, IO, Union
+
+C = TypeVar('C', bound='Contig')
+G = TypeVar('G', bound='Genome')
+R = TypeVar('R', bound='Reference')
+B = TypeVar('B', bound='Binning')
+
 
 class Contig:
     """An object representing a contig mapping to a subject at position start:end.
@@ -75,7 +82,7 @@ class Contig:
     """
     __slots__ = ['name', 'subject', 'start', 'end']
 
-    def __init__(self, name, subject, start, end):
+    def __init__(self, name: str, subject: str, start: int, end: int):
         if end <= start:
             raise ValueError('Contig end must be higher than start')
 
@@ -85,15 +92,16 @@ class Contig:
         self.end = end
 
     @classmethod
-    def subjectless(cls, name, length):
+    def subjectless(cls: type[C], name: str, length: int) -> C:
         "Instantiate with only name and length"
         return cls(name, name, 0, length)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Contig({self.name}, subject={self.subject}, {self.start}:{self.end})'
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.end - self.start
+
 
 class Genome:
     """A set of contigs known to come from the same organism.
@@ -105,48 +113,50 @@ class Genome:
     """
     __slots__ = ['name', 'breadth', 'contigs']
 
-    def __init__(self, name):
+    def __init__(self, name: str):
         self.name = name
-        self.contigs = set()
+        self.contigs: set[Contig] = set()
         self.breadth = 0
 
-    def add(self, contig):
+    def add(self, contig: Contig) -> None:
         self.contigs.add(contig)
 
-    def remove(self, contig):
+    def remove(self, contig: Contig) -> None:
         self.contigs.remove(contig)
 
-    def discard(self, contig):
+    def discard(self, contig: Contig) -> None:
         self.contigs.discard(contig)
 
     @property
-    def ncontigs(self):
+    def ncontigs(self) -> int:
         return len(self.contigs)
 
     @staticmethod
-    def getbreadth(contigs):
+    def getbreadth(contigs: Iterable[Contig]) -> int:
         "This calculates the total number of bases covered at least 1x in ANY Genome."
-        bysubject = _collections.defaultdict(list)
+        bysubject: dict[str, list[Contig]] = defaultdict(list)
         for contig in contigs:
             bysubject[contig.subject].append(contig)
 
         breadth = 0
         for contiglist in bysubject.values():
             contiglist.sort(key=lambda contig: contig.start)
-            rightmost_end = float('-inf')
+            rightmost_end = -1
 
             for contig in contiglist:
-                breadth += max(contig.end, rightmost_end) - max(contig.start, rightmost_end)
+                breadth += max(contig.end, rightmost_end) - \
+                    max(contig.start, rightmost_end)
                 rightmost_end = max(contig.end, rightmost_end)
 
         return breadth
 
-    def update_breadth(self):
+    def update_breadth(self) -> None:
         "Updates the breadth of the genome"
         self.breadth = self.getbreadth(self.contigs)
 
     def __repr__(self):
         return f'Genome({self.name}, ncontigs={self.ncontigs}, breadth={self.breadth})'
+
 
 class Reference:
     """A set of Genomes known to represent the ground truth for binning.
@@ -168,10 +178,14 @@ class Reference:
     """
 
     # Instantiate with any iterable of Genomes
-    def __init__(self, genomes, taxmaps=list()):
-        self.genomes = dict() # genome_name : genome dict
-        self.contigs = dict() # contig_name : contig dict
-        self.genomeof = dict() # contig : genome dict
+    def __init__(
+        self,
+        genomes: Collection[Genome],
+        taxmaps: list[dict[str, str]] = list()
+    ):
+        self.genomes: dict[str, Genome] = dict()  # genome_name : genome dict
+        self.contigs: dict[str, Contig] = dict()  # contig_name : contig dict
+        self.genomeof: dict[Contig, Genome] = dict()  # contig : genome dict
 
         # This is a list of dicts: The first one maps genomename to name of next taxonomic level
         # The second maps name of second level to name of third level etc.
@@ -182,18 +196,19 @@ class Reference:
 
         # Check that there are no genomes with same name
         if len({genome.name for genome in genomes_backup}) != len(genomes_backup):
-            raise ValueError('Multiple genomes with same name not allowed in Reference.')
+            raise ValueError(
+                'Multiple genomes with same name not allowed in Reference.')
 
         for genome in genomes_backup:
             self.add(genome)
 
         self.breadth = sum(genome.breadth for genome in genomes_backup)
 
-    def load_tax_file(self, line_iterator, comment='#'):
+    def load_tax_file(self, line_iterator: Iterable[str], comment: str = '#') -> None:
         """Load in a file with N+1 columns, the first being genomename, the next being
         the equivalent taxonomic annotation at different ranks
         Replaces the Reference's taxmaps list."""
-        taxmaps = list()
+        taxmaps: list[dict[str, str]] = list()
         isempty = True
 
         for line in line_iterator:
@@ -206,18 +221,20 @@ class Reference:
                 if not clades:
                     raise ValueError('Must have at least two columns')
 
-                for i in clades:
+                for _ in clades:
                     taxmaps.append(dict())
                 isempty = False
 
             if genomename in taxmaps[0]:
-                raise KeyError(f"Genome name {genomename} present more than once in taxfile")
+                raise KeyError(
+                    f"Genome name {genomename} present more than once in taxfile")
 
             previousrank = genomename
             for nextrank, rankdict in zip(clades, taxmaps):
                 existing = rankdict.get(previousrank, nextrank)
                 if existing != nextrank:
-                    raise KeyError(f"Rank {previousrank} mapped to both {existing} and {nextrank}")
+                    raise KeyError(
+                        f"Rank {previousrank} mapped to both {existing} and {nextrank}")
 
                 rankdict[previousrank] = nextrank
                 previousrank = nextrank
@@ -225,28 +242,29 @@ class Reference:
         self.taxmaps = taxmaps
 
     @property
-    def ngenomes(self):
+    def ngenomes(self) -> int:
         return len(self.genomes)
 
     @property
-    def ncontigs(self):
+    def ncontigs(self) -> int:
         return len(self.contigs)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         ranks = len(self.taxmaps) + 1
         return f'Reference(ngenomes={self.ngenomes}, ncontigs={self.ncontigs}, ranks={ranks})'
 
     @staticmethod
-    def _parse_subject_line(line):
+    def _parse_subject_line(line: str) -> tuple[Contig, str]:
         "Returns contig, genome_name from a reference file line with subjects"
         contig_name, genome_name, subject, start, end = line[:-1].split('\t')
         start = int(start)
-        end = int(end) + 1 # semi-open interval used in internals, like range()
+        # semi-open interval used in internals, like range()
+        end = int(end) + 1
         contig = Contig(contig_name, subject, start, end)
         return contig, genome_name
 
     @staticmethod
-    def _parse_subjectless_line(line):
+    def _parse_subjectless_line(line: str) -> tuple[Contig, str]:
         "Returns contig, genome_name from a reference file line without subjects"
         contig_name, genome_name, length = line[:-1].split('\t')
         length = int(length)
@@ -254,11 +272,11 @@ class Reference:
         return contig, genome_name
 
     @classmethod
-    def _parse_file(cls, filehandle, subjectless=False):
+    def _parse_file(cls: type[R], filehandle: Iterable[str], subjectless: bool = False) -> list[Genome]:
         "Returns a list of genomes from a reference file"
         function = cls._parse_subjectless_line if subjectless else cls._parse_subject_line
 
-        genomes = dict()
+        genomes: dict[str, Genome] = dict()
         for line in filehandle:
             # Skip comments
             if line.startswith('#'):
@@ -272,14 +290,14 @@ class Reference:
             genome.add(contig)
 
         # Update all genomes
-        genomes = list(genomes.values())
-        for genome in genomes:
+        genome_list = list(genomes.values())
+        for genome in genome_list:
             genome.update_breadth()
 
-        return genomes
+        return genome_list
 
     @classmethod
-    def from_file(cls, filehandle, subjectless=False):
+    def from_file(cls: type[R], filehandle: Iterable[str], subjectless: bool = False) -> R:
         """Instantiate a Reference from an open filehandle.
         "subjectless" refers to the style of reference file: If true, assumes columns are
         [contig_name, genome_name, contig_length]. If false, assume
@@ -293,18 +311,19 @@ class Reference:
         genomes = cls._parse_file(filehandle, subjectless=subjectless)
         return cls(genomes)
 
-    def add(self, genome):
+    def add(self, genome: Genome) -> None:
         "Adds a genome to this Reference. If already present, do nothing."
         if genome.name not in self.genomes:
             self.genomes[genome.name] = genome
             for contig in genome.contigs:
                 if contig.name in self.contigs:
-                    raise KeyError(f"Contig name '{contig.name}' multiple times in Reference.")
+                    raise KeyError(
+                        f"Contig name '{contig.name}' multiple times in Reference.")
 
                 self.contigs[contig.name] = contig
                 self.genomeof[contig] = genome
 
-    def remove(self, genome):
+    def remove(self, genome: Genome) -> None:
         "Removes a genome from this Reference, raising an error if it is not present."
         del self.genomes[genome.name]
 
@@ -312,10 +331,11 @@ class Reference:
             del self.contigs[contig.name]
             del self.genomeof[contig]
 
-    def discard(self, genome):
+    def discard(self, genome: Genome) -> None:
         "Remove a genome if it is present, else do nothing."
         if genome.name in self.genomes:
             self.remove(genome)
+
 
 class Binning:
     """The result of a set of clusters applied to a Reference.
@@ -356,19 +376,19 @@ class Binning:
     _DEFAULTPRECISIONS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
 
     @property
-    def nbins(self):
+    def nbins(self) -> int:
         return len(self.contigsof)
 
     @property
-    def ncontigs(self):
+    def ncontigs(self) -> int:
         return len(self.binof)
 
-    def _iter_intersections(self, genome):
+    def _iter_intersections(self, genome: Genome) -> Generator[tuple[str, int], None, None]:
         """Given a genome, return a generator of (bin_name, intersection) for
         all binning bins with a nonzero recall and precision.
         """
         # Get set of all binning bin names with contigs from that genome
-        bin_names = set()
+        bin_names: set[str] = set()
         for contig in genome.contigs:
             bin_name = self.binof.get(contig)
             if bin_name is None:
@@ -379,44 +399,46 @@ class Binning:
                 bin_names.add(bin_name)
 
         for bin_name in bin_names:
-            intersecting_contigs = genome.contigs.intersection(self.contigsof[bin_name])
+            intersecting_contigs = genome.contigs.intersection(
+                self.contigsof[bin_name])
             intersection = Genome.getbreadth(intersecting_contigs)
             yield bin_name, intersection
 
-    def confusion_matrix(self, genome, bin_name):
+    def confusion_matrix(self, genome: Genome, bin_name: str) -> tuple[int, int, int, int]:
         "Given a genome and a binname, returns TP, TN, FP, FN"
 
         true_positives = self.intersectionsof[genome].get(bin_name, 0)
         false_positives = self.breadthof[bin_name] - true_positives
         false_negatives = genome.breadth - true_positives
-        true_negatives = self.reference.breadth - false_negatives - false_positives + true_positives
+        true_negatives = self.reference.breadth - \
+            false_negatives - false_positives + true_positives
 
         return true_positives, true_negatives, false_positives, false_negatives
 
-    def mcc(self, genome, bin_name):
+    def mcc(self, genome: Genome, bin_name: str) -> float:
         "Calculate Matthew's correlation coefficient between a genome and a bin."
 
         tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
         mcc_num = tp * tn - fp * fn
         mcc_den = (tp + fp) * (tp + fn)
         mcc_den *= (tn + fp) * (tn + fn)
-        return 0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
+        return 0.0 if mcc_den == 0 else mcc_num / _sqrt(mcc_den)
 
-    def f1(self, genome, bin_name):
+    def f1(self, genome: Genome, bin_name: str) -> float:
         "Calculate F1 score between genome and a bin"
 
-        tp, tn, fp, fn = self.confusion_matrix(genome, bin_name)
+        tp, _, fp, fn = self.confusion_matrix(genome, bin_name)
         return 2*tp / (2*tp + fp + fn)
 
-    def _getseen(self, recprecof):
-        """Make a {genome: isseen} dict, where isseen is a boolean vector
-        (implemented as an integer), 1 if a genome is seen at that recall, prec level,
+    def _getseen(self, recprecof: dict[str, dict[str, tuple[float, float]]]) -> dict[str, int]:
+        """Make a {clade: isseen} dict, where isseen is a boolean vector
+        (implemented as an integer), 1 if a clade is seen at that recall, prec level,
         0 otherwise
         """
-        isseen = dict()
+        isseen: dict[str, int] = dict()
         for genome, _dict in recprecof.items():
             seen = 0
-            for binname, (recall, precision) in _dict.items():
+            for (recall, precision) in _dict.values():
                 for i, (min_recall, min_precision) in enumerate(_product(self.recalls, self.precisions)):
                     if recall < min_recall:
                         break
@@ -426,7 +448,11 @@ class Binning:
             isseen[genome] = seen
         return isseen
 
-    def _accumulate(self, seen, counts):
+    def _accumulate(
+        self,
+        seen: dict[str, int],
+        counts: Counter[tuple[float, float]]
+    ) -> None:
         "Given a 'seen' dict, make a dict of counts at each threshold level"
         nsums = (len(self.recalls) * len(self.precisions))
         sums = [0] * nsums
@@ -437,26 +463,28 @@ class Binning:
         for i, (recall, precision) in enumerate(_product(self.recalls, self.precisions)):
             counts[(recall, precision)] = sums[i]
 
-    def _get_prec_rec_dict(self):
-        recprecof = _collections.defaultdict(dict)
+    def _get_prec_rec_dict(self) -> dict[str, dict[str, tuple[float, float]]]:
+        recprecof: defaultdict[str, dict[str,
+                                         tuple[float, float]]] = defaultdict(dict)
         for genome, intersectiondict in self.intersectionsof.items():
             for binname in intersectiondict:
-                tp, tn, fp, fn = self.confusion_matrix(genome, binname)
+                tp, _, fp, fn = self.confusion_matrix(genome, binname)
                 recall = tp / (tp + fn)
                 precision = tp / (tp + fp)
                 recprecof[genome.name][binname] = (recall, precision)
 
         return recprecof
 
-    def _getcounts(self):
+    def _getcounts(self) -> list[Counter[tuple[float, float]]]:
         # One count per rank (+1 for inclusive "genome" rank)
-        counts = [_collections.Counter() for i in range(len(self.reference.taxmaps) + 1)]
+        counts: list[Counter[tuple[float, float]]] = [
+            Counter() for _ in range(len(self.reference.taxmaps) + 1)]
         recprecof = self._get_prec_rec_dict()
         seen = self._getseen(recprecof)
         # Calculate counts for each taxonomic level
         for counter, taxmap in zip(counts, self.reference.taxmaps):
             self._accumulate(seen, counter)
-            newseen = dict()
+            newseen: dict[str, int] = dict()
             for clade, v in seen.items():
                 newclade = taxmap[clade]
                 newseen[newclade] = newseen.get(newclade, 0) | v
@@ -466,29 +494,41 @@ class Binning:
 
         return counts
 
-    def __init__(self, contigsof, reference, recalls=_DEFAULTRECALLS,
-              precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True,
-              binsplit_separator=None, minsize=None, mincontigs=None):
+    def __init__(
+        self,
+        contigsof: Mapping[str, Collection[str]],
+        reference: Reference,
+        recalls: Sequence[float] = _DEFAULTRECALLS,
+        precisions: Sequence[float] = _DEFAULTPRECISIONS,
+        checkpresence: bool = True,
+        disjoint: bool = True,
+        binsplit_separator: Optional[str] = None,
+        minsize: Optional[int] = None,
+        mincontigs: Optional[int] = None
+    ):
         # See class docstring for explanation of arguments
 
         # Checkpresence enforces that each contig in a bin is also in the reference,
         # disjoint enforces that each contig is only present in one bin.
-        if not isinstance(reference, Reference):
+        if not isinstance(reference, Reference):  # type: ignore
             raise ValueError('reference must be a Reference')
 
         self.precisions = tuple(sorted(precisions))
         self.recalls = tuple(sorted(recalls))
         self.reference = reference
 
-        self.contigsof = dict() # bin_name: {contigs} dict
-        self.binof = dict() # contig: bin_name or {bin_names} dict
-        self.breadthof = dict() # bin_name: int dict
-        self._parse_bins(contigsof, checkpresence, disjoint, binsplit_separator, minsize, mincontigs)
+        # bin_name: {contigs} dict
+        self.contigsof: dict[str, set[Contig]] = dict()
+        # contig: bin_name or {bin_names} dict
+        self.binof: dict[Contig, Union[str, set[str]]] = dict()
+        self.breadthof: dict[str, int] = dict()  # bin_name: int dict
+        self._parse_bins(contigsof, checkpresence, disjoint,
+                         binsplit_separator, minsize, mincontigs)
         self.breadth = sum(self.breadthof.values())
 
         # intersectionsof[genome] = {genome: {binname: tp, binname: tp ... }}
         # for all bins with nonzero true positives
-        intersectionsof = dict()
+        intersectionsof: dict[Genome, dict[str, int]] = dict()
         for genome in reference.genomes.values():
             intersectionsof[genome] = dict()
             for bin_name, intersection in self._iter_intersections(genome):
@@ -498,21 +538,30 @@ class Binning:
         # Set counts
         self.counters = self._getcounts()
 
-    def _parse_bins(self, contigsof, checkpresence, disjoint, binsplit_separator, minsize, mincontigs):
+    def _parse_bins(
+        self,
+        contigsof: Mapping[str, Collection[str]],
+        checkpresence: bool,
+        disjoint: bool,
+        binsplit_separator: Optional[str],
+        minsize: Optional[int],
+        mincontigs: Optional[int]
+    ):
         "Fills self.binof, self.contigsof and self.breadthof during instantiation"
-
         if binsplit_separator is not None:
-            contigsof = dict(_vambtools.binsplit(contigsof, binsplit_separator))
+            contigsof = dict(_vambtools.binsplit(
+                contigsof.items(), binsplit_separator))
 
         if minsize is not None or mincontigs is not None:
             minsize = 1 if minsize is None else minsize
             mincontigs = 1 if mincontigs is None else mincontigs
-            contigsof = filter_clusters(contigsof, self.reference, minsize, mincontigs, checkpresence=checkpresence)
+            contigsof = filter_clusters(
+                contigsof, self.reference, minsize, mincontigs, checkpresence=checkpresence)
 
         for bin_name, contig_names in contigsof.items():
-            contigset = set()
+            contigset: set[Contig] = set()
             # This stores each contig by their true genome name.
-            contigsof_genome = _collections.defaultdict(list)
+            contigsof_genome: dict[str, list[Contig]] = defaultdict(list)
 
             for contig_name in contig_names:
                 contig = self.reference.contigs.get(contig_name)
@@ -520,7 +569,8 @@ class Binning:
                 # Check that the contig is in the reference
                 if contig is None:
                     if checkpresence:
-                        raise KeyError(f'Contig {contig_name} not in reference.')
+                        raise KeyError(
+                            f'Contig {contig_name} not in reference.')
                     else:
                         continue
 
@@ -530,11 +580,12 @@ class Binning:
                     self.binof[contig] = bin_name
                 else:
                     if disjoint:
-                        raise KeyError(f'Contig {contig_name} found in multiple bins')
+                        raise KeyError(
+                            f'Contig {contig_name} found in multiple bins')
                     elif isinstance(existing, str):
                         self.binof[contig] = {existing, bin_name}
                     else:
-                        self.binof[contig].add(bin_name)
+                        existing.add(bin_name)
 
                 contigset.add(contig)
                 genome = self.reference.genomeof[self.reference.contigs[contig_name]]
@@ -550,16 +601,25 @@ class Binning:
             self.breadthof[bin_name] = breadth
 
     @classmethod
-    def from_file(cls, filehandle, reference, recalls=_DEFAULTRECALLS,
-                  precisions=_DEFAULTPRECISIONS, checkpresence=True, disjoint=True,
-                  binsplit_separator=None, minsize=None, mincontigs=None):
-        contigsof = dict()
+    def from_file(
+        cls: type[B],
+        filehandle: Iterable[str],
+        reference: Reference,
+        recalls: Sequence[float] = _DEFAULTRECALLS,
+        precisions: Sequence[float] = _DEFAULTPRECISIONS,
+        checkpresence: bool = True,
+        disjoint: bool = True,
+        binsplit_separator: Optional[str] = None,
+        minsize: Optional[int] = None,
+        mincontigs: Optional[int] = None
+    ) -> B:
+        contigsof: dict[str, list[str]] = dict()
         for line in filehandle:
             if line.startswith('#'):
                 continue
 
             line = line.rstrip()
-            bin_name, tab, contig_name = line.partition('\t')
+            bin_name, _tab, contig_name = line.partition('\t')
 
             if bin_name not in contigsof:
                 contigsof[bin_name] = [contig_name]
@@ -569,38 +629,48 @@ class Binning:
         return cls(contigsof, reference, recalls, precisions, checkpresence, disjoint,
                    binsplit_separator, minsize, mincontigs)
 
-    def print_matrix(self, rank, file=_sys.stdout):
+    def print_matrix(self, rank: int, file: IO[str] = _sys.stdout) -> None:
         """Prints the recall/precision number of bins to STDOUT."""
 
         if rank >= len(self.counters):
             raise IndexError("Taxonomic rank out of range")
 
         print('\tRecall', file=file)
-        print('Prec.', '\t'.join([str(r) for r in self.recalls]), sep='\t', file=file)
+        print('Prec.', '\t'.join([str(r)
+              for r in self.recalls]), sep='\t', file=file)
 
         for min_precision in self.precisions:
-            row = [self.counters[rank][(min_recall, min_precision)] for min_recall in self.recalls]
-            print(min_precision, '\t'.join([str(i) for i in row]), sep='\t', file=file)
+            row = [self.counters[rank][(min_recall, min_precision)]
+                   for min_recall in self.recalls]
+            print(min_precision, '\t'.join([str(i)
+                  for i in row]), sep='\t', file=file)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f'Binning({self.ncontigs}/{self.reference.ncontigs} contigs, '
             f'ReferenceID={hex(id(self.reference))})'
         )
 
-    def summary(self, precision=0.9, recalls=None):
+    def summary(self, precision: float = 0.9, recalls: Optional[Sequence[float]] = None) -> list[list[float]]:
         if recalls is None:
             recalls = self.recalls
         return [[counter[(recall, precision)] for recall in recalls] for counter in self.counters]
 
-def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True):
+
+def filter_clusters(
+    clusters: Mapping[str, Collection[str]],
+    reference: Reference,
+    minsize: int,
+    mincontigs: int,
+    checkpresence: bool = True
+):
     """Creates a shallow copy of clusters, but without any clusters with a total size
     smaller than minsize, or fewer contigs than mincontigs.
     If checkpresence is True, raise error if a contig is not present in reference, else
     ignores it when counting cluster size.
     """
 
-    filtered = dict()
+    filtered: dict[str, Collection[str]] = dict()
     for binname, contignames in clusters.items():
         if len(contignames) < mincontigs:
             continue
@@ -617,6 +687,6 @@ def filter_clusters(clusters, reference, minsize, mincontigs, checkpresence=True
                 pass
 
         if size >= minsize:
-            filtered[binname] = contignames.copy()
+            filtered[binname] = [i for i in contignames]
 
     return filtered
