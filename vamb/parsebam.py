@@ -10,7 +10,7 @@ import os as _os
 import numpy as _np
 from vamb.parsecontigs import CompositionMetaData
 import vamb.vambtools as _vambtools
-from typing import Optional, TypeVar, Union, BinaryIO
+from typing import Optional, TypeVar, Union, IO
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -43,13 +43,13 @@ class Abundance:
                 "and in the same order."
             )
 
-    def save(self, io: Union[str, BinaryIO]):
+    def save(self, io: Union[str, IO[bytes]]):
         _np.savez_compressed(io, matrix=self.matrix, refhash=self.refhash)
 
     @classmethod
     def load(
         cls: type[A],
-        io: Union[str, BinaryIO],
+        io: Union[str, IO[bytes]],
         refhash: Optional[bytes]
     ) -> A:
         arrs = _np.load(io, allow_pickle=True)

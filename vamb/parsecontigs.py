@@ -8,7 +8,7 @@ Usage:
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
-from typing import Iterable, BinaryIO, Union, TypeVar, Sequence
+from typing import Iterable, IO, Union, TypeVar, Sequence
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL = _vambtools.read_npz(
@@ -118,7 +118,7 @@ class Composition:
     def nseqs(self) -> int:
         return self.metadata.nseqs
 
-    def save(self, io: Union[str, BinaryIO]):
+    def save(self, io: Union[str, IO[bytes]]):
         _np.savez_compressed(
             io,
             matrix=self.matrix,
@@ -129,7 +129,7 @@ class Composition:
         )
 
     @classmethod
-    def load(cls, io: Union[str, BinaryIO]):
+    def load(cls, io: Union[str, IO[bytes]]):
         arrs = _np.load(io, allow_pickle=True)
         metadata = CompositionMetaData(
             _vambtools.validate_input_array(arrs['identifiers']),

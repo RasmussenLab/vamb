@@ -27,7 +27,7 @@ from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.vambtools as _vambtools
-from typing import Optional, TextIO
+from typing import Optional, IO, Union
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
@@ -440,7 +440,7 @@ class VAE(_nn.Module):
         _torch.save(state, filehandle)
 
     @classmethod
-    def load(cls, path: str, cuda:bool=False, evaluate:bool=True):
+    def load(cls, path: Union[IO[bytes], str], cuda:bool=False, evaluate:bool=True):
         """Instantiates a VAE from a model file.
 
         Inputs:
@@ -480,8 +480,8 @@ class VAE(_nn.Module):
         nepochs: int=500,
         lrate: float=1e-3,
         batchsteps: Optional[list[int]]=[25, 75, 150, 300],
-        logfile: Optional[TextIO]=None,
-        modelfile: Optional[str]=None
+        logfile: Optional[IO[str]]=None,
+        modelfile: Union[None, str, IO[bytes]]=None
     ):
         """Train the autoencoder from depths array and tnf array.
 

@@ -522,9 +522,9 @@ def pairs(
         Generator yielding ("1", {label1, label2 ... }) for each cluster
     """
     maxindex = clustergenerator.indices.max()
-    if len(labels) < maxindex:
+    if len(labels) <= maxindex:
         raise ValueError(
-            f"Cluster generator contains point no {maxindex}, "
+            f"Cluster generator contains point with index {maxindex}, "
             f"but was given only {len(labels)} labels"
         )
 

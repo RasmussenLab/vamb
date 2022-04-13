@@ -8,7 +8,7 @@ import argparse
 import torch
 import datetime
 import time
-from typing import Optional, TextIO, Any
+from typing import Optional, IO, Any
 
 _ncpu = os.cpu_count()
 if _ncpu is None:
@@ -40,7 +40,7 @@ def calc_tnf(
     fastapath: Optional[str],
     npzpath: Optional[str],
     mincontiglength: int,
-    logfile: TextIO
+    logfile: IO[str]
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     log('\nLoading TNF', logfile, 0)
@@ -72,7 +72,7 @@ def calc_rpkm(
     verify_refhash: bool,
     minid: float,
     nthreads: int,
-    logfile: TextIO
+    logfile: IO[str]
 ) -> vamb.parsebam.Abundance:
 
     begintime = time.time()
@@ -126,7 +126,7 @@ def trainvae(
     nepochs: int,
     lrate: float,
     batchsteps: list[int],
-    logfile: TextIO
+    logfile: IO[str]
 ) -> tuple[np.ndarray, np.ndarray]:
 
     begintime = time.time()
@@ -178,7 +178,7 @@ def cluster(
     minclustersize: int,
     separator: str,
     cuda: bool,
-    logfile: TextIO
+    logfile: IO[str]
 ) -> None:
     begintime = time.time()
 
@@ -224,7 +224,7 @@ def write_fasta(
     contignames: list[str],
     contiglengths: np.ndarray,
     minfasta: int,
-    logfile: TextIO
+    logfile: IO[str]
 ) -> None:
     begintime = time.time()
 
@@ -294,7 +294,7 @@ def run(
     separator: str,
     maxclusters: int,
     minfasta: int,
-    logfile: TextIO
+    logfile: IO[str]
 ):
 
     log('Starting Vamb version ' + '.'.join(map(str, vamb.__version__)), logfile)
