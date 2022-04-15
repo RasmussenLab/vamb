@@ -387,7 +387,7 @@ def loadfasta(
     byte_iterator: Iterable[bytes],
     keep: Optional[Collection[str]]=None,
     comment: bytes=b'#',
-    compress: bool=False
+    compress: bool=True
 ) -> dict[str, FastaEntry]:
     """Loads a FASTA file into a dictionary.
 
@@ -399,7 +399,7 @@ def loadfasta(
         byte_iterator: Iterator of binary lines of FASTA file
         keep: Keep entries with headers in `keep`. If None, keep all entries
         comment: Ignore lines beginning with any whitespace + comment
-        compress: Keep sequences compressed [False]
+        compress: Keep sequences compressed [True]
 
     Output: {header: FastaEntry} dict
     """
@@ -409,7 +409,7 @@ def loadfasta(
     for entry in byte_iterfasta(byte_iterator, comment=comment):
         if keep is None or entry.header in keep:
             if compress:
-                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=0))
+                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=1))
 
             entries[entry.header] = entry
 
@@ -419,7 +419,7 @@ def write_bins(
     directory: Union[str, _PurePath],
     bins: dict[str, set[str]],
     fastadict: dict[str, FastaEntry],
-    compressed: bool=False,
+    compressed: bool=True,
     maxbins: Optional[int]=250,
     minsize: int=0
 ):
@@ -430,7 +430,7 @@ def write_bins(
         bins: {'name': {set of contignames}} dictionary (can be loaded from
         clusters.tsv using vamb.cluster.read_clusters)
         fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
-        compressed: Sequences in dict are compressed [False]
+        compressed: Sequences in dict are compressed [True]
         maxbins: None or else raise an error if trying to make more bins than this [250]
         minsize: Minimum number of nucleotides in cluster to be output [0]
 
