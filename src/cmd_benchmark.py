@@ -1,13 +1,14 @@
 #!/usr/bin/python
 import sys
 import argparse
+import vamb
+import os
 
 parser = argparse.ArgumentParser(
     description="""Command-line benchmark utility.""",
     formatter_class=argparse.RawDescriptionHelpFormatter,
     add_help=False)
 
-parser.add_argument('vambpath', help='Path to vamb directory')
 parser.add_argument('clusterspath', help='Path to clusters.tsv')
 parser.add_argument('refpath', help='Path to reference file')
 parser.add_argument('--tax', dest='taxpath', help='Path to taxonomic maps')
@@ -21,10 +22,6 @@ if len(sys.argv) == 1:
     sys.exit()
 
 args = parser.parse_args()
-
-sys.path.append(args.vambpath)
-import vamb
-import os
 
 # Check that files exist
 for path in args.clusterspath, args.refpath, args.taxpath:

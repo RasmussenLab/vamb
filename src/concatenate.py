@@ -4,6 +4,7 @@ import sys
 import os
 import argparse
 import gzip
+import vamb
 
 parser = argparse.ArgumentParser(
     description="""Creates the input FASTA file for Vamb.
@@ -24,9 +25,6 @@ if len(sys.argv) == 1:
     sys.exit()
 
 args = parser.parse_args()
-
-sys.path.append('../vamb')
-import vamb
 
 # Check inputs
 for path in args.inpaths:
