@@ -1,5 +1,6 @@
 import sys
 import argparse
+import vamb
 
 parser = argparse.ArgumentParser(
     description="""Command-line bin creator.
@@ -17,9 +18,6 @@ if len(sys.argv) == 1:
     sys.exit()
 
 args = parser.parse_args()
-
-sys.path.append('../vamb')
-import vamb
 
 with open(args.clusterspath) as file:
     clusters = vamb.vambtools.read_clusters(file)
