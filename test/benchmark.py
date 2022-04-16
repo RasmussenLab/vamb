@@ -183,6 +183,12 @@ class TestReference(unittest.TestCase):
         with self.assertRaises(KeyError):
             ref.load_tax_file(io.StringIO(badstr))
 
+        # Genome bsubtil missing from tax file
+        badstr = "ecoli\ta\tb"
+        ref = Reference.from_file(io.StringIO(REFERENCE))
+        with self.assertRaises(KeyError):
+            ref.load_tax_file(io.StringIO(badstr))
+
 
 class TestFilterContigs(unittest.TestCase):
     @classmethod
