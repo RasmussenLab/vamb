@@ -220,7 +220,7 @@ class Reference:
         Replaces the Reference's taxmaps list."""
         taxmaps: list[dict[str, str]] = list()
         isempty = True
-        genome_names = {i.name for i in self.genomes}
+        unseen_names = {i.name for i in self.genomes}
 
         for line in line_iterator:
             if line.startswith(comment):
@@ -239,9 +239,8 @@ class Reference:
             if genomename in taxmaps[0]:
                 raise KeyError(
                     f"Genome name {genomename} present more than once in taxfile")
-            if genomename not in genome_names:
-                raise KeyError(
-                    f"Genome {genomename} in tax file, but not present in reference.")
+
+            unseen_names.discard(genomename)
 
             previousrank = genomename
             for nextrank, rankdict in zip(clades, taxmaps):
@@ -252,6 +251,11 @@ class Reference:
 
                 rankdict[previousrank] = nextrank
                 previousrank = nextrank
+
+        if len(unseen_names) > 0:
+            unseen = next(iter(unseen_names))
+            raise KeyError(
+                f"Some genomes in reference missing in taxonomy file, e.g. '{unseen}'")
 
         self.taxmaps = taxmaps
 
