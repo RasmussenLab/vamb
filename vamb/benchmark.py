@@ -84,7 +84,10 @@ class Contig:
 
     def __init__(self, name: str, subject: str, start: int, end: int):
         if end <= start:
-            raise ValueError('Contig end must be higher than start')
+            raise ValueError(
+                'Contig end must be higher than start, but '
+                f'contig \"{name}\" spans {start}-{end}.'
+            )
 
         self.name = name
         self.subject = subject
@@ -98,6 +101,12 @@ class Contig:
 
     def __repr__(self) -> str:
         return f'Contig({self.name}, subject={self.subject}, {self.start}:{self.end})'
+
+    def __eq__(self: C, other: C) -> bool:
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(self.name) ^ 3458437981
 
     def __len__(self) -> int:
         return self.end - self.start
@@ -117,6 +126,12 @@ class Genome:
         self.name = name
         self.contigs: set[Contig] = set()
         self.breadth = 0
+
+    def __eq__(self: G, other: G) -> bool:
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(self.name) ^ 4932511201
 
     def add(self, contig: Contig) -> None:
         self.contigs.add(contig)
@@ -185,6 +200,7 @@ class Reference:
         self.genomes: set[Genome] = set()  # genome_name : genome dict
         self.genomeof: dict[Contig, Genome] = dict()  # contig : genome dict
         self.ncontigs = 0
+        self.breadth = 0
 
         # This is a list of dicts: The first one maps genomename to name of next taxonomic level
         # The second maps name of second level to name of third level etc.
@@ -192,13 +208,11 @@ class Reference:
 
         # Check that there are no genomes with same name
         if len({genome.name for genome in genomes}) != len(genomes):
-            raise ValueError(
+            raise KeyError(
                 'Multiple genomes with same name not allowed in Reference.')
 
         for genome in genomes:
             self.add(genome)
-
-        self.breadth = sum(genome.breadth for genome in genomes)
 
     def load_tax_file(self, line_iterator: Iterable[str], comment: str = '#') -> None:
         """Load in a file with N+1 columns, the first being genomename, the next being
@@ -206,12 +220,13 @@ class Reference:
         Replaces the Reference's taxmaps list."""
         taxmaps: list[dict[str, str]] = list()
         isempty = True
+        genome_names = {i.name for i in self.genomes}
 
         for line in line_iterator:
             if line.startswith(comment):
                 continue
 
-            genomename, *clades = line[:-1].split('\t')
+            genomename, *clades = line.rstrip().split('\t')
 
             if isempty:
                 if not clades:
@@ -224,6 +239,9 @@ class Reference:
             if genomename in taxmaps[0]:
                 raise KeyError(
                     f"Genome name {genomename} present more than once in taxfile")
+            if genomename not in genome_names:
+                raise KeyError(
+                    f"Genome {genomename} in tax file, but not present in reference.")
 
             previousrank = genomename
             for nextrank, rankdict in zip(clades, taxmaps):
@@ -248,7 +266,7 @@ class Reference:
     @staticmethod
     def _parse_subject_line(line: str) -> tuple[Contig, str]:
         "Returns contig, genome_name from a reference file line with subjects"
-        contig_name, genome_name, subject, start, end = line[:-1].split('\t')
+        contig_name, genome_name, subject, start, end = line.rstrip().split('\t')
         start = int(start)
         # semi-open interval used in internals, like range()
         end = int(end) + 1
@@ -258,7 +276,7 @@ class Reference:
     @staticmethod
     def _parse_subjectless_line(line: str) -> tuple[Contig, str]:
         "Returns contig, genome_name from a reference file line without subjects"
-        contig_name, genome_name, length = line[:-1].split('\t')
+        contig_name, genome_name, length = line.rstrip().split('\t')
         length = int(length)
         contig = Contig.subjectless(contig_name, length)
         return contig, genome_name
@@ -307,10 +325,11 @@ class Reference:
         "Adds a genome to this Reference. If already present, do nothing."
         if genome not in self.genomes:
             self.genomes.add(genome)
+            self.breadth += genome.breadth
             for contig in genome.contigs:
                 if contig in self.genomeof:
                     raise KeyError(
-                        f"Contig name '{contig.name}' multiple times in Reference.")
+                        f"Contig with name '{contig.name}' multiple times in Reference.")
 
                 self.genomeof[contig] = genome
                 self.ncontigs += 1
@@ -318,10 +337,11 @@ class Reference:
     def remove(self, genome: Genome) -> None:
         "Removes a genome from this Reference, raising an error if it is not present."
         self.genomes.remove(genome)
+        self.breadth -= genome.breadth
 
         for contig in genome.contigs:
             del self.genomeof[contig]
-            self.ncontigs += 1
+            self.ncontigs -= 1
 
     def discard(self, genome: Genome) -> None:
         "Remove a genome if it is present, else do nothing."
@@ -406,7 +426,7 @@ class Binning:
         false_positives = self.breadthof[bin_name] - true_positives
         false_negatives = genome.breadth - true_positives
         true_negatives = self.reference.breadth - \
-            false_negatives - false_positives + true_positives
+            genome.breadth - self.breadthof[bin_name] + true_positives
 
         return true_positives, true_negatives, false_positives, false_negatives
 
@@ -542,16 +562,15 @@ class Binning:
             contigsof = dict(_vambtools.binsplit(
                 contigsof.items(), binsplit_separator))
 
+        contig_by_name: dict[str, Contig] = dict()
+        for contig in self.reference.genomeof:
+            contig_by_name[contig.name] = contig
+
         if minsize is not None or mincontigs is not None:
             minsize = 1 if minsize is None else minsize
             mincontigs = 1 if mincontigs is None else mincontigs
             contigsof = filter_clusters(
-                contigsof, self.reference, minsize, mincontigs, checkpresence=checkpresence)
-
-        contig_by_name: dict[str, Contig] = dict()
-        for genome in self.reference.genomes:
-            for contig in genome.contigs:
-                contig_by_name[contig.name] = contig
+                contigsof, contig_by_name, minsize, mincontigs, checkpresence=checkpresence)
 
         for bin_name_str, contig_names in contigsof.items():
             bin_name = BinName(bin_name_str)
@@ -578,7 +597,7 @@ class Binning:
                     if disjoint:
                         raise KeyError(
                             f'Contig {contig_name} found in multiple bins')
-                    elif isinstance(existing, BinName):
+                    elif isinstance(existing, str):
                         self.binof[contig] = {existing, bin_name}
                     else:
                         existing.add(bin_name)
@@ -655,23 +674,18 @@ class Binning:
 
 def filter_clusters(
     clusters: Mapping[str, Collection[str]],
-    reference: Reference,
+    contigs_by_name: dict[str, Contig],
     minsize: int,
     mincontigs: int,
     checkpresence: bool = True
-):
+) -> dict[str, set[str]]:
     """Creates a shallow copy of clusters, but without any clusters with a total size
     smaller than minsize, or fewer contigs than mincontigs.
     If checkpresence is True, raise error if a contig is not present in reference, else
     ignores it when counting cluster size.
     """
 
-    contigs_by_name: dict[str, Contig] = dict()
-    for genome in reference.genomes:
-        for contig in genome.contigs:
-            contigs_by_name[contig.name] = contig
-
-    filtered: dict[str, Collection[str]] = dict()
+    filtered: dict[str, set[str]] = dict()
     for binname, contignames in clusters.items():
         if len(contignames) < mincontigs:
             continue
@@ -688,6 +702,6 @@ def filter_clusters(
                 pass
 
         if size >= minsize:
-            filtered[binname] = [i for i in contignames]
+            filtered[binname] = {i for i in contignames}
 
     return filtered

@@ -8,4 +8,5 @@ if __name__ == "__main__":
     unittest.main(module='parsebam', exit=False)
     unittest.main(module='encode', exit=False)
     unittest.main(module='cluster', exit=False)
+    unittest.main(module='benchmark', exit=False)
     unittest.main(module='results', exit=False)
