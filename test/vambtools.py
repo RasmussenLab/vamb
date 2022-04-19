@@ -109,7 +109,7 @@ class TestFASTAEntry(unittest.TestCase):
         self.assertEqual(
             vamb.vambtools.FastaEntry(
                 b">foo", bytearray(b"TaGkmYnAC")).sequence,
-            bytearray(b"TAGNNNNAC"),
+            bytearray(b"TaGkmYnAC"),
         )
         self.assertEqual(
             vamb.vambtools.FastaEntry(
@@ -133,7 +133,7 @@ class TestFASTAEntry(unittest.TestCase):
             str(vamb.vambtools.FastaEntry(b">yz", bytearray())), ">yz\n")
         self.assertEqual(
             str(vamb.vambtools.FastaEntry(b">1_2", bytearray(b"TGTAmnyAncC"))),
-            ">1_2\nTGTANNNANCC",
+            ">1_2\nTGTAmnyAncC",
         )
 
     def test_kmercounts(self):
@@ -219,7 +219,7 @@ class TestFASTAReader(unittest.TestCase):
         records = list(vamb.vambtools.byte_iterfasta(data))
         self.assertEqual(3, len(records))
         self.assertEqual(records[0].sequence, bytearray(b"TATANN"))
-        self.assertEqual(records[1].sequence, bytearray(b"CNANNNG"))
+        self.assertEqual(records[1].sequence, bytearray(b"CyAmmkg"))
         self.assertEqual(records[2].sequence, bytearray(b""))
 
         # Comment inside seqs

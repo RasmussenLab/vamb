@@ -190,8 +190,9 @@ class FastaEntry:
     """One single FASTA entry. Instantiate with string header and bytearray
     sequence."""
 
-    basemask = bytearray.maketrans(b'acgtuUswkmyrbdhvnSWKMYRBDHV',
-                                   b'ACGTTTNNNNNNNNNNNNNNNNNNNNN')
+    # IUPAC ambiguous DNA letters + u
+    allowed = b'acgtuswkmyrbdhvn'
+    allowed += allowed.upper()
     # Allow only the same identifier chars that can be in the BAM file, otherwise
     # users will be frustrated with FASTA and BAM headers do not match.
     # BAM only includes identifier, e.g. stuff before whitespace. So we accept anything
@@ -210,11 +211,11 @@ class FastaEntry:
                 ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$\""
             )
         header = headerbytes[1:m.span(1)[1]].decode()
-        masked = sequence.translate(self.basemask, b' \t\n\r')
-        stripped = masked.translate(None, b'ACGTN')
+        masked = sequence.translate(None, b' \t\n\r')
+        stripped = masked.translate(None, self.allowed)
         if len(stripped) > 0:
             bad_character = chr(stripped[0])
-            raise ValueError(f"Non-IUPAC DNA byte in sequence {header}: '{bad_character}'")
+            raise ValueError(f"Non-IUPAC DNA/RNA byte in sequence {header}: '{bad_character}'")
 
         self.header = header
         self.sequence = masked
