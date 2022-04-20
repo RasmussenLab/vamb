@@ -81,21 +81,21 @@ class TestPushArray(unittest.TestCase):
 
 class TestFASTAEntry(unittest.TestCase):
     def test_init(self):
-        passing = [b">0", b">foo", b">FOO123_@@^", b">%%;;/=~~"]
+        passing = [b"0", b"foo", b"FOO123_@@^", b"%%;;/=~~"]
         failing = [
             b"",  # empty
             b">",  # empty
-            b"foo",  # no >
-            b">=",  # cannot start with =
-            b">*",  # cannot start with *
-            b">\xff",  # out of range
-            b">))",
-            b"> ",  # zero-length identifier
+            b">foo",  # with >
+            b"=",  # cannot start with =
+            b"*",  # cannot start with *
+            b"\xff",  # out of range
+            b"))",
+            b" ",  # zero-length identifier
         ]
 
         for i in passing:
             x = vamb.vambtools.FastaEntry(i, bytearray(b"TAG"))
-            self.assertTrue(i[1:].decode().startswith(x.header))
+            self.assertTrue(i.decode(), x.header)
 
         for i in failing:
             with self.assertRaises(ValueError):
@@ -103,41 +103,43 @@ class TestFASTAEntry(unittest.TestCase):
 
         # Various
         with self.assertRaises(ValueError):
-            vamb.vambtools.FastaEntry(b">foo", bytearray(b"ATGCpN"))
+            vamb.vambtools.FastaEntry(b"foo", bytearray(b"ATGCpN"))
 
     def test_masking(self):
         self.assertEqual(
             vamb.vambtools.FastaEntry(
-                b">foo", bytearray(b"TaGkmYnAC")).sequence,
+                b"foo", bytearray(b"TaGkmYnAC")).sequence,
             bytearray(b"TaGkmYnAC"),
         )
         self.assertEqual(
             vamb.vambtools.FastaEntry(
-                b">foo", bytearray()).sequence, bytearray()
+                b"foo", bytearray()).sequence, bytearray()
         )
 
     def test_various(self):
         # Length
         self.assertEqual(
-            len(vamb.vambtools.FastaEntry(b">x", bytearray(b"TAGCA"))), 5)
-        self.assertEqual(len(vamb.vambtools.FastaEntry(b">x", bytearray())), 0)
+            len(vamb.vambtools.FastaEntry(b"x", bytearray(b"TAGCA"))), 5)
+        self.assertEqual(len(vamb.vambtools.FastaEntry(b"x", bytearray())), 0)
         self.assertEqual(
-            len(vamb.vambtools.FastaEntry(b">x", bytearray(b"TGTAmnyAncC"))), 11
+            len(vamb.vambtools.FastaEntry(b"x", bytearray(b"TGTAmnyAncC"))), 11
         )
 
-        # Str
+        # format
         self.assertEqual(
-            str(vamb.vambtools.FastaEntry(b">x", bytearray(b"TAGCA"))), ">x\nTAGCA"
+            vamb.vambtools.FastaEntry(
+                b"x", bytearray(b"TAGCA")).format(), ">x\nTAGCA"
         )
         self.assertEqual(
-            str(vamb.vambtools.FastaEntry(b">yz", bytearray())), ">yz\n")
+            vamb.vambtools.FastaEntry(b"yz", bytearray()).format(), ">yz\n")
         self.assertEqual(
-            str(vamb.vambtools.FastaEntry(b">1_2", bytearray(b"TGTAmnyAncC"))),
+            vamb.vambtools.FastaEntry(
+                b"1_2", bytearray(b"TGTAmnyAncC")).format(),
             ">1_2\nTGTAmnyAncC",
         )
 
     def test_kmercounts(self):
-        seq = vamb.vambtools.FastaEntry(b">X", bytearray(b"TTAyCAAnGAC"))
+        seq = vamb.vambtools.FastaEntry(b"X", bytearray(b"TTAyCAAnGAC"))
 
         with self.assertRaises(ValueError):
             seq.kmercounts(0)
@@ -444,101 +446,78 @@ class TestWriteClusters(unittest.TestCase):
         self.conforms(self.io.getvalue(), self.test_clusters[1:2])
 
 
-class TestLoadFasta(unittest.TestCase):
-    def test_round_trip(self):
-        recs = [testtools.make_randseq(random.Random(), 10, 30)
-                for i in range(10)]
-        bytesio = io.BytesIO()
-
-        bytesio.write(b"#header\n")
-        for i in recs:
-            bytesio.write(i.format().encode())
-            bytesio.write(b"\n")
-
-        bytesio.seek(0)
-        fna_1 = vamb.vambtools.loadfasta(bytesio, compress=False)
-
-        bytesio.seek(0)
-        fna_2 = vamb.vambtools.loadfasta(bytesio, compress=True)
-        for i in fna_2.values():
-            i.sequence = bytearray(gzip.decompress(i.sequence))
-
-        self.assertEqual({str(i) for i in recs}, {str(i)
-                         for i in fna_1.values()})
-        self.assertEqual({str(i) for i in recs}, {str(i)
-                         for i in fna_2.values()})
-
-
 class TestWriteBins(unittest.TestCase):
-    file = io.StringIO()
+    file = io.BytesIO()
     N_BINS = 10
     minsize = 5 * 175  # mean of bin size
 
     @classmethod
     def setUpClass(cls):
-        bins = dict()
-        fastadict = dict()
+        bins: dict[str, set[str]] = dict()
+        seqs: dict[str, vamb.vambtools.FastaEntry] = dict()
         for i in range(cls.N_BINS):
             binname = ''.join(random.choices(string.ascii_letters, k=12))
             bins[binname] = set()
             for j in range(random.randrange(3, 7)):
                 seq = testtools.make_randseq(random.Random(), 100, 250)
-                fastadict[seq.header] = seq
-                bins[binname].add(seq.header)
+                seqs[seq.identifier] = seq
+                bins[binname].add(seq.identifier)
+                cls.file.write(seq.format().encode())
+                cls.file.write(b'\n')
 
         cls.bins = bins
-        cls.fastadict = fastadict
+        cls.seqs = seqs
 
     def setUp(self):
         self.file.seek(0)
-        self.file.truncate(0)
 
     def test_bad_params(self):
         # Too many bins for maxbins
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                "foo", self.bins, self.fastadict, maxbins=self.N_BINS - 1)
+                "foo", self.bins, self.file, maxbins=self.N_BINS - 1)
 
         # Negative minsize
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                "foo", self.bins, self.fastadict, maxbins=self.N_BINS + 1, minsize=-1)
+                "foo", self.bins, self.file, maxbins=self.N_BINS + 1, minsize=-1)
 
         # Parent does not exist
         with self.assertRaises(NotADirectoryError):
             vamb.vambtools.write_bins(
-                "svogew/foo", self.bins, self.fastadict, maxbins=self.N_BINS + 1)
+                "svogew/foo", self.bins, self.file, maxbins=self.N_BINS + 1)
 
         # Target file already exists
         with self.assertRaises(FileExistsError):
             with tempfile.NamedTemporaryFile() as file:
                 vamb.vambtools.write_bins(
-                    file.name, self.bins, self.fastadict, maxbins=self.N_BINS + 1)
+                    file.name, self.bins, self.file, maxbins=self.N_BINS + 1)
 
         # One contig missing from fasta dict
         with self.assertRaises(IndexError):
             bins = {k: v.copy() for k, v in self.bins.items()}
             next(iter(bins.values())).add('a_new_bin_which_does_not_exist')
             vamb.vambtools.write_bins(
-                "foo", bins, self.fastadict, maxbins=self.N_BINS + 1)
+                "foo", bins, self.file, maxbins=self.N_BINS + 1)
 
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as dir:
             vamb.vambtools.write_bins(
-                dir, self.bins, self.fastadict, maxbins=self.N_BINS, compressed=False, minsize=self.minsize)
+                dir, self.bins, self.file, maxbins=self.N_BINS, minsize=self.minsize)
 
-            reconstructed_bins = dict()
-            reconstructed_fna = dict()
+            reconstructed_bins: dict[str, set[str]] = dict()
             for filename in os.listdir(dir):
                 with open(os.path.join(dir, filename), 'rb') as file:
-                    entries_dict = vamb.vambtools.loadfasta(file)
-                    reconstructed_bins[filename[:-4]
-                                       ] = {i.header for i in entries_dict.values()}
-                    for i in entries_dict.values():
-                        reconstructed_fna[i.header] = i
+                    entries = list(vamb.vambtools.byte_iterfasta(file))
+                    if sum(map(len, entries)) < self.minsize:
+                        continue
+                    binname = filename[:-4]
+                    reconstructed_bins[binname] = set()
+                    for entry in entries:
+                        reconstructed_bins[binname].add(entry.identifier)
 
         filtered_bins = {k: v for (k, v) in self.bins.items() if sum(
-            len(self.fastadict[r]) for r in v) >= self.minsize}
+            len(self.seqs[vi]) for vi in v) >= self.minsize}
 
         # Same bins
         self.assertEqual(len(filtered_bins), len(reconstructed_bins))

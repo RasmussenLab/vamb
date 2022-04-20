@@ -48,4 +48,4 @@ def make_randseq(rng, frm: int, to: int) -> vamb.vambtools.FastaEntry:
     seq = "".join(
         rng.choices("acgtACGTnNywsdbK", weights=[0.12] * 8 + [0.005] * 8, k=rng.randrange(frm, to))
     )
-    return vamb.vambtools.FastaEntry(b'>' + name.encode(), bytearray(seq.encode()))
+    return vamb.vambtools.FastaEntry(name.encode(), bytearray(seq.encode()))
