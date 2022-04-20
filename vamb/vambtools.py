@@ -187,7 +187,7 @@ class Reader:
         return self.filehandle
 
 class FastaEntry:
-    """One single FASTA entry. Instantiate with string header and bytearray
+    """One single FASTA entry. Instantiate with byte header and bytearray
     sequence."""
 
     # IUPAC ambiguous DNA letters + u
@@ -199,40 +199,49 @@ class FastaEntry:
     # after whitespace, but do not use it as header.
     # This brutal regex is derived from the SAM specs, valid identifiers,
     # but disallow leading # sign, and allow trailing whitespace + ignored description
-    regex = _re.compile(b">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$")
-    __slots__ = ['header', 'sequence']
+    regex = _re.compile(b"([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)([^\\S\r\n][^\r\n]*)?$")
+    __slots__ = ['identifier', 'description', 'sequence']
 
-    def __init__(self, headerbytes: bytes, sequence: bytearray):
-        m = self.regex.match(headerbytes)
+    def _verify_header(self, header: bytes) -> tuple[str, str]:
+        m = self.regex.match(header)
         if m is None:
             raise ValueError(
-                f"Invalid header line in FASTA: \"{headerbytes.decode()}\". "
+                f"Invalid header in FASTA: \"{header.decode()}\". "
                 "\nMust conform to identifier regex pattern of SAM specification: \""
-                ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)(\\s.*)?$\""
+                ">([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)([^\\S\\r\\n][^\\r\\n]*)?$\""
             )
-        header = headerbytes[1:m.span(1)[1]].decode()
+        identifier, description = m.groups()
+        description = "" if description is None else description.decode()
+        return (identifier.decode(), description)
+
+    def __init__(self, header: bytes, sequence: bytearray):
+        identifier, description = self._verify_header(header)
+        self.identifier: str = identifier
+        self.description: str = description
         masked = sequence.translate(None, b' \t\n\r')
         stripped = masked.translate(None, self.allowed)
         if len(stripped) > 0:
             bad_character = chr(stripped[0])
-            raise ValueError(f"Non-IUPAC DNA/RNA byte in sequence {header}: '{bad_character}'")
+            raise ValueError(f"Non-IUPAC DNA/RNA byte in sequence {identifier}: '{bad_character}'")
 
-        self.header = header
-        self.sequence = masked
+        self.sequence: bytearray = masked
+
+    @property
+    def header(self) -> str:
+        return self.identifier + self.description
+
+    def rename(self, header: bytes) -> None:
+        identifier, description = self._verify_header(header)
+        self.identifier = identifier
+        self.description = description
 
     def __len__(self) -> int:
         return len(self.sequence)
-
-    def __str__(self) -> str:
-        return f'>{self.header}\n{self.sequence.decode()}'
 
     def format(self, width: int=60) -> str:
         sixtymers = range(0, len(self.sequence), width)
         spacedseq = '\n'.join([self.sequence[i: i+width].decode() for i in sixtymers])
         return f'>{self.header}\n{spacedseq}'
-
-    def __repr__(self) -> str:
-        return f'<FastaEntry {self.header}>'
 
     def kmercounts(self, k: int) -> _np.ndarray:
         if k < 1 or k > 10:
@@ -282,7 +291,7 @@ def byte_iterfasta(
         errormsg = 'First line does not contain bytes. Are you reading file in binary mode?'
         raise TypeError(errormsg) from None
 
-    header = probeline
+    header = probeline[1:]
     buffer: list[bytes] = list()
 
     # Iterate over lines
@@ -293,7 +302,7 @@ def byte_iterfasta(
         elif line.startswith(b'>'):
             yield FastaEntry(header, bytearray().join(buffer))
             buffer.clear()
-            header = line
+            header = line[1:]
 
         else:
             buffer.append(line)
@@ -383,44 +392,10 @@ def read_clusters(filehandle: Iterable[str], min_size: int=1) -> dict[str, set[s
 
     return contigsof_dict
 
-
-def loadfasta(
-    byte_iterator: Iterable[bytes],
-    keep: Optional[Collection[str]]=None,
-    comment: bytes=b'#',
-    compress: bool=True
-) -> dict[str, FastaEntry]:
-    """Loads a FASTA file into a dictionary.
-
-    Usage:
-    >>> with Reader('/dir/fasta.fna') as filehandle:
-    ...     fastadict = loadfasta(filehandle)
-
-    Input:
-        byte_iterator: Iterator of binary lines of FASTA file
-        keep: Keep entries with headers in `keep`. If None, keep all entries
-        comment: Ignore lines beginning with any whitespace + comment
-        compress: Keep sequences compressed [True]
-
-    Output: {header: FastaEntry} dict
-    """
-
-    entries: dict[str, FastaEntry] = dict()
-
-    for entry in byte_iterfasta(byte_iterator, comment=comment):
-        if keep is None or entry.header in keep:
-            if compress:
-                entry.sequence = bytearray(_gzip.compress(entry.sequence, compresslevel=1))
-
-            entries[entry.header] = entry
-
-    return entries
-
 def write_bins(
     directory: Union[str, _PurePath],
     bins: dict[str, set[str]],
-    fastadict: dict[str, FastaEntry],
-    compressed: bool=True,
+    fastaio: Iterable[bytes],
     maxbins: Optional[int]=250,
     minsize: int=0
 ):
@@ -428,10 +403,9 @@ def write_bins(
 
     Inputs:
         directory: Directory to create or put files in
-        bins: {'name': {set of contignames}} dictionary (can be loaded from
-        clusters.tsv using vamb.cluster.read_clusters)
-        fastadict: {contigname: FastaEntry} dict as made by `loadfasta`
-        compressed: Sequences in dict are compressed [True]
+        bins: dict[str: set[str]] (can be loaded from
+          clusters.tsv using vamb.cluster.read_clusters)
+        fastaio: bytes iterator containing FASTA file with all sequences
         maxbins: None or else raise an error if trying to make more bins than this [250]
         minsize: Minimum number of nucleotides in cluster to be output [0]
 
@@ -458,16 +432,12 @@ def write_bins(
     if minsize < 0:
         raise ValueError("Minsize must be nonnegative")
 
-    # Check that all contigs in all bins are in the fastadict
-    allcontigs: set[str] = set()
-
-    for contigs in bins.values():
-        allcontigs.update(set(contigs))
-
-    allcontigs -= fastadict.keys()
-    if allcontigs:
-        nmissing = len(allcontigs)
-        raise IndexError(f'{nmissing} contigs in bins missing from fastadict')
+    byteslen_by_id: dict[str, tuple[bytes, int]] = dict()
+    for entry in byte_iterfasta(fastaio):
+        byteslen_by_id[entry.identifier] = (
+            _gzip.compress(entry.format().encode(), compresslevel=1),
+            len(entry)
+        )
 
     # Make the directory if it does not exist - if it does, do nothing
     try:
@@ -479,24 +449,22 @@ def write_bins(
 
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
-        # Load bin into a list, decompress that bin if necessary
-        bin: list[FastaEntry] = []
+        size = 0
         for contig in contigs:
-            entry = fastadict[contig]
-            if compressed:
-                uncompressed = bytearray(_gzip.decompress(entry.sequence))
-                entry = FastaEntry(entry.header.encode(), uncompressed)
-            bin.append(entry)
+            byteslen = byteslen_by_id.get(contig)
+            if byteslen is None:
+                raise IndexError(f'Contig \"{contig}\" in bin missing from input FASTA file')
+            size += byteslen[1]
 
-        # Skip bin if it's too small
-        if minsize > 0 and sum(len(entry) for entry in bin) < minsize:
+        if size < minsize:
             continue
-
+        
         # Print bin to file
         filename = _os.path.join(directory, binname + '.fna')
-        with open(filename, 'w') as file:
-            for entry in bin:
-                print(entry.format(), file=file)
+        with open(filename, 'wb') as file:
+            for contig in contigs:
+                file.write(_gzip.decompress(byteslen_by_id[contig][0]))
+                file.write(b'\n')
 
 def validate_input_array(array: _np.ndarray) -> _np.ndarray:
     "Returns array similar to input array but C-contiguous and with own data."
@@ -563,33 +531,25 @@ def concatenate_fasta(outfile: IO[str], inpaths: Iterable[str], minlength: int=2
     Output: None
     """
 
-    headers: set[str] = set()
+    identifiers: set[str] = set()
     for (inpathno, inpath) in enumerate(inpaths):
         with Reader(inpath) as infile:
 
-            # If we rename, seq headers only have to be unique for each sample
+            # If we rename, seq identifiers only have to be unique for each sample
             if rename:
-                headers.clear()
-            entries = byte_iterfasta(infile)
+                identifiers.clear()
 
-            for entry in entries:
+            for entry in byte_iterfasta(infile):
                 if len(entry) < minlength:
                     continue
 
-                header = entry.header
-                identifier = header.split()[0]
-
                 if rename:
-                    newheader = f"S{inpathno + 1}C{identifier}"
-                else:
-                    newheader = identifier
+                    entry.rename(f"S{inpathno + 1}C{entry.identifier}".encode())
 
-                if newheader in headers:
+                if entry.identifier in identifiers:
                     raise ValueError("Multiple sequences would be given "
-                                     f"header {newheader}.")
-                headers.add(newheader)
-
-                entry.header = newheader
+                                     f"identifier \"{entry.identifier}\".")
+                identifiers.add(entry.identifier)
                 print(entry.format(), file=outfile)
 
 def hash_refnames(refnames: Iterable[str]) -> bytes:
