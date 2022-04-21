@@ -139,20 +139,11 @@ class ClusterGenerator:
 
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
-        if _torch.__version__ >= '1.2':
-            # https://github.com/pytorch/pytorch/issues/20208 fixed in PyTorch 1.2
-            cuda_hist_dtype = _torch.float
-            # Masking using uint8 tensors deprecated in PyTorch 1.2
-            kept_mask_dtype = _torch.bool
-        else:
-            cuda_hist_dtype = _torch.long
-            kept_mask_dtype = _torch.uint8
 
-        kept_mask = _torch.ones(N, dtype=kept_mask_dtype)
-
+        kept_mask = _torch.ones(N, dtype=_torch.bool)
         if self.CUDA:
             histogram = _torch.empty(
-                _ceil(_XMAX/_DELTA_X), dtype=cuda_hist_dtype).cuda()
+                _ceil(_XMAX/_DELTA_X), dtype=_torch.float).cuda()
             kept_mask = kept_mask.cuda()
         else:
             histogram = _torch.empty(_ceil(_XMAX/_DELTA_X))
