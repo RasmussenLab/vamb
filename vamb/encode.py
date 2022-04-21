@@ -1,3 +1,12 @@
+from typing import Optional, IO, Union
+import vamb.vambtools as _vambtools
+from torch.utils.data.dataset import TensorDataset as _TensorDataset
+from torch.utils.data import DataLoader as _DataLoader
+from torch.nn.functional import softmax as _softmax
+from torch.optim import Adam as _Adam
+from torch import Tensor
+from torch import nn as _nn
+from math import log as _log
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
 Creates a variational autoencoder in PyTorch and tries to represent the depths
@@ -18,26 +27,17 @@ import numpy as _np
 import torch as _torch
 _torch.manual_seed(0)
 
-from math import log as _log
-
-from torch import nn as _nn
-from torch import Tensor
-from torch.optim import Adam as _Adam
-from torch.nn.functional import softmax as _softmax
-from torch.utils.data import DataLoader as _DataLoader
-from torch.utils.data.dataset import TensorDataset as _TensorDataset
-import vamb.vambtools as _vambtools
-from typing import Optional, IO, Union
 
 if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
+
 def make_dataloader(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
-    batchsize:int=256,
-    destroy:bool=False,
-    cuda:bool=False
+    batchsize: int = 256,
+    destroy: bool = False,
+    cuda: bool = False
 ) -> tuple[_DataLoader[tuple[Tensor, Tensor]], _np.ndarray]:
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
@@ -94,14 +94,15 @@ def make_dataloader(
         assert isinstance(depthssum, _np.ndarray)
 
     if mask.sum() < batchsize:
-        raise ValueError('Fewer sequences left after filtering than the batch size.')
+        raise ValueError(
+            'Fewer sequences left after filtering than the batch size.')
 
     _vambtools.numpy_inplace_maskarray(rpkm, mask)
     _vambtools.numpy_inplace_maskarray(tnf, mask)
 
     # If multiple samples, normalize to sum to 1, else zscore normalize
     if rpkm.shape[1] > 1:
-        assert depthssum is not None # we set it so just above
+        assert depthssum is not None  # we set it so just above
         rpkm /= depthssum.reshape((-1, 1))
     else:
         _vambtools.zscore(rpkm, axis=0, inplace=True)
@@ -110,7 +111,7 @@ def make_dataloader(
     _vambtools.zscore(tnf, axis=0, inplace=True)
 
     ### Create final tensors and dataloader ###
-    depthstensor = _torch.from_numpy(rpkm) # this is a no-copy operation
+    depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
 
     n_workers = 4 if cuda else 1
@@ -121,6 +122,7 @@ def make_dataloader(
     )
 
     return dataloader, mask
+
 
 class VAE(_nn.Module):
     """Variational autoencoder, subclass of torch.nn.Module.
@@ -147,12 +149,12 @@ class VAE(_nn.Module):
     def __init__(
         self,
         nsamples: int,
-        nhiddens: Optional[list[int]]=None,
-        nlatent:int=32,
-        alpha:Optional[float]=None,
-        beta:float=200.0,
-        dropout:Optional[float]=0.2,
-        cuda:bool=False
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
+        cuda: bool = False
     ):
         if nlatent < 1:
             raise ValueError(f'Minimum 1 latent neuron, not {nlatent}')
@@ -171,7 +173,8 @@ class VAE(_nn.Module):
             dropout = 0.2 if nsamples > 1 else 0.0
 
         if any(i < 1 for i in nhiddens):
-            raise ValueError(f'Minimum 1 neuron per layer, not {min(nhiddens)}')
+            raise ValueError(
+                f'Minimum 1 neuron per layer, not {min(nhiddens)}')
 
         if beta <= 0:
             raise ValueError(f'beta must be > 0, not {beta}')
@@ -180,7 +183,8 @@ class VAE(_nn.Module):
             raise ValueError(f'alpha must be 0 < alpha < 1, not {alpha}')
 
         if not (0 <= dropout < 1):
-            raise ValueError(f'dropout must be 0 <= dropout < 1, not {dropout}')
+            raise ValueError(
+                f'dropout must be 0 <= dropout < 1, not {dropout}')
 
         super(VAE, self).__init__()
 
@@ -215,7 +219,8 @@ class VAE(_nn.Module):
             self.decodernorms.append(_nn.BatchNorm1d(nout))
 
         # Reconstruction (output) layer
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + self.ntnf)
+        self.outputlayer = _nn.Linear(
+            self.nhiddens[0], self.nsamples + self.ntnf)
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
@@ -230,7 +235,8 @@ class VAE(_nn.Module):
 
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
-            tensor = encodernorm(self.dropoutlayer(self.relu(encoderlayer(tensor))))
+            tensor = encodernorm(self.dropoutlayer(
+                self.relu(encoderlayer(tensor))))
             tensors.append(tensor)
 
         # Latent layers
@@ -267,7 +273,8 @@ class VAE(_nn.Module):
         tensors = list()
 
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
-            tensor = decodernorm(self.dropoutlayer(self.relu(decoderlayer(tensor))))
+            tensor = decodernorm(self.dropoutlayer(
+                self.relu(decoderlayer(tensor))))
             tensors.append(tensor)
 
         reconstruction = self.outputlayer(tensor)
@@ -309,7 +316,8 @@ class VAE(_nn.Module):
             ce_weight = 1 - self.alpha
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
-        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
+        kld = -0.5 * (1 + logsigma - mu.pow(2) -
+                      logsigma.exp()).sum(dim=1).mean()
         sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
         loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
@@ -333,7 +341,7 @@ class VAE(_nn.Module):
 
         if epoch in batchsteps:
             data_loader = _DataLoader(dataset=data_loader.dataset,
-                                      batch_size=data_loader.batch_size * 2, # type: ignore
+                                      batch_size=data_loader.batch_size * 2,  # type: ignore
                                       shuffle=True,
                                       drop_last=True,
                                       num_workers=data_loader.num_workers,
@@ -352,7 +360,7 @@ class VAE(_nn.Module):
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
             loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
-                                                  tnf_out, mu, logsigma)
+                                                tnf_out, mu, logsigma)
 
             loss.backward()
             optimizer.step()
@@ -435,12 +443,12 @@ class VAE(_nn.Module):
                  'nhiddens': self.nhiddens,
                  'nlatent': self.nlatent,
                  'state': self.state_dict(),
-                }
+                 }
 
         _torch.save(state, filehandle)
 
     @classmethod
-    def load(cls, path: Union[IO[bytes], str], cuda:bool=False, evaluate:bool=True):
+    def load(cls, path: Union[IO[bytes], str], cuda: bool = False, evaluate: bool = True):
         """Instantiates a VAE from a model file.
 
         Inputs:
@@ -453,7 +461,8 @@ class VAE(_nn.Module):
         """
 
         # Forcably load to CPU even if model was saves as GPU model
-        dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
+        dictionary = _torch.load(
+            path, map_location=lambda storage, loc: storage)
 
         nsamples = dictionary['nsamples']
         alpha = dictionary['alpha']
@@ -477,11 +486,11 @@ class VAE(_nn.Module):
     def trainmodel(
         self,
         dataloader: _DataLoader[tuple[Tensor, Tensor]],
-        nepochs: int=500,
-        lrate: float=1e-3,
-        batchsteps: Optional[list[int]]=[25, 75, 150, 300],
-        logfile: Optional[IO[str]]=None,
-        modelfile: Union[None, str, IO[bytes]]=None
+        nepochs: int = 500,
+        lrate: float = 1e-3,
+        batchsteps: Optional[list[int]] = [25, 75, 150, 300],
+        logfile: Optional[IO[str]] = None,
+        modelfile: Union[None, str, IO[bytes]] = None
     ):
         """Train the autoencoder from depths array and tnf array.
 
@@ -511,14 +520,16 @@ class VAE(_nn.Module):
             if not all(isinstance(i, int) for i in batchsteps):
                 raise ValueError('All elements of batchsteps must be integers')
             if max(batchsteps, default=0) >= nepochs:
-                raise ValueError('Max batchsteps must not equal or exceed nepochs')
+                raise ValueError(
+                    'Max batchsteps must not equal or exceed nepochs')
             last_batchsize = dataloader.batch_size * 2**len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize: # type: ignore
+            if len(dataloader.dataset) < last_batchsize:  # type: ignore
                 raise ValueError('Last batch size exceeds dataset length')
             batchsteps_set = set(batchsteps)
 
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
+        # type: ignore
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
 
@@ -528,12 +539,14 @@ class VAE(_nn.Module):
             print('\tAlpha:', self.alpha, file=logfile)
             print('\tBeta:', self.beta, file=logfile)
             print('\tDropout:', self.dropout, file=logfile)
-            print('\tN hidden:', ', '.join(map(str, self.nhiddens)), file=logfile)
+            print('\tN hidden:', ', '.join(
+                map(str, self.nhiddens)), file=logfile)
             print('\tN latent:', self.nlatent, file=logfile)
             print('\n\tTraining properties:', file=logfile)
             print('\tN epochs:', nepochs, file=logfile)
             print('\tStarting batch size:', dataloader.batch_size, file=logfile)
-            batchsteps_string = ', '.join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
+            batchsteps_string = ', '.join(
+                map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
             print('\tBatchsteps:', batchsteps_string, file=logfile)
             print('\tLearning rate:', lrate, file=logfile)
             print('\tN sequences:', ncontigs, file=logfile)
@@ -541,7 +554,8 @@ class VAE(_nn.Module):
 
         # Train
         for epoch in range(nepochs):
-            dataloader = self.trainepoch(dataloader, epoch, optimizer, sorted(batchsteps_set), logfile)
+            dataloader = self.trainepoch(
+                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile)
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:
