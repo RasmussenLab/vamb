@@ -5,7 +5,7 @@ Usage:
 >>> rpkms = read_bamfiles(bampaths)
 """
 
-import pycoverm as _pycoverm
+import pycoverm
 import os as _os
 import numpy as _np
 from vamb.parsecontigs import CompositionMetaData
@@ -83,10 +83,10 @@ class Abundance:
             if not _os.path.isfile(path):
                 raise FileNotFoundError(path)
 
-            if not _pycoverm.is_bam_sorted(path):
+            if not pycoverm.is_bam_sorted(path):
                 raise ValueError(f"Path {path} is not sorted by reference.")
 
-        headers, coverage = _pycoverm.get_coverages_from_bam(
+        headers, coverage = pycoverm.get_coverages_from_bam(
             paths, threads=nthreads, min_identity=minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
             trim_upper=0.1, trim_lower=0.1

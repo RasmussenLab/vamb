@@ -8,13 +8,10 @@ import argparse
 import torch
 import datetime
 import time
-from typing import Optional, IO, Any
+from typing import Optional, IO
 
 _ncpu = os.cpu_count()
-if _ncpu is None:
-    DEFAULT_THREADS = 8
-else:
-    DEFAULT_THREADS = min(_ncpu, 8)
+DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
 
 # These MUST be set before importing numpy
 # I know this is a shitty hack, see https://github.com/numpy/numpy/issues/11826
@@ -31,7 +28,7 @@ import numpy as np
 import vamb
 
 ################################# DEFINE FUNCTIONS ##########################
-def log(string: str, logfile, indent: int=0):
+def log(string: str, logfile: IO[str], indent: int=0):
     print(('\t' * indent) + string, file=logfile)
     logfile.flush()
 
@@ -233,7 +230,7 @@ def write_fasta(
     assert len(contignames) == len(contiglengths)
 
     lengthof = dict(zip(contignames, contiglengths))
-    filtered_clusters = dict()
+    filtered_clusters: dict[str, set[str]] = dict()
 
     with open(clusterspath) as file:
         clusters = vamb.vambtools.read_clusters(file)
@@ -244,7 +241,7 @@ def write_fasta(
             filtered_clusters[cluster] = clusters[cluster]
 
     del lengthof, clusters
-    keep = set()
+    keep: set[str] = set()
     for contigs in filtered_clusters.values():
         keep.update(set(contigs))
 
@@ -475,7 +472,7 @@ def main():
                 raise FileNotFoundError('Not an existing non-directory file: ' + bampath)
 
             # Check this early, since I expect users will forget about this
-            if not vamb.parsebam._pycoverm.is_bam_sorted(bampath):
+            if not vamb.parsebam.pycoverm.is_bam_sorted(bampath):
                 raise ValueError(f'BAM file {bampath} is not sorted by reference.')
 
     # Check minfasta settings

@@ -27,11 +27,6 @@ import numpy as _np
 import torch as _torch
 _torch.manual_seed(0)
 
-
-if _torch.__version__ < '0.4':
-    raise ImportError('PyTorch version must be 0.4 or newer')
-
-
 def make_dataloader(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
