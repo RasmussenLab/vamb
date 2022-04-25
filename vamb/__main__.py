@@ -100,7 +100,7 @@ def calc_rpkm(outdir, bampaths, rpkmpath, jgipath, mincontiglength, refhash, nco
         with open(jgipath) as file:
             rpkms = vamb.vambtools._load_jgi(file, mincontiglength, refhash)
 
-    else:
+    elif bampaths is not None:
         log('Parsing {} BAM files with {} subprocesses'.format(len(bampaths), subprocesses),
            logfile, 1)
         log('Min alignment score: {}'.format(minalignscore), logfile, 1)
