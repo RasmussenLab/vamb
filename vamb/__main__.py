@@ -476,7 +476,7 @@ def main():
         raise argparse.ArgumentTypeError(
             'If minid is set, RPKM must be passed as bam files')
 
-    minid: float = 0.0 if args.minid is None else args.minid
+    minid: float = 0.001 if (args.minid is None or args.minid < 0.001) else args.minid
     nthreads: int = args.nthreads
     norefcheck: bool = args.norefcheck
     minfasta: Optional[int] = args.minfasta
