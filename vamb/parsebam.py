@@ -10,7 +10,7 @@ import os as _os
 import numpy as _np
 from vamb.parsecontigs import CompositionMetaData
 import vamb.vambtools as _vambtools
-from typing import Optional, TypeVar, Union, IO
+from typing import Optional, TypeVar, Union, IO, Sequence
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -21,13 +21,15 @@ A = TypeVar('A', bound='Abundance')
 class Abundance:
     "Object representing contig abundance. Contains a matrix and refhash."
 
-    __slots__ = ['matrix', 'refhash']
+    __slots__ = ['matrix', 'samplenames', 'minid', 'refhash']
 
-    def __init__(self, matrix: _np.ndarray, refhash: bytes):
+    def __init__(self, matrix: _np.ndarray, samplenames: Sequence[str], minid: float, refhash: bytes):
         assert matrix.dtype == _np.float32
         assert matrix.ndim == 2
 
         self.matrix = matrix
+        self.samplenames = _np.array(samplenames, dtype=object)
+        self.minid = minid
         self.refhash = refhash
 
     @property
@@ -44,7 +46,8 @@ class Abundance:
             )
 
     def save(self, io: Union[str, IO[bytes]]):
-        _np.savez_compressed(io, matrix=self.matrix, refhash=self.refhash)
+        _np.savez_compressed(io, matrix=self.matrix,
+                             samplenames=self.samplenames, minid=self.minid, refhash=self.refhash)
 
     @classmethod
     def load(
@@ -54,7 +57,7 @@ class Abundance:
     ) -> A:
         arrs = _np.load(io, allow_pickle=True)
         abundance = cls(_vambtools.validate_input_array(
-            arrs['matrix']), arrs["refhash"].item())
+            arrs['matrix']), arrs['samplenames'], arrs["minid"], arrs["refhash"].item())
         if refhash is not None:
             abundance.verify_refhash(refhash)
 
@@ -106,7 +109,7 @@ class Abundance:
         _vambtools.numpy_inplace_maskarray(coverage, comp_metadata.mask)
 
         refhash = _vambtools.hash_refnames(headers)
-        abundance = cls(coverage, refhash)
+        abundance = cls(coverage, paths, minid, refhash)
 
         # Check refhash
         if verify_refhash:

@@ -100,13 +100,14 @@ def calc_rpkm(
     else:
         assert bampaths is not None
         log(f'Parsing {len(bampaths)} BAM files with {nthreads} threads', logfile, 1)
-        log(f'Min identity: {minid}\n', logfile, 1)
-        log('Order of columns is:', logfile, 1)
-        log('\n\t'.join(bampaths), logfile, 1)
 
         abundance = vamb.parsebam.Abundance.from_files(
             bampaths, comp_metadata, verify_refhash, minid, nthreads)
         abundance.save(os.path.join(outdir, 'abundance.npz'))
+
+    log(f'Min identity: {abundance.minid}\n', logfile, 1)
+    log('Order of columns is:', logfile, 1)
+    log('\n\t'.join(abundance.samplenames), logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
     print('', file=logfile)
@@ -397,7 +398,7 @@ def main():
         title='RPKM input (either BAMs or .npz required)')
     rpkmos.add_argument('--bamfiles', metavar='',
                         help='paths to (multiple) BAM files', nargs='+')
-    rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM')
+    rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM (abundances)')
 
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
@@ -472,11 +473,12 @@ def main():
     rpkm: Optional[str] = args.rpkm
     minlength: int = args.minlength
 
-    if args.minid is None and bamfiles is None:
+    if args.minid is not None and bamfiles is None:
         raise argparse.ArgumentTypeError(
             'If minid is set, RPKM must be passed as bam files')
 
-    minid: float = 0.001 if (args.minid is None or args.minid < 0.001) else args.minid
+    minid: float = 0.001 if (
+        args.minid is None or args.minid < 0.001) else args.minid
     nthreads: int = args.nthreads
     norefcheck: bool = args.norefcheck
     minfasta: Optional[int] = args.minfasta
