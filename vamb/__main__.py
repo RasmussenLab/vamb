@@ -272,8 +272,10 @@ def run(outdir, fastapath, tnfpath, namespath, lengthspath, bampaths, rpkmpath, 
     log('\nCompleted Vamb in {} seconds'.format(elapsed), logfile)
 
 def main():
-    doc = """Vamb: Variational autoencoders for metagenomic binning.
-
+    doc = f"""Vamb: Variational autoencoders for metagenomic binning.
+    
+    Version: {'.'.join([str(i) for i in vamb.__version__])}
+    
     Default use, good for most datasets:
     vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam
 
