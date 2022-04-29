@@ -7,12 +7,13 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
     add_help=False)
 
-parser.add_argument('vambpath', help='Path to vamb directory')
 parser.add_argument('clusterspath', help='Path to clusters.tsv')
 parser.add_argument('refpath', help='Path to reference file')
 parser.add_argument('--tax', dest='taxpath', help='Path to taxonomic maps')
 parser.add_argument('-m', dest='min_bin_size', metavar='', type=int,
                     default=200000, help='Minimum size of bins [200000]')
+parser.add_argument('-c', dest='min_contigs', metavar='', type=int,
+                    default=None, help='Minimum number of contigs per bin [None=1]')
 parser.add_argument('-s', dest='separator', help='Binsplit separator', default=None)
 parser.add_argument('--disjoint', action='store_true', help='Enforce disjoint clusters')
 
@@ -22,7 +23,6 @@ if len(sys.argv) == 1:
 
 args = parser.parse_args()
 
-sys.path.append(args.vambpath)
 import vamb
 import os
 
@@ -42,7 +42,7 @@ if args.taxpath is not None:
         reference.load_tax_file(file)
 
 binning = vamb.benchmark.Binning(clusters, reference, minsize=args.min_bin_size, disjoint=args.disjoint,
-                            binsplit_separator=args.separator)
+                            binsplit_separator=args.separator, mincontigs=args.min_contigs)
 
 for rank in range(len(binning.counters)):
     binning.print_matrix(rank)
