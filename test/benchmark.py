@@ -1,49 +1,89 @@
 from math import sqrt
 import unittest
-import random
 import io
 
-from vamb.benchmark import Contig, Genome, Reference, Binning, filter_clusters
+from vamb.benchmark import Contig, Genome, Reference, Binning
 
-REFERENCE = """contig1 ecoli   chrom1  55  90
-cnt2    ecoli   chrom1  91  99
-contig3 ecoli   chrom1  99  101
-cnt11   ecoli   cnt11   1   40
-cnt13   bsubtil chrom1  5   15
-cnt15   bsubtil chrom1  27  35
-cnt18   bsubtil chrom1  21  40
-cnt19   bsubtil chrom2  2   11
-cnt22   bsubtil chrom2  6   14
-cnt10   bsubtil chrom2  5   12
-cnt12   bsubtil chrom2  2   14"""
+REFERENCE_DICT = {
+    "genomes": {
+        "gA": {
+            "subjA1": [100, {
+                "sA1c1": [1, 50],
+                "sA1c2": [15, 65],
+                "sA1c3": [20, 40],
+                "sA1c4": [70, 100],
+            }]
+        },
+        "gB": {
+            "subjB1": [20, {
+                "sB1c1": [1, 20],
+            }],
+            "subjB2": [60, {
+                "sB2c1": [1, 60],
+                "sB2c2": [10, 50],
+                "sB2c3": [15, 40],
+                "sB2c4": [20, 30],
+            }]
+        },
+        "gC": {
+            "subjY1": [40, {
+                "sY1c1": [10, 20],
+                "sY1c2": [21, 40],
+            }],
+            "subjY2": [100, {
+                "sY2c1": [1, 60],
+                "sY2c2": [5, 70],
+                "sY2c3": [50, 80],
+                "sY2c4": [60, 99],
+                "sY2c5": [99, 100],
 
-BINNING = """clus1   contig1
-clus1   cnt2
-clus1   cnt11
-clus2   contig3
-clus3   cnt13
-clus3   cnt15
-clus3   cnt18
-clus3   cnt22
-clus3   cnt10
-clus4   cnt19
-clus5   cnt12"""
+            }],
+            "subjY3": [100, {
+                "sY3c1": [40, 50],
+                "sY3c2": [45, 55],
+            }]
+        }
+    },
+    "taxmaps": [
+        {
+            "gA": "D",
+            "gB": "D",
+            "gC": "E"
+        },
+        {
+            "D": "F",
+            "E": "F"
+        }
+    ]
 
-TAXMAP = """ecoli\tbacterium
-bsubtil\tbacterium"""
+}
 
-BREADTH_ECOLI = (101 - 55 + 1) + (40)
-BREADTH_BSUBTIL = (11 + 40 - 21 + 1) + 13
+# C1: All of strainA
+# C2: All of B2, but missing redundant contig c3
+# C3: Y1
+# C4: Y2 + Y3 + B1
+# C5: The missing contig from C2
+BINNING_STR = """C1\tsA1c1
+C1\tsA1c2
+C1\tsA1c3
+C1\tsA1c4
+C2\tsB2c1
+C2\tsB2c2
+C2\tsB2c4
+C3\tsY1c1
+C3\tsY1c2
+C4\tsB1c1
+C4\tsY2c1
+C4\tsY2c3
+C4\tsY2c4
+C4\tsY2c5
+C4\tsY3c1
+C4\tsY3c2
+C5\tsB2c3"""
 
-
-def process_const(str, seed):
-    lines = str.splitlines()
-    random.Random(seed).shuffle(lines)
-    return '\n'.join(['\t'.join(line.split()) for line in lines])
-
-
-REFERENCE = process_const(REFERENCE, 0)
-BINNING = process_const(BINNING, 1)
+# Test breadth of genomes
+# Test breadth of bins
+#
 
 
 class TestContig(unittest.TestCase):
@@ -53,6 +93,9 @@ class TestContig(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             Contig("x", "y", 5, -10)
+
+        with self.assertRaises(ValueError):
+            Contig("x", "y", -1, 5)
 
     def test_works(self):
         c = Contig("x", "y", 9, 19)
@@ -71,59 +114,29 @@ class TestContig(unittest.TestCase):
 
 
 class TestGenome(unittest.TestCase):
-    contigs = [
-        Contig.subjectless("a", 22),  # ref a: 22
-        Contig("p", "k", 71, 89),
-        Contig("w", "k", 32, 59),
-        Contig("k", "m", 2, 15),  # ref m: 19
-        Contig("q", "k", 13, 49),
-        Contig("s", "m", 15, 21),
-        Contig("v", "k", 11, 44),  # ref k: 66
-    ]
-
-    def test_basics(self):
-        g = Genome("w")
-        self.assertEqual(g.ncontigs, 0)
-        self.assertEqual(g.name, "w")
-        self.assertEqual(g.breadth, 0)
-
-    def test_add(self):
+    def test_genome(self):
         g = Genome("gen")
-        for c in self.contigs:
-            g.add(c)
-        self.assertEqual(g.ncontigs, len(self.contigs))
-        self.assertEqual(set(self.contigs), g.contigs)
-        for c in self.contigs:
-            g.discard(c)
-        self.assertEqual(g.ncontigs, 0)
-        g.add(self.contigs[0])
-        self.assertEqual(g.ncontigs, 1)
-        g.remove(self.contigs[0])
-        self.assertEqual(g.ncontigs, 0)
-        with self.assertRaises(KeyError):
-            g.remove(self.contigs[0])
+        with self.assertRaises(ValueError):
+            g.add("foo", 0)
 
-    def test_breadth(self):
-        g = Genome("g")
-        breadth = 22 + 19 + 66
-        self.assertEqual(g.getbreadth(self.contigs), breadth)
-        g.update_breadth()
-        # Contigs not added yet
+        with self.assertRaises(ValueError):
+            g.add("foo", -1)
+
         self.assertEqual(g.breadth, 0)
-        for c in self.contigs:
-            g.add(c)
-        g.update_breadth()
-        self.assertEqual(g.breadth, breadth)
-        g.discard(self.contigs[0])
-        g.update_breadth()
-        self.assertLess(g.breadth, breadth)
+        g.add('bar', 10)
+        self.assertEqual(g.breadth, 10)
+        g.add('qux', 21)
+        self.assertEqual(g.breadth, 31)
 
-    def test_hash_eq(self):
-        c1 = Contig("x", "y", 1, 2)
-        c2 = Contig("y", "y", 1, 2)
+        with self.assertRaises(ValueError):
+            g.add("bar", 5)
+
+        self.assertEqual(g.breadth, sum(g.sources.values()))
+
+    def test_eq(self):
         g1 = Genome("x")
-        g1.add(c1)
-        g1.add(c2)
+        g1.add("foo", 5)
+        g1.add("bar", 10)
         g2 = Genome("x")
         g3 = Genome("different")
         self.assertEqual(g1, g2)
@@ -132,178 +145,211 @@ class TestGenome(unittest.TestCase):
         self.assertEqual(len({g1, g2}), 1)
 
 
-class TestReference(unittest.TestCase):
-    def test_breadth(self):
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        self.assertEqual(ref.breadth, BREADTH_BSUBTIL + BREADTH_ECOLI)
-        self.assertEqual(ref.ngenomes, 2)
-        self.assertEqual(ref.ncontigs, 11)
-
-    def test_remove(self):
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        genome = [i for i in ref.genomes if i.name == "ecoli"][0]
-        ref.discard(genome)
-        self.assertEqual(ref.breadth, BREADTH_BSUBTIL)
-        self.assertEqual(ref.ngenomes, 1)
-        self.assertEqual(ref.ncontigs, 7)
-
-        with self.assertRaises(KeyError):
-            ref.remove(genome)
-
-        ref.add(genome)
-        self.assertEqual(ref.breadth, BREADTH_BSUBTIL + BREADTH_ECOLI)
-        self.assertEqual(ref.ngenomes, 2)
-        self.assertEqual(ref.ncontigs, 11)
-
-    def test_unique_contignames(self):
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        with self.assertRaises(KeyError):
-            genome = Genome("g")
-            genome.add(Contig.subjectless("cnt12", 11))
-            ref.add(genome)
-
-    def test_unique_genomenames(self):
-        g1, g2 = Genome("g"), Genome('g')
-        with self.assertRaises(KeyError):
-            Reference([g1, g2])
-
-    def test_taxfile(self):
-        with self.assertRaises(KeyError):
-            badfile = "ecoli\tbact\nnoexist\tbacterium"
-            ref = Reference.from_file(io.StringIO(REFERENCE))
-            ref.load_tax_file(io.StringIO(badfile))
-
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        ref.load_tax_file(io.StringIO(TAXMAP))
-        self.assertEqual(len(ref.taxmaps), 1)
-
-        # Rank A mapped to both B and C
-        badstr = "ecoli\ta\tb\nbsubtil\ta\tc"
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        with self.assertRaises(KeyError):
-            ref.load_tax_file(io.StringIO(badstr))
-
-        # Genome bsubtil missing from tax file
-        badstr = "ecoli\ta\tb"
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        with self.assertRaises(KeyError):
-            ref.load_tax_file(io.StringIO(badstr))
-
-
-class TestFilterContigs(unittest.TestCase):
+class TestBenchmark(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.clusters = dict()
-        cls.contigs_by_name = dict()
-        for cluster, binname in map(str.split, BINNING.splitlines()):
-            if cluster not in cls.clusters:
-                cls.clusters[cluster] = set()
-            cls.clusters[cluster].add(binname)
-        for (contig, genome, subject, start, end) in map(str.split, REFERENCE.splitlines()):
-            cls.contigs_by_name[contig] = Contig(
-                contig, subject, int(start), int(end) + 1)
+        cls.reference = Reference.from_dict(REFERENCE_DICT)
+        cls.binning = Binning.from_file(
+            io.StringIO(BINNING_STR), cls.reference)
 
-    def test_no_filter(self):
-        self.assertEqual(filter_clusters(
-            self.clusters, self.contigs_by_name, 0, 0), self.clusters)
+    def test_bin_basics(self):
+        bins = {b.name: b for b in self.binning.bins}
+        self.assertEqual(bins["C1"].ncontigs, 4)
+        self.assertEqual(bins["C2"].ncontigs, 3)
+        self.assertEqual(bins["C3"].ncontigs, 2)
+        self.assertEqual(bins["C4"].ncontigs, 7)
+        self.assertEqual(bins["C5"].ncontigs, 1)
 
-    def test_minsize(self):
-        size = 40
-        filt = filter_clusters(self.clusters, self.contigs_by_name, size, 0)
-        # We use Genome's breadth calcular to verify
-        kept_binnames = set()
-        for (binname, contigs) in self.clusters.items():
-            g = Genome("")
-            for contigname in contigs:
-                g.add(self.contigs_by_name[contigname])
-            g.update_breadth()
-            if g.breadth >= size:
-                kept_binnames.add(binname)
+        self.assertEqual(bins["C1"].breadth, 96)
+        self.assertEqual(bins["C2"].breadth, 60)
+        self.assertEqual(bins["C3"].breadth, 31)
+        self.assertEqual(bins["C4"].breadth, 136)
+        self.assertEqual(bins["C5"].breadth, 26)
 
-        self.assertEqual(set(filt), kept_binnames)
+    def test_bin_confusion_matrix(self):
+        bins = {b.name: b for b in self.binning.bins}
+        genomes = {g.name: g for g in self.reference.genomes}
+        self.assertEqual(
+            bins["C1"].confusion_matrix(genomes["gA"]),
+            (96, 0, 4)
+        )
+        self.assertEqual(
+            bins["C4"].confusion_matrix(genomes["gC"]),
+            (116, 20, 124)
+        )
+        self.assertEqual(
+            bins["C2"].confusion_matrix(genomes["gA"]),
+            (0, bins["C2"].breadth, genomes["gA"].breadth)
+        )
 
-    def test_mincontigs(self):
-        filt = filter_clusters(self.clusters, self.contigs_by_name, 0, 3)
-        self.assertEqual(set(filt), {'clus1', 'clus3'})
+    def test_bin_recall_precision(self):
+        bins = {b.name: b for b in self.binning.bins}
+        genomes = {g.name: g for g in self.reference.genomes}
+        self.assertEqual(
+            bins["C1"].recall_precision(genomes["gA"]),
+            (0.96, 1.0)
+        )
+        self.assertEqual(
+            bins["C4"].recall_precision(genomes["gC"]),
+            (116/240, 116/136)
+        )
+        self.assertEqual(
+            bins["C2"].recall_precision(genomes["gA"]),
+            (0.0, 0.0)
+        )
 
+    def test_bin_fscore(self):
+        bins = {b.name: b for b in self.binning.bins}
+        genomes = {g.name: g for g in self.reference.genomes}
+        pairs = [("C1", "gA"), ("C2", "gA"), ("C4", "gC")]
 
-class TestBininng(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.ref = Reference.from_file(io.StringIO(REFERENCE))
-        cls.bin = Binning.from_file(io.StringIO(BINNING), cls.ref)
+        for (binname, gname) in pairs:
+            self.assertEqual(
+                bins[binname].f1(genomes[gname]),
+                bins[binname].fscore(1.0, genomes[gname]),
+            )
 
-    def test_bad_init(self):
-        # Contig not found in reference
-        binstr = BINNING + "\nbinx\tcontignoexist"
+        # Alternatively, these could be considered to be undefined
+        self.assertEqual(bins["C1"].fscore(2.0, genomes["gB"]), 0.0)
+        self.assertEqual(bins["C5"].fscore(0.5, genomes["gA"]), 0.0)
+
+        self.assertAlmostEqual(bins["C4"].fscore(
+            sqrt(2), genomes["gC"]), 0.5649350649350648)
+        self.assertAlmostEqual(bins["C1"].fscore(
+            0.4, genomes["gA"]), 0.9942857142857143)
+
+    def test_ref_errors(self):
+        # Can't add same contig twice
+        genome = self.reference.genomeof[self.reference.contig_by_name["sA1c4"]]
+        with self.assertRaises(ValueError):
+            self.reference.add_contig(
+                Contig("sA1c4", "subjA1", 10, 20), genome)
+
+        # Can't add genome of same name
+        with self.assertRaises(ValueError):
+            self.reference.add_genome(Genome("gB"))
+
+        # Can't add contig with unknown source
+        with self.assertRaises(ValueError):
+            self.reference.add_contig(
+                Contig("newcontig", "newsubject", 10, 20), genome)
+
+        # Can't add contig with unknown genome
+        with self.assertRaises(ValueError):
+            g = Genome("newgenome")
+            g.add("foo", 99)
+            self.reference.add_contig(
+                Contig("newcontig", "foo", 10, 20), Genome("newgenome"))
+
+        # Can't add contig longer than its subject
+        with self.assertRaises(IndexError):
+            ref = Reference()
+            g = Genome("newgenome")
+            g.add("subj", 5)
+            ref.add_genome(g)
+            ref.add_contig(Contig("x", "subj", 1, 6), g)
+
+        with self.assertRaises(ValueError):
+            g = Genome("newgenome")
+            g.add("foo", 99)
+            self.reference.add_contig(
+                Contig("newcontig", "foo", 10, 20), Genome("newgenome"))
+
+        # Can't add taxonomy to wrong clade
+        with self.assertRaises(ValueError):
+            self.reference.add_taxonomy(1, 'D', 'H')
+
+        # Can't add taxonomy of a genome that does not exist
         with self.assertRaises(KeyError):
-            Binning.from_file(io.StringIO(binstr), self.ref)
+            self.reference.add_taxonomy(1, 'X', 'H')
 
-        # This errors in a different code path
-        with self.assertRaises(KeyError):
-            Binning.from_file(io.StringIO(binstr), self.ref, minsize=1)
-        Binning.from_file(io.StringIO(binstr), self.ref, checkpresence=False)
+    def test_ref_basics(self):
+        self.assertEqual(self.reference.ngenomes, 3)
+        self.assertEqual(self.reference.ncontigs, 18)
+        self.assertEqual(self.reference.nranks, 3)
 
-        # Contig in multiple bins
-        binstr = BINNING + "\nbinx\tcontig3"
-        with self.assertRaises(KeyError):
-            Binning.from_file(io.StringIO(binstr), self.ref)
-        Binning.from_file(io.StringIO(binstr), self.ref, disjoint=False)
+    def test_ref_roundtrip(self):
+        ref = self.reference
+        buffer = io.StringIO()
+        ref.save(buffer)
+        buffer.seek(0)
+        ref2 = Reference.from_file(buffer)
 
-    def test_basics(self):
-        self.assertEqual(self.bin.nbins, 5)
-        self.assertEqual(self.bin.ncontigs, 11)
+        self.assertEqual(ref.ncontigs, ref2.ncontigs)
+        self.assertEqual(ref.ngenomes, ref2.ngenomes)
+        self.assertEqual(ref.nranks, ref2.nranks)
+        self.assertEqual(ref.genomes, ref2.genomes)
+        self.assertEqual(ref.contig_by_name, ref2.contig_by_name)
+        self.assertEqual(ref.taxmaps, ref2.taxmaps)
 
-    def test_statistics(self):
-        g1, g2 = sorted(self.bin.reference.genomes, key=lambda x: x.name)
-        tp, tn, fp, fn = self.bin.confusion_matrix(g1, 'clus3')
-        # Manually calculated
-        self.assertEqual(tp, 41)
-        self.assertEqual(tn, g2.breadth)
-        self.assertEqual(fp, 0)
-        self.assertEqual(fn, 3)
+    def test_binning_disjoint(self):
+        s = BINNING_STR + "\nC99\tsY2c1"
+        buffer = io.StringIO(s)
 
-        # Alternative formulae
-        mcc = (tp * tn - fp * fn) / sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
-        self.assertAlmostEqual(self.bin.mcc(g1, "clus3"), mcc)
+        with self.assertRaises(ValueError):
+            _bins = Binning.from_file(buffer, self.reference)
 
-        f1 = tp / (tp + 0.5 * (fp + fn))
-        self.assertAlmostEqual(self.bin.f1(g1, "clus3"), f1)
+        buffer.seek(0)
+        _bins = Binning.from_file(buffer, self.reference, disjoint=False)
 
-        self.assertEqual([[2, 2, 2, 2, 2, 2, 2, 1, 0]], self.bin.summary())
+    def test_binning_strain_counter(self):
+        # This approach is simple and easy to verify to be correct, but very inefficient.
+        # Strain-level counter (level = 0)
+        for ((min_recall, min_precision), n_obs) in self.binning.counters[0].items():
+            n_exp = 0
+            for genome in self.reference.genomes:
+                for bin in self.binning.bins:
+                    recall, precision = bin.recall_precision(genome)
+                    if recall >= min_recall and precision >= min_precision:
+                        n_exp += 1
+                        break
 
-        tp, tn, fp, fn = self.bin.confusion_matrix(g1, 'clus1')
-        self.assertEqual(tp, 0)
-        self.assertEqual(tn, 2)
+            self.assertEqual(n_exp, n_obs)
+
+    def test_binning_clade_counter(self):
+        counters: list[dict[tuple[float, float], int]
+                       ] = self.binning.counters  # type: ignore
+        genomesof = [{'D': ['gA', 'gB'], 'E': ['gC']},
+                     {'F': ['gA', 'gB', 'gC']}]
+
+        genomes = {g.name: g for g in self.reference.genomes}
+        for rank in (1, 2):
+            for ((min_recall, min_precision), n_obs) in counters[rank].items():
+                seen = {c: False for c in genomesof[rank-1]}
+                for (clade, genomenames) in genomesof[rank-1].items():
+                    for bin in self.binning.bins:
+                        rec = 0.0
+                        prec = 0.0
+                        for genomename in genomenames:
+                            recall, precision = bin.recall_precision(
+                                genomes[genomename])
+                            rec = max(rec, recall)
+                            prec += precision
+                        if rec >= min_recall and prec >= min_precision:
+                            seen[clade] = True
+
+                self.assertEqual(sum(seen.values()), n_obs)
 
     def test_filtering(self):
-        bin = Binning.from_file(io.StringIO(BINNING), self.ref, minsize=40)
-        self.assertEqual(bin.nbins, 2)
-        self.assertEqual(bin.ncontigs, 8)
+        def test_binnames(bin: Binning, names):
+            self.assertEqual({b.name for b in bin.bins}, set(names))
 
-        bin = Binning.from_file(io.StringIO(BINNING), self.ref, minsize=12)
-        self.assertEqual(bin.nbins, 3)
-        self.assertEqual(bin.ncontigs, 9)
+        bin2 = Binning.from_file(io.StringIO(
+            BINNING_STR), self.reference, mincontigs=0, minsize=0)
+        test_binnames(bin2, ['C1', 'C2', 'C3', 'C4', 'C5'])
 
-        bin = Binning.from_file(io.StringIO(BINNING), self.ref, mincontigs=2)
-        self.assertEqual(bin.nbins, 2)
-        self.assertEqual(bin.ncontigs, 8)
+        bin2 = Binning.from_file(io.StringIO(
+            BINNING_STR), self.reference, mincontigs=3)
+        test_binnames(bin2, ['C1', 'C2', 'C4'])
 
-        bin = Binning.from_file(io.StringIO(BINNING), self.ref, mincontigs=4)
-        self.assertEqual(bin.nbins, 1)
-        self.assertEqual(bin.ncontigs, 5)
+        bin2 = Binning.from_file(io.StringIO(
+            BINNING_STR), self.reference, minsize=50)
+        test_binnames(bin2, ['C1', 'C2', 'C4'])
 
-    def test_with_taxmaps(self):
-        ref = Reference.from_file(io.StringIO(REFERENCE))
-        ref.load_tax_file(io.StringIO(TAXMAP))
-        bin = Binning.from_file(io.StringIO(BINNING), ref)
-        self.assertEqual(bin.summary(), [[2, 2, 2, 2, 2, 2, 2, 1, 0], [
-                         1, 1, 1, 1, 1, 1, 1, 1, 0]])
+        bin2 = Binning.from_file(io.StringIO(
+            BINNING_STR), self.reference, minsize=100)
+        test_binnames(bin2, ['C4'])
 
-    def test_print_matrix(self):
-        buf = io.StringIO()
-        self.bin.print_matrix(0, buf)
-        buf.getvalue()
-
-        with self.assertRaises(IndexError):
-            self.bin.print_matrix(1)
+        bin2 = Binning.from_file(io.StringIO(
+            BINNING_STR), self.reference, minsize=50, mincontigs=4)
+        test_binnames(bin2, ['C1', 'C4'])
