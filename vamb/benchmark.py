@@ -45,7 +45,7 @@
 # When instantiated, it can do a number of filters or transformations of the bins, e.g.
 # binsplitting or filtering of bins by number of contigs.
 # The only responsibility of the Binning object is to do the benchmarking itself. In practice,
-# this means computing a series of "counters", one for each Reference taxmap: 
+# this means computing a series of "counters", one for each Reference taxmap:
 
 # The first counter is a map from minimum (recall, precision) to the number of genomes
 # for which at least one bin in the Binning has a recall, precision level at or above the
@@ -55,7 +55,7 @@
 # Reference taxmap. For a given bin B and a clade C where C  is not a Genome (i.e. not the lowest
 # level of the taxmaps), the recall of the B/C pair is defined as the max of the recalls B/Cchild for
 # all Cchild taxonomic children of C according to the taxmap.
-# The precision is calculated as the SUM of all B/Cchild. 
+# The precision is calculated as the SUM of all B/Cchild.
 
 
 __doc__ = """Benchmark script
@@ -131,7 +131,7 @@ class Contig:
         return cls(name, name, 0, length)
 
     def __repr__(self) -> str:
-        return f'Contig({self.name}, subject={self.subject}, {self.start}:{self.end})'
+        return f'Contig(\"{self.name}\", \"{self.subject}\", {self.start}, {self.end})'
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, Contig) and self.name == other.name
@@ -484,7 +484,7 @@ class Binning:
                   for i in row]), sep='\t', file=file)
 
     def __repr__(self) -> str:
-        return f'<Binning with {self.nbins} bins and reference {hex(id(self.reference))}'
+        return f'<Binning with {self.nbins} bins and reference {hex(id(self.reference))}>'
 
     @property
     def nbins(self) -> int:
@@ -534,6 +534,8 @@ class Binning:
                 raise ValueError(
                     f"Recall/precision value {i} is not a finite value in (0;1]")
             s.add(i)
+        if len(s) == 0:
+            raise ValueError("Must provide at least 1 recall/precision value")
         return tuple(sorted(s))
 
     def get_seen_bitvectors(self, rp_by_name: dict[str, dict[Bin, tuple[float, float]]]) -> dict[str, int]:

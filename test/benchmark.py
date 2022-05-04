@@ -1,6 +1,7 @@
 from math import sqrt
 import unittest
 import io
+import re
 
 from vamb.benchmark import Contig, Genome, Reference, Binning
 
@@ -99,6 +100,7 @@ class TestContig(unittest.TestCase):
 
     def test_works(self):
         c = Contig("x", "y", 9, 19)
+        self.assertEqual(repr(c), "Contig(\"x\", \"y\", 9, 19)")
         c2 = Contig.subjectless("x", 10)
         self.assertEqual(c.name, c2.name)
         self.assertEqual(len(c), len(c2))
@@ -127,6 +129,7 @@ class TestGenome(unittest.TestCase):
         self.assertEqual(g.breadth, 10)
         g.add('qux', 21)
         self.assertEqual(g.breadth, 31)
+        self.assertEqual(repr(g), "Genome(\"gen\")")
 
         with self.assertRaises(ValueError):
             g.add("bar", 5)
@@ -154,6 +157,8 @@ class TestBenchmark(unittest.TestCase):
 
     def test_bin_basics(self):
         bins = {b.name: b for b in self.binning.bins}
+        self.assertEqual(repr(bins["C1"]), "Bin(\"C1\")")
+
         self.assertEqual(bins["C1"].ncontigs, 4)
         self.assertEqual(bins["C2"].ncontigs, 3)
         self.assertEqual(bins["C3"].ncontigs, 2)
@@ -237,9 +242,9 @@ class TestBenchmark(unittest.TestCase):
         # Can't add contig with unknown genome
         with self.assertRaises(ValueError):
             g = Genome("newgenome")
-            g.add("foo", 99)
+            g.add("subjA1", 99)
             self.reference.add_contig(
-                Contig("newcontig", "foo", 10, 20), Genome("newgenome"))
+                Contig("newcontig", "subjA1", 10, 20), g)
 
         # Can't add contig longer than its subject
         with self.assertRaises(IndexError):
@@ -267,6 +272,10 @@ class TestBenchmark(unittest.TestCase):
         self.assertEqual(self.reference.ngenomes, 3)
         self.assertEqual(self.reference.ncontigs, 18)
         self.assertEqual(self.reference.nranks, 3)
+        self.assertEqual(
+            repr(self.reference),
+            '<Reference with 3 genomes, 18 contigs and 3 ranks>'
+        )
 
     def test_ref_roundtrip(self):
         ref = self.reference
@@ -281,6 +290,26 @@ class TestBenchmark(unittest.TestCase):
         self.assertEqual(ref.genomes, ref2.genomes)
         self.assertEqual(ref.contig_by_name, ref2.contig_by_name)
         self.assertEqual(ref.taxmaps, ref2.taxmaps)
+
+    def test_binning_basics(self):
+        self.assertEqual(self.binning.nbins, 5)
+        self.assertRegex(
+            repr(self.binning),
+            '<Binning with 5 bins and reference 0x[a-f0-9]+>'
+        )
+
+    def test_binning_badargs(self):
+        ref = self.reference
+        with self.assertRaises(ValueError):
+            Binning.from_file(io.StringIO(BINNING_STR), ref, recalls=[])
+
+        with self.assertRaises(ValueError):
+            Binning.from_file(io.StringIO(BINNING_STR),
+                              ref, recalls=[-0.01, 0.5])
+
+        with self.assertRaises(ValueError):
+            Binning.from_file(io.StringIO(BINNING_STR),
+                              ref, recalls=[0.5, 0.5])
 
     def test_binning_disjoint(self):
         s = BINNING_STR + "\nC99\tsY2c1"
@@ -353,3 +382,10 @@ class TestBenchmark(unittest.TestCase):
         bin2 = Binning.from_file(io.StringIO(
             BINNING_STR), self.reference, minsize=50, mincontigs=4)
         test_binnames(bin2, ['C1', 'C4'])
+
+    def test_printmatrix(self):
+        with self.assertRaises(IndexError):
+            self.binning.print_matrix(3)
+
+        buffer = io.StringIO()
+        self.binning.print_matrix(0, buffer)
