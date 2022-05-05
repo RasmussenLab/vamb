@@ -68,4 +68,6 @@ class TestParseBam(unittest.TestCase):
         buf.seek(0)
         abundance2 = vamb.parsebam.Abundance.load(buf, self.abundance.refhash)
         self.assertTrue(np.all(abundance2.matrix == self.abundance.matrix))
+        self.assertTrue(np.all(abundance2.samplenames == self.abundance.samplenames))
         self.assertEqual(abundance2.refhash, self.abundance.refhash)
+        self.assertEqual(abundance2.minid, self.abundance.minid)

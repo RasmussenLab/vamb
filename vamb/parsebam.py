@@ -8,6 +8,7 @@ Usage:
 import pycoverm
 import os as _os
 import numpy as _np
+from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
 import vamb.vambtools as _vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
@@ -26,6 +27,8 @@ class Abundance:
     def __init__(self, matrix: _np.ndarray, samplenames: Sequence[str], minid: float, refhash: bytes):
         assert matrix.dtype == _np.float32
         assert matrix.ndim == 2
+        assert matrix.shape[1] == len(samplenames)
+        assert isfinite(minid) and 0.0 <= minid and minid <= 1.0
 
         self.matrix = matrix
         self.samplenames = _np.array(samplenames, dtype=object)
@@ -57,7 +60,7 @@ class Abundance:
     ) -> A:
         arrs = _np.load(io, allow_pickle=True)
         abundance = cls(_vambtools.validate_input_array(
-            arrs['matrix']), arrs['samplenames'], arrs["minid"], arrs["refhash"].item())
+            arrs['matrix']), arrs['samplenames'], arrs["minid"].item(), arrs["refhash"].item())
         if refhash is not None:
             abundance.verify_refhash(refhash)
 
@@ -89,8 +92,11 @@ class Abundance:
             if not pycoverm.is_bam_sorted(path):
                 raise ValueError(f"Path {path} is not sorted by reference.")
 
+        # Workaround: Currently pycoverm has a bug where it filters contigs when mindid == 0
+        # (issue #7). Can be solved by setting it to a low value
+        _minid = minid if minid > 0.001 else 0.001
         headers, coverage = pycoverm.get_coverages_from_bam(
-            paths, threads=nthreads, min_identity=minid,
+            paths, threads=nthreads, min_identity=_minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
             trim_upper=0.1, trim_lower=0.1
         )
