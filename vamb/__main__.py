@@ -10,6 +10,7 @@ import argparse
 import torch
 import datetime
 import time
+from math import isfinite
 from typing import Optional, IO
 
 _ncpu = os.cpu_count()
@@ -405,8 +406,8 @@ def main():
 
     inputos.add_argument('-m', dest='minlength', metavar='', type=int, default=250,
                          help='ignore contigs shorter than this [250]')
-    inputos.add_argument('-z', dest='minid', metavar='', type=float, default=None,
-                         help='ignore reads with nucleotide identity below this [None]')
+    inputos.add_argument('-z', dest='minid', metavar='', type=float, default=0.0,
+                         help='ignore reads with nucleotide identity below this [0.0]')
     inputos.add_argument('-p', dest='nthreads', metavar='', type=int, default=DEFAULT_THREADS,
                          help=('number of threads to use '
                                '[min(' + str(DEFAULT_THREADS) + ', nbamfiles)]'))
@@ -473,12 +474,11 @@ def main():
     rpkm: Optional[str] = args.rpkm
     minlength: int = args.minlength
 
-    if args.minid is not None and bamfiles is None:
+    if args.minid != 0.0 and bamfiles is None:
         raise argparse.ArgumentTypeError(
             'If minid is set, RPKM must be passed as bam files')
 
-    minid: float = 0.001 if (
-        args.minid is None or args.minid < 0.001) else args.minid
+    minid: float = args.minid
     nthreads: int = args.nthreads
     norefcheck: bool = args.norefcheck
     minfasta: Optional[int] = args.minfasta
@@ -552,7 +552,7 @@ def main():
         raise argparse.ArgumentTypeError(
             'Minimum contig length must be at least 250')
 
-    if minid < 0.0 or minid > 1.0:
+    if not isfinite(minid) or minid < 0.0 or minid > 1.0:
         raise argparse.ArgumentTypeError(
             'Minimum nucleotide ID must be in [0,1]')
 

@@ -4,15 +4,17 @@
 # A subject has only a name and length. Subject names are unique.
 
 # A set of subjects is a Genome. The subjects are assumed to not be overlapping. Hence,
-# the breadth of a genome is the sum of subject lengths in that genome. Genome names
-# are assumed to be unique
+# the "breadth" of a genome is the sum of subject lengths in that genome. Genome names
+# are assumed to be unique.
 
-# A Contig. A Contig has a name, a source subject, and a start and end position within
+# A Contig is composed of a name, a source subject, and a start and end position within
 # that subject, where the contig maps to. Contig names are assumed to be unique.
+# Contigs always have a source. If the source is unknown, a dummy source can be used,
+# i.e. a source not used by any other contig.
 
-# A named set of Contigs is a Bin. Bin names are unique. The breadth of a Bin is the total
-# number of basepairs (positions) covered by any contig in the bin. Contigs can overlap, but
-# a position covered multiple times only count once towards breadth.
+# A named set of Contigs is a Bin. Bin names are unique. The "breadth" of a Bin is the total
+# number of basepairs (positions) covered by any contig in the bin. Contigs can overlap the
+# same subject, but a position covered multiple times only count once towards breadth.
 
 # A Bin/Genome pair has an "intersection". This is the number of basepairs (positions) in
 # the Bin which come from a subject in the given Genome. In other words, it is the breadth
@@ -22,30 +24,30 @@
 # * True positives (TP) is the intersection
 # * False positives (FP) is Bin breadth minus TP
 # * False negatives (FN) is Genome breadth minus TP
-# * Recall is TP / (TP + FN)
-# * Precision is TP / (TP + FP)
-# * F-score is calculated from recall and precision
+# * Recall, precision and F-score is calculated from TP, FP and FN as usual.
 
 # A binning result is described by two objects, the Reference and the Binning.
 
-# A Reference object represents the knowledge about the input data to the binning, and is
-# independent of ant particular binning run or binning result. It is composed of
+# A Reference object represents the information in the test dataset, and is independent of
+# any concrete binning tool or binning result. Hence, a test dataset has one Reference object.
+# It is composed of:
 # * The total set of Contigs input to the binning
 # * The total set of Genomes that the set of Contigs represent. This implies that all Contigs
 #   in the Reference must derive from a subject which is also in a Genome in the Reference, i.e.
-#   there must be no contigs where the source is unknown.
+#   there must be no contigs where the source is not from a Genome (via a subject) in the Reference.
 # * A list of "taxmaps". A taxmap describe taxonomic information about the Genomes of the
 #   Reference. A taxmap is a dictionary that maps the name of a clade to its parent clade.
 #   For example, the pair "Ecoli":"Escherichia" could be present.
 #   The first taxmap has all Genome names as keys.
-#   The second taxmap has as keys the values of the first taxmap, and so on.
+#   The Nth taxmap has as keys the values of the N-1th taxmap (except None).
 #   A clade for which no higher level clade is known or defined maps to None.
 
-# The Binning object contains the matching Reference and a series of Bins.
+# The Binning object contains the matching Reference and a collection of Bins.
 # When instantiated, it can do a number of filters or transformations of the bins, e.g.
 # binsplitting or filtering of bins by number of contigs.
-# The only responsibility of the Binning object is to do the benchmarking itself. In practice,
-# this means computing a series of "counters", one for each Reference taxmap:
+# The only responsibility of the Binning object is to store the input bins, do this filtering
+# and transformation, and do the benchmarking itself. In practice, this means computing a
+# series of "counters", one for each Reference taxmap:
 
 # The first counter is a map from minimum (recall, precision) to the number of genomes
 # for which at least one bin in the Binning has a recall, precision level at or above the
@@ -88,14 +90,13 @@ import json
 from math import isfinite
 from vamb import vambtools
 from collections.abc import Iterable, Sequence
-from typing import Optional, TypeVar, IO, NewType, Any
+from typing import Optional, TypeVar, IO, Any
 
 C = TypeVar('C', bound='Contig')
 G = TypeVar('G', bound='Genome')
 Bn = TypeVar('Bn', bound='Bin')
 R = TypeVar('R', bound='Reference')
 Bs = TypeVar('Bs', bound='Binning')
-BinName = NewType('BinName', str)
 
 
 class Contig:
@@ -545,7 +546,7 @@ class Binning:
 
         for (cladename, d) in rp_by_name.items():
             bitvector = 0
-            for (_, (recall, precision)) in d.items():
+            for (recall, precision) in d.values():
                 for (i, (min_recall, min_precision)) in enumerate(product(recalls, precisions)):
                     if recall >= min_recall and precision >= min_precision:
                         bitvector |= 1 << i

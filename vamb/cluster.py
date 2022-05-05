@@ -284,7 +284,7 @@ class ClusterGenerator:
 
         cluster = Cluster(
             # type: ignore (PyTorch does not yet have type checking)
-            self.indices[medoid].item(),
+            int(self.indices[medoid].item()),
             self.seed, self.indices[points].numpy(), self.peak_valley_ratio,
             threshold, isdefault, self.successes, len(self.attempts)
         )
@@ -465,11 +465,11 @@ def _wander_medoid(
         matrix, kept_mask, medoid, _MEDOID_RADIUS, cuda)
 
     while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
-        sampled_medoid = rng.choice(cluster).item()
+        sampled_medoid = int(rng.choice(cluster).item())
 
         # Prevent sampling same medoid multiple times.
         while sampled_medoid in tried:
-            sampled_medoid = rng.choice(cluster).item()
+            sampled_medoid = int(rng.choice(cluster).item())
 
         tried.add(sampled_medoid)
 
