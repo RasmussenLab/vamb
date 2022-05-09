@@ -364,7 +364,7 @@ class Reference:
             for (sourcename, (sourcelen, contigdict)) in sourcesdict.items():
                 genome.add(sourcename, sourcelen)
                 for (contigname, (start, end)) in contigdict.items():
-                    # JSON format is 1-indexes and includes endpoints, whereas
+                    # JSON format is 1-indexed and includes endpoints, whereas
                     # Contig struct is not, so compensate.
                     contig = Contig(contigname, sourcename, start - 1, end)
                     instance.add_contig(contig, genome)
@@ -462,6 +462,22 @@ class Binning:
         bins = reference.parse_bins(filehandle, binsplit_separator)
         bins = cls.filter_bins(bins, minsize, mincontigs)
         instance = cls(bins, reference, disjoint)
+        instance.benchmark(recalls, precisions)
+        return instance
+
+    @classmethod
+    def gold_standard(
+        cls: type[Bs],
+        reference: Reference,
+        recalls: Sequence[float] = _DEFAULTRECALLS,
+        precisions: Sequence[float] = _DEFAULTPRECISIONS,
+    ) -> Bs:
+        "Return a Binning from a given Reference where each Genome is precisely one Bin"
+        contigsof: defaultdict[Genome, list[Contig]] = defaultdict(list)
+        for contig in reference.contig_by_name.values():
+            contigsof[reference.genomeof[contig]].append(contig)
+        bins = [Bin.from_contigs(genome.name, contigs, reference.genomeof) for (genome, contigs) in contigsof.items()]
+        instance = cls(bins, reference, disjoint=False)
         instance.benchmark(recalls, precisions)
         return instance
 
