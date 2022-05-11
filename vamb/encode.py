@@ -108,18 +108,18 @@ def make_dataloader(
     _vambtools.zscore(tnf, axis=0, inplace=True)
 
     # Create weights
-    weigths_numpy = _np.log(lengths[mask]).astype(_np.float32) - 5.0
-    weigths_numpy[weigths_numpy < 2.0] = 2.0
-    weigths_numpy *= len(weigths_numpy) / weigths_numpy.sum()
-    weigths_numpy.shape = (len(weigths_numpy), 1)
-    weights = _torch.from_numpy(weigths_numpy)
+    lengths = (lengths[mask]).astype(_np.float32)
+    weights = _np.log(lengths).astype(_np.float32) - 5.0
+    weights[weights < 2.0] = 2.0
+    weights *= len(weights) / weights.sum()
+    weights.shape = (len(weights), 1)
 
     ### Create final tensors and dataloader ###
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
-
+    weightstensor = _torch.from_numpy(weights)
     n_workers = 4 if cuda else 1
-    dataset = _TensorDataset(depthstensor, tnftensor, weights)
+    dataset = _TensorDataset(depthstensor, tnftensor, weightstensor)
     dataloader = _DataLoader(
         dataset=dataset, batch_size=batchsize, drop_last=True,
         shuffle=True, num_workers=n_workers, pin_memory=cuda
@@ -209,7 +209,7 @@ class VAE(_nn.Module):
         self.decodernorms = _nn.ModuleList()
 
         # Add all other hidden layers
-        for nin, nout in zip([self.nsamples + self.ntnf] + self.nhiddens, self.nhiddens):
+        for nin, nout in zip([self.nsamples + self.ntnf + 1] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
@@ -293,8 +293,8 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out
 
-    def forward(self, depths: Tensor, tnf: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        tensor = _torch.cat((depths, tnf), 1)
+    def forward(self, depths: Tensor, tnf: Tensor, weights: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        tensor = _torch.cat((depths, tnf, weights), 1)
         mu, logsigma = self._encode(tensor)
         latent = self.reparameterize(mu, logsigma)
         depths_out, tnf_out = self._decode(latent)
@@ -365,7 +365,7 @@ class VAE(_nn.Module):
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
+            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in, weights)
 
             loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                 tnf_out, mu, logsigma, weights)
@@ -420,14 +420,14 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, _ in new_data_loader:
+            for depths, tnf, weights in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
 
                 # Evaluate
-                _, _, mu, _ = self(depths, tnf)
+                _, _, mu, _ = self(depths, tnf, weights)
 
                 if self.usecuda:
                     mu = mu.cpu()
