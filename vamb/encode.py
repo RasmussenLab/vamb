@@ -108,10 +108,11 @@ def make_dataloader(
     _vambtools.zscore(tnf, axis=0, inplace=True)
 
     # Create weights
-    weigths_numpy = _np.log(lengths[mask]).astype(_np.float32)
+    weigths_numpy = _np.log(lengths[mask]).astype(_np.float32) - 5.0
+    weigths_numpy[weigths_numpy < 2.0] = 2.0
+    weigths_numpy *= len(weigths_numpy) / weigths_numpy.sum()
     weigths_numpy.shape = (len(weigths_numpy), 1)
     weights = _torch.from_numpy(weigths_numpy)
-    weights *= 1 / weights.sum().item()
 
     ### Create final tensors and dataloader ###
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
@@ -337,7 +338,7 @@ class VAE(_nn.Module):
         optimizer,
         batchsteps: list[int],
         logfile
-    ) -> _DataLoader[tuple[Tensor, Tensor]]:
+    ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
         self.train()
 
         epoch_loss = 0.0
