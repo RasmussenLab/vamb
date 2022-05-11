@@ -34,7 +34,7 @@ def make_dataloader(
     batchsize: int = 256,
     destroy: bool = False,
     cuda: bool = False
-) -> tuple[_DataLoader[tuple[Tensor, Tensor]], _np.ndarray]:
+) -> tuple[_DataLoader[tuple[Tensor, Tensor, Tensor]], _np.ndarray]:
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -109,9 +109,10 @@ def make_dataloader(
     ### Create final tensors and dataloader ###
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
+    weights = _torch.ones((len(rpkm), 1))
 
     n_workers = 4 if cuda else 1
-    dataset = _TensorDataset(depthstensor, tnftensor)
+    dataset = _TensorDataset(depthstensor, tnftensor, weights)
     dataloader = _DataLoader(
         dataset=dataset, batch_size=batchsize, drop_last=True,
         shuffle=True, num_workers=n_workers, pin_memory=cuda
@@ -300,23 +301,26 @@ class VAE(_nn.Module):
         tnf_in: Tensor,
         tnf_out: Tensor,
         mu: Tensor,
-        logsigma: Tensor
+        logsigma: Tensor,
+        weights: Tensor
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
-            ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
+            ce = - (((depths_out + 1e-9).log() * depths_in) * weights).sum(dim=1).mean()
             ce_weight = (1 - self.alpha) / _log(self.nsamples)
         else:
-            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
+            ce = ((depths_out - depths_in).pow(2) * weights).sum(dim=1).mean()
             ce_weight = 1 - self.alpha
 
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
+        sse = ((tnf_out - tnf_in).pow(2) * weights).sum(dim=1).mean()
         kld = -0.5 * (1 + logsigma - mu.pow(2) -
                       logsigma.exp()).sum(dim=1).mean()
         sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
-        loss = ce * ce_weight + sse * sse_weight + kld * kld_weight
+        reconstruction_loss = ce * ce_weight + sse * sse_weight
+        kld_loss = kld * kld_weight
+        loss = reconstruction_loss + kld_loss
 
         return loss, ce, sse, kld
 
@@ -343,20 +347,21 @@ class VAE(_nn.Module):
                                       num_workers=data_loader.num_workers,
                                       pin_memory=data_loader.pin_memory)
 
-        for depths_in, tnf_in in data_loader:
+        for depths_in, tnf_in, weights in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                weights = weights.cuda()
 
             optimizer.zero_grad()
 
             depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
             loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
-                                                tnf_out, mu, logsigma)
+                                                tnf_out, mu, logsigma, weights)
 
             loss.backward()
             optimizer.step()
@@ -398,7 +403,7 @@ class VAE(_nn.Module):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths_array, _ = data_loader.dataset.tensors
+        depths_array, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -408,7 +413,7 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf in new_data_loader:
+            for depths, tnf, _ in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
