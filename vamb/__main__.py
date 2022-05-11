@@ -121,6 +121,7 @@ def trainvae(
     outdir: str,
     rpkms: np.ndarray,
     tnfs: np.ndarray,
+    lengths: np.ndarray,
     nhiddens: Optional[list[int]],  # set automatically if None
     nlatent: int,
     alpha: Optional[float],  # set automatically if None
@@ -147,7 +148,7 @@ def trainvae(
 
     log('Created VAE', logfile, 1)
     dataloader, mask = vamb.encode.make_dataloader(
-        rpkms, tnfs, batchsize, destroy=True, cuda=cuda
+        rpkms, tnfs, lengths, batchsize, destroy=True, cuda=cuda
     )
     log('Created dataloader and mask', logfile, 1)
     vamb.vambtools.write_npz(os.path.join(outdir, 'mask.npz'), mask)
@@ -326,7 +327,7 @@ def run(
 
     # Train, save model
     mask, latent = trainvae(
-        outdir, abundance.matrix, composition.matrix, nhiddens, nlatent, alpha, beta,
+        outdir, abundance.matrix, composition.matrix, composition.metadata.lengths, nhiddens, nlatent, alpha, beta,
         dropout, cuda, batchsize, nepochs, lrate, batchsteps, logfile
     )
 

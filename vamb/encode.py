@@ -31,6 +31,7 @@ _torch.manual_seed(0)
 def make_dataloader(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
+    lengths: _np.ndarray,
     batchsize: int = 256,
     destroy: bool = False,
     cuda: bool = False
@@ -60,8 +61,8 @@ def make_dataloader(
     if batchsize < 1:
         raise ValueError(f'Minimum batchsize of 1, not {batchsize}')
 
-    if len(rpkm) != len(tnf):
-        raise ValueError('Lengths of RPKM and TNF must be the same')
+    if len(rpkm) != len(tnf) or len(tnf) != len(lengths):
+        raise ValueError('Lengths of RPKM, TNF and lengths must be the same')
 
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError('TNF and RPKM must be Numpy arrays of dtype float32')
@@ -106,10 +107,15 @@ def make_dataloader(
     # Normalize TNF
     _vambtools.zscore(tnf, axis=0, inplace=True)
 
+    # Create weights
+    weigths_numpy = _np.log(lengths[mask]).astype(_np.float32)
+    weigths_numpy.shape = (len(weigths_numpy), 1)
+    weights = _torch.from_numpy(weigths_numpy)
+    weights *= 1 / weights.sum().item()
+
     ### Create final tensors and dataloader ###
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
-    weights = _torch.ones((len(rpkm), 1))
 
     n_workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor, weights)
@@ -486,7 +492,7 @@ class VAE(_nn.Module):
 
     def trainmodel(
         self,
-        dataloader: _DataLoader[tuple[Tensor, Tensor]],
+        dataloader: _DataLoader[tuple[Tensor, Tensor, Tensor]],
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
