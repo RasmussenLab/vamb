@@ -209,7 +209,7 @@ class VAE(_nn.Module):
         self.decodernorms = _nn.ModuleList()
 
         # Add all other hidden layers
-        for nin, nout in zip([self.nsamples + self.ntnf + 1] + self.nhiddens, self.nhiddens):
+        for nin, nout in zip([self.nsamples + self.ntnf] + self.nhiddens, self.nhiddens):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
@@ -293,8 +293,8 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out
 
-    def forward(self, depths: Tensor, tnf: Tensor, weights: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        tensor = _torch.cat((depths, tnf, weights), 1)
+    def forward(self, depths: Tensor, tnf: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        tensor = _torch.cat((depths, tnf), 1)
         mu, logsigma = self._encode(tensor)
         latent = self.reparameterize(mu, logsigma)
         depths_out, tnf_out = self._decode(latent)
@@ -314,22 +314,22 @@ class VAE(_nn.Module):
         # If multiple samples, use cross entropy, else use SSE for abundance
         if self.nsamples > 1:
             # Add 1e-9 to depths_out to avoid numerical instability.
-            ce = - (((depths_out + 1e-9).log() * depths_in) * weights).sum(dim=1).mean()
+            ce = - ((depths_out + 1e-9).log() * depths_in).sum(dim=1)
             ce_weight = (1 - self.alpha) / _log(self.nsamples)
         else:
-            ce = ((depths_out - depths_in).pow(2) * weights).sum(dim=1).mean()
+            ce = (depths_out - depths_in).pow(2).sum(dim=1)
             ce_weight = 1 - self.alpha
 
-        sse = ((tnf_out - tnf_in).pow(2) * weights).sum(dim=1).mean()
-        kld = -0.5 * (1 + logsigma - mu.pow(2) -
-                      logsigma.exp()).sum(dim=1).mean()
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1)
         sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
         reconstruction_loss = ce * ce_weight + sse * sse_weight
         kld_loss = kld * kld_weight
-        loss = reconstruction_loss + kld_loss
+        loss = (reconstruction_loss + kld_loss) * weights
+        loss_scalar = loss.mean()
 
-        return loss, ce, sse, kld
+        return loss_scalar, ce.mean(), sse.mean(), kld.mean()
 
     def trainepoch(
         self,
@@ -365,7 +365,7 @@ class VAE(_nn.Module):
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in, weights)
+            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
 
             loss, ce, sse, kld = self.calc_loss(depths_in, depths_out, tnf_in,
                                                 tnf_out, mu, logsigma, weights)
@@ -427,7 +427,7 @@ class VAE(_nn.Module):
                     tnf = tnf.cuda()
 
                 # Evaluate
-                _, _, mu, _ = self(depths, tnf, weights)
+                _, _, mu, _ = self(depths, tnf)
 
                 if self.usecuda:
                     mu = mu.cpu()
