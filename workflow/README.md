@@ -8,7 +8,7 @@ In short it will:
 1. Filter contigs for 2000bp and rename them to conform with the multi-split workflow
 2. Index resulting contig-file with minimap2 and create a sequence dictionary
 3. Map reads with minimap2 to the combined contig set
-4. Sort bam-files and create a jgi-count matrix by running individual samples in parallel 
+4. Sort bam-files
 5. Run Vamb to bin the contigs
 6. Determine completeness and contamination of the bins using CheckM
 ```
@@ -20,14 +20,14 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
 
 ```
  conda install -c conda-forge mamba
- mamba create -n vamb python=3.7
+ mamba create -n vamb python=3.9
  mamba install -n vamb -c conda-forge -c bioconda snakemake
  mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
  mamba install -n vamb -c bioconda minimap2 pysam checkm-genome 
  mamba install -n vamb -c bioconda/label/cf201901 metabat2
  mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
  conda activate vamb
- pip install https://github.com/RasmussenLab/vamb/archive/3.0.2.zip
+ pip install https://github.com/RasmussenLab/vamb/archive/v4.0.0.zip
  conda deactivate
 ```
 
