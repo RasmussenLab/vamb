@@ -1,5 +1,0 @@
-name: metabat2
-channels:
-  - bioconda
-dependencies:
-  - metabat2

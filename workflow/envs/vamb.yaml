@@ -8,6 +8,6 @@ dependencies:
   - pip
   - torchvision
   - cudatoolkit=10.2
-  - pysam
+  - pycoverm
   - pip:
-     - git+https://github.com/RasmussenLab/vamb@3.0.2
+     - git+https://github.com/RasmussenLab/vamb@4.0.0

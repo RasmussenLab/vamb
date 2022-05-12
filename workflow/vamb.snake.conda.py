@@ -42,7 +42,6 @@ for line in fh_in:
 # targets
 rule all:
     input:
-        "jgi_matrix/jgi.abundance.dat",
         "vamb/clusters.tsv",
         "vamb/checkm.results"
 
@@ -129,71 +128,17 @@ rule sort:
     shell:
         "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2>{log}"
 
-rule jgi:
-    input:
-        bam = "mapped/{sample}.sort.bam"
-    output:
-        jgi = temp("jgi/{sample}.raw.jgi")
-    params:
-        walltime="864000", nodes="1", ppn="1", mem="10gb"
-    threads:
-        int(1)
-    log:
-        "log/jgi/{sample}.jgi"
-    conda:
-        "envs/metabat2.yaml"
-    shell:
-        "jgi_summarize_bam_contig_depths --noIntraDepthVariance --outputDepth {output} {input} 2>{log}"
-
-rule cut_column1to3: 
-    input:
-        "jgi/%s.raw.jgi" % IDS[0] 
-    output:
-        "jgi/jgi.column1to3"
-    params:
-        walltime="86400", nodes="1", ppn="1", mem="1gb"
-    log:
-        "log/jgi/column1to3"
-    shell: 
-        "cut -f1-3 {input} > {output} 2>{log}"
-
-rule cut_column4to5:
-    input:
-        "jgi/{sample}.raw.jgi"
-    output:
-        "jgi/{sample}.cut.jgi"
-    params:
-        walltime="86400", nodes="1", ppn="1", mem="1gb"
-    log:
-        "log/jgi/{sample}.cut.log"
-    shell: 
-        "cut -f1-3 --complement {input} > {output} 2>{log}"
-
-rule paste_abundances:
-    input:
-        column1to3="jgi/jgi.column1to3",
-        data=expand("jgi/{sample}.cut.jgi", sample=IDS)
-    output:
-        "jgi_matrix/jgi.abundance.dat" 
-    params:
-        walltime="86400", nodes="1", ppn="1", mem="1gb"
-    log:
-        "log/jgi/paste_abundances.log"
-    shell: 
-        "paste {input.column1to3} {input.data} > {output} 2>{log}" 
-
 rule vamb:
     input:
-        jgi = "jgi_matrix/jgi.abundance.dat",
-        contigs = "contigs.flt.fna.gz"
+        contigs = "contigs.flt.fna.gz",
+        bamfiles=expand("mapped/{sample}.sort.bam", sample=IDS)
     output:
+        "vamb/composition.npz",
+        "vamb/abundance.npz",
         "vamb/clusters.tsv",
         "vamb/latent.npz",
-        "vamb/lengths.npz",
         "vamb/log.txt",
-        "vamb/model.pt",
-        "vamb/mask.npz",
-        "vamb/tnf.npz"
+        "vamb/model.pt"
     params:
         walltime="86400", nodes="1", ppn=VAMB_PPN, mem=VAMB_MEM
     log:
@@ -205,7 +150,7 @@ rule vamb:
     shell:
         "{VAMB_PRELOAD}"
         "rm -rf vamb;"
-        "vamb --outdir vamb --fasta {input.contigs} --jgi {input.jgi} {VAMB_PARAMS} 2>{log}"
+        "vamb --outdir vamb --fasta {input.contigs} --bamfiles {input.bamfiles} {VAMB_PARAMS} 2> {log}"
 
 rule checkm:
     input:
