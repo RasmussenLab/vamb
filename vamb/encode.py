@@ -327,9 +327,8 @@ class VAE(_nn.Module):
         reconstruction_loss = ce * ce_weight + sse * sse_weight
         kld_loss = kld * kld_weight
         loss = (reconstruction_loss + kld_loss) * weights
-        loss_scalar = loss.mean()
 
-        return loss_scalar, ce.mean(), sse.mean(), kld.mean()
+        return loss.mean(), ce.mean(), sse.mean(), kld.mean()
 
     def trainepoch(
         self,
