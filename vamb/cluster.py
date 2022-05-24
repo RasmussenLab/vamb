@@ -100,7 +100,7 @@ class ClusterGenerator:
         cuda: Accelerate clustering with GPU [False]
     """
 
-    __slots__ = ['MAXSTEPS', 'MINSUCCESSES', 'CUDA', 'RNG', 'matrix', 'indices',
+    __slots__ = ['maxsteps', 'minsuccesses', 'cuda', 'rng', 'matrix', 'indices',
                  'seed', 'nclusters', 'peak_valley_ratio', 'attempts', 'successes',
                  'histogram', 'kept_mask']
 
@@ -109,9 +109,9 @@ class ClusterGenerator:
 
     def __str__(self) -> str:
         return f"""ClusterGenerator({len(self.matrix)} points, {self.nclusters} clusters)
-  CUDA:         {self.CUDA}
-  MAXSTEPS:     {self.MAXSTEPS}
-  MINSUCCESSES: {self.MINSUCCESSES}
+  CUDA:         {self.cuda}
+  maxsteps:     {self.maxsteps}
+  minsuccesses: {self.minsuccesses}
   pvr:          {self.peak_valley_ratio}
   successes:    {self.successes}/{len(self.attempts)}
 """
@@ -141,7 +141,7 @@ class ClusterGenerator:
         "N is number of contigs"
 
         kept_mask = _torch.ones(N, dtype=_torch.bool)
-        if self.CUDA:
+        if self.cuda:
             histogram = _torch.empty(
                 _ceil(_XMAX/_DELTA_X), dtype=_torch.float).cuda()
             kept_mask = kept_mask.cuda()
@@ -178,10 +178,10 @@ class ClusterGenerator:
         if cuda:
             torch_matrix = torch_matrix.cuda()
 
-        self.MAXSTEPS: int = maxsteps
-        self.MINSUCCESSES: int = minsuccesses
-        self.CUDA: bool = cuda
-        self.RNG: _random.Random = _random.Random(0)
+        self.maxsteps: int = maxsteps
+        self.minsuccesses: int = minsuccesses
+        self.cuda: bool = cuda
+        self.rng: _random.Random = _random.Random(0)
 
         self.matrix = torch_matrix
         # This refers to the indices of the original matrix. As we remove points, these
@@ -204,7 +204,7 @@ class ClusterGenerator:
     def __next__(self) -> Cluster:
         # Stop criterion. For CUDA, inplace masking the array is too slow, so the matrix is
         # unchanged. On CPU, we continually modify the matrix by removing rows.
-        if self.CUDA:
+        if self.cuda:
             if not _torch.any(self.kept_mask).item():
                 raise StopIteration
         elif len(self.matrix) == 0:
@@ -218,7 +218,7 @@ class ClusterGenerator:
 
         # Remove all points that's been clustered away. Is slow it itself, but speeds up
         # distance calculation by having fewer points. Worth it on CPU, not on GPU
-        if not self.CUDA:
+        if not self.cuda:
             _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
             # no need to inplace mask small array
             self.indices = self.indices[self.kept_mask]
@@ -236,7 +236,7 @@ class ClusterGenerator:
         while threshold is None:
             # If on GPU, we need to take next seed which has not already been clusted out.
             # if not, clustered points have been removed, so we can just take next seed
-            if self.CUDA:
+            if self.cuda:
                 self.seed = (self.seed + 1) % len(self.matrix)
                 while self.kept_mask[self.seed] == False:
                     self.seed = (self.seed + 1) % len(self.matrix)
@@ -244,11 +244,11 @@ class ClusterGenerator:
                 self.seed = (self.seed + 1) % len(self.matrix)
 
             medoid, distances = _wander_medoid(
-                self.matrix, self.kept_mask, self.seed, self.MAXSTEPS, self.RNG, self.CUDA)
+                self.matrix, self.kept_mask, self.seed, self.maxsteps, self.rng, self.cuda)
 
             # We need to make a histogram of only the unclustered distances - when run on GPU
             # these have not been removed and we must use the kept_mask
-            if self.CUDA:
+            if self.cuda:
                 _torch.histc(distances[self.kept_mask], len(
                     self.histogram), 0, _XMAX, out=self.histogram)
             else:
@@ -257,7 +257,7 @@ class ClusterGenerator:
             self.histogram[0] -= 1  # Remove distance to self
 
             threshold, success = _find_threshold(
-                self.histogram, self.peak_valley_ratio, self.CUDA)
+                self.histogram, self.peak_valley_ratio, self.cuda)
 
             # If success is not None, either threshold detection failed or succeded.
             if success is not None:
@@ -271,7 +271,7 @@ class ClusterGenerator:
 
                 # If less than minsuccesses of the last maxlen attempts were successful,
                 # we relax the clustering criteria and reset counting successes.
-                if len(self.attempts) == self.attempts.maxlen and self.successes < self.MINSUCCESSES:
+                if len(self.attempts) == self.attempts.maxlen and self.successes < self.minsuccesses:
                     self.peak_valley_ratio += 0.1
                     self.attempts.clear()
                     self.successes = 0
@@ -279,7 +279,7 @@ class ClusterGenerator:
         # These are the points of the final cluster AFTER establishing the threshold used
         assert isinstance(distances, _Tensor)
         points = _smaller_indices(
-            distances, self.kept_mask, threshold, self.CUDA)
+            distances, self.kept_mask, threshold, self.cuda)
         isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
 
         cluster = Cluster(
@@ -291,7 +291,7 @@ class ClusterGenerator:
         return cluster, medoid, points
 
 
-def _calc_densities(histogram: _Tensor, cuda: bool, pdf=_NORMALPDF) -> _Tensor:
+def _calc_densities(histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF) -> _Tensor:
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
 

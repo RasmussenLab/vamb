@@ -37,25 +37,25 @@ class PushArray:
     def __len__(self) -> int:
         return self.length
 
-    def _setcapacity(self, n: int):
+    def _setcapacity(self, n: int) -> None:
         self.data.resize(n, refcheck=False)
         self.capacity = n
 
-    def _grow(self, mingrowth: int):
+    def _grow(self, mingrowth: int) -> None:
         """Grow capacity by power of two between 1/8 and 1/4 of current capacity, though at
         least mingrowth"""
         growth = max(int(self.capacity * 0.125), mingrowth)
         nextpow2 = 1 << (growth - 1).bit_length()
         self._setcapacity(self.capacity + nextpow2)
 
-    def append(self, value):
+    def append(self, value) -> None:
         if self.length == self.capacity:
             self._grow(64)
 
         self.data[self.length] = value
         self.length += 1
 
-    def extend(self, values):
+    def extend(self, values) -> None:
         lenv = len(values)
         if self.length + lenv > self.capacity:
             self._grow(lenv)
@@ -68,7 +68,7 @@ class PushArray:
         self._setcapacity(self.length)
         return self.data
 
-    def clear(self, force: bool = False):
+    def clear(self) -> None:
         "Empties the PushArray. Does not clear the underlying memory"
         self.length = 0
 

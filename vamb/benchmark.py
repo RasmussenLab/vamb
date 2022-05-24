@@ -476,7 +476,8 @@ class Binning:
         contigsof: defaultdict[Genome, list[Contig]] = defaultdict(list)
         for contig in reference.contig_by_name.values():
             contigsof[reference.genomeof[contig]].append(contig)
-        bins = [Bin.from_contigs(genome.name, contigs, reference.genomeof) for (genome, contigs) in contigsof.items()]
+        bins = [Bin.from_contigs(genome.name, contigs, reference.genomeof) for (
+            genome, contigs) in contigsof.items()]
         instance = cls(bins, reference, disjoint=False)
         instance.benchmark(recalls, precisions)
         return instance
