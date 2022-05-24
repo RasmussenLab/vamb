@@ -27,6 +27,7 @@ import numpy as _np
 import torch as _torch
 _torch.manual_seed(0)
 
+
 def make_dataloader(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
@@ -524,7 +525,6 @@ class VAE(_nn.Module):
 
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
-        # type: ignore
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
 
