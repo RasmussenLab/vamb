@@ -10,3 +10,4 @@ if __name__ == "__main__":
     unittest.main(module='cluster', exit=False)
     unittest.main(module='benchmark', exit=False)
     unittest.main(module='results', exit=False)
+    unittest.main(module='ci', exit=False)
