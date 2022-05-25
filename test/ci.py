@@ -52,13 +52,18 @@ def head_git_tag():
     st = subprocess.run(["git", "tag", "--points-at", "HEAD"],
                         capture_output=True).stdout.decode()
     if len(st) == 0:
-        return None
-    regex = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9])\n?$")
+        return (None, None)
+    regex = re.compile(r"^(v([0-9]+)\.([0-9]+)\.([0-9]))\n?$")
     m = regex.match(st)
     if m is None:
         raise ValueError("HEADs git tag is not a valid version number")
-    else:
-        return tuple(int(i) for i in m.groups())
+    vnum = tuple(int(i) for i in m.groups()[1:4])
+    tagname = m.groups()[0]
+
+    # Check it's annotated if it exists - then returncode is 0
+    proc = subprocess.run(["git", "describe", tagname])
+    is_annotated = proc.returncode == 0
+    return (vnum, is_annotated)
 
 
 class TestVersions(unittest.TestCase):
@@ -69,7 +74,9 @@ class TestVersions(unittest.TestCase):
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
         cls.last_tag = latest_git_tag()
-        cls.head_tag = head_git_tag()
+        head_tag, is_annotated = head_git_tag()
+        cls.head_tag = head_tag
+        cls.is_annotated = is_annotated
 
     def test_same_versions(self):
         # setup.py, envs/vamb version and last tag must all point to the latest release
@@ -81,7 +88,8 @@ class TestVersions(unittest.TestCase):
         # than the latest release.
         # If not, it must be the same version as the tag of the current commit,
         # i.e. the current commit must be a release version.
-        if self.v_init[3] == "DEV":
+        if self.v_init[-1] == "DEV":
             self.assertGreater(self.v_init[:3], self.v_setup)
         else:
             self.assertEqual(self.v_init, self.head_tag)
+            self.assertTrue(self.is_annotated)
