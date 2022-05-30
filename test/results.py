@@ -51,13 +51,14 @@ class TestEncodingResult(unittest.TestCase):
         rng = np.random.RandomState(15)
         tnfs = rng.random((200, 103)).astype(np.float32)
         rpkm = rng.random((200, 6)).astype(np.float32)
+        lens = rng.randint(2000, 5000, 200)
         vae = vamb.encode.VAE(6)
-        dl, mask = vamb.encode.make_dataloader(rpkm, tnfs, batchsize=16)
+        dl, mask = vamb.encode.make_dataloader(rpkm, tnfs, lens, batchsize=16)
         vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
         latent = vae.encode(dl)
         self.assertEqual(
             sha256(latent.data.tobytes()).digest().hex(),
-            "217d167b5e162a91f894eeb50d310d63076768e3619c3a35a489e43ce0910fed"
+            "7636ce0fa1efeb24c040ba99c518baf5df5d3ed4957a8f5b62fd7925e7eed80b"
         )
 
 class TestClusterResult(unittest.TestCase):
