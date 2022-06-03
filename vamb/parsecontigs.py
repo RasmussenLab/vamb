@@ -86,10 +86,10 @@ class CompositionMetaData:
 
     def filter_min_length(self, length: int):
         "Set or reset minlength of this object"
-        if length < self.minlength:
+        if length <= self.minlength:
             return None
 
-        self.filter_mask(self.lengths >= self.minlength)
+        self.filter_mask(self.lengths >= length)
         self.minlength = length
 
 
@@ -140,9 +140,13 @@ class Composition:
         )
         return cls(metadata, _vambtools.validate_input_array(arrs['matrix']))
 
-    def filter_min_length(self, len: int):
-        mask = self.metadata.lengths >= len
+    def filter_min_length(self, length: int):
+        if length <= self.metadata.minlength:
+            return None
+
+        mask = self.metadata.lengths >= length
         self.metadata.filter_mask(mask)
+        self.metadata.minlength = length
         _vambtools.numpy_inplace_maskarray(self.matrix, mask)
 
     @classmethod
