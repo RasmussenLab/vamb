@@ -179,7 +179,7 @@ def trainvae(
 def cluster(
     clusterspath: str,
     latent: np.ndarray,
-    contignames: list[str],
+    contignames: np.ndarray, # of dtype object
     windowsize: int,
     minsuccesses: int,
     maxclusters: Optional[int],
@@ -231,7 +231,7 @@ def write_fasta(
     outdir: str,
     clusterspath: str,
     fastapath: str,
-    contignames: list[str],
+    contignames: np.ndarray, # of object
     contiglengths: np.ndarray,
     minfasta: int,
     logfile: IO[str]
