@@ -531,7 +531,15 @@ class VAE(_nn.Module):
                     'Max batchsteps must not equal or exceed nepochs')
             last_batchsize = dataloader.batch_size * 2**len(batchsteps)
             if len(dataloader.dataset) < last_batchsize:  # type: ignore
-                raise ValueError('Last batch size exceeds dataset length')
+                raise ValueError(
+                    f'Last batch size of {last_batchsize} exceeds dataset length '
+                    f'of {len(dataloader.dataset)}. '  # type: ignore
+                    'This means you have too few contigs left after filtering to train. '
+                    'It is not adviced to run Vamb with fewer than 50,000 sequences '
+                    'after filtering. '
+                    'Please check the Vamb log file to see where there sequences were '
+                    'filtered away.'
+                )
             batchsteps_set = set(batchsteps)
 
         # Get number of features
