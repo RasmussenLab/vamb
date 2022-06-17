@@ -13,4 +13,4 @@ changelog
 TODO.md
 build/
 dist/
-.vscode
+**.vscode
