@@ -320,15 +320,15 @@ class VAE(_nn.Module):
             ce = (depths_out - depths_in).pow(2).sum(dim=1)
             ce_weight = 1 - self.alpha
 
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+        logsse = ((tnf_out - tnf_in).pow(2)).sum(dim=1).log()
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1)
         sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
-        reconstruction_loss = ce * ce_weight + sse * sse_weight
+        reconstruction_loss = ce * ce_weight + logsse * sse_weight
         kld_loss = kld * kld_weight
         loss = (reconstruction_loss + kld_loss) * weights
 
-        return loss.mean(), ce.mean(), sse.mean(), kld.mean()
+        return loss.mean(), ce.mean(), logsse.mean(), kld.mean()
 
     def trainepoch(
         self,
@@ -378,7 +378,7 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
-            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
+            print('\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tlog(SSE): {:.6f}\tKLD: {:.4f}\tBatchsize: {}'.format(
                   epoch + 1,
                   epoch_loss / len(data_loader),
                   epoch_celoss / len(data_loader),
