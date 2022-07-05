@@ -27,7 +27,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba install -n vamb -c bioconda/label/cf201901 metabat2
  mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
  conda activate vamb
- pip install https://github.com/RasmussenLab/vamb/archive/v4.0.0.zip
+ pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
  conda deactivate
 ```
 

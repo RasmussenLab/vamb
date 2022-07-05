@@ -14,18 +14,16 @@ def grep(path, regex):
 
     raise ValueError(f"Could not find regex in path {path}")
 
-
 def snakemake_vamb_version(path):
     regex = re.compile(
-        r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)\s*$")
+        r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)")
     return grep(path, regex)
 
-
-def setup_vamb_version(path):
+def readme_vamb_version(path):
     regex = re.compile(
-        r"^\s*\"version\": \"([0-9]+)\.([0-9]+)\.([0-9]+)\"(,\s*)?$")
+        r"https://github\.com/RasmussenLab/vamb/archive/v([0-9]+)\.([0-9]+)\.([0-9]+)\.zip"
+    )
     return grep(path, regex)
-
 
 def validate_init(init):
     if not (
@@ -69,8 +67,9 @@ def head_git_tag():
 class TestVersions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.v_setup = setup_vamb_version("../setup.py")
         cls.v_snakemake = snakemake_vamb_version("../workflow/envs/vamb.yaml")
+        cls.v_snakemake_readme = readme_vamb_version("../workflow/README.md")
+        cls.v_readme = readme_vamb_version("../README.md")
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
         cls.last_tag = latest_git_tag()
@@ -79,9 +78,10 @@ class TestVersions(unittest.TestCase):
         cls.is_annotated = is_annotated
 
     def test_same_versions(self):
-        # setup.py, envs/vamb version and last tag must all point to the latest release
-        self.assertEqual(self.v_setup, self.v_snakemake)
-        self.assertEqual(self.v_setup, self.last_tag)
+        # envs/vamb version, versions in README and last tag must all point to the latest release
+        self.assertEqual(self.v_snakemake, self.last_tag)
+        self.assertEqual(self.v_snakemake, self.v_snakemake_readme)
+        self.assertEqual(self.v_snakemake, self.v_readme)
 
     def test_dev_version(self):
         # If the current version is a DEV version, it must be a greater version
@@ -89,7 +89,8 @@ class TestVersions(unittest.TestCase):
         # If not, it must be the same version as the tag of the current commit,
         # i.e. the current commit must be a release version.
         if self.v_init[-1] == "DEV":
-            self.assertGreater(self.v_init[:3], self.v_setup)
+            self.assertGreater(self.v_init[:3], self.v_snakemake)
         else:
             self.assertEqual(self.v_init, self.head_tag)
+            self.assertEqual(self.v_init[:3], self.v_snakemake)
             self.assertTrue(self.is_annotated)
