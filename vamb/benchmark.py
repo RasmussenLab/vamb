@@ -198,7 +198,12 @@ class Bin:
         return len(self.contigs)
 
     @classmethod
-    def from_contigs(cls: type[Bn], name: str, contigs: Iterable[Contig], genomeof: dict[Contig, Genome]) -> Bn:
+    def from_contigs(
+        cls: type[Bn],
+        name: str,
+        contigs: Iterable[Contig],
+        genomeof: dict[Contig, Genome]
+    ) -> Bn:
         instance = cls(name)
         instance.contigs = set(contigs)
         instance.finalize(genomeof)  # remember to do this
