@@ -10,7 +10,7 @@ SETUP_METADATA = \
     "url": "https://github.com/RasmussenLab/vamb",
     "author": "Jakob Nybo Nissen and Simon Rasmussen",
     "author_email": "jakobnybonissen@gmail.com",
-    "version": "3.0.7",
+    "version": "3.0.8",
     "license": "MIT",
     "packages": find_packages(),
     "package_data": {"vamb": ["kernel.npz"]},
