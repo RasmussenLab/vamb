@@ -17,23 +17,6 @@ _KERNEL: _np.ndarray = _vambtools.read_npz(
 )
 
 
-def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarray:
-    "Project fourmers down in dimensionality"
-    s = fourmers.sum(axis=1).reshape(-1, 1)
-    s[s == 0] = 1.0
-    fourmers *= 1/s
-    fourmers += -(1/256)
-    return _np.dot(fourmers, kernel)
-
-
-def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
-    "Move data from raw PushArray to projected PushArray, converting it."
-    raw_mat = raw.take().reshape(-1, 256)
-    projected_mat = _project(raw_mat)
-    projected.extend(projected_mat.ravel())
-    raw.clear()
-
-
 class CompositionMetaData:
     """A class containing metadata of sequence composition.
     Current fields are:
@@ -149,6 +132,23 @@ class Composition:
         self.metadata.minlength = length
         _vambtools.numpy_inplace_maskarray(self.matrix, mask)
 
+    @staticmethod
+    def _project(fourmers: _np.ndarray, kernel: _np.ndarray = _KERNEL) -> _np.ndarray:
+        "Project fourmers down in dimensionality"
+        s = fourmers.sum(axis=1).reshape(-1, 1)
+        s[s == 0] = 1.0
+        fourmers *= 1/s
+        fourmers += -(1/256)
+        return _np.dot(fourmers, kernel)
+
+    @staticmethod
+    def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
+        "Move data from raw PushArray to projected PushArray, converting it."
+        raw_mat = raw.take().reshape(-1, 256)
+        projected_mat = Composition._project(raw_mat)
+        projected.extend(projected_mat.ravel())
+        raw.clear()
+
     @classmethod
     def from_file(cls: type[C], filehandle: Iterable[bytes], minlength: int = 100) -> C:
         """Parses a FASTA file open in binary reading mode, returning Composition.
@@ -179,13 +179,13 @@ class Composition:
             raw.extend(entry.kmercounts(4))
 
             if len(raw) > 256000:
-                _convert(raw, projected)
+                Composition._convert(raw, projected)
 
             lengths.append(len(entry))
             contignames.append(entry.header)
 
         # Convert rest of contigs
-        _convert(raw, projected)
+        Composition._convert(raw, projected)
         tnfs_arr = projected.take()
 
         # Don't use reshape since it creates a new array object with shared memory
