@@ -12,9 +12,9 @@ For more information about the implementation, methodological considerations, an
 
 ### Installation for casual users:
 
-Recommended: Vamb can be installed with pip (version > 9) (thanks to contribution from C. Titus Brown):
+Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
 ```
-pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
+pip install vamb
 ```
 
 Alternatively, it can be installed as a [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
@@ -38,7 +38,7 @@ pip install -e .
 
 ### Installing by compiling the Cython yourself
 
-If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pycoverm`. Compile `src/_vambtools.pyx`, (see `src/build_vambtools.py`) then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
+If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pycoverm`. Compile `src/_vambtools.pyx` then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
 For more detailed description of the recommended workflow, see the section _Detailed user instructions_ below.
@@ -67,7 +67,7 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 2. Concatenate the input contigs to a single FASTA file discarding very short contigs (e.g. < 2 kbp), e.g. using Vamb's `concatenate.py` script:
 
 ```
-concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
+python concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
 /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 
@@ -90,7 +90,7 @@ vamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/
 
 To make it even easier to run Vamb, we have created a [Snakemake](https://snakemake.readthedocs.io/en/stable/#) workflow.
 This workflow runs steps 2-5 above using `minimap2` to align, and [CheckM](https://ecogenomics.github.io/CheckM/) to estimate completeness and contamination of the resulting bins.
-The workflow can run both on a local machine, a workstation and a HPC system using `qsub`. It can be found in the `workflow` folder.
+The workflow can run both on a local machine, a workstation and a HPC system using `qsub`. It can be found in the `workflow` folder - see the file `workflow/README.md` for details.
 
 # Detailed user instructions
 See the tutorial in `doc/tutorial.html` for even more detailed instructions.
@@ -130,13 +130,13 @@ We use `fastp` for this - but you can use whichever tool you think gives the bes
 
 __2) Assemble each sample individually and get the contigs out__
 
-We recommend using metaSPAdes on each sample individually. You can also use scaffolds or other nucleotide sequences instead of contigs as input sequences to Vamb. Assemble each sample individually, as single-sample assembly followed by samplewise binsplitting gives the best results.
+We recommend using metaSPAdes on each sample individually. MEGAHIT also works well. You can also use scaffolds or other nucleotide sequences instead of contigs as input sequences to Vamb. Assemble each sample individually, as single-sample assembly followed by samplewise binsplitting gives the best results.
 
 __3) Concatenate the FASTA files together while making sure all contig headers stay unique, and filter away small contigs__
 
 You can use the function `vamb.vambtools.concatenate_fasta` for this or the script `src/concatenate.py`. 
 
-:warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have tested that Vamb's neural network does not overfit too badly on all datasets we have worked with, but we have not tested on any dataset with fewer than 50,000 contigs.
+:warning: *Important:* Vamb uses a neural network to encode sequences, and neural networks overfit on small datasets. We have designed Vamb to underfit most datasets, but it may still overfit if you have less than e.g. 20,000 contigs.
 
 You should not try to bin very short sequences. When deciding the length cutoff for your input sequences, there's a tradeoff here between on one hand choosing a too low cutoff, retaining short contigs that are hard to bin AND which adversely affects the binning of *all* contigs, and on the other hand choosing a too high cutoff, throwing out good data.
 We use a length cutoff of 2000 bp as default but haven't actually run tests for the optimal value. The optimal tradeoff will depend on your specific dataset and the biological information you are interested in.
@@ -147,13 +147,13 @@ The script `src/concatenate.py` will automatically rename your sequences to this
 
 Vamb is fairly memory efficient, and we have run Vamb with 1000 samples and 5.9 million contigs using <30 GB of RAM.
 If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like `sourmash` to group similar samples together in smaller batches, bin these batches individually.
-This way, you can still leverage co-abundance.
+This way, you can still leverage co-abundance, and will get much better results.
 
 __4) Map the reads to the FASTA file to obtain BAM files__
 
 :warning: *Important:* Vamb only accepts BAM files sorted by coordinate. You can sort BAM files with `samtools sort`.
 
-Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15)):
+Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15) - see our Snakemake script for how to work around it):
 
 ```
 minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
@@ -162,7 +162,7 @@ minimap2 -t 28 -N 5 -ax sr catalogue.mmi sample1.forward.fastq.gz sample1.revers
 
 :warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
 
-If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` flag.
+If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` option.
 
 __5) Run Vamb__
 
@@ -173,7 +173,7 @@ Run Vamb with:
 
 where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
 
-Note that if you provide insufficient memory (RAM) to Vamb, it will run very slowly. Make sure you don't run out of RAM!
+Note that if you provide insufficient memory (RAM) to Vamb, it will run very slowly due to [thrashing](https://en.wikipedia.org/wiki/Thrashing_(computer_science)). Make sure you don't run out of RAM!
 
 __6) Postprocess the results__
 
@@ -181,7 +181,7 @@ Vamb will bin every input contig. Contigs that cannot be binned with other conti
 
 ## Parameter optimisation (optional)
 
-The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default for multiple samples is `-l 32 -n 512 512`)`:
+The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default for multiple samples is `-l 32 -n 512 512`):
 
 ```
 vamb -l 24 -n 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
