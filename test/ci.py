@@ -69,7 +69,6 @@ class TestVersions(unittest.TestCase):
     def setUpClass(cls):
         cls.v_snakemake = snakemake_vamb_version("../workflow/envs/vamb.yaml")
         cls.v_snakemake_readme = readme_vamb_version("../workflow/README.md")
-        cls.v_readme = readme_vamb_version("../README.md")
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
         cls.last_tag = latest_git_tag()
@@ -81,7 +80,6 @@ class TestVersions(unittest.TestCase):
         # envs/vamb version, versions in README and last tag must all point to the latest release
         self.assertEqual(self.v_snakemake, self.last_tag)
         self.assertEqual(self.v_snakemake, self.v_snakemake_readme)
-        self.assertEqual(self.v_snakemake, self.v_readme)
 
     def test_dev_version(self):
         # If the current version is a DEV version, it must be a greater version
