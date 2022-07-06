@@ -1,41 +1,55 @@
 #!/usr/bin/env python
+import re
+import os
+import from vamb.vambtools import concatenate_fasta
+
+def get_config(name, default, regex):
+    res = config.get(name, default).strip()
+    m = re.match(regex, res)
+    if m is None:
+        raise ValueError(
+            f"Config option \"{name}\" is \"{res}\", but must conform to regex \"{regex}\"")
+    return res
 
 # set configurations
-INDEX_SIZE = config.get("index_size", "12G")
-MM_MEM = config.get("minimap_mem", "35gb")
-MM_PPN = config.get("minimap_ppn", "10")
-VAMB_MEM = config.get("vamb_mem", "20gb")
-VAMB_PPN = config.get("vamb_ppn", "10")
-CHECKM_MEM = config.get("checkm_mem", "25gb")
-CHECKM_PPN = config.get("checkm_ppn", "10")
-SAMPLE_DATA = config.get("sample_data", "samples2data.txt")
-CONTIGS = config.get("contigs", "contigs.txt")
-VAMB_PARAMS = config.get("vamb_params", "-o C -m 2000 --minfasta 500000")
-VAMB_PRELOAD = config.get("vamb_preload", "")
+INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
+MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*gb$")
+MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
+MIN_CONTIG_SIZE = get_config("min_contig_size", "2000", r"[1-9]\d*$")
+VAMB_MEM = get_config("vamb_mem", "20gb", r"[1-9]\d*gb$")
+VAMB_PPN = get_config("vamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
+CHECKM_MEM = get_config("checkm_mem", "25gb", r"[1-9]\d*gb$")
+CHECKM_PPN = get_config("checkm_ppn", "10", r"[1-9]\d*$")
+SAMPLE_DATA = get_config("sample_data", "samples2data.txt", r".*")
+CONTIGS = get_config("contigs", "contigs.txt", r".*")
+VAMB_PARAMS = get_config("vamb_params", "-o C -m 2000 --minfasta 500000", r".*")
+VAMB_PRELOAD = get_config("vamb_preload", "", r".*")
+
+# Get output dir
+OUTDIR_NAME = "vamb"
+while os.path.exists(OUTDIR_NAME):
+    n = 1 if OUTDIR_NAME == "vamb" else int(OUTDIR_NAME[4:]) + 1
+    OUTDIR_NAME = "vamb" + str(n)
 
 # parse if GPUs is needed #
-VAMB_split = VAMB_PPN.split(":") 
-VAMB_threads = VAMB_split[0]
+
+vamb_threads, sep, vamb_gpus = VAMB_PPN.partition(":gpus=")
+VAMB_PPN = vamb_threads
+CUDA = len(vamb_gpus) > 0
 
 ## read in sample information ##
 
 # read in sample2path
 IDS = []
 sample2path = {}
-fh_in = open(SAMPLE_DATA, 'r')
-for line in fh_in:
-    line = line.rstrip()
-    fields = line.split('\t')
-    IDS.append(fields[0])
-    sample2path[fields[0]] = [fields[1], fields[2]]
+with open(SAMPLE_DATA) as file:
+    for (id, fw, rv) in map(lambda line: line.strip().split('\t'), file):
+        IDS.append(id)
+        sample2path[id] = [fw, rv]
 
 # read in list of per-sample assemblies
-contigs_list = []
-fh_in = open(CONTIGS, 'r')
-for line in fh_in:
-    line = line.rstrip()
-    contigs_list.append(line)
-
+with open(CONTIGS) as file:
+    contigs_list = list(filter(None, map(str.strip, file)))
 
 ## start of snakemake rules ##
 
@@ -51,15 +65,28 @@ rule cat_contigs:
     output:
         "contigs.flt.fna.gz"
     params:
-        walltime="864000", nodes="1", ppn="1", mem="10gb"
+        walltime="864000",
+        nodes="1",
+        ppn="1",
+        mem="10gb"
     threads:
-        int(1)
+        1
     log:
         "log/contigs/catcontigs.log"
     conda:
         "envs/vamb.yaml"
-    shell:
-        "concatenate.py {output} {input} -m 2000"
+    run:
+        for path in input:
+            if not os.path.isfile()
+                raise FileNotFoundError(path)
+
+        if os.path.exists(output[0]):
+            raise FileExistsError(output[0])
+
+        with gzip.open(output[0], "wt", compresslevel=3) as file:
+            concatenate_fasta(
+                file, input, minlength=int(MIN_CONTIG_SIZE), rename=True
+            )
 
 rule index:
     input:
@@ -67,9 +94,12 @@ rule index:
     output:
         mmi = "contigs.flt.mmi"
     params:
-        walltime="864000", nodes="1", ppn="1", mem="90gb"
+        walltime="864000",
+        nodes="1",
+        ppn="1",
+        mem="90gb"
     threads:
-        int(1)
+        1
     log:
         "log/contigs/index.log"
     conda: 
@@ -77,15 +107,24 @@ rule index:
     shell:
         "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log}"
 
+# This rule creates a SAM header from a FASTA file.
+# We need it because minimap2 for truly unknowable reasons will write
+# SAM headers INTERSPERSED in the output SAM file, making it unparseable.
+# To work around this mind-boggling bug, we remove all header lines from
+# minimap2's SAM output by grepping, then re-add the header created in this
+# rule.
 rule dict:
     input:
         contigs = "contigs.flt.fna.gz"
     output:
         dict = "contigs.flt.dict"
     params:
-        walltime="864000", nodes="1", ppn="1", mem="10gb"
+        walltime="864000",
+        nodes="1",
+        ppn="1",
+        mem="10gb"
     threads:
-        int(1)
+        1
     log:
         "log/contigs/dict.log"
     conda:
@@ -101,7 +140,10 @@ rule minimap:
     output:
         bam = temp("mapped/{sample}.bam")
     params:
-        walltime="864000", nodes="1", ppn=MM_PPN, mem=MM_MEM
+        walltime="864000",
+        nodes="1",
+        ppn=MM_PPN,
+        mem=MM_MEM
     threads:
         int(MM_PPN)
     log:
@@ -109,7 +151,12 @@ rule minimap:
     conda:
         "envs/minimap2.yaml"
     shell:
-        '''minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5 | grep -v "^@" | cat {input.dict} - | samtools view -F 3584 -b - > {output.bam} 2>{log}'''
+        # See comment over rule "dict" to understand what happens here
+        "minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5"
+        " | grep -v '^@'"
+        " | cat {input.dict} - "
+        " | samtools view -F 3584 -b - " # supplementary, duplicate read, fail QC check
+        " > {output.bam} 2> {log}"
 
 rule sort:
     input:
@@ -117,10 +164,13 @@ rule sort:
     output:
         temp("mapped/{sample}.sort.bam")
     params:
-        walltime="864000", nodes="1", ppn="2", mem="15gb",
+        walltime="864000",
+        nodes="1",
+        ppn="2",
+        mem="15gb",
         prefix="mapped/tmp.{sample}"
     threads:
-        int(2)
+        2
     log:
         "log/map/{sample}.sort.log"
     conda:
@@ -140,7 +190,11 @@ rule vamb:
         "vamb/log.txt",
         "vamb/model.pt"
     params:
-        walltime="86400", nodes="1", ppn=VAMB_PPN, mem=VAMB_MEM
+        walltime="86400",
+        nodes="1",
+        ppn=VAMB_PPN,
+        mem=VAMB_MEM,
+        cuda="--cuda " if CUDA else ""
     log:
         "log/vamb/vamb.log"
     threads:
@@ -149,8 +203,11 @@ rule vamb:
         "envs/vamb.yaml"
     shell:
         "{VAMB_PRELOAD}"
-        "rm -rf vamb;"
-        "vamb --outdir vamb --fasta {input.contigs} --bamfiles {input.bamfiles} {VAMB_PARAMS} 2> {log}"
+        "vamb --outdir {OUTDIR_NAME} "
+        "--fasta {input.contigs} "
+        "--bamfiles {input.bamfiles} "
+        "{params.cuda}"
+        "-m {MIN_CONTIG_SIZE} {VAMB_PARAMS} 2> {log}"
 
 rule checkm:
     input:
@@ -158,9 +215,12 @@ rule checkm:
     output:
         "vamb/checkm.results"
     params:
-        walltime="86400", nodes="1", ppn=CHECKM_PPN, mem=CHECKM_MEM,
-        bins = "vamb/bins",
-        outdir = "vamb/checkm.outdir"
+        walltime="86400",
+        nodes="1",
+        ppn=CHECKM_PPN,
+        mem=CHECKM_MEM,
+        bins="vamb/bins",
+        outdir="vamb/checkm.outdir"
     log:
         "log/vamb/checkm.log"
     threads:
@@ -168,4 +228,4 @@ rule checkm:
     conda:
         "envs/checkm.yaml"
     shell:
-        "checkm lineage_wf -f {output} -t {threads} -x fna {params.bins} {params.outdir} 2>{log}"
+        "checkm lineage_wf -f {output} -t {threads} -x fna {params.bins} {params.outdir} 2> {log}"
