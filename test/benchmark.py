@@ -227,23 +227,23 @@ class TestBenchmark(unittest.TestCase):
         # Can't add same contig twice
         genome = self.reference.genomeof[self.reference.contig_by_name["sA1c4"]]
         with self.assertRaises(ValueError):
-            self.reference.add_contig(
+            self.reference._add_contig(
                 Contig("sA1c4", "subjA1", 10, 20), genome)
 
         # Can't add genome of same name
         with self.assertRaises(ValueError):
-            self.reference.add_genome(Genome("gB"))
+            self.reference._add_genome(Genome("gB"))
 
         # Can't add contig with unknown source
         with self.assertRaises(ValueError):
-            self.reference.add_contig(
+            self.reference._add_contig(
                 Contig("newcontig", "newsubject", 10, 20), genome)
 
         # Can't add contig with unknown genome
         with self.assertRaises(ValueError):
             g = Genome("newgenome")
             g.add("subjA1", 99)
-            self.reference.add_contig(
+            self.reference._add_contig(
                 Contig("newcontig", "subjA1", 10, 20), g)
 
         # Can't add contig longer than its subject
@@ -251,22 +251,22 @@ class TestBenchmark(unittest.TestCase):
             ref = Reference()
             g = Genome("newgenome")
             g.add("subj", 5)
-            ref.add_genome(g)
-            ref.add_contig(Contig("x", "subj", 1, 6), g)
+            ref._add_genome(g)
+            ref._add_contig(Contig("x", "subj", 1, 6), g)
 
         with self.assertRaises(ValueError):
             g = Genome("newgenome")
             g.add("foo", 99)
-            self.reference.add_contig(
+            self.reference._add_contig(
                 Contig("newcontig", "foo", 10, 20), Genome("newgenome"))
 
         # Can't add taxonomy to wrong clade
         with self.assertRaises(ValueError):
-            self.reference.add_taxonomy(1, 'D', 'H')
+            self.reference._add_taxonomy(1, 'D', 'H')
 
         # Can't add taxonomy of a genome that does not exist
         with self.assertRaises(KeyError):
-            self.reference.add_taxonomy(1, 'X', 'H')
+            self.reference._add_taxonomy(1, 'X', 'H')
 
     def test_ref_basics(self):
         self.assertEqual(self.reference.ngenomes, 3)

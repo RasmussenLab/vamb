@@ -190,8 +190,16 @@ class Bin:
     def __init__(self, name: str) -> None:
         self.name = name
         self.contigs: set[Contig] = set()
-        self.intersections: Optional[dict[Genome, int]] = None
-        self.breadth: Optional[int] = None
+        self.intersections: dict[Genome, int] = dict()
+        self.breadth: int = 0
+
+    def copy(self: Bn) -> Bn:
+        "Return a copy x with x.contigs and x.intersections being shallow copies."
+        instance = type(self)(self.name)
+        instance.contigs = self.contigs.copy()
+        instance.intersections = self.intersections.copy()
+        instance.breadth = self.breadth
+        return instance
 
     @property
     def ncontigs(self) -> int:
@@ -206,7 +214,7 @@ class Bin:
     ) -> Bn:
         instance = cls(name)
         instance.contigs = set(contigs)
-        instance.finalize(genomeof)  # remember to do this
+        instance._finalize(genomeof)  # remember to do this
         return instance
 
     def __repr__(self) -> str:
@@ -226,8 +234,7 @@ class Bin:
 
         return result
 
-    def finalize(self, genomeof: dict[Contig, Genome]) -> None:
-        self.intersections = dict()
+    def _finalize(self, genomeof: dict[Contig, Genome]) -> None:
         by_source: defaultdict[tuple[Genome, str],
                                list[Contig]] = defaultdict(list)
         for contig in self.contigs:
@@ -240,8 +247,8 @@ class Bin:
     def confusion_matrix(self, genome: Genome) -> tuple[int, int, int]:
         "Given a genome and a binname, returns TP, FP, FN"
         # This is None if it's not updated, we want it to throw type errors then
-        d: dict[Genome, int] = self.intersections  # type: ignore
-        breadth: int = self.breadth  # type: ignore
+        d: dict[Genome, int] = self.intersections
+        breadth: int = self.breadth
         tp = d.get(genome, 0)
         fp = breadth - tp
         fn = genome.breadth - tp
@@ -283,13 +290,13 @@ class Reference:
         # The second maps name of second level to name of third level etc. None means it's the top level
         self.taxmaps: list[dict[str, Optional[str]]] = [dict()]
 
-    def add_genome(self, genome: Genome) -> None:
+    def _add_genome(self, genome: Genome) -> None:
         if genome in self.genomes:
             raise ValueError(f"Genome \"{genome.name}\" already in reference.")
         self.genomes.add(genome)
         self.taxmaps[0][genome.name] = None
 
-    def add_contig(self, contig: Contig, genome: Genome) -> None:
+    def _add_contig(self, contig: Contig, genome: Genome) -> None:
         if contig in self.genomeof:
             raise ValueError(f"Reference already has Contig \"{contig.name}\"")
         if contig.subject not in genome.sources:
@@ -309,7 +316,7 @@ class Reference:
         self.genomeof[contig] = genome
         self.contig_by_name[contig.name] = contig
 
-    def add_taxonomy(self, level: int, child: str, parent: str) -> None:
+    def _add_taxonomy(self, level: int, child: str, parent: str) -> None:
         existing = self.taxmaps[level][child]
         if existing is None:
             self.taxmaps[level][child] = parent
@@ -365,20 +372,20 @@ class Reference:
         instance = cls()
         for (genomename, sourcesdict) in json_dict["genomes"].items():
             genome = Genome(genomename)
-            instance.add_genome(genome)
+            instance._add_genome(genome)
             for (sourcename, (sourcelen, contigdict)) in sourcesdict.items():
                 genome.add(sourcename, sourcelen)
                 for (contigname, (start, end)) in contigdict.items():
                     # JSON format is 1-indexed and includes endpoints, whereas
                     # Contig struct is not, so compensate.
                     contig = Contig(contigname, sourcename, start - 1, end)
-                    instance.add_contig(contig, genome)
+                    instance._add_contig(contig, genome)
 
         for _ in range(len(json_dict["taxmaps"]) - 1):
             instance.taxmaps.append(dict())
         for (level, taxmap) in enumerate(json_dict["taxmaps"]):
             for (child, parent) in taxmap.items():
-                instance.add_taxonomy(level, child, parent)
+                instance._add_taxonomy(level, child, parent)
 
         return instance
 
@@ -436,12 +443,20 @@ class Binning:
     _DEFAULTRECALLS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99)
     _DEFAULTPRECISIONS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99)
 
-    def __init__(self, bins: Sequence[Bin], reference: Reference, disjoint: bool = True) -> None:
+    def __init__(
+        self,
+        bins: Sequence[Bin],
+        reference: Reference,
+        recalls: Sequence[float] = _DEFAULTRECALLS,
+        precisions: Sequence[float] = _DEFAULTPRECISIONS,
+        disjoint: bool = True
+    ) -> None:
+        self.recalls: tuple[float] = self._validate_rec_prec(recalls)
+        self.precisions: tuple[float] = self._validate_rec_prec(precisions)
         self.reference = reference
         self.bins: list[Bin] = list(bins)
-        self.counters: Optional[list[dict[tuple[float, float], int]]] = None
-        self.recalls: Optional[tuple[float]] = None
-        self.precisions: Optional[tuple[float]] = None
+        # This is initialized by self._benchmark
+        self.counters: list[dict[tuple[float, float], int]] = list()
 
         if disjoint:
             seen_contigs: set[Contig] = set()
@@ -451,6 +466,7 @@ class Binning:
                         raise ValueError(
                             f"Contig \"{contig.name}\" seen twice in disjoint binning.")
                     seen_contigs.add(contig)
+        self._benchmark()
 
     @classmethod
     def from_file(
@@ -466,8 +482,7 @@ class Binning:
     ) -> Bs:
         bins = reference.parse_bins(filehandle, binsplit_separator)
         bins = cls.filter_bins(bins, minsize, mincontigs)
-        instance = cls(bins, reference, disjoint)
-        instance.benchmark(recalls, precisions)
+        instance = cls(bins, reference, recalls, precisions, disjoint)
         return instance
 
     @classmethod
@@ -483,8 +498,7 @@ class Binning:
             contigsof[reference.genomeof[contig]].append(contig)
         bins = [Bin.from_contigs(genome.name, contigs, reference.genomeof) for (
             genome, contigs) in contigsof.items()]
-        instance = cls(bins, reference, disjoint=False)
-        instance.benchmark(recalls, precisions)
+        instance = cls(bins, reference, recalls, precisions, disjoint=False)
         return instance
 
     def print_matrix(self, rank: int, file: IO[str] = sys.stdout) -> None:
@@ -516,18 +530,12 @@ class Binning:
     @staticmethod
     def filter_bins(bins: Iterable[Bin], minsize: int, mincontigs: int) -> list[Bin]:
         def is_ok(bin: Bin) -> bool:
-            breadth: int = bin.breadth  # type: ignore
+            breadth: int = bin.breadth
             return breadth >= minsize and bin.ncontigs >= mincontigs
 
         return list(filter(is_ok, bins))
 
-    def benchmark(
-        self,
-        recalls: Sequence[float] = _DEFAULTRECALLS,
-        precisions: Sequence[float] = _DEFAULTPRECISIONS
-    ) -> None:
-        self.recalls = self.validate_rec_prec(recalls)
-        self.precisions = self.validate_rec_prec(precisions)
+    def _benchmark(self) -> None:
         counters: list[dict[tuple[float, float], int]] = list()
         # key here is name of genome (and later, other taxonomic ranks)
         rp_by_name: dict[str, dict[Bin, tuple[float, float]]] = {
@@ -536,18 +544,18 @@ class Binning:
             assert bin.intersections is not None
             for genome in bin.intersections:
                 rp_by_name[genome.name][bin] = bin.recall_precision(genome)
-        bitvectors = self.get_seen_bitvectors(rp_by_name)
-        counters.append(self.counter_from_bitvectors(bitvectors))
+        bitvectors = self._get_seen_bitvectors(rp_by_name)
+        counters.append(self._counter_from_bitvectors(bitvectors))
 
         for rank in range(self.reference.nranks - 1):
-            rp_by_name = self.uprank_rp_by_name(rank, rp_by_name)
-            bitvectors = self.get_seen_bitvectors(rp_by_name)
-            counters.append(self.counter_from_bitvectors(bitvectors))
+            rp_by_name = self._uprank_rp_by_name(rank, rp_by_name)
+            bitvectors = self._get_seen_bitvectors(rp_by_name)
+            counters.append(self._counter_from_bitvectors(bitvectors))
 
         self.counters = counters
 
     @staticmethod
-    def validate_rec_prec(x: Iterable[float]) -> tuple[float]:
+    def _validate_rec_prec(x: Iterable[float]) -> tuple[float]:
         s: set[float] = set()
         for i in x:
             if i in s:
@@ -561,7 +569,7 @@ class Binning:
             raise ValueError("Must provide at least 1 recall/precision value")
         return tuple(sorted(s))
 
-    def get_seen_bitvectors(self, rp_by_name: dict[str, dict[Bin, tuple[float, float]]]) -> dict[str, int]:
+    def _get_seen_bitvectors(self, rp_by_name: dict[str, dict[Bin, tuple[float, float]]]) -> dict[str, int]:
         recalls: tuple[float] = self.recalls  # type: ignore
         precisions: tuple[float] = self.precisions  # type: ignore
         bitvectors: dict[str, int] = dict()
@@ -580,7 +588,7 @@ class Binning:
 
         return bitvectors
 
-    def counter_from_bitvectors(self, bitvectors: dict[str, int]) -> dict[tuple[float, float], int]:
+    def _counter_from_bitvectors(self, bitvectors: dict[str, int]) -> dict[tuple[float, float], int]:
         recalls: tuple[float] = self.recalls  # type: ignore
         precisions: tuple[float] = self.precisions  # type: ignore
         result: dict[tuple[float, float], int] = {
@@ -591,7 +599,7 @@ class Binning:
 
         return result
 
-    def uprank_rp_by_name(
+    def _uprank_rp_by_name(
         self,
         fromrank: int,
         rp_by_name: dict[str, dict[Bin, tuple[float, float]]]
