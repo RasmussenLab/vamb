@@ -193,14 +193,6 @@ class Bin:
         self.intersections: dict[Genome, int] = dict()
         self.breadth: int = 0
 
-    def copy(self: Bn) -> Bn:
-        "Return a copy x with x.contigs and x.intersections being shallow copies."
-        instance = type(self)(self.name)
-        instance.contigs = self.contigs.copy()
-        instance.intersections = self.intersections.copy()
-        instance.breadth = self.breadth
-        return instance
-
     @property
     def ncontigs(self) -> int:
         return len(self.contigs)
@@ -213,7 +205,7 @@ class Bin:
         genomeof: dict[Contig, Genome]
     ) -> Bn:
         instance = cls(name)
-        instance.contigs = set(contigs)
+        instance.contigs.update(contigs)
         instance._finalize(genomeof)  # remember to do this
         return instance
 
@@ -235,6 +227,7 @@ class Bin:
         return result
 
     def _finalize(self, genomeof: dict[Contig, Genome]) -> None:
+        self.intersections.clear()
         by_source: defaultdict[tuple[Genome, str],
                                list[Contig]] = defaultdict(list)
         for contig in self.contigs:
@@ -503,8 +496,8 @@ class Binning:
 
     def print_matrix(self, rank: int, file: IO[str] = sys.stdout) -> None:
         """Prints the recall/precision number of bins to STDOUT."""
-        recalls: tuple[float] = self.recalls  # type: ignore
-        precisions: tuple[float] = self.precisions  # type: ignore
+        recalls: tuple[float] = self.recalls
+        precisions: tuple[float] = self.precisions
         assert self.counters is not None
 
         if rank >= self.reference.nranks:
@@ -570,8 +563,8 @@ class Binning:
         return tuple(sorted(s))
 
     def _get_seen_bitvectors(self, rp_by_name: dict[str, dict[Bin, tuple[float, float]]]) -> dict[str, int]:
-        recalls: tuple[float] = self.recalls  # type: ignore
-        precisions: tuple[float] = self.precisions  # type: ignore
+        recalls: tuple[float] = self.recalls
+        precisions: tuple[float] = self.precisions
         bitvectors: dict[str, int] = dict()
 
         for (cladename, d) in rp_by_name.items():
@@ -589,8 +582,8 @@ class Binning:
         return bitvectors
 
     def _counter_from_bitvectors(self, bitvectors: dict[str, int]) -> dict[tuple[float, float], int]:
-        recalls: tuple[float] = self.recalls  # type: ignore
-        precisions: tuple[float] = self.precisions  # type: ignore
+        recalls: tuple[float] = self.recalls
+        precisions: tuple[float] = self.precisions
         result: dict[tuple[float, float], int] = {
             (r, p): 0 for (r, p) in product(recalls, precisions)}
         for (_, bitvector) in bitvectors.items():
