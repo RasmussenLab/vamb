@@ -19,6 +19,18 @@ def snakemake_vamb_version(path):
         r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)")
     return grep(path, regex)
 
+def changelog_version(path):
+    with open(path) as file:
+        next(file) # header
+        textline = next(filter(None, map(str.strip, file)))
+    regex = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)*(?:-([A-Za-z]+))")
+    m = regex.search(textline)
+    if m is None:
+        raise ValueError("Could not find version in first non-header line of CHANGELOG")
+    g = m.groups()
+    v_nums = (int(g[0]), int(g[1]), int(g[2]))
+    return v_nums if g[3] is None else (*v_nums, g[3])
+
 def readme_vamb_version(path):
     regex = re.compile(
         r"https://github\.com/RasmussenLab/vamb/archive/v([0-9]+)\.([0-9]+)\.([0-9]+)\.zip"
@@ -71,6 +83,7 @@ class TestVersions(unittest.TestCase):
         cls.v_snakemake_readme = readme_vamb_version("../workflow/README.md")
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
+        cls.v_changelog = changelog_version("../CHANGELOG.md")
         cls.last_tag = latest_git_tag()
         head_tag, is_annotated = head_git_tag()
         cls.head_tag = head_tag
@@ -80,6 +93,9 @@ class TestVersions(unittest.TestCase):
         # envs/vamb version, versions in README and last tag must all point to the latest release
         self.assertEqual(self.v_snakemake, self.last_tag)
         self.assertEqual(self.v_snakemake, self.v_snakemake_readme)
+
+        # The version in the changelog must fit the one in __init__
+        self.assertEqual(self.v_init, self.v_changelog)
 
     def test_dev_version(self):
         # If the current version is a DEV version, it must be a greater version
