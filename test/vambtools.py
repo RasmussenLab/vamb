@@ -191,6 +191,30 @@ class TestFASTAEntry(unittest.TestCase):
         automatic = seq.kmercounts(4)
         self.assertTrue(np.all(manual_counts == automatic))
 
+    def test_rename(self):
+        seq = vamb.vambtools.FastaEntry(b"foo", bytearray(b"TaGkmYnAC"))
+
+        # Does not error
+        seq.rename(b"identifier\t desc")
+        self.assertEqual(seq.identifier, "identifier")
+        self.assertEqual(seq.description, "\t desc")
+
+        seq.rename(b"newname")
+        self.assertEqual(seq.identifier, "newname")
+        self.assertEqual(seq.description, "")
+
+        # Errors
+        with self.assertRaises(ValueError):
+            seq.rename(b"\tabc def")
+
+        with self.assertRaises(ValueError):
+            seq.rename(b"=123")
+
+        with self.assertRaises(ValueError):
+            seq.rename(b"")
+
+        with self.assertRaises(ValueError):
+            seq.rename(b"\xff")
 
 class TestFASTAReader(unittest.TestCase):
     def test_bad_files(self):
@@ -319,7 +343,6 @@ class TestInplaceMaskArray(unittest.TestCase):
             vamb.vambtools.torch_inplace_maskarray(arr, mask)
 
 
-"""
 class TestHashRefNames(unittest.TestCase):
     def test_refhash(self):
         names = ["foo", "9", "eleven", "a"]
@@ -328,22 +351,19 @@ class TestHashRefNames(unittest.TestCase):
         b2 = vamb.vambtools.hash_refnames(names)
         names[1] = names[1][:-1] + " \t"  # it strips whitespace off right end
         b3 = vamb.vambtools.hash_refnames(names)
-
-        self.assertIsNone(vamb.vambtools.verify_refhash(names, b1))
-
         names = names[::-1]
         b4 = vamb.vambtools.hash_refnames(names)
-        names.clear()
+        names = (i + '   ' for i in names[::-1])
         b5 = vamb.vambtools.hash_refnames(names)
+        b6 = vamb.vambtools.hash_refnames(names)  # now empty generator
+        b7 = vamb.vambtools.hash_refnames([])
 
-        hashes = [b1, b2, b3, b4, b5]
-        self.assertTrue(b1 == b3)
-        self.assertTrue(len(set(hashes)) == 4)
-        self.assertTrue(len(set(map(len, hashes))) == 1)
-
-        with self.assertRaises(ValueError):
-            vamb.vambtools.verify_refhash(names, b1)
-"""
+        self.assertNotEqual(b1, b2)
+        self.assertEqual(b1, b3)
+        self.assertNotEqual(b1, b4)
+        self.assertEqual(b1, b5)
+        self.assertNotEqual(b1, b6)
+        self.assertEqual(b6, b7)
 
 
 class TestBinSplit(unittest.TestCase):

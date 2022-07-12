@@ -524,24 +524,6 @@ def write_npz(file, array: _np.ndarray):
     _np.savez_compressed(file, array)
 
 
-def filtercontigs(infile: Iterable[bytes], outfile: IO[str], minlength: int = 2000):
-    """Creates new FASTA file with filtered contigs
-
-    Inputs:
-        infile: Binary opened input FASTA file
-        outfile: Write-opened output FASTA file
-        minlength: Minimum contig length to keep [2000]
-
-    Output: None
-    """
-
-    fasta_entries = byte_iterfasta(infile)
-
-    for entry in fasta_entries:
-        if len(entry) > minlength:
-            print(entry.format(), file=outfile)
-
-
 def concatenate_fasta(outfile: IO[str], inpaths: Iterable[str], minlength: int = 2000, rename: bool = True):
     """Creates a new FASTA file from input paths, and optionally rename contig headers
     to the pattern "S{sample number}C{contig identifier}".
