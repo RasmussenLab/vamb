@@ -492,36 +492,6 @@ def _wander_medoid(
 
     return medoid, distances
 
-
-def cluster(
-    matrix: _np.ndarray,
-    maxsteps: int = 25,
-    windowsize: int = 200,
-    minsuccesses: int = 20,
-    destroy: bool = False,
-    normalized: bool = False,
-    cuda: bool = False
-) -> Iterable[tuple[int, set[int]]]:
-    """Create iterable of (medoid, {point1, point2 ...}) tuples for each cluster.
-
-    Inputs:
-        matrix: A (obs x features) Numpy matrix of data type numpy.float32
-        maxsteps: Stop searching for optimal medoid after N futile attempts [25]
-        windowsize: Length of window to count successes [200]
-        minsuccesses: Minimum acceptable number of successes [15]
-        destroy: Save memory by destroying matrix while clustering [False]
-        normalized: Matrix is already preprocessed [False]
-        cuda: Accelerate clustering with GPU [False]
-
-    Output: Generator of (medoid, {point1, point2 ...}) tuples for each cluster.
-    """
-
-    it = ClusterGenerator(matrix, maxsteps, windowsize,
-                          minsuccesses, destroy, normalized, cuda)
-    for cluster in it:
-        yield cluster.as_tuple()
-
-
 def pairs(
     clustergenerator: ClusterGenerator,
     labels: Sequence[str]

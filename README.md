@@ -6,7 +6,7 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 :star: Vamb is benchmarked in CAMI2. Read our interpretations of the results [here.](https://github.com/github/RasmussenLab/blob/master/doc/CAMI2.md) :star:
 
-For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial.](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.html)
+For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.md).
 
 # Installation
 
@@ -93,7 +93,7 @@ This workflow runs steps 2-5 above using `minimap2` to align, and [CheckM](https
 The workflow can run both on a local machine, a workstation and a HPC system using `qsub`. It can be found in the `workflow` folder - see the file `workflow/README.md` for details.
 
 # Detailed user instructions
-See the tutorial in `doc/tutorial.html` for even more detailed instructions.
+See the tutorial in `doc/tutorial.md` for even more detailed instructions.
 
 ### Inputs
 Vamb relies on two properties of the DNA sequences to be binned:

@@ -179,7 +179,7 @@ def trainvae(
 def cluster(
     clusterspath: str,
     latent: np.ndarray,
-    contignames: np.ndarray, # of dtype object
+    contignames: np.ndarray,  # of dtype object
     windowsize: int,
     minsuccesses: int,
     maxclusters: Optional[int],
@@ -199,14 +199,19 @@ def cluster(
     log('Separator: {}'.format(None if separator is None else ("\""+separator+"\"")),
         logfile, 1)
 
-    it = vamb.cluster.cluster(
-        latent, destroy=True, windowsize=windowsize,
-        normalized=False, minsuccesses=minsuccesses, cuda=cuda
+    cluster_generator = vamb.cluster.ClusterGenerator(
+        latent,
+        windowsize=windowsize,
+        minsuccesses=minsuccesses,
+        destroy=True,
+        normalized=False,
+        cuda=cuda
     )
 
-    # Iterator of tuple[clusternumber, set[contigs...]]
-    renamed = ((str(i+1), {contignames[m] for m in ms})
-               for (i, (_n, ms)) in enumerate(it))
+    renamed = (
+        (str(cluster_index + 1), {contignames[i] for i in members})
+        for (cluster_index, (_, members)) in enumerate(map(lambda x: x.as_tuple(), cluster_generator))
+    )
 
     # Binsplit if given a separator
     if separator is not None:
@@ -231,7 +236,7 @@ def write_fasta(
     outdir: str,
     clusterspath: str,
     fastapath: str,
-    contignames: np.ndarray, # of object
+    contignames: np.ndarray,  # of object
     contiglengths: np.ndarray,
     minfasta: int,
     logfile: IO[str]
@@ -400,7 +405,8 @@ def main():
         title='RPKM input (either BAMs or .npz required)')
     rpkmos.add_argument('--bamfiles', metavar='',
                         help='paths to (multiple) BAM files', nargs='+')
-    rpkmos.add_argument('--rpkm', metavar='', help='path to .npz of RPKM (abundances)')
+    rpkmos.add_argument('--rpkm', metavar='',
+                        help='path to .npz of RPKM (abundances)')
 
     # Optional arguments
     inputos = parser.add_argument_group(title='IO options', description=None)
