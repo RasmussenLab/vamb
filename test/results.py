@@ -72,7 +72,8 @@ class TestClusterResult(unittest.TestCase):
         # it always clusters everything in 1-point clusters.
         # Uncomment when updating this test.
         # lens = list()
-        for (medoid, points) in vamb.cluster.cluster(latent):
+        for cluster in vamb.cluster.ClusterGenerator(latent):
+            medoid, points = cluster.as_tuple()
             # Set hashing may differ from run to run, so turn into sorted arrays
             arr = np.array(list(points))
             arr.sort()

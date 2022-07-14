@@ -11,9 +11,9 @@ vamb.benchmark
 
 General workflow:
 1) Filter contigs by size using vamb.vambtools.filtercontigs
-2) Map reads to contigs to obtain BAM file
-3) Calculate TNF of contigs using vamb.parsecontigs
-4) Create RPKM table from BAM files using vamb.parsebam
+2) Map reads to contigs to obtain BAM files
+3) Calculate a Composition of contigs using vamb.parsecontigs
+4) Create Abundance object from BAM files using vamb.parsebam
 5) Train autoencoder using vamb.encode
 6) Cluster latent representation using vamb.cluster
 7) Split bins using vamb.vambtools

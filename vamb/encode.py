@@ -14,7 +14,7 @@ and tnf in the latent space under gaussian noise.
 
 Usage:
 >>> vae = VAE(nsamples=6)
->>> dataloader, mask = make_dataloader(depths, tnf)
+>>> dataloader, mask = make_dataloader(depths, tnf, lengths)
 >>> vae.trainmodel(dataloader)
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape

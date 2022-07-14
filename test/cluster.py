@@ -3,7 +3,6 @@ import numpy as np
 from hashlib import md5
 import random
 import string
-import time
 
 import vamb
 

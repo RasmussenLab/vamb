@@ -2,7 +2,7 @@ __doc__ = """Estimate depths from BAM files of reads mapped to contigs.
 
 Usage:
 >>> bampaths = ['/path/to/bam1.bam', '/path/to/bam2.bam', '/path/to/bam3.bam']
->>> rpkms = read_bamfiles(bampaths)
+>>> rpkms = Abundance.from_file(bampaths, metadata, True, 0.1, 3)
 """
 
 import pycoverm
@@ -38,6 +38,10 @@ class Abundance:
     @property
     def nseqs(self) -> int:
         return len(self.matrix)
+
+    @property
+    def nsamples(self) -> int:
+        return len(self.samplenames)
 
     def verify_refhash(self, refhash: bytes) -> None:
         if self.refhash != refhash:
