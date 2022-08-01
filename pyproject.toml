@@ -4,9 +4,12 @@ dynamic = ["version"]
 dependencies = [
     "numpy ~= 1.20",
     "torch ~= 1.8",
-    "pycoverm ~= 0.3"
+    "pycoverm ~= 0.4"
 ]
-requires-python = ">=3.9"
+# Currently pycoverm does not have binaries for Python > 3.10.
+# The dependency resolver, will not error on Python 3.11, but attempt
+# to build pycoverm from source, but will not get the deps required for that.
+requires-python = "<3.11.*,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [metadata]
