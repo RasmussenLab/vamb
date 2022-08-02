@@ -348,8 +348,12 @@ class Reference:
         clusters = vambtools.read_clusters(io).items()
         if binsplit_sep is not None:
             clusters = vambtools.binsplit(clusters, binsplit_sep)
+        return self.load_bins(clusters)
+    
+    def load_bins(self, bins: Iterable[tuple[str, Iterable[str]]]) -> list[Bin]:
+        """Convert a set of bin names to a list of Bins"""
         result: list[Bin] = list()
-        for (binname, contignames) in clusters:
+        for (binname, contignames) in bins:
             contigs = (self.contig_by_name[name] for name in contignames)
             result.append(Bin.from_contigs(binname, contigs, self.genomeof))
 
