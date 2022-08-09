@@ -19,7 +19,7 @@ Vamb is most easily installed with pip - make sure your pip version is up to dat
 
 Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
 ```
-pip install https://github.com/RasmussenLab/vamb/archive/v3.0.3.zip
+pip install https://github.com/RasmussenLab/vamb/archive/v3.0.8.zip
 ```
 
 or using [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
