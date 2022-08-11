@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import re
 import os
-import from vamb.vambtools import concatenate_fasta
+from vamb.vambtools import concatenate_fasta
 
 def get_config(name, default, regex):
     res = config.get(name, default).strip()
@@ -10,6 +10,8 @@ def get_config(name, default, regex):
         raise ValueError(
             f"Config option \"{name}\" is \"{res}\", but must conform to regex \"{regex}\"")
     return res
+
+SNAKEDIR = os.path.dirname(workflow.snakefile)
 
 # set configurations
 INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
@@ -25,12 +27,6 @@ CONTIGS = get_config("contigs", "contigs.txt", r".*")
 VAMB_PARAMS = get_config("vamb_params", "-o C -m 2000 --minfasta 500000", r".*")
 VAMB_PRELOAD = get_config("vamb_preload", "", r".*")
 
-# Get output dir
-OUTDIR_NAME = "vamb"
-while os.path.exists(OUTDIR_NAME):
-    n = 1 if OUTDIR_NAME == "vamb" else int(OUTDIR_NAME[4:]) + 1
-    OUTDIR_NAME = "vamb" + str(n)
-
 # parse if GPUs is needed #
 
 vamb_threads, sep, vamb_gpus = VAMB_PPN.partition(":gpus=")
@@ -43,7 +39,7 @@ CUDA = len(vamb_gpus) > 0
 IDS = []
 sample2path = {}
 with open(SAMPLE_DATA) as file:
-    for (id, fw, rv) in map(lambda line: line.strip().split('\t'), file):
+    for (id, fw, rv) in map(lambda line: line.strip().split(), file):
         IDS.append(id)
         sample2path[id] = [fw, rv]
 
@@ -51,13 +47,11 @@ with open(SAMPLE_DATA) as file:
 with open(CONTIGS) as file:
     contigs_list = list(filter(None, map(str.strip, file)))
 
-## start of snakemake rules ##
-
 # targets
 rule all:
     input:
         "vamb/clusters.tsv",
-        "vamb/checkm.results"
+        "checkm/checkm.results"
 
 rule cat_contigs:
     input:
@@ -65,6 +59,7 @@ rule cat_contigs:
     output:
         "contigs.flt.fna.gz"
     params:
+        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "concatenate.py"),
         walltime="864000",
         nodes="1",
         ppn="1",
@@ -75,18 +70,7 @@ rule cat_contigs:
         "log/contigs/catcontigs.log"
     conda:
         "envs/vamb.yaml"
-    run:
-        for path in input:
-            if not os.path.isfile()
-                raise FileNotFoundError(path)
-
-        if os.path.exists(output[0]):
-            raise FileExistsError(output[0])
-
-        with gzip.open(output[0], "wt", compresslevel=3) as file:
-            concatenate_fasta(
-                file, input, minlength=int(MIN_CONTIG_SIZE), rename=True
-            )
+    shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
     input:
@@ -162,7 +146,7 @@ rule sort:
     input:
         "mapped/{sample}.bam"
     output:
-        temp("mapped/{sample}.sort.bam")
+        "mapped/{sample}.sort.bam"
     params:
         walltime="864000",
         nodes="1",
@@ -183,12 +167,7 @@ rule vamb:
         contigs = "contigs.flt.fna.gz",
         bamfiles=expand("mapped/{sample}.sort.bam", sample=IDS)
     output:
-        "vamb/composition.npz",
-        "vamb/abundance.npz",
-        "vamb/clusters.tsv",
-        "vamb/latent.npz",
-        "vamb/log.txt",
-        "vamb/model.pt"
+        "vamb/clusters.tsv"
     params:
         walltime="86400",
         nodes="1",
@@ -198,12 +177,13 @@ rule vamb:
     log:
         "log/vamb/vamb.log"
     threads:
-        int(VAMB_threads)
+        int(vamb_threads)
     conda:
         "envs/vamb.yaml"
     shell:
+        "rm -r vamb && "
         "{VAMB_PRELOAD}"
-        "vamb --outdir {OUTDIR_NAME} "
+        "vamb --outdir vamb "
         "--fasta {input.contigs} "
         "--bamfiles {input.bamfiles} "
         "{params.cuda}"
@@ -213,16 +193,16 @@ rule checkm:
     input:
         "vamb/clusters.tsv"
     output:
-        "vamb/checkm.results"
+        "checkm/checkm.results"
     params:
         walltime="86400",
         nodes="1",
         ppn=CHECKM_PPN,
         mem=CHECKM_MEM,
         bins="vamb/bins",
-        outdir="vamb/checkm.outdir"
+        outdir="checkm"
     log:
-        "log/vamb/checkm.log"
+        "log/checkm.log"
     threads:
         int(CHECKM_PPN)
     conda:

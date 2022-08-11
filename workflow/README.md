@@ -19,13 +19,12 @@ The nice thing about using snakemake for this is that it will keep track of whic
 To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `vamb` and herefter install all the dependencies needed.
 
 ```
- conda install -c conda-forge mamba
- mamba create -n vamb python=3.9
- mamba install -n vamb -c conda-forge -c bioconda snakemake
- mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
- mamba install -n vamb -c bioconda minimap2 pysam checkm-genome 
- mamba install -n vamb -c bioconda/label/cf201901 metabat2
- mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
+ conda config --append channels conda-forge
+ conda config --append channels bioconda
+ conda config --append channels pytorch
+ mamba create -n vamb python=3.10
+ conda install mamba
+ mamba install -n vamb snakemake "samtools>=1.8" minimap2 checkm-genome pytorch torchvision cudatoolkit=10.2
  conda activate vamb
  pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
  conda deactivate
