@@ -41,8 +41,7 @@ pip install -e .
 If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pycoverm`. Compile `src/_vambtools.pyx` then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
 
 # Running
-For more detailed description of the recommended workflow, see the section _Detailed user instructions_ below.
-For an even more detailed explanation of the parameters of Vamb, or different inputs, see the tutorial in the `doc` directory. 
+For more detailed description of the recommended workflow, see the tutorial in the `doc` directory. 
 
 For more command-line options, see the command-line help menu:
 ```
@@ -67,8 +66,7 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 2. Concatenate the input contigs to a single FASTA file discarding very short contigs (e.g. < 2 kbp), e.g. using Vamb's `concatenate.py` script:
 
 ```
-python concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta
-/path/to/assemblies/sample2/contigs.fasta  [ ... ]
+python concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 
 3. Use your favorite aligner to map each your read files back to the FASTA file:
