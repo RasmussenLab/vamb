@@ -34,6 +34,10 @@ for path in args.inpaths:
 if os.path.exists(args.outpath):
     raise FileExistsError(args.outpath)
 
+parent = os.path.dirname(args.outpath)
+if not os.path.isdir(parent):
+    raise NotADirectoryError(f"Output file cannot be created: Parent directory \"{parent}\" is not an existing directory")
+
 # Run the code. Compressing DNA is easy, this is about 8% bigger than compresslevel 9,
 # but ~15x faster.
 filehandle = open(args.outpath, "w") if args.nozip else gzip.open(args.outpath, "wt", compresslevel=3)
