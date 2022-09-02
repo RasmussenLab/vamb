@@ -83,7 +83,7 @@ concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fas
 
 ```
 minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
-minimap2 -t 8 -N 5 -ax sr catalogue.mmi /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
+minimap2 -t 8 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
 ```
 
 4. Run Vamb:
@@ -182,7 +182,7 @@ Be careful to choose proper parameters for your aligner - in general, if reads f
 
 ```
 minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
-minimap2 -t 28 -N 5 -ax sr catalogue.mmi sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam
+minimap2 -t 28 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam
 ```
 
 :warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
