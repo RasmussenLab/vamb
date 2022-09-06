@@ -8,6 +8,7 @@ from hashlib import sha256
 import vamb
 import testtools
 
+
 class TestCompositionResult(unittest.TestCase):
     io = io.BytesIO()
 
@@ -26,7 +27,7 @@ class TestCompositionResult(unittest.TestCase):
         comp = vamb.parsecontigs.Composition.from_file(self.io)
         self.assertEqual(
             sha256(comp.matrix.data.tobytes()).digest().hex(),
-            "9e9a2d7b021654e874894722bdd6cd3eda18bed03fabd32a9440e806a8ab1bd1"
+            "9e9a2d7b021654e874894722bdd6cd3eda18bed03fabd32a9440e806a8ab1bd1",
         )
 
 
@@ -36,17 +37,21 @@ class TestAbundanceResult(unittest.TestCase):
             np.array(testtools.BAM_NAMES, dtype=object),
             np.array(testtools.BAM_SEQ_LENS),
             np.ones(len(testtools.BAM_SEQ_LENS), dtype=bool),
-            2000
+            2000,
         )
 
-        abundance = vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, comp_metadata, True, 0.9, 3)
+        abundance = vamb.parsebam.Abundance.from_files(
+            testtools.BAM_FILES, comp_metadata, True, 0.9, 3
+        )
         self.assertEqual(
             sha256(abundance.matrix.data.tobytes()).digest().hex(),
-            "3d82a87bc1a9d77235269aeea1a66b67c5c4503ece2dd042b3ac6a1ccf7af882"
+            "3d82a87bc1a9d77235269aeea1a66b67c5c4503ece2dd042b3ac6a1ccf7af882",
         )
+
 
 class TestEncodingResult(unittest.TestCase):
     torch.manual_seed(0)
+
     def test_result(self):
         rng = np.random.RandomState(15)
         tnfs = rng.random((200, 103)).astype(np.float32)
@@ -58,8 +63,9 @@ class TestEncodingResult(unittest.TestCase):
         latent = vae.encode(dl)
         self.assertEqual(
             sha256(latent.data.tobytes()).digest().hex(),
-            "7636ce0fa1efeb24c040ba99c518baf5df5d3ed4957a8f5b62fd7925e7eed80b"
+            "7636ce0fa1efeb24c040ba99c518baf5df5d3ed4957a8f5b62fd7925e7eed80b",
         )
+
 
 class TestClusterResult(unittest.TestCase):
     def test_result(self):
@@ -77,12 +83,12 @@ class TestClusterResult(unittest.TestCase):
             # Set hashing may differ from run to run, so turn into sorted arrays
             arr = np.array(list(points))
             arr.sort()
-            hash.update(medoid.to_bytes(4, 'big'))
+            hash.update(medoid.to_bytes(4, "big"))
             hash.update(arr.data)
-            #lens.append(len(points))
+            # lens.append(len(points))
 
-        #print(lens)
+        # print(lens)
         self.assertEqual(
             hash.digest().hex(),
-            '2b3caf674ff1d1906a831219e0953b2d9f1b78ecefec709b70c672280af49aee'
+            "2b3caf674ff1d1906a831219e0953b2d9f1b78ecefec709b70c672280af49aee",
         )

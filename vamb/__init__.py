@@ -19,13 +19,14 @@ General workflow:
 7) Split bins using vamb.vambtools
 """
 
-__authors__ = 'Jakob Nybo Nissen', 'Simon Rasmussen'
-__licence__ = 'MIT'
+__authors__ = "Jakob Nybo Nissen", "Simon Rasmussen"
+__licence__ = "MIT"
 __version__ = (4, 0, 0, "DEV")
 
 import sys as _sys
+
 if _sys.version_info[:2] < (3, 9):
-    raise ImportError('Python version must be >= 3.9')
+    raise ImportError("Python version must be >= 3.9")
 
 from . import vambtools
 from . import parsebam

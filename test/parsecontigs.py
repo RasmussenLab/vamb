@@ -32,7 +32,7 @@ class TestReadContigs(unittest.TestCase):
                 np.array(["foo", "foo"], dtype=object),
                 np.array([1000, 1000]),
                 np.array([True, True], dtype=bool),
-                1000
+                1000,
             )
 
     def test_filter_minlength(self):
@@ -48,8 +48,7 @@ class TestReadContigs(unittest.TestCase):
         self.assertNotEqual(hash1, hash2)
         self.assertEqual(len(md.identifiers), len(md.lengths))
         self.assertEqual(md.nseqs, md.mask.sum())
-        self.assertLessEqual(
-            minlen, composition.metadata.lengths.min(initial=minlen))
+        self.assertLessEqual(minlen, composition.metadata.lengths.min(initial=minlen))
         self.assertEqual(len(md.mask), len(self.records))
 
         # NB: Here we filter metadata without filtering the composition.
@@ -59,7 +58,8 @@ class TestReadContigs(unittest.TestCase):
         self.assertEqual(len(md.identifiers), len(md.lengths))
         self.assertEqual(md.nseqs, md.mask.sum())
         self.assertLessEqual(
-            minlen, composition.metadata.lengths.min(initial=minlen + 50))
+            minlen, composition.metadata.lengths.min(initial=minlen + 50)
+        )
         self.assertEqual(len(md.mask), len(self.records))
         self.assertLess(md.nseqs, n_initial_seq)
 
@@ -79,22 +79,22 @@ class TestReadContigs(unittest.TestCase):
         composition = Composition.from_file(self.io, minlength=420)
         passed = list(filter(lambda x: len(x.sequence) >= 420, self.records))
 
-        self.assertEqual(composition.nseqs, len(
-            composition.metadata.identifiers))
+        self.assertEqual(composition.nseqs, len(composition.metadata.identifiers))
         self.assertEqual(composition.nseqs, len(composition.metadata.lengths))
 
         self.assertTrue(composition.matrix.dtype, np.float32)
         self.assertEqual(composition.matrix.shape, (len(passed), 103))
 
         # Names
-        self.assertEqual(list(composition.metadata.identifiers), [
-                         i.header for i in passed])
+        self.assertEqual(
+            list(composition.metadata.identifiers), [i.header for i in passed]
+        )
 
         # Lengths
-        self.assertTrue(np.issubdtype(
-            composition.metadata.lengths.dtype, np.integer))
-        self.assertEqual([len(i.sequence) for i in passed],
-                         list(composition.metadata.lengths))
+        self.assertTrue(np.issubdtype(composition.metadata.lengths.dtype, np.integer))
+        self.assertEqual(
+            [len(i.sequence) for i in passed], list(composition.metadata.lengths)
+        )
 
     def test_save_load(self):
         buf = io.BytesIO()

@@ -36,16 +36,43 @@ BAM_NAMES = [
 ]
 
 BAM_SEQ_LENS = [
-    2271, 3235, 3816, 2625, 2716,
-    4035, 3001, 2583, 5962, 3774,
-    2150, 2161, 2218, 2047, 5772,
-    2633, 3400, 3502, 2103, 4308,
-    3061, 2464, 4099, 2640, 2449
+    2271,
+    3235,
+    3816,
+    2625,
+    2716,
+    4035,
+    3001,
+    2583,
+    5962,
+    3774,
+    2150,
+    2161,
+    2218,
+    2047,
+    5772,
+    2633,
+    3400,
+    3502,
+    2103,
+    4308,
+    3061,
+    2464,
+    4099,
+    2640,
+    2449,
 ]
 
+
 def make_randseq(rng, frm: int, to: int) -> vamb.vambtools.FastaEntry:
-    name = rng.choice(string.ascii_uppercase) + ''.join(rng.choices(string.ascii_lowercase, k=11))
+    name = rng.choice(string.ascii_uppercase) + "".join(
+        rng.choices(string.ascii_lowercase, k=11)
+    )
     seq = "".join(
-        rng.choices("acgtACGTnNywsdbK", weights=[0.12] * 8 + [0.005] * 8, k=rng.randrange(frm, to))
+        rng.choices(
+            "acgtACGTnNywsdbK",
+            weights=[0.12] * 8 + [0.005] * 8,
+            k=rng.randrange(frm, to),
+        )
     )
     return vamb.vambtools.FastaEntry(name.encode(), bytearray(seq.encode()))

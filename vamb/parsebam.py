@@ -16,15 +16,21 @@ from typing import Optional, TypeVar, Union, IO, Sequence
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
 
-A = TypeVar('A', bound='Abundance')
+A = TypeVar("A", bound="Abundance")
 
 
 class Abundance:
     "Object representing contig abundance. Contains a matrix and refhash."
 
-    __slots__ = ['matrix', 'samplenames', 'minid', 'refhash']
+    __slots__ = ["matrix", "samplenames", "minid", "refhash"]
 
-    def __init__(self, matrix: _np.ndarray, samplenames: Sequence[str], minid: float, refhash: bytes):
+    def __init__(
+        self,
+        matrix: _np.ndarray,
+        samplenames: Sequence[str],
+        minid: float,
+        refhash: bytes,
+    ):
         assert matrix.dtype == _np.float32
         assert matrix.ndim == 2
         assert matrix.shape[1] == len(samplenames)
@@ -53,18 +59,23 @@ class Abundance:
             )
 
     def save(self, io: Union[str, IO[bytes]]):
-        _np.savez_compressed(io, matrix=self.matrix,
-                             samplenames=self.samplenames, minid=self.minid, refhash=self.refhash)
+        _np.savez_compressed(
+            io,
+            matrix=self.matrix,
+            samplenames=self.samplenames,
+            minid=self.minid,
+            refhash=self.refhash,
+        )
 
     @classmethod
-    def load(
-        cls: type[A],
-        io: Union[str, IO[bytes]],
-        refhash: Optional[bytes]
-    ) -> A:
+    def load(cls: type[A], io: Union[str, IO[bytes]], refhash: Optional[bytes]) -> A:
         arrs = _np.load(io, allow_pickle=True)
-        abundance = cls(_vambtools.validate_input_array(
-            arrs['matrix']), arrs['samplenames'], arrs["minid"].item(), arrs["refhash"].item())
+        abundance = cls(
+            _vambtools.validate_input_array(arrs["matrix"]),
+            arrs["samplenames"],
+            arrs["minid"].item(),
+            arrs["refhash"].item(),
+        )
         if refhash is not None:
             abundance.verify_refhash(refhash)
 
@@ -77,7 +88,7 @@ class Abundance:
         comp_metadata: CompositionMetaData,
         verify_refhash: bool,
         minid: float,
-        nthreads: int
+        nthreads: int,
     ) -> A:
         """Input:
         paths: List of paths to BAM files
@@ -100,9 +111,12 @@ class Abundance:
         # (issue #7). Can be solved by setting it to a low value
         _minid = minid if minid > 0.001 else 0.001
         headers, coverage = pycoverm.get_coverages_from_bam(
-            paths, threads=nthreads, min_identity=_minid,
+            paths,
+            threads=nthreads,
+            min_identity=_minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
-            trim_upper=0.1, trim_lower=0.1
+            trim_upper=0.1,
+            trim_lower=0.1,
         )
 
         assert len(headers) == len(coverage)

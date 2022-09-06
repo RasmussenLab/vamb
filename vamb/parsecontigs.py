@@ -26,11 +26,18 @@ class CompositionMetaData:
     * refhash: A bytes object representing the hash of the identifiers
     * minlength: The minimum contig length used for filtering
     """
-    __slots__ = ['identifiers', 'lengths', 'mask', 'refhash', 'minlength']
 
-    def __init__(self, identifiers: _np.ndarray, lengths: _np.ndarray, mask: _np.ndarray, minlength: int):
+    __slots__ = ["identifiers", "lengths", "mask", "refhash", "minlength"]
+
+    def __init__(
+        self,
+        identifiers: _np.ndarray,
+        lengths: _np.ndarray,
+        mask: _np.ndarray,
+        minlength: int,
+    ):
         assert len(identifiers) == len(lengths)
-        assert identifiers.dtype == _np.dtype('O')
+        assert identifiers.dtype == _np.dtype("O")
         assert _np.issubdtype(lengths.dtype, _np.integer)
         assert mask.dtype == bool
         assert mask.sum() == len(lengths)
@@ -38,9 +45,9 @@ class CompositionMetaData:
 
         if len(set(identifiers)) < len(identifiers):
             raise ValueError(
-                'Sequence names must be unique, but are not. '
-                'Vamb only uses the identifier (e.g. header before whitespace) as '
-                'sequence identifiers. Verify identifier uniqueness.'
+                "Sequence names must be unique, but are not. "
+                "Vamb only uses the identifier (e.g. header before whitespace) as "
+                "sequence identifiers. Verify identifier uniqueness."
             )
 
         self.identifiers = identifiers
@@ -76,7 +83,7 @@ class CompositionMetaData:
         self.minlength = length
 
 
-C = TypeVar('C', bound='Composition')
+C = TypeVar("C", bound="Composition")
 
 
 class Composition:
@@ -86,7 +93,7 @@ class Composition:
     * matrix: The composition matrix itself
     """
 
-    __slots__ = ['metadata', 'matrix']
+    __slots__ = ["metadata", "matrix"]
 
     def __init__(self, metadata: CompositionMetaData, matrix: _np.ndarray):
         assert matrix.dtype == _np.float32
@@ -109,19 +116,19 @@ class Composition:
             identifiers=self.metadata.identifiers,
             lengths=self.metadata.lengths,
             mask=self.metadata.mask,
-            minlength=self.metadata.minlength
+            minlength=self.metadata.minlength,
         )
 
     @classmethod
     def load(cls, io: Union[str, IO[bytes]]):
         arrs = _np.load(io, allow_pickle=True)
         metadata = CompositionMetaData(
-            _vambtools.validate_input_array(arrs['identifiers']),
-            _vambtools.validate_input_array(arrs['lengths']),
-            _vambtools.validate_input_array(arrs['mask']),
-            arrs['minlength'].item()
+            _vambtools.validate_input_array(arrs["identifiers"]),
+            _vambtools.validate_input_array(arrs["lengths"]),
+            _vambtools.validate_input_array(arrs["mask"]),
+            arrs["minlength"].item(),
         )
-        return cls(metadata, _vambtools.validate_input_array(arrs['matrix']))
+        return cls(metadata, _vambtools.validate_input_array(arrs["matrix"]))
 
     def filter_min_length(self, length: int):
         if length <= self.metadata.minlength:
@@ -137,8 +144,8 @@ class Composition:
         "Project fourmers down in dimensionality"
         s = fourmers.sum(axis=1).reshape(-1, 1)
         s[s == 0] = 1.0
-        fourmers *= 1/s
-        fourmers += -(1/256)
+        fourmers *= 1 / s
+        fourmers += -(1 / 256)
         return _np.dot(fourmers, kernel)
 
     @staticmethod
@@ -159,7 +166,7 @@ class Composition:
         """
 
         if minlength < 4:
-            raise ValueError(f'Minlength must be at least 4, not {minlength}')
+            raise ValueError(f"Minlength must be at least 4, not {minlength}")
 
         raw = _vambtools.PushArray(_np.float32)
         projected = _vambtools.PushArray(_np.float32)
@@ -189,13 +196,13 @@ class Composition:
         tnfs_arr = projected.take()
 
         # Don't use reshape since it creates a new array object with shared memory
-        tnfs_arr.shape = (len(tnfs_arr)//103, 103)
+        tnfs_arr.shape = (len(tnfs_arr) // 103, 103)
         lengths_arr = lengths.take()
 
         metadata = CompositionMetaData(
             _np.array(contignames, dtype=object),
             lengths_arr,
             _np.array(mask, dtype=bool),
-            minlength
+            minlength,
         )
         return cls(metadata, tnfs_arr)
