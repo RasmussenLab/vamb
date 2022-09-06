@@ -28,30 +28,65 @@ _XMAX = 0.3
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
 # of one point sums to approximately one
 _NORMALPDF = _DELTA_X * _Tensor(
-    [2.43432053e-11, 9.13472041e-10, 2.66955661e-08, 6.07588285e-07,
-     1.07697600e-05, 1.48671951e-04, 1.59837411e-03, 1.33830226e-02,
-     8.72682695e-02, 4.43184841e-01, 1.75283005e+00, 5.39909665e+00,
-     1.29517596e+01, 2.41970725e+01, 3.52065327e+01, 3.98942280e+01,
-     3.52065327e+01, 2.41970725e+01, 1.29517596e+01, 5.39909665e+00,
-     1.75283005e+00, 4.43184841e-01, 8.72682695e-02, 1.33830226e-02,
-     1.59837411e-03, 1.48671951e-04, 1.07697600e-05, 6.07588285e-07,
-     2.66955661e-08, 9.13472041e-10, 2.43432053e-11])
+    [
+        2.43432053e-11,
+        9.13472041e-10,
+        2.66955661e-08,
+        6.07588285e-07,
+        1.07697600e-05,
+        1.48671951e-04,
+        1.59837411e-03,
+        1.33830226e-02,
+        8.72682695e-02,
+        4.43184841e-01,
+        1.75283005e00,
+        5.39909665e00,
+        1.29517596e01,
+        2.41970725e01,
+        3.52065327e01,
+        3.98942280e01,
+        3.52065327e01,
+        2.41970725e01,
+        1.29517596e01,
+        5.39909665e00,
+        1.75283005e00,
+        4.43184841e-01,
+        8.72682695e-02,
+        1.33830226e-02,
+        1.59837411e-03,
+        1.48671951e-04,
+        1.07697600e-05,
+        6.07588285e-07,
+        2.66955661e-08,
+        9.13472041e-10,
+        2.43432053e-11,
+    ]
+)
 
 
 class Cluster:
-    __slots__ = ['medoid', 'seed', 'members', 'pvr',
-                 'radius', 'isdefault', 'successes', 'attempts']
+    __slots__ = [
+        "medoid",
+        "seed",
+        "members",
+        "pvr",
+        "radius",
+        "isdefault",
+        "successes",
+        "attempts",
+    ]
 
-    def __init__(self,
-                 medoid: int,
-                 seed: int,
-                 members: _np.ndarray,
-                 pvr: float,
-                 radius: float,
-                 isdefault: bool,
-                 successes: int,
-                 attempts: int
-                 ):
+    def __init__(
+        self,
+        medoid: int,
+        seed: int,
+        members: _np.ndarray,
+        pvr: float,
+        radius: float,
+        isdefault: bool,
+        successes: int,
+        attempts: int,
+    ):
         self.medoid = medoid
         self.seed = seed
         self.members = members
@@ -62,16 +97,16 @@ class Cluster:
         self.attempts = attempts
 
     def __repr__(self) -> str:
-        return f'<Cluster of medoid {self.medoid}, {len(self.members)} members>'
+        return f"<Cluster of medoid {self.medoid}, {len(self.members)} members>"
 
     def as_tuple(self) -> tuple[int, set[int]]:
         return (self.medoid, {i for i in self.members})
 
     def dump(self) -> str:
         return (
-            '{self.medoid}\t{self.seed}\t{self.pvt}\t{self.radius}\t{self.isdefault}'
-            '\t{self.successes}\t{self.attempts}\t'
-        ) + ','.join([str(i) for i in self.members])
+            "{self.medoid}\t{self.seed}\t{self.pvt}\t{self.radius}\t{self.isdefault}"
+            "\t{self.successes}\t{self.attempts}\t"
+        ) + ",".join([str(i) for i in self.members])
 
     def __str__(self) -> str:
         radius = f"{self.radius:.3f}"
@@ -100,9 +135,21 @@ class ClusterGenerator:
         cuda: Accelerate clustering with GPU [False]
     """
 
-    __slots__ = ['maxsteps', 'minsuccesses', 'cuda', 'rng', 'matrix', 'indices',
-                 'seed', 'nclusters', 'peak_valley_ratio', 'attempts', 'successes',
-                 'histogram', 'kept_mask']
+    __slots__ = [
+        "maxsteps",
+        "minsuccesses",
+        "cuda",
+        "rng",
+        "matrix",
+        "indices",
+        "seed",
+        "nclusters",
+        "peak_valley_ratio",
+        "attempts",
+        "successes",
+        "histogram",
+        "kept_mask",
+    ]
 
     def __repr__(self) -> str:
         return f"ClusterGenerator({len(self.matrix)} points, {self.nclusters} clusters)"
@@ -116,37 +163,37 @@ class ClusterGenerator:
   successes:    {self.successes}/{len(self.attempts)}
 """
 
-    def _check_params(self, matrix: _np.ndarray, maxsteps: int, windowsize: int, minsuccesses: int) -> None:
+    def _check_params(
+        self, matrix: _np.ndarray, maxsteps: int, windowsize: int, minsuccesses: int
+    ) -> None:
         """Checks matrix, and maxsteps."""
 
         if matrix.dtype != _np.float32:
-            raise(ValueError("Matrix must be of dtype float32"))
+            raise (ValueError("Matrix must be of dtype float32"))
 
         if maxsteps < 1:
-            raise ValueError(
-                f'maxsteps must be a positive integer, not {maxsteps}')
+            raise ValueError(f"maxsteps must be a positive integer, not {maxsteps}")
 
         if windowsize < 1:
-            raise ValueError(
-                f'windowsize must be at least 1, not {windowsize}')
+            raise ValueError(f"windowsize must be at least 1, not {windowsize}")
 
         if minsuccesses < 1 or minsuccesses > windowsize:
             raise ValueError(
-                f'minsuccesses must be between 1 and windowsize, not {minsuccesses}')
+                f"minsuccesses must be between 1 and windowsize, not {minsuccesses}"
+            )
 
         if len(matrix) < 1:
-            raise ValueError('Matrix must have at least 1 observation.')
+            raise ValueError("Matrix must have at least 1 observation.")
 
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
 
         kept_mask = _torch.ones(N, dtype=_torch.bool)
         if self.cuda:
-            histogram = _torch.empty(
-                _ceil(_XMAX/_DELTA_X), dtype=_torch.float).cuda()
+            histogram = _torch.empty(_ceil(_XMAX / _DELTA_X), dtype=_torch.float).cuda()
             kept_mask = kept_mask.cuda()
         else:
-            histogram = _torch.empty(_ceil(_XMAX/_DELTA_X))
+            histogram = _torch.empty(_ceil(_XMAX / _DELTA_X))
 
         return histogram, kept_mask
 
@@ -158,7 +205,7 @@ class ClusterGenerator:
         minsuccesses: int = 20,
         destroy: bool = False,
         normalized: bool = False,
-        cuda: bool = False
+        cuda: bool = False,
     ):
         self._check_params(matrix, maxsteps, windowsize, minsuccesses)
         if not destroy:
@@ -244,20 +291,33 @@ class ClusterGenerator:
                 self.seed = (self.seed + 1) % len(self.matrix)
 
             medoid, distances = _wander_medoid(
-                self.matrix, self.kept_mask, self.seed, self.maxsteps, self.rng, self.cuda)
+                self.matrix,
+                self.kept_mask,
+                self.seed,
+                self.maxsteps,
+                self.rng,
+                self.cuda,
+            )
 
             # We need to make a histogram of only the unclustered distances - when run on GPU
             # these have not been removed and we must use the kept_mask
             if self.cuda:
-                _torch.histc(distances[self.kept_mask], len(
-                    self.histogram), 0, _XMAX, out=self.histogram)
+                _torch.histc(
+                    distances[self.kept_mask],
+                    len(self.histogram),
+                    0,
+                    _XMAX,
+                    out=self.histogram,
+                )
             else:
-                _torch.histc(distances, len(self.histogram),
-                             0, _XMAX, out=self.histogram)
+                _torch.histc(
+                    distances, len(self.histogram), 0, _XMAX, out=self.histogram
+                )
             self.histogram[0] -= 1  # Remove distance to self
 
             threshold, success = _find_threshold(
-                self.histogram, self.peak_valley_ratio, self.cuda)
+                self.histogram, self.peak_valley_ratio, self.cuda
+            )
 
             # If success is not None, either threshold detection failed or succeded.
             if success is not None:
@@ -271,27 +331,39 @@ class ClusterGenerator:
 
                 # If less than minsuccesses of the last maxlen attempts were successful,
                 # we relax the clustering criteria and reset counting successes.
-                if len(self.attempts) == self.attempts.maxlen and self.successes < self.minsuccesses:
+                if (
+                    len(self.attempts) == self.attempts.maxlen
+                    and self.successes < self.minsuccesses
+                ):
                     self.peak_valley_ratio += 0.1
                     self.attempts.clear()
                     self.successes = 0
 
         # These are the points of the final cluster AFTER establishing the threshold used
         assert isinstance(distances, _Tensor)
-        points = _smaller_indices(
-            distances, self.kept_mask, threshold, self.cuda)
-        isdefault = success is None and threshold == _DEFAULT_RADIUS and self.peak_valley_ratio > 0.55
+        points = _smaller_indices(distances, self.kept_mask, threshold, self.cuda)
+        isdefault = (
+            success is None
+            and threshold == _DEFAULT_RADIUS
+            and self.peak_valley_ratio > 0.55
+        )
 
         cluster = Cluster(
-            # type: ignore (PyTorch does not yet have type checking)
-            int(self.indices[medoid].item()),
-            self.seed, self.indices[points].numpy(), self.peak_valley_ratio,
-            threshold, isdefault, self.successes, len(self.attempts)
+            int(self.indices[medoid].item()),  # type: ignore
+            self.seed,
+            self.indices[points].numpy(),
+            self.peak_valley_ratio,
+            threshold,
+            isdefault,
+            self.successes,
+            len(self.attempts),
         )
         return cluster, medoid, points
 
 
-def _calc_densities(histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF) -> _Tensor:
+def _calc_densities(
+    histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF
+) -> _Tensor:
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
 
@@ -300,7 +372,7 @@ def _calc_densities(histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF) -
 
     densities = _torch.zeros(len(histogram) + pdf_len - 1)
     for i in range(len(densities) - pdf_len + 1):
-        densities[i:i+pdf_len] += pdf * histogram[i]
+        densities[i : i + pdf_len] += pdf * histogram[i]
 
     densities = densities[15:-15]
 
@@ -308,9 +380,7 @@ def _calc_densities(histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF) -
 
 
 def _find_threshold(
-    histogram: _Tensor,
-    peak_valley_ratio: float,
-    cuda: bool
+    histogram: _Tensor, peak_valley_ratio: float, cuda: bool
 ) -> tuple[Optional[float], Optional[bool]]:
     """Find a threshold distance, where where is a dip in point density
     that separates an initial peak in densities from the larger bulk around 0.5.
@@ -379,10 +449,7 @@ def _find_threshold(
 
 
 def _smaller_indices(
-    tensor: _Tensor,
-    kept_mask: _Tensor,
-    threshold: float,
-    cuda: bool
+    tensor: _Tensor, kept_mask: _Tensor, threshold: float, cuda: bool
 ) -> _Tensor:
     """Get all indices where the tensor is smaller than the threshold.
     Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190"""
@@ -411,8 +478,8 @@ def _normalize(matrix: _Tensor, inplace: bool = False) -> _Tensor:
     # If any rows are kept all zeros, the distance function will return 0.5 to all points
     # inclusive itself, which can break the code in this module
     zeromask = matrix.sum(dim=1) == 0
-    matrix[zeromask] = 1/matrix.shape[1]
-    matrix /= (matrix.norm(dim=1).reshape(-1, 1) * (2 ** 0.5))
+    matrix[zeromask] = 1 / matrix.shape[1]
+    matrix /= matrix.norm(dim=1).reshape(-1, 1) * (2**0.5)
     return matrix
 
 
@@ -424,11 +491,7 @@ def _calc_distances(matrix: _Tensor, index: int) -> _Tensor:
 
 
 def _sample_medoid(
-    matrix: _Tensor,
-    kept_mask: _Tensor,
-    medoid: int,
-    threshold: float,
-    cuda: bool
+    matrix: _Tensor, kept_mask: _Tensor, medoid: int, threshold: float, cuda: bool
 ) -> tuple[_Tensor, _Tensor, float]:
     """Returns:
     - A vector of indices to points within threshold
@@ -453,7 +516,7 @@ def _wander_medoid(
     medoid: int,
     max_attempts: int,
     rng: _random.Random,
-    cuda: bool
+    cuda: bool,
 ) -> tuple[int, _Tensor]:
     """Keeps sampling new points within the cluster until it has sampled
     max_attempts without getting a new set of cluster with lower average
@@ -462,7 +525,8 @@ def _wander_medoid(
     futile_attempts = 0
     tried = {medoid}  # keep track of already-tried medoids
     cluster, distances, average_distance = _sample_medoid(
-        matrix, kept_mask, medoid, _MEDOID_RADIUS, cuda)
+        matrix, kept_mask, medoid, _MEDOID_RADIUS, cuda
+    )
 
     while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
         sampled_medoid = int(rng.choice(cluster).item())
@@ -474,7 +538,8 @@ def _wander_medoid(
         tried.add(sampled_medoid)
 
         sampling = _sample_medoid(
-            matrix, kept_mask, sampled_medoid, _MEDOID_RADIUS, cuda)
+            matrix, kept_mask, sampled_medoid, _MEDOID_RADIUS, cuda
+        )
         sample_cluster, sample_distances, sample_avg = sampling
 
         # If the mean distance of inner points of the sample is lower,
@@ -492,9 +557,9 @@ def _wander_medoid(
 
     return medoid, distances
 
+
 def pairs(
-    clustergenerator: ClusterGenerator,
-    labels: Sequence[str]
+    clustergenerator: ClusterGenerator, labels: Sequence[str]
 ) -> Iterable[tuple[str, set[str]]]:
     """Create an iterable of (N, {label1, label2 ...}) for each
     cluster in a ClusterGenerator, where N is "1", "2", "3", etc.
@@ -514,6 +579,6 @@ def pairs(
         )
 
     return (
-        (str(i+1), {labels[j] for j in c.as_tuple()[1]})
+        (str(i + 1), {labels[j] for j in c.as_tuple()[1]})
         for (i, c) in enumerate(clustergenerator)
     )

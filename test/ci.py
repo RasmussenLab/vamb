@@ -14,14 +14,15 @@ def grep(path, regex):
 
     raise ValueError(f"Could not find regex in path {path}")
 
+
 def snakemake_vamb_version(path):
-    regex = re.compile(
-        r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)")
+    regex = re.compile(r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)")
     return grep(path, regex)
+
 
 def changelog_version(path):
     with open(path) as file:
-        next(file) # header
+        next(file)  # header
         textline = next(filter(None, map(str.strip, file)))
     regex = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)*(?:-([A-Za-z]+))")
     m = regex.search(textline)
@@ -31,25 +32,28 @@ def changelog_version(path):
     v_nums = (int(g[0]), int(g[1]), int(g[2]))
     return v_nums if g[3] is None else (*v_nums, g[3])
 
+
 def readme_vamb_version(path):
     regex = re.compile(
         r"https://github\.com/RasmussenLab/vamb/archive/v([0-9]+)\.([0-9]+)\.([0-9]+)\.zip"
     )
     return grep(path, regex)
 
+
 def validate_init(init):
     if not (
-        isinstance(init, tuple) and
-        len(init) in (3, 4) and
-        all(isinstance(i, int) for i in init[:3]) and
-        (len(init) == 3 or init[3] == "DEV")
+        isinstance(init, tuple)
+        and len(init) in (3, 4)
+        and all(isinstance(i, int) for i in init[:3])
+        and (len(init) == 3 or init[3] == "DEV")
     ):
         raise ValueError("Wrong format of __version__ in __init__.py")
 
 
 def latest_git_tag():
-    st = subprocess.run(["git", "describe", "--tags",
-                        "--abbrev=0"], capture_output=True).stdout.decode()
+    st = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"], capture_output=True
+    ).stdout.decode()
     regex = re.compile(r"^v?([0-9]+)\.([0-9]+)\.([0-9])\n?$")
     m = regex.match(st)
     if m is None:
@@ -59,8 +63,9 @@ def latest_git_tag():
 
 
 def head_git_tag():
-    st = subprocess.run(["git", "tag", "--points-at", "HEAD"],
-                        capture_output=True).stdout.decode()
+    st = subprocess.run(
+        ["git", "tag", "--points-at", "HEAD"], capture_output=True
+    ).stdout.decode()
     if len(st) == 0:
         return (None, None)
     regex = re.compile(r"^(v([0-9]+)\.([0-9]+)\.([0-9]))\n?$")

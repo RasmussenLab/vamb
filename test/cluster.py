@@ -24,8 +24,7 @@ class TestClusterer(unittest.TestCase):
             vamb.cluster.ClusterGenerator(self.data, minsuccesses=0)
 
         with self.assertRaises(ValueError):
-            vamb.cluster.ClusterGenerator(
-                self.data, minsuccesses=5, windowsize=4)
+            vamb.cluster.ClusterGenerator(self.data, minsuccesses=5, windowsize=4)
 
         with self.assertRaises(ValueError):
             vamb.cluster.ClusterGenerator(np.random.random((0, 40)))
@@ -53,8 +52,7 @@ class TestClusterer(unittest.TestCase):
         clusters.append(x)
 
         # All members are clustered
-        self.assertEqual(
-            sum(map(lambda x: len(x.members), clusters)), len(self.data))
+        self.assertEqual(sum(map(lambda x: len(x.members), clusters)), len(self.data))
 
         # Elements of members are exactly the matrix row indices
         mems = set()
@@ -65,12 +63,10 @@ class TestClusterer(unittest.TestCase):
     def test_detruction(self):
         copy = self.data.copy()
         clstr = vamb.cluster.ClusterGenerator(self.data)
-        self.assertTrue(
-            np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
+        self.assertTrue(np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
         clstr = vamb.cluster.ClusterGenerator(copy, destroy=True)
         self.assertTrue(np.all(np.abs(copy - clstr.matrix.numpy()) < 1e-6))
-        self.assertTrue(
-            np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
+        self.assertTrue(np.any(np.abs(self.data - clstr.matrix.numpy()) > 0.001))
 
     @staticmethod
     def xor_rows_hash(matrix):
@@ -84,8 +80,7 @@ class TestClusterer(unittest.TestCase):
     def test_normalization(self):
         hash_before = md5(self.data.data.tobytes()).digest().hex()
         gen = vamb.cluster.ClusterGenerator(self.data)
-        self.assertEqual(hash_before, md5(
-            self.data.data.tobytes()).digest().hex())
+        self.assertEqual(hash_before, md5(self.data.data.tobytes()).digest().hex())
         cp = self.data.copy()
         gen = vamb.cluster.ClusterGenerator(cp, destroy=True)
         hash_after = md5(cp.data.tobytes()).digest().hex()
@@ -120,12 +115,10 @@ class TestPairs(unittest.TestCase):
         with self.assertRaises(ValueError):
             list(vamb.cluster.pairs(clstr, list(nameset)))
 
-
     def test_pairs(self):
         clstr = vamb.cluster.ClusterGenerator(self.data)
         nameset = {self.randstring(10) for i in range(len(self.data))}
-        pairs = list(vamb.cluster.pairs(
-            clstr, list(nameset)))
+        pairs = list(vamb.cluster.pairs(clstr, list(nameset)))
 
         medoid, members = pairs[0]
         self.assertIsInstance(medoid, str)
