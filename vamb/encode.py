@@ -61,10 +61,10 @@ def make_dataloader(
         raise ValueError("TNF and RPKM must be Numpy arrays")
 
     if batchsize < 1:
-        raise ValueError(f"Minimum batchsize of 1, not {batchsize}")
+        raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
 
     if len(rpkm) != len(tnf) or len(tnf) != len(lengths):
-        raise ValueError("Lengths of RPKM, TNF and lengths must be the same")
+        raise ValueError("Lengths of RPKM, TNF and lengths arrays must be the same")
 
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
@@ -79,7 +79,7 @@ def make_dataloader(
     # Normalize samples to have same depth
     sample_depths_sum = rpkm.sum(axis=0)
     if _np.any(sample_depths_sum == 0):
-        raise ValueError("One or more samples have zero total depth.")
+        raise ValueError("One or more samples have zero depth in all sequences, so cannot be depth normalized")
     rpkm *= 1_000_000 / sample_depths_sum
 
     # If multiple samples, also include nonzero depth as requirement for accept
@@ -93,7 +93,12 @@ def make_dataloader(
         assert isinstance(depthssum, _np.ndarray)
 
     if mask.sum() < batchsize:
-        raise ValueError("Fewer sequences left after filtering than the batch size.")
+        raise ValueError(
+            "Fewer sequences left after filtering than the batch size. " +
+            "This probably means you try to run on a too small dataset (below ~10k sequences), " + 
+            "or that nearly all sequences were filtered away. Check the log file, " + 
+            "and verify BAM file content is sensible."
+            )
 
     _vambtools.numpy_inplace_maskarray(rpkm, mask)
     _vambtools.numpy_inplace_maskarray(tnf, mask)
@@ -548,10 +553,10 @@ class VAE(_nn.Module):
                     f"Last batch size of {last_batchsize} exceeds dataset length "
                     f"of {len(dataloader.dataset)}. "  # type: ignore
                     "This means you have too few contigs left after filtering to train. "
-                    "It is not adviced to run Vamb with fewer than 50,000 sequences "
+                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
                     "after filtering. "
-                    "Please check the Vamb log file to see where there sequences were "
-                    "filtered away."
+                    "Please check the Vamb log file to see where the sequences were "
+                    "filtered away, and verify BAM files has sensible content."
                 )
             batchsteps_set = set(batchsteps)
 
