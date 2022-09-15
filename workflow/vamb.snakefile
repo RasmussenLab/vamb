@@ -39,9 +39,13 @@ CUDA = len(vamb_gpus) > 0
 IDS = []
 sample2path = {}
 with open(SAMPLE_DATA) as file:
-    for (id, fw, rv) in map(lambda line: line.strip().split(), file):
+    for (lineno, fields) in enumerate(map(str.split, filter(None, map(str.split, file)))):
+        if len(fields) != 3:
+            raise ValueError(f"In sample file {SAMPLE_DATA}, expected 3 fields per line, but got {len(fields)} on line {lineno+1}")
+        (id, fw, rv) = fields
         IDS.append(id)
         sample2path[id] = [fw, rv]
+
 
 # read in list of per-sample assemblies
 with open(CONTIGS) as file:
