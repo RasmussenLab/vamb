@@ -10,4 +10,4 @@ dependencies:
   - cudatoolkit=10.2
   - pycoverm
   - pip:
-     - git+https://github.com/RasmussenLab/vamb.git@v4
+     - https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
