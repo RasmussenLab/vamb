@@ -1,5 +1,6 @@
 __doc__ = "Various classes and functions Vamb uses internally."
 
+import sys
 import os as _os
 import gzip as _gzip
 import bz2 as _bz2
@@ -231,9 +232,10 @@ class FastaEntry:
         masked = sequence.translate(None, b" \t\n\r")
         stripped = masked.translate(None, self.allowed)
         if len(stripped) > 0:
-            bad_character = chr(stripped[0])
+            codeunit = stripped[0]
+            bad_character = chr(codeunit)
             raise ValueError(
-                f"Non-IUPAC DNA/RNA byte in sequence {identifier}: '{bad_character}'"
+                f"Non-IUPAC DNA/RNA byte in sequence {identifier}: '{bad_character}', byte value {codeunit}"
             )
 
         self.sequence: bytearray = masked
@@ -543,26 +545,30 @@ def concatenate_fasta(
 
     identifiers: set[str] = set()
     for (inpathno, inpath) in enumerate(inpaths):
-        with Reader(inpath) as infile:
+        try:
+            with Reader(inpath) as infile:
 
-            # If we rename, seq identifiers only have to be unique for each sample
-            if rename:
-                identifiers.clear()
-
-            for entry in byte_iterfasta(infile):
-                if len(entry) < minlength:
-                    continue
-
+                # If we rename, seq identifiers only have to be unique for each sample
                 if rename:
-                    entry.rename(f"S{inpathno + 1}C{entry.identifier}".encode())
+                    identifiers.clear()
 
-                if entry.identifier in identifiers:
-                    raise ValueError(
-                        "Multiple sequences would be given "
-                        f'identifier "{entry.identifier}".'
-                    )
-                identifiers.add(entry.identifier)
-                print(entry.format(), file=outfile)
+                for entry in byte_iterfasta(infile):
+                    if len(entry) < minlength:
+                        continue
+
+                    if rename:
+                        entry.rename(f"S{inpathno + 1}C{entry.identifier}".encode())
+
+                    if entry.identifier in identifiers:
+                        raise ValueError(
+                            "Multiple sequences would be given "
+                            f'identifier "{entry.identifier}".'
+                        )
+                    identifiers.add(entry.identifier)
+                    print(entry.format(), file=outfile)
+        except Exception as e:
+            print(f"Exception occured when parsing file {inpath}", file=sys.stderr)
+            raise e from None
 
 
 def hash_refnames(refnames: Iterable[str]) -> bytes:
