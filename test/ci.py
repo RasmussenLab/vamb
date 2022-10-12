@@ -16,7 +16,9 @@ def grep(path, regex):
 
 
 def snakemake_vamb_version(path):
-    regex = re.compile(r"github\.com/RasmussenLab/vamb@v([0-9]+)\.([0-9]+)\.([0-9]+)")
+    regex = re.compile(
+        r"https://github\.com/RasmussenLab/vamb/archive/v([0-9]+)\.([0-9]+)\.([0-9]+)\.zip"
+    )
     return grep(path, regex)
 
 
