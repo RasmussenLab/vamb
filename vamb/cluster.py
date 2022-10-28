@@ -104,8 +104,8 @@ class Cluster:
 
     def dump(self) -> str:
         return (
-            "{self.medoid}\t{self.seed}\t{self.pvt}\t{self.radius}\t{self.isdefault}"
-            "\t{self.successes}\t{self.attempts}\t"
+            f"{self.medoid}\t{self.seed}\t{self.pvr}\t{self.radius}\t{self.isdefault}"
+            f"\t{self.successes}\t{self.attempts}\t"
         ) + ",".join([str(i) for i in self.members])
 
     def __str__(self) -> str:
