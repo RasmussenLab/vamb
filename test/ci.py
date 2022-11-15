@@ -86,7 +86,6 @@ def head_git_tag():
 class TestVersions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.v_snakemake = snakemake_vamb_version("../workflow/envs/vamb.yaml")
         cls.v_snakemake_readme = readme_vamb_version("../workflow/README.md")
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
@@ -98,8 +97,7 @@ class TestVersions(unittest.TestCase):
 
     def test_same_versions(self):
         # envs/vamb version, versions in README and last tag must all point to the latest release
-        self.assertEqual(self.v_snakemake, self.last_tag)
-        self.assertEqual(self.v_snakemake, self.v_snakemake_readme)
+        self.assertEqual(self.last_tag, self.v_snakemake_readme)
 
         # The version in the changelog must fit the one in __init__
         self.assertEqual(self.v_init, self.v_changelog)
@@ -110,8 +108,8 @@ class TestVersions(unittest.TestCase):
         # If not, it must be the same version as the tag of the current commit,
         # i.e. the current commit must be a release version.
         if self.v_init[-1] == "DEV":
-            self.assertGreater(self.v_init[:3], self.v_snakemake)
+            self.assertGreater(self.v_init[:3], self.last_tag)
         else:
             self.assertEqual(self.v_init, self.head_tag)
-            self.assertEqual(self.v_init[:3], self.v_snakemake)
+            self.assertEqual(self.v_init[:3], self.last_tag)
             self.assertTrue(self.is_annotated)
