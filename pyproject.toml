@@ -3,7 +3,7 @@ name = "vamb"
 dynamic = ["version"]
 dependencies = [
     "numpy ~= 1.20",
-    "torch ~= 1.12",
+    "torch ~= 1.13",
     "pycoverm ~= 0.4"
 ]
 # Currently pycoverm does not have binaries for Python > 3.10.

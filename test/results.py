@@ -63,7 +63,7 @@ class TestEncodingResult(unittest.TestCase):
         latent = vae.encode(dl)
         self.assertEqual(
             sha256(latent.data.tobytes()).digest().hex(),
-            "7636ce0fa1efeb24c040ba99c518baf5df5d3ed4957a8f5b62fd7925e7eed80b",
+            "0148ec0767e88c756615340d6fd0b31ca07aa6b4b172a1874fb7de7179acb57d",
         )
 
 
