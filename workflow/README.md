@@ -16,18 +16,13 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `vamb` and herefter install all the dependencies needed.
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), then use the `environment.yml` file to make a conda environment named `vamb`:
 
 ```
- conda config --append channels conda-forge
- conda config --append channels bioconda
- conda config --append channels pytorch
- mamba create -n vamb python=3.10
- conda install mamba
- mamba install -n vamb snakemake "samtools>=1.8" minimap2 checkm-genome pytorch torchvision cudatoolkit=10.2
- conda activate vamb
- pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
- conda deactivate
+conda env create -f environment.yml
+conda activate vamb
+pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
+conda deactivate
 ```
 
 We only have access to `vamb` and the other programs when we are inside this specific conda environment. We can use `conda activate vamb` to activate the environment (the name of shell changes and should say something with vamb) and `conda deactivate` to get out of it again. Therefore, if you can an error further down it could simply be because you have not activated the environment.  
@@ -114,4 +109,3 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
 Note that I could not get `vamb` to work with `cuda` on our cluster when installing from bioconda. Therefore I added a line to preload cuda toolkit to the configuration file that will load this module when running `vamb`. 
 
 Please let us know if you have any issues and we can try to help out.
-
