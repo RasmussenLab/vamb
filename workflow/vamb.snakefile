@@ -39,7 +39,7 @@ CUDA = len(vamb_gpus) > 0
 IDS = []
 sample2path = {}
 with open(SAMPLE_DATA) as file:
-    for (lineno, fields) in enumerate(map(str.split, filter(None, map(str.split, file)))):
+    for (lineno, fields) in enumerate(map(str.split, filter(None, file))):
         if len(fields) != 3:
             raise ValueError(f"In sample file {SAMPLE_DATA}, expected 3 fields per line, but got {len(fields)} on line {lineno+1}")
         (id, fw, rv) = fields
@@ -73,7 +73,7 @@ rule cat_contigs:
     log:
         "log/contigs/catcontigs.log"
     conda:
-        "envs/vamb.yaml"
+        "vamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -183,7 +183,7 @@ rule vamb:
     threads:
         int(vamb_threads)
     conda:
-        "envs/vamb.yaml"
+        "vamb"
     shell:
         "rm -r vamb && "
         "{VAMB_PRELOAD}"
