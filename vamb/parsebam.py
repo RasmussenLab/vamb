@@ -10,8 +10,9 @@ import os as _os
 import numpy as _np
 from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
-import vamb.vambtools as _vambtools
+from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
+from collections.abc import Iterator
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -71,7 +72,7 @@ class Abundance:
     def load(cls: type[A], io: Union[str, IO[bytes]], refhash: Optional[bytes]) -> A:
         arrs = _np.load(io, allow_pickle=True)
         abundance = cls(
-            _vambtools.validate_input_array(arrs["matrix"]),
+            vambtools.validate_input_array(arrs["matrix"]),
             arrs["samplenames"],
             arrs["minid"].item(),
             arrs["refhash"].item(),
@@ -130,12 +131,79 @@ class Abundance:
             )
 
         headers = [h for (h, m) in zip(headers, comp_metadata.mask) if m]
-        _vambtools.numpy_inplace_maskarray(coverage, comp_metadata.mask)
+        vambtools.numpy_inplace_maskarray(coverage, comp_metadata.mask)
 
-        refhash = _vambtools.hash_refnames(headers)
+        refhash = vambtools.hash_refnames(headers)
         abundance = cls(coverage, paths, minid, refhash)
 
         # Check refhash
+        if verify_refhash:
+            abundance.verify_refhash(comp_metadata.refhash)
+
+        return abundance
+
+    @classmethod
+    def from_jgi_filehandle(
+        cls: type[A],
+        filehandle: Iterator[str],
+        comp_metadata: CompositionMetaData,
+        verify_refhash: bool,
+    ) -> A:
+        # Check header
+        header = next(filehandle)
+        fields = header.strip().split("\t")
+        if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
+            raise ValueError(
+                'Input file format error: First columns should be "contigName,"'
+                '"contigLen" and "totalAvgDepth"'
+            )
+
+        sample_names = []
+        for fieldno in range(3, len(fields)):
+            field = fields[fieldno]
+            if fieldno % 2 == 0:
+                if not field.endswith("-var"):
+                    raise ValueError(
+                        f'Header of column {fieldno + 1} does not end with "-var" as expected'
+                    )
+            else:
+                if field.endswith("-var"):
+                    raise ValueError(
+                        f'Header of column {fieldno + 1} unexpectedly ends with "-var"'
+                    )
+                sample_names.append(field)
+
+        # Load identifiers and mean abundance in each sample for each ref
+        columns = range(3, len(fields), 2)
+        array = vambtools.PushArray(_np.float32)
+        identifiers = list()
+
+        for row in filehandle:
+            fields = row.split("\t")
+            for col in columns:
+                array.append(float(fields[col]))
+
+            identifiers.append(fields[0])
+
+        # Mask
+        if len(identifiers) != len(comp_metadata.mask):
+            raise ValueError(
+                f"CompositionMetaData was created with {len(comp_metadata.mask)} sequences, "
+                f"but number of ref sequences in JGI file is {len(identifiers)}."
+            )
+        identifiers = [h for (h, m) in zip(identifiers, comp_metadata.mask) if m]
+
+        matrix = array.take()
+        matrix.shape = (len(matrix) // len(columns), len(columns))
+        matrix = vambtools.validate_input_array(matrix)
+        vambtools.numpy_inplace_maskarray(matrix, comp_metadata.mask)
+
+        assert matrix.shape[1] == len(sample_names)
+
+        # Refhash
+        refhash = vambtools.hash_refnames(identifiers)
+        abundance = cls(matrix, sample_names, 0.0, refhash)
+
         if verify_refhash:
             abundance.verify_refhash(comp_metadata.refhash)
 
