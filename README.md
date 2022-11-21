@@ -17,6 +17,8 @@ Recommended: Vamb can be installed with pip (thanks to contribution from C. Titu
 pip install vamb
 ```
 
+:bangbang: An active Conda environment can hijack your system's linker, causing an error during installation. Either deactivate `conda`, or delete the `~/miniconda/compiler_compats` directory before installing with pip.
+
 Alternatively, it can be installed as a [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
 Currently, the Conda version lags behind the pip version, so we recommend using pip. The BioConda package does not include GPU support.
  
