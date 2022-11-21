@@ -25,7 +25,7 @@ class TestParseBam(unittest.TestCase):
         )
 
         cls.abundance = vamb.parsebam.Abundance.from_files(
-            testtools.BAM_FILES, cls.comp_metadata, True, 0.0, 3
+            testtools.BAM_FILES, "/tmp/bam_tmpfile", cls.comp_metadata, True, 0.0, 2
         )
 
     def test_refhash(self):
@@ -33,7 +33,7 @@ class TestParseBam(unittest.TestCase):
         cp = CompositionMetaData(m.identifiers, m.lengths, m.mask, m.minlength)
         cp.refhash = b"a" * 32  # write bad refhash
         with self.assertRaises(ValueError):
-            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cp, True, 0.97, 1)
+            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, None, cp, True, 0.97, 4)
 
     def test_bad_metadata_mask(self):
         m = self.comp_metadata
@@ -46,19 +46,19 @@ class TestParseBam(unittest.TestCase):
             m.identifiers[:-1], m.lengths[:-1], m.mask[:-3], m.minlength
         )
         with self.assertRaises(ValueError):
-            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, cp, True, 0.97, 1)
+            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, None, cp, True, 0.97, 4)
 
     def test_badfile(self):
         with self.assertRaises(FileNotFoundError):
             vamb.parsebam.Abundance.from_files(
-                ["noexist"], self.comp_metadata, True, 0.97, 1
+                ["noexist"], None, self.comp_metadata, True, 0.97, 1
             )
 
     # Minid too high
     def test_minid_off(self):
         with self.assertRaises(ValueError):
             vamb.parsebam.Abundance.from_files(
-                testtools.BAM_FILES, self.comp_metadata, True, 1.01, 1
+                testtools.BAM_FILES, None, self.comp_metadata, True, 1.01, 4
             )
 
     def test_parse(self):
@@ -71,7 +71,7 @@ class TestParseBam(unittest.TestCase):
 
     def test_minid(self):
         abundance = vamb.parsebam.Abundance.from_files(
-            testtools.BAM_FILES, self.comp_metadata, True, 0.95, 3
+            testtools.BAM_FILES, None, self.comp_metadata, True, 0.95, 3
         )
         self.assertTrue(np.any(abundance.matrix < self.abundance.matrix))
 

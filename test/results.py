@@ -41,12 +41,16 @@ class TestAbundanceResult(unittest.TestCase):
         )
 
         abundance = vamb.parsebam.Abundance.from_files(
-            testtools.BAM_FILES, comp_metadata, True, 0.9, 3
+            testtools.BAM_FILES, "/tmp/tmpbam", comp_metadata, True, 0.9, 2
         )
         self.assertEqual(
             sha256(abundance.matrix.data.tobytes()).digest().hex(),
             "3d82a87bc1a9d77235269aeea1a66b67c5c4503ece2dd042b3ac6a1ccf7af882",
         )
+        abundance2 = vamb.parsebam.Abundance.from_files(
+            testtools.BAM_FILES, None, comp_metadata, True, 0.9, 4
+        )
+        self.assertTrue(np.all(np.abs(abundance.matrix - abundance2.matrix) < 1e-5))
 
 
 class TestEncodingResult(unittest.TestCase):
