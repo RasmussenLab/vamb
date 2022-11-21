@@ -111,8 +111,9 @@ def calc_rpkm(
         assert bampaths is not None
         log(f"Parsing {len(bampaths)} BAM files with {nthreads} threads", logfile, 1)
 
+        cache_directory = os.path.join(outdir, "tmp")
         abundance = vamb.parsebam.Abundance.from_files(
-            bampaths, comp_metadata, verify_refhash, minid, nthreads
+            bampaths, cache_directory, comp_metadata, verify_refhash, minid, nthreads
         )
         abundance.save(os.path.join(outdir, "abundance.npz"))
 
