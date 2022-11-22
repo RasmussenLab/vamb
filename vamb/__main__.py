@@ -76,6 +76,7 @@ def calc_rpkm(
     outdir: str,
     bampaths: Optional[list[str]],
     npzpath: Optional[str],
+    jgipath: Optional[str],
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     verify_refhash: bool,
     minid: float,
@@ -105,6 +106,13 @@ def calc_rpkm(
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
+            )
+
+    elif jgipath is not None:
+        log(f"Loading depths from JGI path {jgipath}", logfile, 1)
+        with open(jgipath) as file:
+            abundance = vamb.parsebam.Abundance.from_jgi_filehandle(
+                file, comp_metadata, verify_refhash
             )
 
     else:
@@ -310,6 +318,7 @@ def run(
     compositionpath: Optional[str],
     bampaths: Optional[list[str]],
     rpkmpath: Optional[str],
+    jgipath: Optional[str],
     mincontiglength: int,
     norefcheck: bool,
     noencode: bool,
@@ -346,6 +355,7 @@ def run(
         outdir,
         bampaths,
         rpkmpath,
+        jgipath,
         composition.metadata,
         not norefcheck,
         minid,
@@ -468,6 +478,7 @@ def main():
         "--bamfiles", metavar="", help="paths to (multiple) BAM files", nargs="+"
     )
     rpkmos.add_argument("--rpkm", metavar="", help="path to .npz of RPKM (abundances)")
+    rpkmos.add_argument("--jgi", metavar="", help="path to JGI text file of abundances")
 
     # Optional arguments
     inputos = parser.add_argument_group(title="IO options", description=None)
@@ -651,6 +662,7 @@ def main():
     composition: Optional[str] = args.composition
     bamfiles: Optional[list[str]] = args.bamfiles
     rpkm: Optional[str] = args.rpkm
+    jgipath: Optional[str] = args.jgi
     minlength: int = args.minlength
 
     if args.minid != 0.0 and bamfiles is None:
@@ -701,7 +713,7 @@ def main():
             raise FileNotFoundError(path)
 
     # Make sure only one RPKM input is there
-    if not ((bamfiles is None) ^ (rpkm is None)):
+    if not ((bamfiles is None) + (rpkm is None) + (jgipath is None)) == 1:
         raise argparse.ArgumentTypeError(
             "Must specify exactly one of BAM files or RPKM input"
         )
@@ -719,6 +731,9 @@ def main():
             # Check this early, since I expect users will forget about this
             if not vamb.parsebam.pycoverm.is_bam_sorted(bampath):
                 raise ValueError(f"BAM file {bampath} is not sorted by reference.")
+
+    if jgipath is not None and not os.path.isfile(jgipath):
+        raise FileNotFoundError("Not an existing non-directory file: " + jgipath)
 
     # Check minfasta settings
     if minfasta is not None and fasta is None:
@@ -814,6 +829,7 @@ def main():
             composition,
             bamfiles,
             rpkm,
+            jgipath,
             mincontiglength=minlength,
             norefcheck=norefcheck,
             noencode=noencode,
