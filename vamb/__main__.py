@@ -322,6 +322,7 @@ class VambOptions:
         # TODO: Check that if noencode is passed, no encoding/clustering options are passed
         self.noencode = noencode
 
+
 def log(string: str, logfile: IO[str], indent: int = 0):
     print(("\t" * indent) + string, file=logfile)
     logfile.flush()

@@ -14,6 +14,7 @@ from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
 from collections.abc import Iterator
 from pathlib import Path
+import shutil
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -163,36 +164,33 @@ class Abundance:
         target_refhash: Optional[bytes],
         mask: _np.ndarray,
     ) -> A:
-        try:
-            _os.mkdir(cache_directory)
-        except FileExistsError:
-            pass
+        _os.mkdir(cache_directory)
 
         chunks = [
             (i, min(len(paths), i + nthreads)) for i in range(0, len(paths), nthreads)
+        ]
+        filenames = [
+            _os.path.join(cache_directory, str(i) + ".npz") for i in range(len(chunks))
         ]
         assert len(chunks) > 1
 
         # Load from BAM and store them chunkwise
         refhash = None
-        for (chunk_number, (chunkstart, chunkstop)) in enumerate(chunks):
+        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
             (matrix, refhash) = cls.run_pycoverm(
                 paths[chunkstart:chunkstop],
                 minid,
                 target_refhash,
                 mask,
             )
-            vambtools.write_npz(
-                _os.path.join(cache_directory, str(chunk_number) + ".npz"), matrix
-            )
+            vambtools.write_npz(filename, matrix)
 
-        # Initialize matrix, the load them chunkwise
+        # Initialize matrix, the load them chunkwise. Delete the temp files when done
         matrix = _np.empty((mask.sum(), len(paths)), dtype=_np.float32)
-        for (chunk_number, (chunkstart, chunkstop)) in enumerate(chunks):
-            m = vambtools.read_npz(
-                _os.path.join(cache_directory, str(chunk_number) + ".npz")
-            )
-            matrix[:, chunkstart:chunkstop] = m
+        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+            matrix[:, chunkstart:chunkstop] = vambtools.read_npz(filename)
+
+        shutil.rmtree(cache_directory)
 
         assert refhash is not None
         return cls(matrix, paths, minid, refhash)
