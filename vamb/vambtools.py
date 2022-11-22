@@ -12,7 +12,7 @@ import collections as _collections
 from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
-from pathlib import PurePath as _PurePath
+from pathlib import PurePath
 
 
 class PushArray:
@@ -160,7 +160,7 @@ class Reader:
     TEST LINE
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: Union[str, PurePath]):
         self.filename = filename
 
         with open(self.filename, "rb") as f:
@@ -414,7 +414,7 @@ def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set
 
 
 def write_bins(
-    directory: Union[str, _PurePath],
+    directory: Union[str, PurePath],
     bins: dict[str, set[str]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 250,

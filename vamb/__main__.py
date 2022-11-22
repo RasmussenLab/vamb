@@ -11,7 +11,8 @@ import torch
 import datetime
 import time
 from math import isfinite
-from typing import Optional, IO
+from typing import Optional, IO, Union
+from pathlib import Path
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -28,8 +29,298 @@ parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
 
-################################# DEFINE FUNCTIONS ##########################
+class FASTAPath(type(Path())):
+    pass
 
+
+class CompositionPath(type(Path())):
+    pass
+
+
+class CompositionOptions:
+    __slots__ = ["path", "min_contig_length"]
+
+    def __init__(
+        self, fastapath: Optional[Path], npzpath: Optional[Path], min_contig_length: int
+    ):
+        assert isinstance(fastapath, Union[Path, None])
+        assert isinstance(npzpath, Union[Path, None])
+        assert isinstance(min_contig_length, int)
+
+        if min_contig_length < 250:
+            raise argparse.ArgumentTypeError(
+                "Minimum contig length must be at least 250"
+            )
+
+        if not (fastapath is None) ^ (npzpath is None):
+            raise argparse.ArgumentTypeError(
+                "Must specify either FASTA or composition path"
+            )
+
+        for path in (fastapath, npzpath):
+            if path is not None and not path.is_file():
+                raise FileNotFoundError(path)
+
+        if fastapath is not None:
+            self.path = FASTAPath(fastapath)
+        else:
+            assert npzpath is not None
+            self.path = CompositionPath(npzpath)
+        self.min_contig_length = min_contig_length
+
+
+class AbundancePath(type(Path())):
+    pass
+
+
+class JGIPath(type(Path())):
+    pass
+
+
+class AbundanceOptions:
+    __slots__ = ["path", "min_alignment_id", "refcheck"]
+
+    def __init__(
+        self,
+        bampaths: Optional[list[Path]],
+        abundancepath: Optional[Path],
+        jgipath: Optional[Path],
+        min_alignment_id: Optional[float],
+        refcheck: bool,
+    ):
+        assert isinstance(bampaths, Optional[list])
+        assert isinstance(abundancepath, Optional[Path])
+        assert isinstance(jgipath, Optional[Path])
+        assert isinstance(min_alignment_id, Optional[float])
+        assert isinstance(refcheck, bool)
+
+        # Make sure only one RPKM input is there
+        if not ((bampaths is None) + (abundancepath is None) + (jgipath is None)) != 1:
+            raise argparse.ArgumentTypeError(
+                "Must specify exactly one of BAM files, abundance NPZ or JGI file input"
+            )
+
+        if abundancepath is not None:
+            if not abundancepath.is_file():
+                raise FileNotFoundError(
+                    f'Not an existing non-directory file: "{str(abundancepath)}"'
+                )
+            self.path = AbundancePath(abundancepath)
+
+        elif bampaths is not None:
+            for bampath in bampaths:
+                if not bampath.is_file():
+                    raise FileNotFoundError(
+                        f'Not an existing non-directory file: "{str(bampath)}"'
+                    )
+            self.path = bampaths
+
+        if jgipath is not None:
+            if not jgipath.is_file():
+                raise FileNotFoundError(
+                    f'Not an existing non-directory file: "{str(jgipath)}"'
+                )
+            self.path = JGIPath(jgipath)
+
+        if min_alignment_id is not None:
+            if bampaths is None:
+                raise argparse.ArgumentTypeError(
+                    "If minid is set, RPKM must be passed as bam files"
+                )
+            if (
+                not isfinite(min_alignment_id)
+                or min_alignment_id < 0.0
+                or min_alignment_id > 1.0
+            ):
+                raise argparse.ArgumentTypeError(
+                    "Minimum nucleotide ID must be in [0,1]"
+                )
+            self.min_alignment_id = min_alignment_id
+        else:
+            self.min_alignment_id = 0.0
+
+        self.refcheck = refcheck
+
+
+class VAEOptions:
+    __slots__ = ["nhiddens", "nlatent", "alpha", "beta", "dropout", "cuda"]
+
+    def __init__(
+        self,
+        nhiddens: Optional[list[int]],
+        nlatent: int,
+        alpha: Optional[float],
+        beta: float,
+        dropout: Optional[float],
+    ):
+        assert isinstance(nhiddens, Optional[list])
+        assert isinstance(nlatent, int)
+        assert isinstance(alpha, Optional[float])
+        assert isinstance(beta, float)
+        assert isinstance(dropout, Optional[float])
+
+        if nhiddens is not None and any(i < 1 for i in nhiddens):
+            raise argparse.ArgumentTypeError(
+                f"Minimum 1 neuron per layer, not {min(nhiddens)}"
+            )
+        self.nhiddens = nhiddens
+
+        if nlatent < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 latent neuron, not {nlatent}")
+        self.nlatent = nlatent
+
+        if alpha is not None and (alpha <= 0 or alpha) >= 1:
+            raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
+        self.alpha = alpha
+
+        if beta <= 0 or not isfinite(beta):
+            raise argparse.ArgumentTypeError("beta cannot be negative or zero")
+        self.beta = beta
+
+        if dropout is not None and (dropout < 0 or dropout >= 1):
+            raise argparse.ArgumentTypeError("dropout must be in 0 <= d < 1")
+        self.dropout = dropout
+
+
+class TrainingOptions:
+    __slots__ = ["nepochs", "batchsize", "batchsteps", "lrate"]
+
+    def __init__(
+        self, nepochs: int, batchsize: int, batchsteps: list[int], lrate: float
+    ):
+        assert isinstance(nepochs, int)
+        assert isinstance(batchsize, int)
+        assert isinstance(batchsteps, list)
+        assert isinstance(lrate, float)
+
+        if nepochs < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
+        self.nepochs = nepochs
+
+        if batchsize < 1:
+            raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
+        self.batchsize = batchsize
+
+        batchsteps = sorted(set(batchsteps))
+        if max(batchsteps, default=0) >= self.nepochs:
+            raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
+
+        if min(batchsteps, default=1) < 1:
+            raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
+        self.batchsteps = batchsteps
+
+        if lrate <= 0.0:
+            raise argparse.ArgumentTypeError("Learning rate must be positive")
+        self.lrate = lrate
+
+
+class ClusterOptions:
+    __slots__ = [
+        "window_size",
+        "min_successes",
+        "min_cluster_size",
+        "max_clusters",
+        "binsplit_separator",
+    ]
+
+    def __init__(
+        self,
+        window_size: int,
+        min_successes: int,
+        min_cluster_size: int,
+        max_clusters: Optional[int],
+        binsplit_separator: Optional[str],
+    ):
+        assert isinstance(window_size, int)
+        assert isinstance(min_successes, int)
+        assert isinstance(min_cluster_size, int)
+        assert isinstance(max_clusters, Optional[int])
+        assert isinstance(binsplit_separator, Optional[str])
+
+        if window_size < 1:
+            raise argparse.ArgumentTypeError("Window size must be at least 1")
+        self.window_size = window_size
+
+        if min_cluster_size < 1:
+            raise argparse.ArgumentTypeError("Minimum cluster size must be at least 0")
+        self.min_cluster_size = min_cluster_size
+
+        if min_successes < 1 or min_successes > window_size:
+            raise argparse.ArgumentTypeError(
+                "Minimum cluster size must be in 1:windowsize"
+            )
+        self.min_successes = min_successes
+
+        if max_clusters is not None and max_clusters < 1:
+            raise argparse.ArgumentTypeError("Max clusters must be at least 1")
+        self.max_clusters = max_clusters
+
+        if binsplit_separator is not None and len(binsplit_separator) == 0:
+            raise argparse.ArgumentTypeError(
+                "Binsplit separator cannot be an empty string"
+            )
+        self.binsplit_separator = binsplit_separator
+
+
+class VambOptions:
+    __slots__ = [
+        "out_dir",
+        "n_threads",
+        "comp_options",
+        "min_fasta_output_size",
+        "cuda",
+        "noencode",
+    ]
+
+    def __init__(
+        self,
+        out_dir: Path,
+        n_threads: int,
+        comp_options: CompositionOptions,
+        min_fasta_output_size: Optional[int],
+        cuda: bool,
+        noencode: bool,
+    ):
+        assert isinstance(out_dir, Path)
+        assert isinstance(n_threads, int)
+        assert isinstance(comp_options, CompositionOptions)
+        assert isinstance(min_fasta_output_size, Optional[int])
+        assert isinstance(cuda, bool)
+        assert isinstance(noencode, bool)
+
+        # Outdir does not exist
+        if out_dir.exists():
+            raise FileExistsError(out_dir)
+
+        # Outdir is in an existing parent dir
+        if not out_dir.parent.is_dir():
+            raise NotADirectoryError(parentdir)
+        self.out_dir = out_dir
+
+        if n_threads < 1:
+            raise ValueError(f"Must pass at least 1 thread, not {n_threads}")
+        self.n_threads = n_threads
+
+        if min_fasta_output_size is not None:
+            if not isinstance(comp_options.path, FASTAPath):
+                raise argparse.ArgumentTypeError(
+                    "If minfasta is not None, "
+                    "input fasta file must be given explicitly"
+                )
+            if min_fasta_output_size < 0:
+                raise argparse.ArgumentTypeError(
+                    "Minimum FASTA output size must be nonnegative"
+                )
+        self.min_fasta_output_size = min_fasta_output_size
+
+        if cuda and not torch.cuda.is_available():
+            raise ModuleNotFoundError(
+                "Cuda is not available on your PyTorch installation"
+            )
+        self.cuda = cuda
+
+        # TODO: Check that if noencode is passed, no encoding/clustering options are passed
+        self.noencode = noencode
 
 def log(string: str, logfile: IO[str], indent: int = 0):
     print(("\t" * indent) + string, file=logfile)
@@ -37,28 +328,28 @@ def log(string: str, logfile: IO[str], indent: int = 0):
 
 
 def calc_tnf(
-    outdir: str,
-    fastapath: Optional[str],
-    npzpath: Optional[str],
-    mincontiglength: int,
+    options: CompositionOptions,
+    outdir: Path,
     logfile: IO[str],
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     log("\nLoading TNF", logfile, 0)
-    log(f"Minimum sequence length: {mincontiglength}", logfile, 1)
+    log(f"Minimum sequence length: {options.min_contig_length}", logfile, 1)
 
-    if npzpath is not None:
-        log(f"Loading composition from npz {npzpath}", logfile, 1)
-        composition = vamb.parsecontigs.Composition.load(npzpath)
-        composition.filter_min_length(mincontiglength)
+    path = options.path
+
+    if isinstance(path, CompositionPath):
+        log(f"Loading composition from npz {path}", logfile, 1)
+        composition = vamb.parsecontigs.Composition.load(str(path))
+        composition.filter_min_length(options.min_contig_length)
     else:
-        assert fastapath is not None
-        log(f"Loading data from FASTA file {fastapath}", logfile, 1)
-        with vamb.vambtools.Reader(fastapath) as file:
+        assert isinstance(path, FASTAPath)
+        log(f"Loading data from FASTA file {path}", logfile, 1)
+        with vamb.vambtools.Reader(str(path)) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, minlength=mincontiglength
+                file, minlength=options.min_contig_length
             )
-        composition.save(os.path.join(outdir, "composition.npz"))
+        composition.save(outdir.joinpath("composition.npz"))
 
     elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
@@ -73,13 +364,9 @@ def calc_tnf(
 
 
 def calc_rpkm(
-    outdir: str,
-    bampaths: Optional[list[str]],
-    npzpath: Optional[str],
-    jgipath: Optional[str],
+    abundance_options: AbundanceOptions,
+    outdir: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
-    verify_refhash: bool,
-    minid: float,
     nthreads: int,
     logfile: IO[str],
 ) -> vamb.parsebam.Abundance:
@@ -87,43 +374,47 @@ def calc_rpkm(
     begintime = time.time()
     log("\nLoading depths", logfile)
     log(
-        f'Reference hash: {comp_metadata.refhash.hex() if verify_refhash else "None"}',
+        f'Reference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else "None"}',
         logfile,
         1,
     )
 
-    # If rpkm is given, we load directly from .npz file
-    if npzpath is not None:
-        log(f"Loading depths from npz array {npzpath}", logfile, 1)
+    path = abundance_options.path
+    if isinstance(path, AbundancePath):
+        log(f"Loading depths from npz array {str(path)}", logfile, 1)
         abundance = vamb.parsebam.Abundance.load(
-            npzpath, comp_metadata.refhash if verify_refhash else None
+            path, comp_metadata.refhash if abundance_options.refcheck else None
         )
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
         if abundance.nseqs != comp_metadata.nseqs:
-            assert not verify_refhash
+            assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
             )
 
-    elif jgipath is not None:
-        log(f"Loading depths from JGI path {jgipath}", logfile, 1)
-        with open(jgipath) as file:
+    elif isinstance(path, JGIPath):
+        log(f"Loading depths from JGI path {str(path)}", logfile, 1)
+        with open(path) as file:
             abundance = vamb.parsebam.Abundance.from_jgi_filehandle(
-                file, comp_metadata, verify_refhash
+                file, comp_metadata, abundance_options.refcheck
             )
 
     else:
-        assert bampaths is not None
-        log(f"Parsing {len(bampaths)} BAM files with {nthreads} threads", logfile, 1)
+        assert isinstance(path, list)
+        log(f"Parsing {len(path)} BAM files with {nthreads} threads", logfile, 1)
 
-        cache_directory = os.path.join(outdir, "tmp")
         abundance = vamb.parsebam.Abundance.from_files(
-            bampaths, cache_directory, comp_metadata, verify_refhash, minid, nthreads
+            [str(i) for i in path],
+            outdir.joinpath("tmp"),
+            comp_metadata,
+            abundance_options.refcheck,
+            abundance_options.min_alignment_id,
+            nthreads,
         )
-        abundance.save(os.path.join(outdir, "abundance.npz"))
+        abundance.save(outdir.joinpath("abundance.npz"))
 
     log(f"Min identity: {abundance.minid}\n", logfile, 1)
     log("Order of columns is:", logfile, 1)
@@ -137,20 +428,13 @@ def calc_rpkm(
 
 
 def trainvae(
-    outdir: str,
+    vae_options: VAEOptions,
+    training_options: TrainingOptions,
+    vamb_options: VambOptions,
+    outdir: Path,
     rpkms: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
-    nhiddens: Optional[list[int]],  # set automatically if None
-    nlatent: int,
-    alpha: Optional[float],  # set automatically if None
-    beta: float,
-    dropout: Optional[float],  # set automatically if None
-    cuda: bool,
-    batchsize: int,
-    nepochs: int,
-    lrate: float,
-    batchsteps: list[int],
     logfile: IO[str],
 ) -> tuple[np.ndarray, np.ndarray]:
 
@@ -162,17 +446,22 @@ def trainvae(
     nsamples = rpkms.shape[1]
     vae = vamb.encode.VAE(
         nsamples,
-        nhiddens=nhiddens,
-        nlatent=nlatent,
-        alpha=alpha,
-        beta=beta,
-        dropout=dropout,
-        cuda=cuda,
+        nhiddens=vae_options.nhiddens,
+        nlatent=vae_options.nlatent,
+        alpha=vae_options.alpha,
+        beta=vae_options.beta,
+        dropout=vae_options.dropout,
+        cuda=vamb_options.cuda,
     )
 
     log("Created VAE", logfile, 1)
     dataloader, mask = vamb.encode.make_dataloader(
-        rpkms, tnfs, lengths, batchsize, destroy=True, cuda=cuda
+        rpkms,
+        tnfs,
+        lengths,
+        training_options.batchsize,
+        destroy=True,
+        cuda=vamb_options.cuda,
     )
     log("Created dataloader and mask", logfile, 1)
     vamb.vambtools.write_npz(os.path.join(outdir, "mask.npz"), mask)
@@ -181,12 +470,12 @@ def trainvae(
     log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
     print("", file=logfile)
 
-    modelpath = os.path.join(outdir, "model.pt")
+    modelpath = outdir.joinpath("model.pt")
     vae.trainmodel(
         dataloader,
-        nepochs=nepochs,
-        lrate=lrate,
-        batchsteps=batchsteps,
+        nepochs=training_options.nepochs,
+        lrate=training_options.lrate,
+        batchsteps=training_options.batchsteps,
         logfile=logfile,
         modelfile=modelpath,
     )
@@ -204,35 +493,39 @@ def trainvae(
 
 
 def cluster(
-    clusterspath: str,
+    cluster_options: ClusterOptions,
+    clusterspath: Path,
     latent: np.ndarray,
     contignames: np.ndarray,  # of dtype object
-    windowsize: int,
-    minsuccesses: int,
-    maxclusters: Optional[int],
-    minclustersize: int,
-    separator: Optional[str],
     cuda: bool,
     logfile: IO[str],
 ) -> None:
     begintime = time.time()
 
     log("\nClustering", logfile)
-    log(f"Windowsize: {windowsize}", logfile, 1)
-    log(f"Min successful thresholds detected: {minsuccesses}", logfile, 1)
-    log(f"Max clusters: {maxclusters}", logfile, 1)
-    log(f"Min cluster size: {minclustersize}", logfile, 1)
+    log(f"Windowsize: {cluster_options.window_size}", logfile, 1)
+    log(
+        f"Min successful thresholds detected: {cluster_options.min_successes}",
+        logfile,
+        1,
+    )
+    log(f"Max clusters: {cluster_options.max_clusters}", logfile, 1)
+    log(f"Min cluster size: {cluster_options.min_cluster_size}", logfile, 1)
     log(f"Use CUDA for clustering: {cuda}", logfile, 1)
     log(
-        "Separator: {}".format(None if separator is None else ('"' + separator + '"')),
+        "Separator: {}".format(
+            None
+            if cluster_options.binsplit_separator is None
+            else ('"' + cluster_options.binsplit_separator + '"')
+        ),
         logfile,
         1,
     )
 
     cluster_generator = vamb.cluster.ClusterGenerator(
         latent,
-        windowsize=windowsize,
-        minsuccesses=minsuccesses,
+        windowsize=cluster_options.window_size,
+        minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
         cuda=cuda,
@@ -246,8 +539,10 @@ def cluster(
     )
 
     # Binsplit if given a separator
-    if separator is not None:
-        maybe_split = vamb.vambtools.binsplit(renamed, separator)
+    if cluster_options.binsplit_separator is not None:
+        maybe_split = vamb.vambtools.binsplit(
+            renamed, cluster_options.binsplit_separator
+        )
     else:
         maybe_split = renamed
 
@@ -255,8 +550,8 @@ def cluster(
         clusternumber, ncontigs = vamb.vambtools.write_clusters(
             clustersfile,
             maybe_split,
-            max_clusters=maxclusters,
-            min_size=minclustersize,
+            max_clusters=cluster_options.max_clusters,
+            min_size=cluster_options.min_cluster_size,
             rename=False,
         )
 
@@ -268,9 +563,9 @@ def cluster(
 
 
 def write_fasta(
-    outdir: str,
-    clusterspath: str,
-    fastapath: str,
+    outdir: Path,
+    clusterspath: Path,
+    fastapath: Path,
     contignames: np.ndarray,  # of object
     contiglengths: np.ndarray,
     minfasta: int,
@@ -300,7 +595,7 @@ def write_fasta(
 
     with vamb.vambtools.Reader(fastapath) as file:
         vamb.vambtools.write_bins(
-            os.path.join(outdir, "bins"), filtered_clusters, file, maxbins=None
+            outdir.joinpath("bins"), filtered_clusters, file, maxbins=None
         )
 
     ncontigs = sum(map(len, filtered_clusters.values()))
@@ -313,33 +608,12 @@ def write_fasta(
 
 
 def run(
-    outdir: str,
-    fastapath: Optional[str],
-    compositionpath: Optional[str],
-    bampaths: Optional[list[str]],
-    rpkmpath: Optional[str],
-    jgipath: Optional[str],
-    mincontiglength: int,
-    norefcheck: bool,
-    noencode: bool,
-    minid: float,
-    nthreads: int,
-    nhiddens: Optional[list[int]],
-    nlatent: int,
-    nepochs: int,
-    batchsize: int,
-    cuda: bool,
-    alpha: Optional[float],
-    beta: float,
-    dropout: Optional[float],
-    lrate: float,
-    batchsteps: list[int],
-    windowsize: int,
-    minsuccesses: int,
-    minclustersize: int,
-    separator: Optional[str],
-    maxclusters: Optional[int],
-    minfasta: Optional[int],
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    vae_options: VAEOptions,
+    training_options: TrainingOptions,
+    cluster_options: ClusterOptions,
     logfile: IO[str],
 ):
 
@@ -348,22 +622,18 @@ def run(
     begintime = time.time()
 
     # Get TNFs, save as npz
-    composition = calc_tnf(outdir, fastapath, compositionpath, mincontiglength, logfile)
+    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
 
     # Parse BAMs, save as npz
     abundance = calc_rpkm(
-        outdir,
-        bampaths,
-        rpkmpath,
-        jgipath,
+        abundance_options,
+        vamb_options.out_dir,
         composition.metadata,
-        not norefcheck,
-        minid,
-        nthreads,
+        vamb_options.n_threads,
         logfile,
     )
 
-    if noencode:
+    if vamb_options.noencode:
         elapsed = round(time.time() - begintime, 2)
         log(
             f"\nNoencode set, skipping encoding and clustering.\n\nCompleted Vamb in {elapsed} seconds",
@@ -373,20 +643,13 @@ def run(
 
     # Train, save model
     mask, latent = trainvae(
-        outdir,
+        vae_options,
+        training_options,
+        vamb_options,
+        vamb_options.out_dir,
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
-        nhiddens,
-        nlatent,
-        alpha,
-        beta,
-        dropout,
-        cuda,
-        batchsize,
-        nepochs,
-        lrate,
-        batchsteps,
         logfile,
     )
 
@@ -398,31 +661,28 @@ def run(
     assert comp_metadata.nseqs == len(latent)
 
     # Cluster, save tsv file
-    clusterspath = os.path.join(outdir, "clusters.tsv")
+    clusterspath = vamb_options.out_dir.joinpath("clusters.tsv")
     cluster(
+        cluster_options,
         clusterspath,
         latent,
         comp_metadata.identifiers,
-        windowsize,
-        minsuccesses,
-        maxclusters,
-        minclustersize,
-        separator,
-        cuda,
+        vamb_options.cuda,
         logfile,
     )
 
     del latent
 
-    if minfasta is not None and fastapath is not None:
-        # We have already checked fastapath is not None if minfasta is not None.
+    if vamb_options.min_fasta_output_size is not None:
+        path = comp_options.path
+        assert isinstance(path, FASTAPath)
         write_fasta(
-            outdir,
+            vamb_options.out_dir,
             clusterspath,
-            fastapath,
+            path,
             comp_metadata.identifiers,
             comp_metadata.lengths,
-            minfasta,
+            vamb_options.min_fasta_output_size,
             logfile,
         )
 
@@ -460,32 +720,55 @@ def main():
     # Positional arguments
     reqos = parser.add_argument_group(title="Output (required)", description=None)
     reqos.add_argument(
-        "--outdir", metavar="", required=True, help="output directory to create"
+        "--outdir",
+        metavar="",
+        type=Path,
+        required=True,
+        help="output directory to create",
     )
 
     # TNF arguments
     tnfos = parser.add_argument_group(
         title="TNF input (either fasta or all .npz files required)"
     )
-    tnfos.add_argument("--fasta", metavar="", help="path to fasta file")
-    tnfos.add_argument("--composition", metavar="", help="path to .npz of composition")
+    tnfos.add_argument("--fasta", metavar="", type=Path, help="path to fasta file")
+    tnfos.add_argument(
+        "--composition", metavar="", type=Path, help="path to .npz of composition"
+    )
 
     # RPKM arguments
     rpkmos = parser.add_argument_group(
         title="RPKM input (either BAMs or .npz required)"
     )
     rpkmos.add_argument(
-        "--bamfiles", metavar="", help="paths to (multiple) BAM files", nargs="+"
+        "--bamfiles",
+        metavar="",
+        dest="bampaths",
+        type=Path,
+        help="paths to (multiple) BAM files",
+        nargs="+",
     )
-    rpkmos.add_argument("--rpkm", metavar="", help="path to .npz of RPKM (abundances)")
-    rpkmos.add_argument("--jgi", metavar="", help="path to JGI text file of abundances")
+    rpkmos.add_argument(
+        "--rpkm",
+        metavar="",
+        dest="abundancepath",
+        type=Path,
+        help="path to .npz of RPKM (abundances)",
+    )
+    rpkmos.add_argument(
+        "--jgi",
+        metavar="",
+        dest="jgipath",
+        type=Path,
+        help="path to JGI text file of abundances",
+    )
 
     # Optional arguments
     inputos = parser.add_argument_group(title="IO options", description=None)
 
     inputos.add_argument(
         "-m",
-        dest="minlength",
+        dest="min_contig_length",
         metavar="",
         type=int,
         default=250,
@@ -493,10 +776,10 @@ def main():
     )
     inputos.add_argument(
         "-z",
-        dest="minid",
+        dest="min_alignment_id",
         metavar="",
         type=float,
-        default=0.0,
+        default=None,
         help="ignore reads with nucleotide identity below this [0.0]",
     )
     inputos.add_argument(
@@ -516,7 +799,7 @@ def main():
     )
     inputos.add_argument(
         "--minfasta",
-        dest="minfasta",
+        dest="min_fasta_output_size",
         metavar="",
         type=int,
         default=None,
@@ -611,7 +894,7 @@ def main():
     clusto = parser.add_argument_group(title="Clustering options", description=None)
     clusto.add_argument(
         "-w",
-        dest="windowsize",
+        dest="window_size",
         metavar="",
         type=int,
         default=200,
@@ -619,7 +902,7 @@ def main():
     )
     clusto.add_argument(
         "-u",
-        dest="minsuccesses",
+        dest="min_successes",
         metavar="",
         type=int,
         default=20,
@@ -627,7 +910,7 @@ def main():
     )
     clusto.add_argument(
         "-i",
-        dest="minsize",
+        dest="min_cluster_size",
         metavar="",
         type=int,
         default=1,
@@ -635,7 +918,7 @@ def main():
     )
     clusto.add_argument(
         "-c",
-        dest="maxclusters",
+        dest="max_clusters",
         metavar="",
         type=int,
         default=None,
@@ -643,214 +926,76 @@ def main():
     )
     clusto.add_argument(
         "-o",
-        dest="separator",
+        dest="binsplit_separator",
         metavar="",
         type=str,
         default=None,
         help="binsplit separator [None = no split]",
     )
 
-    ######################### PRINT HELP IF NO ARGUMENTS ###################
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit()
 
     args = parser.parse_args()
+    comp_options = CompositionOptions(
+        args.fasta, args.composition, args.min_contig_length
+    )
 
-    outdir: str = os.path.abspath(args.outdir)
-    fasta: Optional[str] = args.fasta
-    composition: Optional[str] = args.composition
-    bamfiles: Optional[list[str]] = args.bamfiles
-    rpkm: Optional[str] = args.rpkm
-    jgipath: Optional[str] = args.jgi
-    minlength: int = args.minlength
+    abundance_options = AbundanceOptions(
+        args.bampaths,
+        args.abundancepath,
+        args.jgipath,
+        args.min_alignment_id,
+        not args.norefcheck,
+    )
 
-    if args.minid != 0.0 and bamfiles is None:
-        raise argparse.ArgumentTypeError(
-            "If minid is set, RPKM must be passed as bam files"
-        )
+    vae_options = VAEOptions(
+        args.nhiddens,
+        args.nlatent,
+        args.alpha,
+        args.beta,
+        args.dropout,
+    )
 
-    minid: float = args.minid
-    nthreads: int = args.nthreads
-    norefcheck: bool = args.norefcheck
-    minfasta: Optional[int] = args.minfasta
-    noencode: bool = args.noencode
-    nhiddens: Optional[list[int]] = args.nhiddens
-    nlatent: int = args.nlatent
-    alpha: Optional[float] = args.alpha
-    beta: float = args.beta
-    dropout: Optional[float] = args.dropout
-    cuda: bool = args.cuda
-    nepochs: int = args.nepochs
-    batchsize: int = args.batchsize
-    batchsteps: list[int] = args.batchsteps
-    lrate: float = args.lrate
-    windowsize: int = args.windowsize
-    minsuccesses: int = args.minsuccesses
-    minsize: int = args.minsize
-    maxclusters: Optional[int] = args.maxclusters
-    separator: Optional[str] = args.separator
+    training_options = TrainingOptions(
+        args.nepochs, args.batchsize, args.batchsteps, args.lrate
+    )
 
-    ######################### CHECK INPUT/OUTPUT FILES #####################
+    cluster_options = ClusterOptions(
+        args.window_size,
+        args.min_successes,
+        args.min_cluster_size,
+        args.max_clusters,
+        args.binsplit_separator,
+    )
 
-    # Outdir does not exist
-    if os.path.exists(outdir):
-        raise FileExistsError(outdir)
+    vamb_options = VambOptions(
+        args.outdir,
+        args.nthreads,
+        comp_options,
+        args.min_fasta_output_size,
+        args.cuda,
+        args.noencode,
+    )
 
-    # Outdir is in an existing parent dir
-    parentdir = os.path.dirname(outdir)
-    if parentdir and not os.path.isdir(parentdir):
-        raise NotADirectoryError(parentdir)
+    torch.set_num_threads(vamb_options.n_threads)
 
-    # Make sure only one TNF input is there
-    if not (composition is None) ^ (fasta is None):
-        raise argparse.ArgumentTypeError(
-            "Must specify either FASTA or composition path"
-        )
-
-    for path in (fasta, composition):
-        if path is not None and not os.path.isfile(path):
-            raise FileNotFoundError(path)
-
-    # Make sure only one RPKM input is there
-    if not ((bamfiles is None) + (rpkm is None) + (jgipath is None)) == 1:
-        raise argparse.ArgumentTypeError(
-            "Must specify exactly one of BAM files or RPKM input"
-        )
-
-    if rpkm is not None and not os.path.isfile(rpkm):
-        raise FileNotFoundError("Not an existing non-directory file: " + rpkm)
-
-    if bamfiles is not None:
-        for bampath in bamfiles:
-            if not os.path.isfile(bampath):
-                raise FileNotFoundError(
-                    "Not an existing non-directory file: " + bampath
-                )
-
-            # Check this early, since I expect users will forget about this
-            if not vamb.parsebam.pycoverm.is_bam_sorted(bampath):
-                raise ValueError(f"BAM file {bampath} is not sorted by reference.")
-
-    if jgipath is not None and not os.path.isfile(jgipath):
-        raise FileNotFoundError("Not an existing non-directory file: " + jgipath)
-
-    # Check minfasta settings
-    if minfasta is not None and fasta is None:
-        raise argparse.ArgumentTypeError(
-            "If minfasta is not None, " "input fasta file must be given explicitly"
-        )
-
-    if minfasta is not None and minfasta < 0:
-        raise argparse.ArgumentTypeError(
-            "Minimum FASTA output size must be nonnegative"
-        )
-
-    ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
-    if minlength < 250:
-        raise argparse.ArgumentTypeError("Minimum contig length must be at least 250")
-
-    if not isfinite(minid) or minid < 0.0 or minid > 1.0:
-        raise argparse.ArgumentTypeError("Minimum nucleotide ID must be in [0,1]")
-
-    if nthreads < 1:
-        raise argparse.ArgumentTypeError("Zero or negative subprocesses requested")
-
-    ####################### CHECK VAE OPTIONS ################################
-    if nhiddens is not None and any(i < 1 for i in nhiddens):
-        raise argparse.ArgumentTypeError(
-            f"Minimum 1 neuron per layer, not {min(nhiddens)}"
-        )
-
-    if nlatent < 1:
-        raise argparse.ArgumentTypeError(f"Minimum 1 latent neuron, not {nlatent}")
-
-    if alpha is not None and (alpha <= 0 or alpha >= 1):
-        raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
-
-    if beta <= 0:
-        raise argparse.ArgumentTypeError("beta cannot be negative or zero")
-
-    if dropout is not None and (dropout < 0 or dropout >= 1):
-        raise argparse.ArgumentTypeError("dropout must be in 0 <= d < 1")
-
-    if cuda and not torch.cuda.is_available():
-        raise ModuleNotFoundError("Cuda is not available on your PyTorch installation")
-
-    ###################### CHECK TRAINING OPTIONS ####################
-    if nepochs < 1:
-        raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
-
-    if batchsize < 1:
-        raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
-
-    batchsteps = sorted(set(batchsteps))
-    if max(batchsteps, default=0) >= nepochs:
-        raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
-
-    if min(batchsteps, default=1) < 1:
-        raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
-
-    if lrate <= 0:
-        raise argparse.ArgumentTypeError("Learning rate must be positive")
-
-    ###################### CHECK CLUSTERING OPTIONS ####################
-    if minsize < 1:
-        raise argparse.ArgumentTypeError("Minimum cluster size must be at least 0")
-
-    if windowsize < 1:
-        raise argparse.ArgumentTypeError("Window size must be at least 1")
-
-    if minsuccesses < 1 or minsuccesses > windowsize:
-        raise argparse.ArgumentTypeError("Minimum cluster size must be in 1:windowsize")
-
-    if separator is not None and len(separator) == 0:
-        raise argparse.ArgumentTypeError("Binsplit separator cannot be an empty string")
-
-    ###################### SET UP LAST PARAMS ############################
-
-    # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
-    torch.set_num_threads(nthreads)
-
-    ################### RUN PROGRAM #########################
     try:
-        os.mkdir(outdir)
+        os.mkdir(vamb_options.out_dir)
     except FileExistsError:
         pass
     except:
         raise
 
-    logpath = os.path.join(outdir, "log.txt")
-
-    with open(logpath, "w") as logfile:
+    with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(
-            outdir,
-            fasta,
-            composition,
-            bamfiles,
-            rpkm,
-            jgipath,
-            mincontiglength=minlength,
-            norefcheck=norefcheck,
-            noencode=noencode,
-            minid=minid,
-            nthreads=nthreads,
-            nhiddens=nhiddens,
-            nlatent=nlatent,
-            nepochs=nepochs,
-            batchsize=batchsize,
-            cuda=cuda,
-            alpha=alpha,
-            beta=beta,
-            dropout=dropout,
-            lrate=lrate,
-            batchsteps=batchsteps,
-            windowsize=windowsize,
-            minsuccesses=minsuccesses,
-            minclustersize=minsize,
-            separator=separator,
-            maxclusters=maxclusters,
-            minfasta=minfasta,
+            vamb_options,
+            comp_options,
+            abundance_options,
+            vae_options,
+            training_options,
+            cluster_options,
             logfile=logfile,
         )
 
