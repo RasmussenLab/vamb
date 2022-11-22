@@ -13,6 +13,7 @@ from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
 from collections.abc import Iterator
+from pathlib import Path
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -60,7 +61,7 @@ class Abundance:
                 "and in the same order."
             )
 
-    def save(self, io: Union[str, IO[bytes]]):
+    def save(self, io: Union[Path, IO[bytes]]):
         _np.savez_compressed(
             io,
             matrix=self.matrix,
@@ -70,7 +71,9 @@ class Abundance:
         )
 
     @classmethod
-    def load(cls: type[A], io: Union[str, IO[bytes]], refhash: Optional[bytes]) -> A:
+    def load(
+        cls: type[A], io: Union[str, Path, IO[bytes]], refhash: Optional[bytes]
+    ) -> A:
         arrs = _np.load(io, allow_pickle=True)
         abundance = cls(
             vambtools.validate_input_array(arrs["matrix"]),
@@ -87,7 +90,7 @@ class Abundance:
     def from_files(
         cls: type[A],
         paths: list[str],
-        cache_directory: Optional[str],
+        cache_directory: Optional[Path],
         comp_metadata: CompositionMetaData,
         verify_refhash: bool,
         minid: float,
@@ -154,7 +157,7 @@ class Abundance:
     def chunkwise_loading(
         cls: type[A],
         paths: list[str],
-        cache_directory: str,
+        cache_directory: Path,
         nthreads: int,
         minid: float,
         target_refhash: Optional[bytes],
