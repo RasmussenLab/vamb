@@ -33,6 +33,7 @@ class FASTAPath(type(Path())):
     pass
 
 
+
 class CompositionPath(type(Path())):
     pass
 
@@ -43,8 +44,8 @@ class CompositionOptions:
     def __init__(
         self, fastapath: Optional[Path], npzpath: Optional[Path], min_contig_length: int
     ):
-        assert isinstance(fastapath, Union[Path, None])
-        assert isinstance(npzpath, Union[Path, None])
+        assert isinstance(fastapath, (Path, type(None)))
+        assert isinstance(npzpath, (Path, type(None)))
         assert isinstance(min_contig_length, int)
 
         if min_contig_length < 250:
@@ -88,10 +89,10 @@ class AbundanceOptions:
         min_alignment_id: Optional[float],
         refcheck: bool,
     ):
-        assert isinstance(bampaths, Optional[list])
-        assert isinstance(abundancepath, Optional[Path])
-        assert isinstance(jgipath, Optional[Path])
-        assert isinstance(min_alignment_id, Optional[float])
+        assert isinstance(bampaths, (list, type(None)))
+        assert isinstance(abundancepath, (Path, type(None)))
+        assert isinstance(jgipath, (Path, type(None)))
+        assert isinstance(min_alignment_id, (float, type(None)))
         assert isinstance(refcheck, bool)
 
         # Make sure only one RPKM input is there
@@ -153,11 +154,11 @@ class VAEOptions:
         beta: float,
         dropout: Optional[float],
     ):
-        assert isinstance(nhiddens, Optional[list])
+        assert isinstance(nhiddens, (list, type(None)))
         assert isinstance(nlatent, int)
-        assert isinstance(alpha, Optional[float])
+        assert isinstance(alpha, (float, type(None)))
         assert isinstance(beta, float)
-        assert isinstance(dropout, Optional[float])
+        assert isinstance(dropout, (float, type(None)))
 
         if nhiddens is not None and any(i < 1 for i in nhiddens):
             raise argparse.ArgumentTypeError(
@@ -234,8 +235,8 @@ class ClusterOptions:
         assert isinstance(window_size, int)
         assert isinstance(min_successes, int)
         assert isinstance(min_cluster_size, int)
-        assert isinstance(max_clusters, Optional[int])
-        assert isinstance(binsplit_separator, Optional[str])
+        assert isinstance(max_clusters, (int, type(None)))
+        assert isinstance(binsplit_separator, (str, type(None)))
 
         if window_size < 1:
             raise argparse.ArgumentTypeError("Window size must be at least 1")
@@ -284,7 +285,7 @@ class VambOptions:
         assert isinstance(out_dir, Path)
         assert isinstance(n_threads, int)
         assert isinstance(comp_options, CompositionOptions)
-        assert isinstance(min_fasta_output_size, Optional[int])
+        assert isinstance(min_fasta_output_size, (int, type(None)))
         assert isinstance(cuda, bool)
         assert isinstance(noencode, bool)
 

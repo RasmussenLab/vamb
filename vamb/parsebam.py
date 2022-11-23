@@ -202,7 +202,7 @@ class Abundance:
         target_refhash: Optional[bytes],
         mask: _np.ndarray,
     ) -> tuple[_np.ndarray, bytes]:
-        headers, coverage = pycoverm.get_coverages_from_bam(
+        coverage, headers = pycoverm.get_coverages_from_bam(
             paths,
             threads=len(paths),
             min_identity=minid,
