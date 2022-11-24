@@ -270,7 +270,6 @@ class VambOptions:
         "comp_options",
         "min_fasta_output_size",
         "cuda",
-        "noencode",
     ]
 
     def __init__(
@@ -280,14 +279,12 @@ class VambOptions:
         comp_options: CompositionOptions,
         min_fasta_output_size: Optional[int],
         cuda: bool,
-        noencode: bool,
     ):
         assert isinstance(out_dir, Path)
         assert isinstance(n_threads, int)
         assert isinstance(comp_options, CompositionOptions)
         assert isinstance(min_fasta_output_size, (int, type(None)))
         assert isinstance(cuda, bool)
-        assert isinstance(noencode, bool)
 
         # Outdir does not exist
         if out_dir.exists():
@@ -319,9 +316,6 @@ class VambOptions:
                 "Cuda is not available on your PyTorch installation"
             )
         self.cuda = cuda
-
-        # TODO: Check that if noencode is passed, no encoding/clustering options are passed
-        self.noencode = noencode
 
 
 def log(string: str, logfile: IO[str], indent: int = 0):
@@ -635,14 +629,6 @@ def run(
         logfile,
     )
 
-    if vamb_options.noencode:
-        elapsed = round(time.time() - begintime, 2)
-        log(
-            f"\nNoencode set, skipping encoding and clustering.\n\nCompleted Vamb in {elapsed} seconds",
-            logfile,
-        )
-        return None
-
     # Train, save model
     mask, latent = trainvae(
         vae_options,
@@ -806,11 +792,6 @@ def main():
         type=int,
         default=None,
         help="minimum bin size to output as fasta [None = no files]",
-    )
-    inputos.add_argument(
-        "--noencode",
-        help="Output tnfs and abundances only, do not encode or cluster [False]",
-        action="store_true",
     )
 
     # VAE arguments
@@ -977,8 +958,7 @@ def main():
         args.nthreads,
         comp_options,
         args.min_fasta_output_size,
-        args.cuda,
-        args.noencode,
+        args.cuda
     )
 
     torch.set_num_threads(vamb_options.n_threads)
