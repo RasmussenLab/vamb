@@ -10,7 +10,6 @@ import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
 from typing import IO, Union, TypeVar
-from pathlib import Path
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL: _np.ndarray = _vambtools.read_npz(
@@ -110,7 +109,7 @@ class Composition:
     def nseqs(self) -> int:
         return self.metadata.nseqs
 
-    def save(self, io: Union[str, Path, IO[bytes]]):
+    def save(self, io: Union[str, IO[bytes]]):
         _np.savez_compressed(
             io,
             matrix=self.matrix,

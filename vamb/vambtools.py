@@ -12,7 +12,7 @@ import collections as _collections
 from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
-from pathlib import PurePath
+from pathlib import PurePath as _PurePath
 
 
 class PushArray:
@@ -160,7 +160,7 @@ class Reader:
     TEST LINE
     """
 
-    def __init__(self, filename: Union[str, PurePath]):
+    def __init__(self, filename: str):
         self.filename = filename
 
         with open(self.filename, "rb") as f:
@@ -335,6 +335,7 @@ def write_clusters(
     min_size: int = 1,
     header: Optional[str] = None,
     rename: bool = True,
+    cluster_prefix= str,
 ) -> tuple[int, int]:
     """Writes clusters to an open filehandle.
     Inputs:
@@ -344,6 +345,7 @@ def write_clusters(
         min_size: Don't output clusters smaller than N contigs
         header: Commented one-line header to add
         rename: Rename clusters to "cluster_1", "cluster_2" etc.
+        cluster_prefix: prepend a tag to identify which model produced the clusters (vae,aae_l, aae_y)
 
     Outputs:
         clusternumber: Number of clusters written
@@ -373,7 +375,9 @@ def write_clusters(
             continue
 
         if rename:
-            clustername = "cluster_" + str(clusternumber + 1)
+            clustername = cluster_prefix + "cluster_" + str(clusternumber + 1)
+        else:
+            clustername = cluster_prefix +  str(clusternumber + 1)
 
         for contig in contigs:
             print(clustername, contig, sep="\t", file=filehandle)
@@ -388,7 +392,7 @@ def write_clusters(
     return clusternumber, ncontigs
 
 
-def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set[str]]:
+def read_clusters(filehandle: Iterable[str], min_size: int =1) -> dict[str, set[str]]:
     """Read clusters from a file as created by function `writeclusters`.
 
     Inputs:
@@ -414,22 +418,23 @@ def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set
 
 
 def write_bins(
-    directory: Union[str, PurePath],
+    directory: Union[str, _PurePath],
     bins: dict[str, set[str]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 250,
     minsize: int = 0,
+    separator: str = None,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
 
     Inputs:
         directory: Directory to create or put files in
         bins: dict[str: set[str]] (can be loaded from
-          clusters.tsv using vamb.cluster.read_clusters)
+        clusters.tsv using vamb.cluster.read_clusters)
         fastaio: bytes iterator containing FASTA file with all sequences
         maxbins: None or else raise an error if trying to make more bins than this [250]
         minsize: Minimum number of nucleotides in cluster to be output [0]
-
+        separator: string that separates the contig/cluster name from the sample ; i.e. sample_id_separator_contig_name/cluster_name 
     Output: None
     """
 
@@ -471,6 +476,8 @@ def write_bins(
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
         size = 0
+        if separator is not None:
+            binsample=next(iter(contigs)).split(separator)[0]
         for contig in contigs:
             byteslen = byteslen_by_id.get(contig)
             if byteslen is None:
@@ -481,9 +488,22 @@ def write_bins(
 
         if size < minsize:
             continue
-
+        # added by pau to split bin files into sample dirs
+        if separator is not None:
+       
+            bin_dir=_os.path.join(directory,binsample)
+            try:
+                _os.mkdir(bin_dir)
+            except FileExistsError:
+                pass
+            except:
+                raise
+        else:
+            bin_dir=directory
         # Print bin to file
-        filename = _os.path.join(directory, binname + ".fna")
+        filename = _os.path.join(bin_dir, binname + ".fna")
+
+        #filename = _os.path.join(directory, binname + ".fna")
         with open(filename, "wb") as file:
             for contig in contigs:
                 file.write(_gzip.decompress(byteslen_by_id[contig][0]))
@@ -622,7 +642,9 @@ def binsplit(
     >>> binsplit(clusters, "-")
     {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
     """
-
+    if isinstance(clusters, dict): # added by Pau since y clusters are in a dictionary object
+        clusters = clusters.items()
+ 
     for binname, headers in clusters:
         for newbinname, splitheaders in _split_bin(binname, headers, separator):
             yield newbinname, splitheaders

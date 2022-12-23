@@ -104,8 +104,8 @@ class Cluster:
 
     def dump(self) -> str:
         return (
-            f"{self.medoid}\t{self.seed}\t{self.pvr}\t{self.radius}\t{self.isdefault}"
-            f"\t{self.successes}\t{self.attempts}\t"
+            "{self.medoid}\t{self.seed}\t{self.pvt}\t{self.radius}\t{self.isdefault}"
+            "\t{self.successes}\t{self.attempts}\t"
         ) + ",".join([str(i) for i in self.members])
 
     def __str__(self) -> str:
@@ -456,7 +456,7 @@ def _smaller_indices(
 
     # If it's on GPU, we remove the already clustered points at this step.
     if cuda:
-        return _torch.nonzero((tensor <= threshold) & kept_mask).flatten().cpu()
+        return _torch.nonzero((tensor <= threshold) & kept_mask).flatten()
     else:
         arr = tensor.numpy()
         indices = (arr <= threshold).nonzero()[0]
