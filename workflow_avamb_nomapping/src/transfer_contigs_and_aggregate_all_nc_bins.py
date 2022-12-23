@@ -19,9 +19,7 @@ def main(path_run,
         #path_bins,
         bin_path,
         path_bins_ripped,
-        bin_separator,
-        min_comp,
-        max_cont):
+        bin_separator):
         
     # {cluster:sample} dictionary for the manually drep clusters
     cluster_sample= get_cluster_sample(cluster_contigs,
@@ -69,9 +67,7 @@ def main(path_run,
                                                         bin_path,
                                                         cluster_scores,
                                                         path_run,
-                                                        cluster_sample,
-                                                        min_comp,
-                                                        max_cont)
+                                                        cluster_sample)
 
     nc_clusters_unchanged = nc_clusters_unchanged.union(nc_clusters_unchanged_2)
     nc_clusters_ripped = nc_clusters_ripped.union(nc_clusters_ripped_single)
@@ -143,7 +139,7 @@ def mv_single_ripped_nc_bins(ripped_bins_scores_ar,
         assert comp == comp_
         assert cont == cont_
 
-        if (comp > min_comp and cont < max_cont):
+        if (comp > 90 and cont < 5):
             #cluster = bin_name.replace('.fna','')
             #src_bin=os.path.join(path_bins,cluster_sample[cluster],bin_name+'.fna')
             src_bin=bin_path[cluster+'.fna']
@@ -295,8 +291,6 @@ if __name__ == '__main__':
     parser.add_argument("--br", type=str, help="path bins ripped ")
     parser.add_argument("-d", type=str, help="folder name that will contain all nc bins")
     parser.add_argument("--bin_separator", type=str, help="path ripped bins")
-    parser.add_argument("--comp", type=float,default=0.9 ,help="Min completeness ")
-    parser.add_argument("--cont", type=float,default=0.05 ,help="Max contamination ")
 
 
     opt = parser.parse_args()
@@ -341,6 +335,4 @@ if __name__ == '__main__':
         drep_folder,
         bin_path,
         path_bins_ripped,
-        bin_separator,
-        opt.comp,
-        opt.cont)
+        bin_separator)

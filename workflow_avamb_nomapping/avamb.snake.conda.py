@@ -15,13 +15,9 @@ def get_config(name, default, regex):
 SNAKEDIR = os.path.dirname(workflow.snakefile)
 
 # set configurations
-CONTIGS = get_config("contigs", "contigs.txt", r".*") # each line is a contigs path from a given sample
-SAMPLE_DATA = get_config("sample_data", "samples2data.txt", r".*") # each line is composed by 3 elements: sample id, forward_reads_path , backward_reads_path
-INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
-MIN_CONTIG_SIZE = get_config("min_contig_size", "2000", r"[1-9]\d*$")
+CONTIGS = get_config("contigs_file_path", "contigs.flt.fna.gz", r".*") 
+BAM = get_config("bam_files_path", "bam_sorted/", r".*")
 
-MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*gb$")
-MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
 AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*gb$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
 
@@ -30,8 +26,10 @@ CHECKM_PPN = get_config("checkm2_ppn", "10", r"[1-9]\d*$")
 CHECKM_MEM_r = get_config("checkm2_mem_r", "30gb", r"[1-9]\d*gb$")
 CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 
+MIN_COMP=str((int(get_config("min_completeness", "90", r"[1-9]\d*$"))/100))
+MAX_CONT= str((int(get_config("min_completeness", "5", r"[1-9]\d*$"))/100))
 
-AVAMB_PARAMS = get_config("avamb_params","  -o C --minfasta 200000  -e 2 -q 1 --e_aae 2 --q_aae 2 -m 2000 --minfasta 200000 ", r".*")
+AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 -m 2000 ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
 
 OUTDIR= get_config("outdir", "outdir_avamb", r".*")
@@ -43,164 +41,30 @@ except FileExistsError:
 except:
     raise
 
-#MEM_GENERAL=get_config("total_mem_avail","35gb", r"[1-9]\d*gb$")
-#THREADS_GENERAL=get_config("total_ppn_avail","30", r"[1-9]\d*$")
-
-#contigs_file=config.get("contigs_file")
-#bam_path=config.get("bam_path")
-
-
 
 # parse if GPUs is needed #
 avamb_threads, sep, avamb_gpus = AVAMB_PPN.partition(":gpus=")
 AVAMB_PPN = avamb_threads
 CUDA = len(avamb_gpus) > 0
 
-## read in sample information ##
-
-# read in sample2path
-IDS = []
-sample2path = {}
-with open(SAMPLE_DATA) as file:
-    for (lineno, fields) in enumerate(map(str.split, filter(None, map(str.split, file)))):
-        if len(fields) != 3:
-            raise ValueError(f"In sample file {SAMPLE_DATA}, expected 3 fields per line, but got {len(fields)} on line {lineno+1}")
-        (id, fw, rv) = fields
-        IDS.append(id)
-        sample2path[id] = [fw, rv]
-
-
-# read in list of per-sample assemblies
-with open(CONTIGS) as file:
-    contigs_list = list(filter(None, map(str.strip, file)))
-
 # target
 rule target_rule:
     input:
-        #'vamb/tmp/workflow_finished_avamb.log'
-        contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
-
-rule cat_contigs:
-    input:
-        contigs_list
-    output:
-        os.path.join(OUTDIR,"contigs.flt.fna.gz")
-    params:
-        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "concatenate.py"),
-        walltime="864000",
-        nodes="1",
-        ppn="1",
-        mem="10gb"
-    threads:
-        1
-    log:
-        os.path.join(OUTDIR,"log/contigs/catcontigs.log")
-    conda:
-        "envs/avamb.yaml"
-    shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
-
-rule index:
-    input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
-    output:
-        mmi = os.path.join(OUTDIR,"contigs.flt.mmi")
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn="1",
-        mem="90gb"
-    threads:
-        1
-    log:
-        os.path.join(OUTDIR,"log/contigs/index.log")
-    conda: 
-        "envs/minimap2.yaml"
-    shell:
-        "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log}"
-
-# This rule creates a SAM header from a FASTA file.
-# We need it because minimap2 for truly unknowable reasons will write
-# SAM headers INTERSPERSED in the output SAM file, making it unparseable.
-# To work around this mind-boggling bug, we remove all header lines from
-# minimap2's SAM output by grepping, then re-add the header created in this
-# rule.
-rule dict:
-    input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
-    output:
-        dict = os.path.join(OUTDIR,"contigs.flt.dict")  
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn="1",
-        mem="10gb"
-    threads:
-        1
-    log:
-        os.path.join(OUTDIR,"log/contigs/dict.log")
-    conda:
-        "envs/samtools.yaml"
-    shell:
-        "samtools dict {input} | cut -f1-3 > {output} 2> {log}"
-
-rule minimap:
-    input:
-        fq = lambda wildcards: sample2path[wildcards.sample],
-        mmi = os.path.join(OUTDIR,"contigs.flt.mmi"),
-        dict = os.path.join(OUTDIR,"contigs.flt.dict")
-    output:
-        bam = temp(os.path.join(OUTDIR,"mapped/{sample}.bam")
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn=MM_PPN,
-        mem=MM_MEM
-    threads:
-        int(MM_PPN)
-    log:
-        os.path.join(OUTDIR,"log/map/{sample}.minimap.log")
-    conda:
-        "envs/minimap2.yaml"
-    shell:
-        # See comment over rule "dict" to understand what happens here
-        "minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5"
-        " | grep -v '^@'"
-        " | cat {input.dict} - "
-        " | samtools view -F 3584 -b - " # supplementary, duplicate read, fail QC check
-        " > {output.bam} 2> {log}"
-
-rule sort:
-    input:
-        os.path.join(OUTDIR,"mapped/{sample}.bam")
-    output:
-        os.path.join(OUTDIR,"mapped/{sample}.sort.bam")
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn="2",
-        mem="15gb",
-        prefix=os.path.join(OUTDIR,"mapped/tmp.{sample}")
-    threads:
-        2
-    log:
-        os.path.join(OUTDIR,"log/map/{sample}.sort.log")
-    conda:
-        "envs/samtools.yaml"
-    shell:
-        "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2>{log}"
+        os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
+        #contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
+        #bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
 
 
 
-# Configurations for dereplication
+# Run avamb
 rule run_avamb:
     input:
         #contigs=contigs_file,
         #bam_files=bam_path
-        contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
+        contigs=CONTIGS,
+        bam_files=BAM
     output:
-        outdir_avamb=os.path.join(OUTDIR,"avamb"),
+        outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters.tsv"),
@@ -218,12 +82,13 @@ rule run_avamb:
     log:
         os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log")
 
-#    conda:
-#        "envs/vamb.yaml"
+    #conda:
+        #"envs/avamb.yaml"
     shell:
-        "rm -r   && " 
+        "rm -r {output.outdir_avamb}  && " 
         "{AVAMB_PRELOAD}"
-        "vamb --outdir {output.outdir_avamb} --fasta {input.contigs} --bamfiles {input.bam_files}/*.bam {params.cuda} {AVAMB_PARAMS} 2> {log}"
+        "vamb --outdir {output.outdir_avamb} --fasta {input.contigs} --bamfiles {input.bam_files}/*.bam {params.cuda} {AVAMB_PARAMS}; "
+        "touch {log}"
 
 checkpoint samples_with_bins:
     input:        
@@ -254,7 +119,7 @@ rule run_checkm2_per_sample_all_bins:
         bins_dir_sample=os.path.join(OUTDIR,"avamb/bins/{sample}"),
         out_dir_checkm2=os.path.join(OUTDIR,"avamb/tmp/checkm2_all")
     output:
-        out_log_file=os.path.join(OUTDIR,"avamb/tmp/checkm2_all_{sample}_bins_finished.log"
+        out_log_file=os.path.join(OUTDIR,"avamb/tmp/checkm2_all_{sample}_bins_finished.log")
     params:
         walltime="86400",
         nodes="1",
@@ -262,9 +127,8 @@ rule run_checkm2_per_sample_all_bins:
         mem=CHECKM_MEM
     threads:
         int(CHECKM_PPN)
-#    conda:
-#        "envs/checkm2.yaml"
-
+    #conda :
+        #"envs/checkm2.yaml" # not functional since CheckM2 cannot be installed with #conda at the moment (20/12/2022).
     shell:
         "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
 
@@ -298,6 +162,9 @@ rule create_cluster_scores_bin_path_dictionaries:
         mem="10gb"
     threads:
         5
+    #conda:
+        #"envs/avamb.yaml"
+
     shell:
         "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
@@ -321,9 +188,11 @@ rule run_drep_manual_vamb_z_y:
         mem="10gb"
     threads:
         5
-   
+    #conda:
+        #"envs/avamb.yaml"
+  
     shell:
-        "python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}  --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}  --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}"
+        "python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}  --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}  --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb} --comp {MIN_COMP} --cont {MAX_CONT}"
 
 
 checkpoint create_ripped_bins_avamb:
@@ -333,8 +202,7 @@ checkpoint create_ripped_bins_avamb:
         
     output:
         path_avamb_manually_drep_clusters_ripped=os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
-    log:
-        os.path.join(OUTDIR,"avamb/tmp/bins_ripped_avamb.log")
+        name_bins_ripped_file=os.path.join(OUTDIR,"avamb/tmp/bins_ripped_avamb.log")
     params:
         path=os.path.join(os.path.dirname(SNAKEDIR), "src", "rip_bins.py"),
         walltime="86400",
@@ -343,8 +211,11 @@ checkpoint create_ripped_bins_avamb:
         mem="10gb"
     threads:
         5
+    #conda:
+        #"envs/avamb.yaml"
+ 
     shell: 
-        "python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}  --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/avamb/tmp/ripped_bins --bin_separator C --log_nc_ripped_bins {log} "          
+        "python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}  --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/avamb/tmp/ripped_bins --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} "          
 
 rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
@@ -364,8 +235,10 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         mem="10gb"
     threads:
         5
+    #conda:
+        #"envs/avamb.yaml"
     shell:
-        "python {params.path} --c {input.clusters_avamb_manual_drep}  --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} --bin_separator C 2> {log} "
+        "python {params.path} --c {input.clusters_avamb_manual_drep}  --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} --bin_separator C 2> {log}  --comp {MIN_COMP} --cont {MAX_CONT} "
         
     
     
@@ -393,8 +266,8 @@ rule run_checkm2_ripped_bins_avamb:
         mem=CHECKM_MEM_r
     threads:
         int(CHECKM_PPN_r)
-#    conda:
-#        "envs/checkm2.yaml"
+#    #conda:
+#        #"envs/checkm2.yaml" # not available at the moment.
     shell:
         "checkm2 predict --threads {CHECKM_PPN_r} --input {input} --output-directory {output}/checkm2_out 2> {log}"
 
@@ -412,7 +285,8 @@ rule update_cs_d_avamb:
         mem="10gb"
     threads:
         5
-    
+    #conda:
+        #"envs/avamb.yaml"
     shell:
         "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
@@ -437,8 +311,12 @@ rule aggregate_nc_bins_avamb:
         mem="10gb"
     threads:
         5
+    #conda:
+        #"envs/avamb.yaml"
+
     shell:
-        "python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C  2>  {output}"
+        "python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C   --comp {MIN_COMP} --cont {MAX_CONT} 2>  {output}"
+
 
 
 rule write_clusters_from_nc_folders:
@@ -458,6 +336,9 @@ rule write_clusters_from_nc_folders:
         mem="10gb"
     threads:
         5
+    #conda:
+        #"envs/avamb.yaml"
+    
     shell:
         "sh {params.path} -d {input.nc_bins} -o {output} 2> {log} "
 

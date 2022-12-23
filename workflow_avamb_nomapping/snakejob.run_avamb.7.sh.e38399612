@@ -1,0 +1,51 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 10
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=1951, disk_mb=1951
+Select jobs to execute...
+
+[Fri Dec 23 21:24:37 2022]
+rule run_avamb:
+    input: /home/projects/cpr_10006/projects/aamb/datasets/urog/contigs.fna, /home/projects/cpr_10006/people/paupie/aae_new/bam_files_sorted/urog
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_z_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_y_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/vae_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/contignames, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/lengths.npz
+    log: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/avamb_finished.log
+    jobid: 0
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/avamb_finished.log
+    threads: 10
+    resources: mem_mb=1951, disk_mb=1951, tmpdir=/scratch/38399612
+
+Traceback (most recent call last):
+  File "/home/projects/cpr_10006/people/paupie/aae_new/anaconda_new/envs/checkm2/bin/vamb", line 33, in <module>
+    sys.exit(load_entry_point('vamb', 'console_scripts', 'vamb')())
+  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/__main__.py", line 1086, in main
+    run(
+  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/__main__.py", line 450, in run
+    mask, latent = trainvae(
+  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/__main__.py", line 190, in trainvae
+    vamb.vambtools.write_npz(os.path.join(outdir, "latent.npz"), latent)
+  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/vambtools.py", line 548, in write_npz
+    _np.savez_compressed(file, array)
+  File "<__array_function__ internals>", line 180, in savez_compressed
+  File "/home/projects/cpr_10006/people/paupie/aae_new/anaconda_new/envs/checkm2/lib/python3.9/site-packages/numpy/lib/npyio.py", line 666, in savez_compressed
+    _savez(file, args, kwds, True)
+  File "/home/projects/cpr_10006/people/paupie/aae_new/anaconda_new/envs/checkm2/lib/python3.9/site-packages/numpy/lib/npyio.py", line 692, in _savez
+    zipf = zipfile_factory(file, mode="w", compression=compression)
+  File "/home/projects/cpr_10006/people/paupie/aae_new/anaconda_new/envs/checkm2/lib/python3.9/site-packages/numpy/lib/npyio.py", line 103, in zipfile_factory
+    return zipfile.ZipFile(file, *args, **kwargs)
+  File "/home/projects/cpr_10006/people/paupie/aae_new/anaconda_new/envs/checkm2/lib/python3.9/zipfile.py", line 1248, in __init__
+    self.fp = io.open(file, filemode)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/latent.npz'
+[Fri Dec 23 21:34:38 2022]
+Error in rule run_avamb:
+    jobid: 0
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_z_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_y_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/vae_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/contignames, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/lengths.npz
+    log: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/avamb_finished.log (check log file(s) for error message)
+    shell:
+        rm -r /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb  && vamb --outdir /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb --fasta /home/projects/cpr_10006/projects/aamb/datasets/urog/contigs.fna --bamfiles /home/projects/cpr_10006/people/paupie/aae_new/bam_files_sorted/urog/*.bam  -o C --minfasta 200000 -m 2000; touch /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/avamb_finished.log
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Removing output files of failed job run_avamb since they might be corrupted:
+/home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message

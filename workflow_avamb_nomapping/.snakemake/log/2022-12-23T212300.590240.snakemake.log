@@ -1,0 +1,103 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cluster nodes: 10
+Job stats:
+job                                            count    min threads    max threads
+-------------------------------------------  -------  -------------  -------------
+cat_checkm2_all                                    1              1              1
+create_cluster_scores_bin_path_dictionaries        1              5              5
+create_ripped_bins_avamb                           1              5              5
+run_checkm2_per_sample_all_bins                    7             15             15
+run_drep_manual_vamb_z_y                           1              5              5
+target_rule                                        1              1              1
+workflow_finished                                  1              1              1
+total                                             13              1             15
+
+Select jobs to execute...
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S6, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S6_bins_finished.log
+    jobid: 17
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S6_bins_finished.log
+    wildcards: sample=S6
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 17 with external jobid '38399605'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S0, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S0_bins_finished.log
+    jobid: 9
+    reason: Updated input files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    wildcards: sample=S0
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 9 with external jobid '38399606'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S2, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log
+    jobid: 10
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log
+    wildcards: sample=S2
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 10 with external jobid '38399607'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S24, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S24_bins_finished.log
+    jobid: 13
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S24_bins_finished.log
+    wildcards: sample=S24
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 13 with external jobid '38399608'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S5, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S5_bins_finished.log
+    jobid: 16
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S5_bins_finished.log
+    wildcards: sample=S5
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 16 with external jobid '38399609'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S21, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S21_bins_finished.log
+    jobid: 11
+    reason: Updated input files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    wildcards: sample=S21
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 11 with external jobid '38399610'.
+
+[Fri Dec 23 21:23:06 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S22, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all
+    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S22_bins_finished.log
+    jobid: 12
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/tmp/checkm2_all_S22_bins_finished.log
+    wildcards: sample=S22
+    threads: 15
+    resources: mem_mb=1000, disk_mb=1000, tmpdir=/tmp
+
+Submitted job 12 with external jobid '38399611'.
+Terminating processes on user request, this might take some time.
+No --cluster-cancel given. Will exit after finishing currently running jobs.
+Cancelling snakemake on user request.

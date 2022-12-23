@@ -5,14 +5,7 @@ import os
 import numpy as np
 import json
 
-def main(cluster_scores, 
-        cluster_contigs, 
-        bin_separator, 
-        path_nc_bins_folder , 
-        path_bins_folder, 
-        path_nc_clusters,
-        min_comp=0.9,
-        max_cont=0.05 ):
+def main(cluster_scores, cluster_contigs, bin_separator, path_nc_bins_folder , path_bins_folder, path_nc_clusters):
     
 
     cluster_sample=get_cluster_sample(cluster_contigs,bin_separator)
@@ -32,10 +25,9 @@ def get_nc_cluster_scores(cluster_scores,cluster_sample):
     for cluster,scores in cluster_scores.items():
         comp,cont=scores
         comp,cont=float(comp),float(cont)
-        comp,cont= comp/100, cont/100
         if cluster not in cluster_sample.keys():
             continue
-        if (comp >= min_comp and cont <= max_cont):
+        if (comp >= 90 and cont <= 5):
             nc_cluster_scores[cluster]=[comp,cont]
     
     return nc_cluster_scores
@@ -104,8 +96,6 @@ if __name__=='__main__':
     parser.add_argument("--b", type=str, help="path all bins ")
     parser.add_argument("--d", type=str, help="path to folder that will contain all nc bins")
     parser.add_argument("--bin_separator", type=str, help="separator ")
-    parser.add_argument("--comp", type=float,default=0.9 ,help="Min completeness ")
-    parser.add_argument("--cont", type=float,default=0.05 ,help="Max contamination ")
 
     opt = parser.parse_args()   
 
@@ -116,5 +106,5 @@ if __name__=='__main__':
         cluster_scores=json.load(f)
 
     
-    main(cluster_scores, cluster_contigs, opt.bin_separator, opt.d , opt.b, opt.cf, opt.comp, opt.cont)
+    main(cluster_scores, cluster_contigs, opt.bin_separator, opt.d , opt.b, opt.cf)
 

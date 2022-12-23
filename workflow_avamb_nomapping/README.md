@@ -1,17 +1,14 @@
 # AVAMB snakemake workflow
 
-This is a snakemake workflow that performs all the necessary steps to run Avamb, as input it takes quality control filtered paired end reads and individual sample _de novo_ assemblies, process them through best practice pipeline (multi-split), runs Vamb and Aamb, runs CheckM2 to assess the quality of the bins as well as to dereplicate the bins per sample and binner.
+This is a snakemake workflow that performs all the necessary steps to run Avamb, as input it takes sorted bam files per sample and the contigs file, process them through best practice pipeline (multi-split), runs Vamb and Aamb, runs CheckM2 to assess the quality of the bins as well as to dereplicate the bins per sample and binner.
 
 In short it will:
 
 ```
 1. Filter contigs for 2000bp and rename them to conform with the multi-split workflow
-2. Index resulting contig-file with minimap2 and create a sequence dictionary
-3. Map reads with minimap2 to the combined contig set
-4. Sort bam-files
-5. Run Vamb and Aamb to bin the contigs, generating 3 sets of bins: vae_bins, aae_z_bins and aae_y_bins
-6. Determine completeness and contamination of the bins using CheckM2
-7. Dereplicate near complete bins, assuring contigs are present in one bin only.
+2. Run Vamb and Aamb to bin the contigs, generating 3 sets of bins: vae_bins, aae_z_bins and aae_y_bins
+3. Determine completeness and contamination of the bins using CheckM2
+4. Dereplicate near complete bins, assuring contigs are present in one bin only.
 ```
 
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
@@ -25,7 +22,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda config --append channels pytorch
  mamba create -n avamb python=3.10
  conda install mamba
- mamba install -n avamb snakemake "samtools>=1.8" minimap2 pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
+ mamba install -n avamb snakemake pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
  conda activate avamb
  pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated 
  conda deactivate
@@ -36,7 +33,7 @@ We only have access to `avamb` and the other programs when we are inside this sp
 
 ## Set up configuration with your data
 
-To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: 
+To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a contigs file wich contains all the contigs from all samples, and the sorted bam files per sample. CONTINUE FROM HERE Example files are included and described here for an example dataset of four samples: 
 
 `contigs.txt` contains paths to each of the per-sample assemblies:
 ```
