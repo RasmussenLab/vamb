@@ -1,0 +1,206 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 30
+Rules claiming more threads will be scaled down.
+Job stats:
+job                                            count    min threads    max threads
+-------------------------------------------  -------  -------------  -------------
+cat_checkm2_all                                    1              1              1
+create_cluster_scores_bin_path_dictionaries        1              5              5
+create_ripped_bins_avamb                           1              5              5
+dict                                               1              1              1
+index                                              1              1              1
+minimap                                            2             15             15
+run_avamb                                          1             10             10
+run_drep_manual_vamb_z_y                           1              5              5
+samples_with_bins                                  1              1              1
+sort                                               2              2              2
+target_rule                                        1              1              1
+workflow_finished                                  1              1              1
+total                                             14              1             15
+
+Select jobs to execute...
+
+[Thu Dec 22 00:03:05 2022]
+rule index:
+    input: avamb_outdir/contigs.flt.fna.gz
+    output: avamb_outdir/contigs.flt.mmi
+    log: avamb_outdir/log/contigs/index.log
+    jobid: 11
+    reason: Missing output files: avamb_outdir/contigs.flt.mmi
+    resources: tmpdir=/scratch/38386649
+
+
+[Thu Dec 22 00:03:05 2022]
+rule dict:
+    input: avamb_outdir/contigs.flt.fna.gz
+    output: avamb_outdir/contigs.flt.dict
+    log: avamb_outdir/log/contigs/dict.log
+    jobid: 12
+    reason: Missing output files: avamb_outdir/contigs.flt.dict
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:03:06 2022]
+Finished job 12.
+1 of 14 steps (7%) done
+[Thu Dec 22 00:03:09 2022]
+Finished job 11.
+2 of 14 steps (14%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:03:09 2022]
+rule minimap:
+    input: /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_airways/reads/sample_11.r1.fq.gz, /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_airways/reads/sample_11.r2.fq.gz, avamb_outdir/contigs.flt.mmi, avamb_outdir/contigs.flt.dict
+    output: avamb_outdir/mapped/S11.bam
+    log: avamb_outdir/log/map/S11.minimap.log
+    jobid: 14
+    reason: Missing output files: avamb_outdir/mapped/S11.bam; Input files updated by another job: avamb_outdir/contigs.flt.dict, avamb_outdir/contigs.flt.mmi
+    wildcards: sample=S11
+    threads: 15
+    resources: tmpdir=/scratch/38386649
+
+
+[Thu Dec 22 00:03:09 2022]
+rule minimap:
+    input: /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_airways/reads/sample_10.r1.fq.gz, /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_airways/reads/sample_10.r2.fq.gz, avamb_outdir/contigs.flt.mmi, avamb_outdir/contigs.flt.dict
+    output: avamb_outdir/mapped/S10.bam
+    log: avamb_outdir/log/map/S10.minimap.log
+    jobid: 10
+    reason: Missing output files: avamb_outdir/mapped/S10.bam; Input files updated by another job: avamb_outdir/contigs.flt.dict, avamb_outdir/contigs.flt.mmi
+    wildcards: sample=S10
+    threads: 15
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:15:51 2022]
+Finished job 14.
+3 of 14 steps (21%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:15:51 2022]
+rule sort:
+    input: avamb_outdir/mapped/S11.bam
+    output: avamb_outdir/mapped/S11.sort.bam
+    log: avamb_outdir/log/map/S11.sort.log
+    jobid: 13
+    reason: Missing output files: avamb_outdir/mapped/S11.sort.bam; Input files updated by another job: avamb_outdir/mapped/S11.bam
+    wildcards: sample=S11
+    threads: 2
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:16:16 2022]
+Finished job 10.
+4 of 14 steps (29%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:16:16 2022]
+rule sort:
+    input: avamb_outdir/mapped/S10.bam
+    output: avamb_outdir/mapped/S10.sort.bam
+    log: avamb_outdir/log/map/S10.sort.log
+    jobid: 9
+    reason: Missing output files: avamb_outdir/mapped/S10.sort.bam; Input files updated by another job: avamb_outdir/mapped/S10.bam
+    wildcards: sample=S10
+    threads: 2
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:29:36 2022]
+Finished job 13.
+5 of 14 steps (36%) done
+Removing temporary output avamb_outdir/mapped/S11.bam.
+[Thu Dec 22 00:30:22 2022]
+Finished job 9.
+6 of 14 steps (43%) done
+Removing temporary output avamb_outdir/mapped/S10.bam.
+Select jobs to execute...
+
+[Thu Dec 22 00:30:23 2022]
+rule run_avamb:
+    input: avamb_outdir/contigs.flt.fna.gz, avamb_outdir/mapped/S10.sort.bam, avamb_outdir/mapped/S11.sort.bam
+    output: avamb_outdir/avamb, avamb_outdir/avamb/aae_z_clusters.tsv, avamb_outdir/avamb/aae_y_clusters.tsv, avamb_outdir/avamb/vae_clusters.tsv, avamb_outdir/avamb/contignames, avamb_outdir/avamb/lengths.npz
+    log: avamb_outdir/avamb/tmp/avamb_finished.log
+    jobid: 7
+    reason: Missing output files: avamb_outdir/avamb/lengths.npz, avamb_outdir/avamb/aae_z_clusters.tsv, avamb_outdir/avamb/aae_y_clusters.tsv, avamb_outdir/avamb/vae_clusters.tsv, avamb_outdir/avamb/contignames, avamb_outdir/avamb/tmp/avamb_finished.log; Input files updated by another job: avamb_outdir/mapped/S10.sort.bam, avamb_outdir/mapped/S11.sort.bam
+    threads: 10
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:31:13 2022]
+Finished job 7.
+7 of 14 steps (50%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:31:13 2022]
+checkpoint samples_with_bins:
+    input: avamb_outdir/avamb/tmp/avamb_finished.log
+    output: avamb_outdir/avamb/tmp/samples_with_bins.txt
+    jobid: 6
+    reason: Missing output files: avamb_outdir/avamb/tmp/samples_with_bins.txt; Input files updated by another job: avamb_outdir/avamb/tmp/avamb_finished.log
+    resources: tmpdir=/scratch/38386649
+Downstream jobs will be updated after completion.
+
+[Thu Dec 22 00:31:13 2022]
+Finished job 6.
+8 of 14 steps (57%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:31:13 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: avamb_outdir/avamb/bins/S2, avamb_outdir/avamb/tmp/checkm2_all
+    output: avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log
+    jobid: 19
+    reason: Missing output files: avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log
+    wildcards: sample=S2
+    threads: 15
+    resources: tmpdir=/scratch/38386649
+
+
+[Thu Dec 22 00:31:13 2022]
+rule run_checkm2_per_sample_all_bins:
+    input: avamb_outdir/avamb/bins/S1, avamb_outdir/avamb/tmp/checkm2_all
+    output: avamb_outdir/avamb/tmp/checkm2_all_S1_bins_finished.log
+    jobid: 18
+    reason: Missing output files: avamb_outdir/avamb/tmp/checkm2_all_S1_bins_finished.log
+    wildcards: sample=S1
+    threads: 15
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:40:52 2022]
+Finished job 19.
+9 of 16 steps (56%) done
+[Thu Dec 22 00:41:24 2022]
+Finished job 18.
+10 of 16 steps (62%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:41:24 2022]
+rule cat_checkm2_all:
+    input: avamb_outdir/avamb/tmp/checkm2_all_S1_bins_finished.log, avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log
+    output: avamb_outdir/avamb/tmp/checkm2_finished.txt
+    jobid: 5
+    reason: Missing output files: avamb_outdir/avamb/tmp/checkm2_finished.txt; Input files updated by another job: avamb_outdir/avamb/tmp/checkm2_all_S2_bins_finished.log, avamb_outdir/avamb/tmp/checkm2_all_S1_bins_finished.log
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:41:24 2022]
+Finished job 5.
+11 of 16 steps (69%) done
+Select jobs to execute...
+
+[Thu Dec 22 00:41:24 2022]
+rule create_cluster_scores_bin_path_dictionaries:
+    input: avamb_outdir/avamb/tmp/checkm2_finished.txt
+    output: avamb_outdir/avamb/tmp/cs_d_avamb.json, avamb_outdir/avamb/tmp/bp_d_avamb.json
+    jobid: 4
+    reason: Missing output files: avamb_outdir/avamb/tmp/cs_d_avamb.json, avamb_outdir/avamb/tmp/bp_d_avamb.json; Input files updated by another job: avamb_outdir/avamb/tmp/checkm2_finished.txt
+    threads: 5
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 00:41:24 2022]
+Error in rule create_cluster_scores_bin_path_dictionaries:
+    jobid: 4
+    output: avamb_outdir/avamb/tmp/cs_d_avamb.json, avamb_outdir/avamb/tmp/bp_d_avamb.json
+    shell:
+        python /home/projects/cpr_10006/projects/aamb/avamb/vamb/src/create_cluster_scores_bin_path_dict.py  --s avamb_outdir/avamb/tmp/checkm2_all --b avamb_outdir/avamb/bins --cs_d avamb_outdir/avamb/tmp/cs_d_avamb.json --bp_d avamb_outdir/avamb/tmp/bp_d_avamb.json 
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2022-12-22T000303.471075.snakemake.log

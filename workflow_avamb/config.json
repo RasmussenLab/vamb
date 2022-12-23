@@ -1,0 +1,17 @@
+{
+   "contigs": "/home/projects/cpr_10006/projects/aamb/test_workflow/contigs.txt",
+   "sample_data": "/home/projects/cpr_10006/projects/aamb/test_workflow/samples2data.txt",
+   "index_size": "3G",
+   "min_contig_size": "2000",
+   "minimap_mem": "15gb",
+   "minimap_ppn": "15",
+   "vamb_mem": "28gb",
+   "vamb_ppn": "30",
+   "checkm2_mem": "15gb",
+   "checkm2_ppn": "15",
+   "checkm2_mem_r": "30gb",
+   "checkm2_ppn_r": "30",
+   "vamb_params": "-o C --minfasta 500000",
+   "vamb_preload": "",
+   "outdir":"/home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir"
+}

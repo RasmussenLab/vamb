@@ -8,11 +8,12 @@ parser = argparse.ArgumentParser(
 Print the median RPKM abundance for each bin in each sample to STDOUT.
 Will read the RPKM file into memory - beware.""",
     formatter_class=argparse.RawDescriptionHelpFormatter,
-    add_help=False)
+    add_help=False,
+)
 
-parser.add_argument('rpkmpath', help='Path to RPKM file')
-parser.add_argument('clusterspath', help='Path to clusters.tsv')
-parser.add_argument('headerpath', help='Path to list of headers')
+parser.add_argument("rpkmpath", help="Path to RPKM file")
+parser.add_argument("clusterspath", help="Path to clusters.tsv")
+parser.add_argument("headerpath", help="Path to list of headers")
 
 if len(sys.argv) == 1:
     parser.print_help()
@@ -26,12 +27,12 @@ for infile in (args.rpkmpath, args.clusterspath, args.headerpath):
         raise FileNotFoundError(infile)
 
 # Load Vamb
-sys.path.append('../vamb')
+sys.path.append("../vamb")
 import vamb
 
 # Load in files
 with open(args.headerpath) as file:
-    indexof = {line.strip():i for i,line in enumerate(file)}
+    indexof = {line.strip(): i for i, line in enumerate(file)}
 
 with open(args.clusterspath) as file:
     clusters = vamb.vambtools.read_clusters(file)
@@ -59,5 +60,5 @@ for clustername, cluster in clusters.items():
 
     median_depths = np.median(depths, axis=0)
 
-    print(clustername, end='\t')
-    print('\t'.join([str(i) for i in median_depths]))
+    print(clustername, end="\t")
+    print("\t".join([str(i) for i in median_depths]))

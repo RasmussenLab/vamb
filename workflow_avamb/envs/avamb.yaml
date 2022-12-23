@@ -1,0 +1,14 @@
+name: avamb
+channels:
+  - pytorch
+  - conda-forge
+  - bioconda
+dependencies:
+  - pytorch
+  - pip
+  - torchvision
+  - cudatoolkit=10.2
+  - pycoverm
+  - networkx
+  - pip:
+     - https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # this must be modified 

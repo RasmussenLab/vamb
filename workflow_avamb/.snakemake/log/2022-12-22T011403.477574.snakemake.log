@@ -1,0 +1,53 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 30
+Rules claiming more threads will be scaled down.
+Job stats:
+job                                               count    min threads    max threads
+----------------------------------------------  -------  -------------  -------------
+nc_clusters_and_bins_from_mdrep_clusters_avamb        1              5              5
+target_rule                                           1              1              1
+workflow_finished                                     1              1              1
+total                                                 3              1              5
+
+Select jobs to execute...
+
+[Thu Dec 22 01:14:05 2022]
+rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
+    input: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/avamb_manual_drep_clusters.tsv, /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/cs_d_avamb.json, /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/NC_bins
+    output: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/avamb_manual_drep_disjoint_clusters.tsv
+    log: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log
+    jobid: 17
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log
+    threads: 5
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 01:14:06 2022]
+Finished job 17.
+1 of 3 steps (33%) done
+Select jobs to execute...
+
+[Thu Dec 22 01:14:06 2022]
+rule workflow_finished:
+    input: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log
+    output: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/workflow_finished_avamb.log
+    jobid: 1
+    reason: Missing output files: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/workflow_finished_avamb.log; Input files updated by another job: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 01:14:06 2022]
+Finished job 1.
+2 of 3 steps (67%) done
+Select jobs to execute...
+
+[Thu Dec 22 01:14:06 2022]
+localrule target_rule:
+    input: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/workflow_finished_avamb.log
+    jobid: 0
+    reason: Input files updated by another job: /home/projects/cpr_10006/projects/aamb/test_workflow/avamb_outdir/avamb/tmp/workflow_finished_avamb.log
+    resources: tmpdir=/scratch/38386649
+
+[Thu Dec 22 01:14:06 2022]
+Finished job 0.
+3 of 3 steps (100%) done
+Complete log: .snakemake/log/2022-12-22T011403.477574.snakemake.log
