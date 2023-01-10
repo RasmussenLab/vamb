@@ -630,8 +630,8 @@ def main():
     Default use, good for most datasets:
     vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C 
 
-    For advanced use and extensions of Vamb, check documentation of the package
-    at https://github.com/RasmussenLab/vamb."""
+    For advanced use and extensions of Avamb, check documentation of the package
+    at https://github.com/RasmussenLab/vamb.""" # must be updated with the new github
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,

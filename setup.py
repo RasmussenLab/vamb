@@ -5,12 +5,12 @@ import os
 
 SETUP_METADATA = \
                {
-    "name": "vamb",
-    "description": "Variational autoencoder for metagenomic binning",
-    "url": "https://github.com/RasmussenLab/vamb",
-    "author": "Jakob Nybo Nissen and Simon Rasmussen",
-    "author_email": "jakobnybonissen@gmail.com",
-    "version": "3.0.9",
+    "name": "vamb", # update (?)
+    "description": "Adversarial and Variational autoencoders for metagenomic binning",
+    "url": "https://github.com/RasmussenLab/vamb", # update
+    "author": "Pau Piera, Jakob Nybo Nissen and Simon Rasmussen",
+    "author_email": "jakobnybonissen@gmail.com", # Update (?)
+    "version": "3.0.9", # update
     "license": "MIT",
     "packages": find_packages(),
     "package_data": {"vamb": ["kernel.npz"]},
