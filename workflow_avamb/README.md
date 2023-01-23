@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `avamb` and herefter install all the dependencies needed.
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `avamb` and hereafter install all the dependencies needed.
 
 ```
  conda config --append channels conda-forge
