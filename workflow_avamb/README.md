@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make 2 conda environments: one named `avamb` and another named `checkm2`. `checkm2` environment will contain the last version of CheckM2, please follow the original instructions to install CheckM2 [here](https://github.com/chklovski/CheckM2#installation). Please the follwing instructions to create `avamb` environment:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make 2 conda environments: one named `avamb` and another named `checkm2`. `checkm2` environment will contain the last version of CheckM2, instructions to install CheckM2 can be found on the original [repository](https://github.com/chklovski/CheckM2#installation). Please the follwing instructions to create `avamb` environment:
 
 ```
  conda config --append channels conda-forge
