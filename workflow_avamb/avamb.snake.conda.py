@@ -43,11 +43,6 @@ except FileExistsError:
 except:
     raise
 
-#MEM_GENERAL=get_config("total_mem_avail","35gb", r"[1-9]\d*gb$")
-#THREADS_GENERAL=get_config("total_ppn_avail","30", r"[1-9]\d*$")
-
-#contigs_file=config.get("contigs_file")
-#bam_path=config.get("bam_path")
 
 # parse if GPUs is needed #
 avamb_threads, sep, avamb_gpus = AVAMB_PPN.partition(":gpus=")
@@ -77,8 +72,6 @@ for line in fh_in:
 rule target_rule:
     input:
         os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
-        #contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        #bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
 
 rule cat_contigs:
     input:
@@ -95,8 +88,8 @@ rule cat_contigs:
         1
     log:
         os.path.join(OUTDIR,"log/contigs/catcontigs.log")
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -113,8 +106,8 @@ rule index:
         1
     log:
         os.path.join(OUTDIR,"log/contigs/index.log")
-    #conda: 
-        #"envs/minimap2.yaml"
+    conda: 
+        "envs/minimap2.yaml"
     shell:
         "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log}"
 
@@ -138,8 +131,8 @@ rule dict:
         1
     log:
         os.path.join(OUTDIR,"log/contigs/dict.log")
-    #conda:
-        #"envs/samtools.yaml"
+    conda:
+        "envs/samtools.yaml"
     shell:
         "samtools dict {input} | cut -f1-3 > {output} 2> {log}"
 
@@ -159,8 +152,8 @@ rule minimap:
         int(MM_PPN)
     log:
         os.path.join(OUTDIR,"log/map/{sample}.minimap.log")
-    #conda:
-        #"envs/minimap2.yaml"
+    conda:
+        "envs/minimap2.yaml"
     shell:
         # See comment over rule "dict" to understand what happens here
         "minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5"
@@ -217,8 +210,8 @@ rule run_avamb:
     log:
         os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log")
 
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
     shell:
         "rm -r {output.outdir_avamb}  && " 
         "{AVAMB_PRELOAD}"
@@ -262,8 +255,8 @@ rule run_checkm2_per_sample_all_bins:
         mem=CHECKM_MEM
     threads:
         int(CHECKM_PPN)
-    #conda :
-        #"envs/checkm2.yaml" # not functional since CheckM2 cannot be installed with #conda at the moment (20/12/2022).
+    conda :
+        "envs/checkm2.yaml" 
     shell:
         "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
 
@@ -297,8 +290,8 @@ rule create_cluster_scores_bin_path_dictionaries:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
 
     shell:
         "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
@@ -323,8 +316,8 @@ rule run_drep_manual_vamb_z_y:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
   
     shell:
         "python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}  --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}  --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}"
@@ -346,8 +339,8 @@ checkpoint create_ripped_bins_avamb:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
  
     shell: 
         "python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}  --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/avamb/tmp/ripped_bins --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} "          
@@ -370,8 +363,8 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
     shell:
         "python {params.path} --c {input.clusters_avamb_manual_drep}  --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} --bin_separator C 2> {log} "
         
@@ -401,8 +394,8 @@ rule run_checkm2_ripped_bins_avamb:
         mem=CHECKM_MEM_r
     threads:
         int(CHECKM_PPN_r)
-#    #conda:
-#        #"envs/checkm2.yaml" # not available at the moment.
+    conda:
+        "envs/checkm2.yaml" 
     shell:
         "checkm2 predict --threads {CHECKM_PPN_r} --input {input} --output-directory {output}/checkm2_out 2> {log}"
 
@@ -420,8 +413,8 @@ rule update_cs_d_avamb:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
     shell:
         "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
@@ -446,8 +439,8 @@ rule aggregate_nc_bins_avamb:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
 
     shell:
         "python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C  2>  {output}"
@@ -470,8 +463,8 @@ rule write_clusters_from_nc_folders:
         mem="10gb"
     threads:
         5
-    #conda:
-        #"envs/avamb.yaml"
+    conda:
+        "envs/avamb.yaml"
     
     shell:
         "sh {params.path} -d {input.nc_bins} -o {output} 2> {log} "
