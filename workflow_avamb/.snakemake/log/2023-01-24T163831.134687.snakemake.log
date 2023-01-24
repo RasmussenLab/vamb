@@ -1,0 +1,9 @@
+Migrating .snakemake folder to new format...
+Migration complete
+Building DAG of jobs...
+MissingInputException in rule cat_contigs in file /home/ppierali/avamb/workflow_avamb/avamb_test.snake.conda.py, line 76:
+Missing input files for rule cat_contigs:
+    output: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    affected files:
+        /Users/mbv396/PhD/projects/avamb_project/test_workflow/input_data/contigs/contigs.S11.fasta
+        /Users/mbv396/PhD/projects/avamb_project/test_workflow/input_data/contigs/contigs.S10.fasta

@@ -1,0 +1,3 @@
+ModuleNotFoundError in file /home/ppierali/avamb/workflow_avamb/avamb.snake.conda.py, line 5:
+No module named 'vamb'
+  File "/home/ppierali/avamb/workflow_avamb/avamb.snake.conda.py", line 5, in <module>

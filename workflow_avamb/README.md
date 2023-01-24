@@ -27,6 +27,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda install mamba
  mamba install -n avamb snakemake "samtools>=1.8" minimap2 pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
  conda activate avamb
+ pip install pycoverm
  pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated 
  conda deactivate
 ```
