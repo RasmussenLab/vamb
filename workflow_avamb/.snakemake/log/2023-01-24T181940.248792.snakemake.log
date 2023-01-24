@@ -1,0 +1,69 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 10
+Rules claiming more threads will be scaled down.
+Conda environments: ignored
+Job stats:
+job                  count    min threads    max threads
+-----------------  -------  -------------  -------------
+cat_checkm2_all          1              1              1
+minimap                  1             10             10
+run_avamb                1             10             10
+samples_with_bins        1              1              1
+sort                     2              2              2
+target_rule              1              1              1
+workflow_finished        1              1              1
+total                    8              1             10
+
+Select jobs to execute...
+
+[Tue Jan 24 18:19:41 2023]
+rule minimap:
+    input: /home/ppierali/input_test_avamb/reads/sample_10.r1.fq.gz, /home/ppierali/input_test_avamb/reads/sample_10.r2.fq.gz, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S10.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S10.minimap.log
+    jobid: 7
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S10.bam
+    wildcards: sample=S10
+    threads: 10
+    resources: tmpdir=/tmp
+
+[Tue Jan 24 18:21:12 2023]
+Error in rule minimap:
+    jobid: 7
+    input: /home/ppierali/input_test_avamb/reads/sample_10.r1.fq.gz, /home/ppierali/input_test_avamb/reads/sample_10.r2.fq.gz, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S10.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S10.minimap.log (check log file(s) for error details)
+    conda-env: /home/ppierali/avamb/workflow_avamb/.snakemake/conda/7b419e9cee71a9bb5db02ddc7f9fb260_
+    shell:
+        minimap2 -t 10 -ax sr /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi /home/ppierali/input_test_avamb/reads/sample_10.r1.fq.gz /home/ppierali/input_test_avamb/reads/sample_10.r2.fq.gz -N 5 | grep -v '^@' | cat /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict -  | samtools view -F 3584 -b -  > /home/ppierali/input_test_avamb/avamb_outdir/mapped/S10.bam 2> /home/ppierali/input_test_avamb/avamb_outdir/log/map/S10.minimap.log
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Removing output files of failed job minimap since they might be corrupted:
+/home/ppierali/input_test_avamb/avamb_outdir/mapped/S10.bam
+Select jobs to execute...
+
+[Tue Jan 24 18:21:13 2023]
+rule sort:
+    input: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.sort.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.sort.log
+    jobid: 10
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.sort.bam
+    wildcards: sample=S11
+    threads: 2
+    resources: tmpdir=/tmp
+
+Terminating processes on user request, this might take some time.
+[Tue Jan 24 18:21:30 2023]
+Error in rule sort:
+    jobid: 10
+    input: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.sort.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.sort.log (check log file(s) for error details)
+    conda-env: /home/ppierali/avamb/workflow_avamb/.snakemake/conda/1c362e072ba4b1d62ef6b73960392a61_
+    shell:
+        samtools sort /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam -T /home/ppierali/input_test_avamb/avamb_outdir/mapped/tmp.S11 --threads 1 -m 3G -o /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.sort.bam 2>/home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.sort.log
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Complete log: .snakemake/log/2023-01-24T181940.248792.snakemake.log

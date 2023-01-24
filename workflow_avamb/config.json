@@ -11,7 +11,7 @@
    "checkm2_ppn": "15",
    "checkm2_mem_r": "30gb",
    "checkm2_ppn_r": "30",
-   "avamb_params": "-o C --minfasta 500000",
+   "avamb_params": "-o C --minfasta 1000000 -e 2 -q 1 --e_aae 2 --q_aae 1   ",
    "avamb_preload": "",
    "outdir":"/home/ppierali/input_test_avamb/avamb_outdir"
 }

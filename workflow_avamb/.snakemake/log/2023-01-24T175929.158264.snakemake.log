@@ -1,0 +1,90 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 10
+Rules claiming more threads will be scaled down.
+Conda environments: ignored
+Job stats:
+job                                            count    min threads    max threads
+-------------------------------------------  -------  -------------  -------------
+cat_checkm2_all                                    1              1              1
+cat_contigs                                        1              1              1
+create_cluster_scores_bin_path_dictionaries        1              5              5
+create_ripped_bins_avamb                           1              5              5
+dict                                               1              1              1
+index                                              1              1              1
+minimap                                            2             10             10
+run_avamb                                          1             10             10
+run_drep_manual_vamb_z_y                           1              5              5
+samples_with_bins                                  1              1              1
+sort                                               2              2              2
+target_rule                                        1              1              1
+workflow_finished                                  1              1              1
+total                                             15              1             10
+
+Select jobs to execute...
+
+[Tue Jan 24 17:59:30 2023]
+rule cat_contigs:
+    input: /home/ppierali/input_test_avamb/contigs/contigs.S10.fasta, /home/ppierali/input_test_avamb/contigs/contigs.S11.fasta
+    output: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/contigs/catcontigs.log
+    jobid: 8
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    resources: tmpdir=/tmp
+
+[Tue Jan 24 17:59:41 2023]
+Finished job 8.
+1 of 15 steps (7%) done
+Select jobs to execute...
+
+[Tue Jan 24 17:59:41 2023]
+rule index:
+    input: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    output: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/contigs/index.log
+    jobid: 11
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi; Input files updated by another job: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    resources: tmpdir=/tmp
+
+
+[Tue Jan 24 17:59:41 2023]
+rule dict:
+    input: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    output: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/contigs/dict.log
+    jobid: 12
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict; Input files updated by another job: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.fna.gz
+    resources: tmpdir=/tmp
+
+[Tue Jan 24 17:59:42 2023]
+Finished job 12.
+2 of 15 steps (13%) done
+[Tue Jan 24 17:59:46 2023]
+Finished job 11.
+3 of 15 steps (20%) done
+Select jobs to execute...
+
+[Tue Jan 24 17:59:46 2023]
+rule minimap:
+    input: /home/ppierali/input_test_avamb/reads/sample_11.r1.fq.gz, /home/ppierali/input_test_avamb/reads/sample_11.r2.fq.gz, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.minimap.log
+    jobid: 14
+    reason: Missing output files: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam; Input files updated by another job: /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    wildcards: sample=S11
+    threads: 10
+    resources: tmpdir=/tmp
+
+Terminating processes on user request, this might take some time.
+[Tue Jan 24 17:59:47 2023]
+Error in rule minimap:
+    jobid: 14
+    input: /home/ppierali/input_test_avamb/reads/sample_11.r1.fq.gz, /home/ppierali/input_test_avamb/reads/sample_11.r2.fq.gz, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi, /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict
+    output: /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam
+    log: /home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.minimap.log (check log file(s) for error details)
+    conda-env: /home/ppierali/avamb/workflow_avamb/.snakemake/conda/7b419e9cee71a9bb5db02ddc7f9fb260_
+    shell:
+        minimap2 -t 10 -ax sr /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.mmi /home/ppierali/input_test_avamb/reads/sample_11.r1.fq.gz /home/ppierali/input_test_avamb/reads/sample_11.r2.fq.gz -N 5 | grep -v '^@' | cat /home/ppierali/input_test_avamb/avamb_outdir/contigs.flt.dict -  | samtools view -F 3584 -b -  > /home/ppierali/input_test_avamb/avamb_outdir/mapped/S11.bam 2> /home/ppierali/input_test_avamb/avamb_outdir/log/map/S11.minimap.log
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Complete log: .snakemake/log/2023-01-24T175929.158264.snakemake.log

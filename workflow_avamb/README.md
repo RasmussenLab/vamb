@@ -23,13 +23,13 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda config --append channels conda-forge
  conda config --append channels bioconda
  conda config --append channels pytorch
- mamba create -n avamb python=3.10
  conda install mamba
+ mamba create -n avamb python=3.10
  mamba install -n avamb snakemake "samtools>=1.8" minimap2 pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
  conda activate avamb
  pip install pycoverm
  git clone https://github.com/RasmussenLab/avamb.git -b avamb_new
- cd avamb                                                                                                                                                                                                                                                                        pip install -e .
+ cd avamb                                                                                                                                pip install -e .
  #pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated
  conda deactivate
 ```
