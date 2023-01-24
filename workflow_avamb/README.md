@@ -29,7 +29,8 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda activate avamb
  pip install pycoverm
  git clone https://github.com/RasmussenLab/avamb.git -b avamb_new
- cd avamb                                                                                                                                pip install -e .
+ cd avamb
+ pip install -e .
  #pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated
  conda deactivate
 ```
