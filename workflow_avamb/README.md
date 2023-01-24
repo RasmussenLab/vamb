@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make 2 conda environments: one named `avamb` and another named `checkm2`. `checkm2` environment will contain the last version of CheckM2, instructions to install CheckM2 can be found on the original [repository](https://github.com/chklovski/CheckM2#installation). Please the follwing instructions to create `avamb` environment:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make 2 conda environments: one named `avamb` and another named `checkm2`. `checkm2` environment will contain the last version of CheckM2, instructions to install CheckM2 can be found on the original [repository](https://github.com/chklovski/CheckM2#installation). To create the `avamb` environment, execute:
 
 ```
  conda config --append channels conda-forge
@@ -28,7 +28,9 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba install -n avamb snakemake "samtools>=1.8" minimap2 pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
  conda activate avamb
  pip install pycoverm
- pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated 
+ git clone https://github.com/RasmussenLab/avamb.git -b avamb_new
+ cd avamb                                                                                                                                                                                                                                                                        pip install -e .
+ #pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # that might to be updated
  conda deactivate
 ```
 
