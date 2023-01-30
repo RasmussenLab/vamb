@@ -1,3 +1,0 @@
-FileNotFoundError in file /home/ppierali/avamb/workflow_avamb/avamb_test.snake.conda.py, line 57:
-[Errno 2] No such file or directory: 'samples2data.txt'
-  File "/home/ppierali/avamb/workflow_avamb/avamb_test.snake.conda.py", line 57, in <module>

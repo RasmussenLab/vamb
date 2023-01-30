@@ -1,5 +1,0 @@
-ModuleNotFoundError in file /home/ppierali/avamb/workflow_avamb/avamb_test.snake.conda.py, line 5:
-No module named 'pycoverm'
-  File "/home/ppierali/avamb/workflow_avamb/avamb_test.snake.conda.py", line 5, in <module>
-  File "/home/ppierali/avamb/vamb/__init__.py", line 32, in <module>
-  File "/home/ppierali/avamb/vamb/parsebam.py", line 8, in <module>

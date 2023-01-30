@@ -1,3 +1,0 @@
-IndexErrorin line 69 of /home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py:
-list index out of range
-  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py", line 69, in <module>

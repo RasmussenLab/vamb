@@ -89,7 +89,7 @@ rule cat_contigs:
     log:
         os.path.join(OUTDIR,"log/contigs/catcontigs.log")
     conda:
-        "envs/avamb.yaml"
+        "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -187,8 +187,6 @@ rule sort:
 # Configurations for dereplication
 rule run_avamb:
     input:
-        #contigs=contigs_file,
-        #bam_files=bam_path
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
         bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
     output:
@@ -211,7 +209,7 @@ rule run_avamb:
         os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log")
 
     conda:
-        "envs/avamb.yaml"
+        "avamb"
     shell:
         "rm -r {output.outdir_avamb}  && " 
         "{AVAMB_PRELOAD}"
@@ -255,10 +253,10 @@ rule run_checkm2_per_sample_all_bins:
         mem=CHECKM_MEM
     threads:
         int(CHECKM_PPN)
-    conda :
-        "envs/checkm2.yaml" 
-    shell:
-        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
+    conda: # we are using an already created environment instead of creating a new one, I could not find a better solution
+        "checkm2" 
+    shell:# Unfortunately, snakemake does not allow to run checkm2 as "checkm2 predict ..." because it violates the bash strick mode, a way around is to prepend the location of checkm2 executable path, very inconvinient
+        "/home/ppierali/mambaforge/envs/checkm2/bin/checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
 
 rule cat_checkm2_all:
     input:
@@ -291,7 +289,7 @@ rule create_cluster_scores_bin_path_dictionaries:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
 
     shell:
         "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
@@ -317,7 +315,7 @@ rule run_drep_manual_vamb_z_y:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
   
     shell:
         "python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}  --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}  --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}"
@@ -340,7 +338,7 @@ checkpoint create_ripped_bins_avamb:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
  
     shell: 
         "python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}  --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/avamb/tmp/ripped_bins --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} "          
@@ -364,7 +362,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
     shell:
         "python {params.path} --c {input.clusters_avamb_manual_drep}  --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} --bin_separator C 2> {log} "
         
@@ -395,9 +393,9 @@ rule run_checkm2_ripped_bins_avamb:
     threads:
         int(CHECKM_PPN_r)
     conda:
-        "envs/checkm2.yaml" 
+        "checkm2" 
     shell:
-        "checkm2 predict --threads {CHECKM_PPN_r} --input {input} --output-directory {output}/checkm2_out 2> {log}"
+        "/home/ppierali/mambaforge/envs/checkm2/bin/checkm2 predict --threads {CHECKM_PPN_r} --input {input} --output-directory {output}/checkm2_out 2> {log}"
 
 rule update_cs_d_avamb:
     input:
@@ -414,7 +412,7 @@ rule update_cs_d_avamb:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
     shell:
         "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
@@ -440,7 +438,7 @@ rule aggregate_nc_bins_avamb:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
 
     shell:
         "python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C  2>  {output}"
@@ -464,7 +462,7 @@ rule write_clusters_from_nc_folders:
     threads:
         5
     conda:
-        "envs/avamb.yaml"
+        "avamb"
     
     shell:
         "sh {params.path} -d {input.nc_bins} -o {output} 2> {log} "
