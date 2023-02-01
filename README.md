@@ -8,7 +8,12 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.md).
 
-:mega: Interested on maximizing the number of high quality bins from your samples? please check out Avamb. Avamb is a metagenomics binning pipeline composed by vamb and aamb, an adversarial autoencoder for metagenomics binning, as well as a bin dereplication and quality filtering step that runs CheckM2. In the same way than vamb, avamb leverages sequence composition information from a contig catalogue and co-abundance information from BAM files by projecting those features into aamb and vamb latent spaces, where the metagenomics binning actually takes place. Avamb has shown to reconstruct 23% more high quality bins as well as to increase the bins quality. For more information, please check the [Avamb snakemake page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb).
+:mega: Interested on maximizing the number of high quality bins from your samples?
+Please check out Avamb.
+Avamb is a metagenomics binning pipeline composed by Vamb and Aamb, an adversarial autoencoder for metagenomics binning, as well as a bin dereplication and quality filtering step that runs CheckM2.
+Similar to Vamb, Avamb leverages sequence composition information from a contig catalogue and co-abundance information from BAM files by projecting those features into  latent spaces, where the metagenomics binning actually takes place.
+Avamb has shown to reconstruct 23% more high quality bins as well as to increase the bins quality.
+For more information, please check the [Avamb snakemake page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb).
 
 Avamb pre-print can be found here [biorxiv](<insert biorXv link>) 
 
