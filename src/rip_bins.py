@@ -7,24 +7,24 @@ import networkx as nx
 import vamb
 import json
 
+from collections.abc import Sequence
+from typing import cast
+
 
 def main(
-    contig_names,
-    contig_lengths,
-    cluster_contigs,
-    bin_path,
-    path_ripped,
-    path_clusters_not_ripped,
-    bin_separator,
-):
+    contig_names: Sequence[str],
+    contig_lengths: Sequence[int],
+    cluster_contigs: dict[str, set[str]],
+    bin_path: dict[str, str],
+    path_ripped: str,
+    path_clusters_not_ripped: str,
+) -> dict[str, str]:
 
     cluster_contigs_original = cluster_contigs.copy()
 
     contig_length = get_contig_length(contig_names, contig_lengths)
     cluster_length = get_cluster_length(cluster_contigs, contig_length)
     graph_clusters = get_graph_clusters(cluster_contigs, contig_length, cluster_length)
-    cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
-
     (
         cluster_contigs,
         graph_clusters,
@@ -40,17 +40,16 @@ def main(
         cluster_length,
         clusters_changed_but_not_intersecting_contigs_2,
     ) = make_all_components_pair(
-        graph_clusters, cluster_contigs, cluster_length, contig_length, cluster_sample
+        graph_clusters, cluster_contigs, cluster_length, contig_length
     )
 
     ripped_clusters_set = create_ripped_clusters_and_write_ripped_bins(
-        graph_clusters, cluster_contigs, cluster_sample, bin_path, path_ripped
+        graph_clusters, cluster_contigs, bin_path, path_ripped
     )
 
-    clusters_changed_but_not_intersecting_contigs_total = {
-        **clusters_changed_but_not_intersecting_contigs,
-        **clusters_changed_but_not_intersecting_contigs_2,
-    }
+
+    clusters_changed_but_not_intersecting_contigs_total = clusters_changed_but_not_intersecting_contigs.copy()
+    clusters_changed_but_not_intersecting_contigs_total.update(clusters_changed_but_not_intersecting_contigs_2)
 
     (
         bin_path,
@@ -58,20 +57,17 @@ def main(
     ) = find_remaining_clusters_ripped_and_write_ripped_bins(
         cluster_contigs_original,
         clusters_changed_but_not_intersecting_contigs_total,
-        cluster_sample,
         bin_path,
         path_ripped,
     )
 
     # Remove the clusters that have been ripped because of removing the intersections
-    # print(ripped_clusters_set)
     for cluster in ripped_clusters_set:
         if cluster in cluster_contigs_not_ripped.keys():
             print("%s cluster removed from the set since it was ripped" % (cluster))
             del cluster_contigs_not_ripped[cluster]
 
-    with open(path_clusters_not_ripped, "w") as file_:
-
+    with open(path_clusters_not_ripped, "w") as file:
         for cluster, contigs_nr in cluster_contigs_not_ripped.items():
             contigs_o = cluster_contigs_original[cluster]
             if contigs_o != contigs_nr:
@@ -79,22 +75,19 @@ def main(
                     "Clusters that have been ripped remain in the non ripped set of clusters"
                 )
             for contig in contigs_nr:
-                print(cluster, contig, sep="\t", file=file_)
-            file_.flush()
+                print(cluster, contig, sep="\t", file=file)
+            file.flush()
     return bin_path
 
 
-def get_contig_length(names, lengths):
-    """{contig:length}"""
-    contig_length = dict()
-    for name, length in zip(names, lengths):
-        contig_length[name] = length
-    return contig_length
+def get_contig_length(names: Sequence[str], lengths: Sequence[int]) -> dict[str, int]:
+    return dict(zip(names, lengths))
 
 
-def get_cluster_length(cluster_contigs, contig_length):
-    """{cluster:length}"""
-    cluster_length = OrderedDict()
+def get_cluster_length(
+    cluster_contigs: dict[str, set[str]], contig_length: dict[str, int]
+) -> OrderedDict[str, int]:
+    cluster_length: OrderedDict[str, int] = OrderedDict()
     for (cluster_name, contigs) in cluster_contigs.items():
         cluster_length[cluster_name] = 0
         for contig in contigs:
@@ -102,7 +95,11 @@ def get_cluster_length(cluster_contigs, contig_length):
     return cluster_length
 
 
-def get_graph_clusters(cluster_contigs, contig_length, cluster_length):
+def get_graph_clusters(
+    cluster_contigs: dict[str, set[str]],
+    contig_length: dict[str, int],
+    cluster_length: OrderedDict[str, int],
+):
     """Generate a graph where each cluster is a node and each edge connecting 2 nodes is
     created if clusters share some contigs, edges are weighted by the intersection length"""
     graph_clusters = nx.Graph()
@@ -126,10 +123,10 @@ def get_graph_clusters(cluster_contigs, contig_length, cluster_length):
                     cluster_length[cluster_j],
                 )
                 cluster_i_j_contigs_intersection_length = sum(
-                    [
+                    (
                         contig_length[contig_k]
                         for contig_k in cluster_i_j_contigs_intersection
-                    ]
+                    )
                 )
                 intersection_length_ratio = (
                     cluster_i_j_contigs_intersection_length
@@ -140,41 +137,40 @@ def get_graph_clusters(cluster_contigs, contig_length, cluster_length):
                 graph_clusters.add_edge(
                     cluster_i, cluster_j, weight=intersection_length_ratio
                 )
-                # print('%s and %s share '%(cluster_i,cluster_j))
-                # print(cluster_i_j_contigs_intersection)
     return graph_clusters
 
 
 def remove_meaningless_edges_from_pairs(
-    graph_clusters, cluster_length, cluster_contigs, contig_length, weight_thr=0.001
+    graph_clusters: nx.Graph,
+    cluster_length: OrderedDict[str, int],
+    cluster_contigs: dict[str, set[str]],
+    contig_length: dict[str, int],
+    weight_thr: float = 0.001,
 ):
     """Iterate over all the components of the graph and remove components composed by 2 node/clusters
     according the following criteria:
         - For edges with weight smaller than threshold, just remove edge and remove intersecting contigs from
           larger cluster
     """
-    components = list()
+    components: list[set[str]] = list()
 
     for component in nx.connected_components(graph_clusters):
         components.append(component)
 
-    clusters_changed_but_not_intersecting_contigs = dict()
+    clusters_changed_but_not_intersecting_contigs: dict[str, set[str]] = dict()
     for component in components:
         if len(component) == 2:
             cl_i = component.pop()
             cl_j = component - {cl_i}
             assert len(cl_j) == 1
             cl_j = cl_j.pop()
-            cl_i_cl_j_edge_weight = graph_clusters.get_edge_data(cl_i, cl_j)["weight"]
+            cl_i_cl_j_edge_weight: float = graph_clusters.get_edge_data(cl_i, cl_j)[
+                "weight"
+            ]
             if cl_i_cl_j_edge_weight > weight_thr:
                 pass
             else:
-                (
-                    graph_clusters,
-                    cluster_contigs,
-                    cluster_length,
-                    cluster_updated,
-                ) = move_intersection_to_smaller_cluster(
+                cluster_updated = move_intersection_to_smaller_cluster(
                     graph_clusters,
                     cl_i,
                     cl_j,
@@ -187,7 +183,7 @@ def remove_meaningless_edges_from_pairs(
                     cluster_updated
                 ] = cluster_contigs[cluster_updated]
 
-    components = list()
+    components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
         components.append(component)
 
@@ -207,13 +203,16 @@ def remove_meaningless_edges_from_pairs(
 
 
 def move_intersection_to_smaller_cluster(
-    graph_bins, cl_i, cl_j, cluster_contigs, cluster_length, contig_length
-):
+    graph_bins: nx.Graph,
+    cl_i: str,
+    cl_j: str,
+    cluster_contigs: dict[str, set[str]],
+    cluster_length: OrderedDict[str, int],
+    contig_length: dict[str, int],
+) -> str:
     """Move the intersecting contigs to the shortest cluster"""
-    # print(cl_i,cl_j,cluster_length[cl_i],cluster_length[cl_j])
     cl_i_contigs, cl_j_contigs = cluster_contigs[cl_i], cluster_contigs[cl_j]
     cl_i_cl_j_intersection_contigs = cl_i_contigs.intersection(cl_j_contigs)
-    # print(cl_i_cl_j_intersection_contigs)
     cl_i_length, cl_j_length = cluster_length[cl_i], cluster_length[cl_j]
 
     if cl_i_length < cl_j_length:
@@ -230,30 +229,31 @@ def move_intersection_to_smaller_cluster(
         cluster_updated = cl_i
     graph_bins.remove_edge(cl_i, cl_j)
 
-    # print(cl_i,cl_j,cluster_length[cl_i],cluster_length[cl_j],'after moving intersection to smaller')
-
-    return graph_bins, cluster_contigs, cluster_length, cluster_updated
+    return cluster_updated
 
 
 def make_all_components_pair(
-    graph_clusters, cluster_contigs, cluster_length, contig_length, cluster_sample
+    graph_clusters: nx.Graph,
+    cluster_contigs: dict[str, set[str]],
+    cluster_length: OrderedDict[str, int],
+    contig_length: dict[str, int],
 ):
     """Iterate over all graph components that contain more than 2 nodes/clusters and break them down to
     2 nodes/clusters components according the following criteria:
         - Remove the weaker edge by removing the intersecting contigs from the larger cluster"""
 
-    components = list()
+    components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
         components.append(component)
 
-    clusters_changed_but_not_intersecting_contigs = dict()
+    clusters_changed_but_not_intersecting_contigs: dict[str, set[str]] = dict()
     for component in components:
         if len(component) > 2:
-            weight_edges = dict()
+            weight_edges: dict[float, set[str]] = dict()
             for cl_i in component:
                 for cl_j in component - {cl_i}:
                     if graph_clusters.has_edge(cl_i, cl_j):
-                        cl_i_cl_j_edge_weight = graph_clusters.get_edge_data(
+                        cl_i_cl_j_edge_weight: float = graph_clusters.get_edge_data(
                             cl_i, cl_j
                         )["weight"]
                         if (
@@ -263,20 +263,14 @@ def make_all_components_pair(
                             cl_i_cl_j_edge_weight += 1 * 10**-30
                         weight_edges[cl_i_cl_j_edge_weight] = {cl_i, cl_j}
 
-            dsc_sorted_weights = list(np.min(weight_edges.keys()))
+            dsc_sorted_weights: list[float] = [min(weight_edges.keys())]
             i = 0
             component_len = len(component)
-            # clusters_updated=set()
             while component_len > 2:
                 weight_i = dsc_sorted_weights[i]
                 cl_i, cl_j = weight_edges[weight_i]
 
-                (
-                    graph_clusters,
-                    cluster_contigs,
-                    cluster_length,
-                    cluster_updated,
-                ) = move_intersection_to_smaller_cluster(
+                cluster_updated = move_intersection_to_smaller_cluster(
                     graph_clusters,
                     cl_i,
                     cl_j,
@@ -297,7 +291,7 @@ def make_all_components_pair(
 
                 i += 1
 
-    components = list()
+    components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
         components.append(component)
 
@@ -316,32 +310,22 @@ def make_all_components_pair(
     )
 
 
-def get_cluster_sample(cluster_contigs, bin_separator):
-    """{cluster:sample}"""
-    cluster_sample = {}
-    for cluster, contigs in cluster_contigs.items():
-        contig_i = next(iter(contigs))
-        # sample=contig_i.split('C')[0]
-        sample = contig_i.split(bin_separator)[0]
-
-        cluster_sample[cluster] = sample
-    return cluster_sample
-
-
 def create_ripped_clusters_and_write_ripped_bins(
-    graph_clusters, cluster_contigs, cluster_sample, bin_path, path_ripped
-):
+    graph_clusters: nx.Graph,
+    cluster_contigs: dict[str, set[str]],
+    bin_path: dict[str, str],
+    path_ripped: str,
+) -> set[str]:
     """Given the components of the graph, write ripped bins where each bin misses the intersection with the other bin"""
-    ripped_clusters_set = set()
+    ripped_clusters_set: set[str] = set()
     try:
         os.mkdir(path_ripped)
-    except:
+    except FileExistsError:
         pass
 
     for component in nx.connected_components(graph_clusters):
         cl_i = next(iter(component))
         cl_j = component - {cl_i}
-        # print(len(cl_j))
         assert len(cl_j) == 1
         cl_j = next(iter(cl_j))
         cl_i_contigs, cl_j_contigs = cluster_contigs[cl_i], cluster_contigs[cl_j]
@@ -351,7 +335,6 @@ def create_ripped_clusters_and_write_ripped_bins(
             % (cl_i, cl_j, len(cluster_i_j_contigs_intersection))
         )
 
-        sample_clusters = cluster_sample[cl_i]
         bin_i_path = bin_path[cl_i + ".fna"]
         bin_j_path = bin_path[cl_j + ".fna"]
 
@@ -380,7 +363,9 @@ def create_ripped_clusters_and_write_ripped_bins(
     return ripped_clusters_set
 
 
-def write_ripped_bin(contigs_cluster_ripped, bin_i_path, bin_i_ripped_path):
+def write_ripped_bin(
+    contigs_cluster_ripped, bin_i_path: str, bin_i_ripped_path: str
+) -> None:
     """Write ripped bin"""
     contig_sequences = []
     for contig in SeqIO.parse(bin_i_path, "fasta"):
@@ -391,11 +376,10 @@ def write_ripped_bin(contigs_cluster_ripped, bin_i_path, bin_i_ripped_path):
 
 
 def find_remaining_clusters_ripped_and_write_ripped_bins(
-    cluster_contigs_original,
-    clusters_changed_but_not_intersecting_contigs_total,
-    cluster_sample,
-    bin_path,
-    path_ripped,
+    cluster_contigs_original: dict[str, set[str]],
+    clusters_changed_but_not_intersecting_contigs_total: dict[str, set[str]],
+    bin_path: dict[str, str],
+    path_ripped: str,
 ):
     """Compare cluster_contigs_ripped_only_by_meaningless_edges_or_not_ripped_at_all with cluster_contigs
     to find the clusters that remain different, so we can re evaluate them with checkM2, those clusters
@@ -405,7 +389,7 @@ def find_remaining_clusters_ripped_and_write_ripped_bins(
 
     try:
         os.mkdir(path_ripped)
-    except:
+    except FileExistsError:
         pass
 
     for (
@@ -416,8 +400,6 @@ def find_remaining_clusters_ripped_and_write_ripped_bins(
 
         assert contigs_r != contigs_o
         assert len(contigs_r) < len(contigs_o)
-        sample = cluster_sample[cluster]
-        # print(cluster)
         bin_o_path = bin_path[cluster + ".fna"]
         bin_r_path = os.path.join(path_ripped, cluster + ".fna")
         write_ripped_bin(contigs_r, bin_o_path, bin_r_path)
@@ -462,12 +444,12 @@ if __name__ == "__main__":
         cluster_contigs = vamb.vambtools.read_clusters(file)
 
     contig_lengths_file = opt.l
-    contig_lengths = np.load(contig_lengths_file)["arr_0"]
+    contig_lengths = cast(Sequence[int], np.load(contig_lengths_file)["arr_0"])
 
     contignames_file = opt.n
-    contig_names = np.loadtxt(contignames_file, dtype=object)
+    contig_names = cast(Sequence[str], np.loadtxt(contignames_file, dtype=object))
 
-    path_ripped = opt.br
+    path_ripped = cast(str, opt.br)
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)
@@ -481,7 +463,6 @@ if __name__ == "__main__":
         bin_path,
         path_ripped,
         clusters_not_ripped_path,
-        bin_separator,
     )
 
     with open(opt.bp_d, "w") as f:
@@ -492,5 +473,5 @@ if __name__ == "__main__":
         if ".fna" in _file:
             n_bins_ripped_in_folder += 1
 
-    with open(opt.log_nc_ripped_bins, "w") as file_:
-        file_.write(str(n_bins_ripped_in_folder))
+    with open(opt.log_nc_ripped_bins, "w") as file:
+        file.write(str(n_bins_ripped_in_folder))
