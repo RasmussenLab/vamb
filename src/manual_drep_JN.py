@@ -22,7 +22,7 @@ def main(
     # Path to length.npz of contig length. Output by Vamb
     lengths_npz: Path,
     # Path to CheckM2 quality_report.tsv file
-    quality_report: dict[str, list()],
+    quality_report: dict[str, list],
     # List of paths to clusters.tsv files as output by Vamb.
     # Names of clusters must match those in CheckM2 quality_report,
     # and those of contigs match those in names_npz
@@ -36,7 +36,6 @@ def main(
     bins_extension: str,
 ) -> None:
     # Load contig names
-    # contig_names: list[str] = list(vamb.vambtools.read_npz(names_npz))
     contig_names: list[str] = list(np.loadtxt(names, dtype=object))
 
     assert isinstance(contig_names, list)
@@ -50,7 +49,6 @@ def main(
     (bin_names, qualities, bin_by_name) = load_checkm2(
         quality_report, min_comp, max_cont, bins_extension
     )
-    # print(bin_by_name)
     # Load bins
     (bin_lengths, union_bins) = load_binnings(
         binnings, contig_names, lengths, bin_by_name
@@ -71,9 +69,8 @@ def main(
                 print(bin_name, contig_names[contig], sep="\t", file=file)
 
 
-# TODO: Change to list of paths
 def load_checkm2(
-    quality_report: dict[str, list()],
+    quality_report: dict[str, list],
     min_completeness: float,
     max_contamination: float,
     bins_extension: str,
@@ -85,7 +82,6 @@ def load_checkm2(
     """Extract all bin names and assign them either a BinId, or else None,
     if their completeness/contamination is so bad the bin should be discarded
     """
-    print("min comp ", min_completeness, " max cont ", max_contamination)
     # This is None if the bin is to be discarded
     bin_by_name: dict[str, Optional[BinId]] = dict()
     bin_names: list[str] = []
@@ -142,9 +138,6 @@ def load_binnings(
             # filter by clusters larger than 200kbs
             for (bin_name, contigs) in clusters_filtered.items():
 
-                # if bin_name.startswith('M_'):
-                #    bin_name += '.fa.gz'
-                # else:
                 bin_name += ".fna"
                 # None is a valid value, so we use -1 as sentinel for missing
                 bin = bin_by_name.get(bin_name, -1)
@@ -153,7 +146,6 @@ def load_binnings(
                         f"Bin {bin_name} found in binning {binning_path}, but is not scored by CheckM2"
                     )
                 # Means: Below threshold, so skip it
-                # continue
                 elif bin is None:
                     continue
                 else:
@@ -198,9 +190,8 @@ def dereplicate(
     qualities: Sequence[tuple[float, float]],
     contig_lengths: np.ndarray,
     bin_lengths: Sequence[int],
-    threshold=float,
+    threshold: float,
 ) -> list[BinId]:
-    # print('min cov ',threshold)
     "Removes bins if they are too similar to another bin. Return list of kept bins"
     assert len(union_bins) == len(qualities) == len(bin_lengths)
 
@@ -230,8 +221,6 @@ def get_binsof(union_bins: Iterable[Iterable[ContigId]]) -> dict[ContigId, list[
 
 def bin_score(completeness: float, contamination: float) -> float:
     return completeness - 5 * contamination
-    # return 2*(completeness * (100-contamination))/(completeness * (100-contamination))
-
 
 def get_overlapping_bin_pairs(
     binsof: Mapping[ContigId, list[BinId]], qualities: Sequence[tuple[float, float]]
@@ -306,7 +295,6 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
     args = vars(parser.parse_args())
-    print(args)
     with open(opt.cs_d) as f:
         cluster_scores = json.load(f)
 
