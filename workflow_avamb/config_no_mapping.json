@@ -1,0 +1,14 @@
+{
+   "abundances": "/home/projects/cpr_10006/projects/aamb/test_avamb_runs/airways/input_data/abundance.npz",
+   "fastafile": "/home/projects/cpr_10006/projects/aamb/datasets/airways/contigs.fna",
+   "sample_data": "/home/ppierali/input_test_avamb/samples2data.txt",
+   "avamb_mem": "15gb",
+   "avamb_ppn": "30",
+   "checkm2_mem": "15gb",
+   "checkm2_ppn": "15",
+   "checkm2_mem_r": "30gb",
+   "checkm2_ppn_r": "30",
+   "avamb_params": "-o C --minfasta 200000 -e 10 -q 5 --e_aae 10 --q_aae 5   ",
+   "avamb_preload": "",
+   "outdir":"/home/projects/cpr_10006/projects/aamb/test_workflows/test_workflow_no_mapping/airways"
+}
