@@ -256,7 +256,7 @@ rule run_checkm2_per_sample_all_bins:
     conda: # we are using an already created environment instead of creating a new one, I could not find a better solution
         "checkm2" 
     shell:
-        "/checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
+        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
 
 rule cat_checkm2_all:
     input:
