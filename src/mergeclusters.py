@@ -1,4 +1,3 @@
-
 __doc__ = """Merge clusters according to overlap in contigs.
 
 This module is obsolete in the current version of Vamb, as VAMB now creates
@@ -29,7 +28,6 @@ hierarchical_merge:
 """
 
 
-
 import sys as _sys
 import os as _os
 import itertools as _itertools
@@ -39,7 +37,6 @@ from collections import defaultdict as _defaultdict
 # Uncomment this (& install python-igraph) to get community (walktrap) merging.
 # On sparse graphs this gives the same result as subgraph_merge, so no need.
 # import igraph as _igraph
-
 
 
 def _iter_overlapping_pairs(contigsof, threshold=0.5):
@@ -67,7 +64,6 @@ def _iter_overlapping_pairs(contigsof, threshold=0.5):
 
         if overlap >= threshold:
             yield (cluster1, cluster2), overlap
-
 
 
 # def comminuty_merge(contigsof, threshold=0.5, steps=4):
@@ -113,6 +109,7 @@ def _iter_overlapping_pairs(contigsof, threshold=0.5):
 
 #     return merged
 
+
 def _bron_kerbosch(r, p, x, cliques, edges):
     """Finds all maximal cliques in a graph"""
 
@@ -126,6 +123,7 @@ def _bron_kerbosch(r, p, x, cliques, edges):
 
     else:
         cliques.append(r)
+
 
 def clique_merge(contigsof, threshold=0.5):
     """Merges all maximal cliques of clusters.
@@ -157,7 +155,7 @@ def clique_merge(contigsof, threshold=0.5):
     mergedclusters = dict()
 
     for i, clique in enumerate(cliques):
-        mergedname = 'cluster_' + str(i + 1)
+        mergedname = "cluster_" + str(i + 1)
         contigs = set()
 
         for cluster in clique:
@@ -166,7 +164,6 @@ def clique_merge(contigsof, threshold=0.5):
         mergedclusters[mergedname] = contigs
 
     return mergedclusters
-
 
 
 def subgraph_merge(contigsof, threshold=0.5):
@@ -195,7 +192,7 @@ def subgraph_merge(contigsof, threshold=0.5):
     mergedclusters = dict()
 
     for i, subgraph in enumerate(deduplicated_subgraphs):
-        mergedname = 'cluster_' + str(i + 1)
+        mergedname = "cluster_" + str(i + 1)
         contigs = set()
 
         for cluster in subgraph:
@@ -204,6 +201,7 @@ def subgraph_merge(contigsof, threshold=0.5):
         mergedclusters[mergedname] = contigs
 
     return mergedclusters
+
 
 def hierarchical_merge(contigsof, threshold=0.5):
     """Merges pairs together from most to least connected.
@@ -248,10 +246,10 @@ def hierarchical_merge(contigsof, threshold=0.5):
             clustersof[contig].remove(set1)
 
         for contig in set2:
-            clustersof[contig].discard(set2) # no error for set(set1 & set2)
+            clustersof[contig].discard(set2)  # no error for set(set1 & set2)
 
         existing.remove(set1)
-        existing.discard(set2) # don't raise error if set1 == set2
+        existing.discard(set2)  # don't raise error if set1 == set2
 
         # Use clustersof to get list of all sets which may have some overlap with newset
         # We only do this to avoid checking for overlap with *every* existing set
@@ -276,7 +274,7 @@ def hierarchical_merge(contigsof, threshold=0.5):
     mergedclusters = dict()
 
     for number, cluster in enumerate(existing):
-        mergedname = 'cluster_' + str(number + 1)
+        mergedname = "cluster_" + str(number + 1)
         mergedclusters[mergedname] = set(cluster)
 
     return mergedclusters
