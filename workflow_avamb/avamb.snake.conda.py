@@ -255,8 +255,8 @@ rule run_checkm2_per_sample_all_bins:
         int(CHECKM_PPN)
     conda: # we are using an already created environment instead of creating a new one, I could not find a better solution
         "checkm2" 
-    shell:# Unfortunately, snakemake does not allow to run checkm2 as "checkm2 predict ..." because it violates the bash strick mode, a way around is to prepend the location of checkm2 executable path, very inconvinient
-        "/home/ppierali/mambaforge/envs/checkm2/bin/checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
+    shell:
+        "/checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
 
 rule cat_checkm2_all:
     input:
