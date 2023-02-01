@@ -2,38 +2,41 @@ import vamb
 import argparse
 import shutil
 import os
-import numpy as np
 import json
+
+from typing import Optional
 
 
 def main(
-    cluster_scores,
-    cluster_contigs,
-    bin_separator,
-    path_nc_bins_folder,
-    path_bins_folder,
-    path_nc_clusters,
-    min_comp=0.9,
-    max_cont=0.05,
+    cluster_scores: dict[str, tuple[float, float]],
+    cluster_contigs: dict[str, set[str]],
+    bin_separator: Optional[str],
+    path_nc_bins_folder: str,
+    path_bins_folder: str,
+    path_nc_clusters: str,
+    min_comp: float = 0.9,
+    max_cont: float = 0.05,
 ):
 
     cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
-
-    nc_cluster_scores = get_nc_cluster_scores(cluster_scores, cluster_sample)
-
+    nc_cluster_scores = get_nc_cluster_scores(
+        cluster_scores, cluster_sample, min_comp, max_cont
+    )
     create_nc_sample_folders(nc_cluster_scores, cluster_sample, path_nc_bins_folder)
-
     write_nc_bins_from_mdrep_clusters(
         nc_cluster_scores, cluster_sample, path_nc_bins_folder, path_bins_folder
     )
-
     write_quality_report(nc_cluster_scores, path_nc_bins_folder)
-
     write_final_nc_clusters(nc_cluster_scores, cluster_contigs, path_nc_clusters)
 
 
-def get_nc_cluster_scores(cluster_scores, cluster_sample):
-    nc_cluster_scores = dict()
+def get_nc_cluster_scores(
+    cluster_scores: dict[str, tuple[float, float]],
+    cluster_sample: dict[str, str],
+    min_comp: float,
+    max_cont: float,
+) -> dict[str, tuple[float, float]]:
+    nc_cluster_scores: dict[str, tuple[float, float]] = dict()
     for cluster, scores in cluster_scores.items():
         comp, cont = scores
         comp, cont = float(comp), float(cont)
@@ -41,13 +44,15 @@ def get_nc_cluster_scores(cluster_scores, cluster_sample):
         if cluster not in cluster_sample.keys():
             continue
         if comp >= min_comp and cont <= max_cont:
-            nc_cluster_scores[cluster] = [comp, cont]
+            nc_cluster_scores[cluster] = (comp, cont)
 
     return nc_cluster_scores
 
 
-def get_cluster_sample(cluster_contigs, bin_separator):
-    cluster_sample = dict()
+def get_cluster_sample(
+    cluster_contigs: dict[str, set[str]], bin_separator: Optional[str]
+) -> dict[str, str]:
+    cluster_sample: dict[str, str] = dict()
     for cluster_ in cluster_contigs.keys():
         contigs = cluster_contigs[cluster_]
         contig_i = next(iter(contigs))
@@ -57,8 +62,12 @@ def get_cluster_sample(cluster_contigs, bin_separator):
     return cluster_sample
 
 
-def create_nc_sample_folders(cluster_scores, cluster_sample, path_nc_bins_folder):
-    nc_samples = set()
+def create_nc_sample_folders(
+    cluster_scores: dict[str, tuple[float, float]],
+    cluster_sample: dict[str, str],
+    path_nc_bins_folder: str,
+):
+    nc_samples: set[str] = set()
     for cluster in cluster_scores.keys():
 
         sample = cluster_sample[cluster]
@@ -67,12 +76,15 @@ def create_nc_sample_folders(cluster_scores, cluster_sample, path_nc_bins_folder
     for sample in nc_samples:
         try:
             os.mkdir(os.path.join(path_nc_bins_folder, sample))
-        except:
+        except FileExistsError:
             pass
 
 
 def write_nc_bins_from_mdrep_clusters(
-    cluster_scores, cluster_sample, path_nc_bins_folder, path_bins_folder
+    cluster_scores: dict[str, tuple[float, float]],
+    cluster_sample: dict[str, str],
+    path_nc_bins_folder: str,
+    path_bins_folder: str,
 ):
 
     for cluster in cluster_scores.keys():
@@ -82,19 +94,22 @@ def write_nc_bins_from_mdrep_clusters(
         shutil.move(src_bin, trg_bin)
 
 
-def write_quality_report(cluster_scores, path_nc_bins_folder):
+def write_quality_report(
+    cluster_scores: dict[str, tuple[float, float]], path_nc_bins_folder: str
+):
+    with open(os.path.join(path_nc_bins_folder, "quality_report.tsv"), "w") as file:
+        print("Name completeness contamination", sep="\t", file=file)
+        file.flush()
+        for nc_cluster, (completeness, contaminaton) in cluster_scores.items():
+            print(nc_cluster, completeness, contaminaton, sep="\t", file=file)
+            file.flush()
 
-    with open(os.path.join(path_nc_bins_folder, "quality_report.tsv"), "w") as file_:
-        print("Name completeness contamination", sep="\t", file=file_)
-        file_.flush()
-        for nc_cluster, scores in cluster_scores.items():
-            print(nc_cluster, scores[0], scores[1], sep="\t", file=file_)
-            file_.flush()
 
-
-def write_final_nc_clusters(cluster_scores, cluster_contigs, path_nc_clusters):
-
-    # nc_cluster_contigs=dict()
+def write_final_nc_clusters(
+    cluster_scores: dict[str, tuple[float, float]],
+    cluster_contigs: dict[str, set[str]],
+    path_nc_clusters: str,
+):
     with open(path_nc_clusters, "w") as file:
         for nc_cluster in cluster_scores.keys():
             nc_contigs = cluster_contigs[nc_cluster]
