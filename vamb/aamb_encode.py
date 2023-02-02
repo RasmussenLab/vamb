@@ -175,7 +175,7 @@ class AAE(nn.Module):
         loss = ce * ce_weight + sse * sse_weight
         return loss, ce, sse
 
-    def forward(self, depths_in, tnfs_in):
+    def forward(self, depths_in, tnfs_in, z_prior, y_prior):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in)
         z_latent = self._reparameterization(mu, logvar)
         depths_out, tnfs_out = self._decode(z_latent, y_latent)
