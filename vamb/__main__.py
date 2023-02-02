@@ -27,8 +27,8 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
-import aamb
-from aamb import aamb_encode
+
+from vamb import aamb_encode
 
 ################################# DEFINE FUNCTIONS ##########################
 
