@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import json
-from typing import cast Optional
+from typing import cast, Optional
 import vamb
 import shutil
 
