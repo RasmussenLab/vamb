@@ -1,3 +1,0 @@
-Waiting at most 60 seconds for missing files.
-Missing files after 60 seconds. This might be due to filesystem latency. If that is the case, consider to increase the wait time with --latency-wait:
-/home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/bins/S5
