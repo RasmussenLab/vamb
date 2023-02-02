@@ -3,7 +3,6 @@
 
 import numpy as np
 from math import log
-import itertools
 import time
 from torch.utils.data.dataset import TensorDataset as TensorDataset
 from torch.autograd import Variable
@@ -12,18 +11,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
-# from .data_loader_aae import make_dataloader
-import random
-
-# from .calc_loss import calc_loss
-from datetime import datetime
 from torch.utils.data import DataLoader as _DataLoader
 
-# torch.manual_seed(0)
-# from .benchmark import benchmark_2
-
-import vamb
-import os
+from typing import Optional
 
 random_seed = 42
 torch.manual_seed(random_seed)
@@ -34,12 +24,20 @@ np.random.seed(random_seed)
 
 ############################################################################# MODEL ###########################################################
 class AAE(nn.Module):
-    def __init__(self, nsamples, nhiddens, nlatent_l, nlatent_y, sl, slr, alpha, _cuda):
-        if nsamples == None:
+    def __init__(
+        self,
+        nsamples: int,
+        nhiddens: int,
+        nlatent_l: int,
+        nlatent_y,
+        sl: float,
+        slr: float,
+        alpha: Optional[float],
+        _cuda: bool,
+    ):
+        if nsamples is None:
             raise ValueError(
-                "Number of samples  should be provided to define the encoder input layer as well as the categorical latent dimension, not {}".format(
-                    nsamples
-                )
+                f"Number of samples  should be provided to define the encoder input layer as well as the categorical latent dimension, not {nsamples}"
             )
 
         super(AAE, self).__init__()
@@ -108,7 +106,7 @@ class AAE(nn.Module):
     ## Reparametrisation trick
     def _reparameterization(self, mu, logvar):
 
-        Tensor = torch.cuda.FloatTensor if self.usecuda is True else torch.FloatTensor
+        Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
 
         std = torch.exp(logvar / 2)
         sampled_z = Variable(Tensor(np.random.normal(0, 1, (mu.size(0), self.ld))))
@@ -156,14 +154,12 @@ class AAE(nn.Module):
 
     ## Discriminator Z space (continuous latent space defined by mu and sigma layers)
     def _discriminator_z(self, z):
-        validity = self.discriminator_z(z)
-        return validity
+        return self.discriminator_z(z)
 
     ## Discriminator Y space (categorical latent space defined by Y layer)
 
     def _discriminator_y(self, y):
-        validity = self.discriminator_y(y)
-        return validity
+        return self.discriminator_y(y)
 
     def calc_loss(self, depths_in, depths_out, tnf_in, tnf_out):
         # If multiple samples, use cross entropy, else use SSE for abundance
@@ -179,16 +175,11 @@ class AAE(nn.Module):
         loss = ce * ce_weight + sse * sse_weight
         return loss, ce, sse
 
-    def forward(self, depths_in, tnfs_in, z_prior, y_prior):
-        # if self.train():
+    def forward(self, depths_in, tnfs_in):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in)
-
         z_latent = self._reparameterization(mu, logvar)
-
         depths_out, tnfs_out = self._decode(z_latent, y_latent)
-
         d_z_latent = self._discriminator_z(z_latent)
-
         d_y_latent = self._discriminator_y(y_latent)
 
         return mu, depths_out, tnfs_out, z_latent, y_latent, d_z_latent, d_y_latent
@@ -203,7 +194,7 @@ class AAE(nn.Module):
 
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         batchsteps_set = set(batchsteps)
-        ncontigs, nsamples = data_loader.dataset.tensors[0].shape
+        ncontigs, _ = data_loader.dataset.tensors[0].shape
 
         # Initialize generator and discriminator
 
@@ -262,61 +253,50 @@ class AAE(nn.Module):
                     pin_memory=data_loader.pin_memory,
                 )
 
-                # epochs_num=len(dataloader_e[0])
-
-            time_e0 = time.time()
-
             (
                 ED_loss_e,
                 D_z_loss_e,
                 D_y_loss_e,
                 V_loss_e,
-                G_loss_adv_Z_e,
-                G_loss_adv_Y_e,
                 CE_e,
                 SSE_e,
-                NC_S_list_e,
-            ) = (0, 0, 0, 0, 0, 0, 0, 0, [])
+            ) = (0, 0, 0, 0, 0, 0)
 
             total_batches_inthis_epoch = len(data_loader)
             time_epoch_0 = time.time()
 
             for depths_in, tnfs_in, _ in data_loader:  # weights currently unused here
-
-                time_0 = time.time()
-                I = torch.cat((depths_in, tnfs_in), dim=1)
+                nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
 
                 labels_prior = Variable(
-                    Tensor(I.shape[0], 1).fill_(1.0), requires_grad=False
+                    Tensor(nrows, 1).fill_(1.0), requires_grad=False
                 )
                 labels_latent = Variable(
-                    Tensor(I.shape[0], 1).fill_(0.0), requires_grad=False
+                    Tensor(nrows, 1).fill_(0.0), requires_grad=False
                 )
 
                 # Sample noise as discriminator Z,Y ground truth
 
                 if self.usecuda:
-                    z_prior = torch.cuda.FloatTensor(I.shape[0], self.ld).normal_()
+                    z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()
                     z_prior.cuda()
                     ohc = RelaxedOneHotCategorical(
                         torch.tensor([T], device="cuda"),
-                        torch.ones([I.shape[0], self.y_len], device="cuda"),
+                        torch.ones([nrows, self.y_len], device="cuda"),
                     )
                     y_prior = ohc.sample()
                     y_prior = y_prior.cuda()
 
                 else:
                     z_prior = Variable(
-                        Tensor(np.random.normal(0, 1, (I.shape[0], self.ld)))
+                        Tensor(np.random.normal(0, 1, (nrows, self.ld)))
                     )
                     ohc = RelaxedOneHotCategorical(
-                        T, torch.ones([I.shape[0], self.y_len])
+                        T, torch.ones([nrows, self.y_len])
                     )
                     y_prior = ohc.sample()
-
-                time_1 = time.time()
 
                 del ohc
 
@@ -344,8 +324,6 @@ class AAE(nn.Module):
                 vae_loss, ce, sse = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out
                 )
-                # g_loss_adv_z = adversarial_loss(d_z_latent, labels_prior)
-                # g_loss_adv_y = adversarial_loss(d_y_latent, labels_prior)
                 g_loss_adv_z = adversarial_loss(
                     self._discriminator_z(z_latent), labels_prior
                 )
@@ -362,8 +340,6 @@ class AAE(nn.Module):
                 ed_loss.backward()
                 optimizer_E.step()
                 optimizer_D.step()
-
-                time_2 = time.time()
 
                 # ----------------------
                 #  Train Discriminator z
@@ -383,7 +359,6 @@ class AAE(nn.Module):
 
                 d_z_loss.backward()
                 optimizer_D_z.step()
-                time_3 = time.time()
 
                 # ----------------------
                 #  Train Discriminator y
@@ -402,15 +377,6 @@ class AAE(nn.Module):
                 d_y_loss.backward()
                 optimizer_D_y.step()
 
-                time_4 = time.time()
-
-                # Times
-                time_sampling = round(time_1 - time_0, 4)
-                time_ED = round(time_1 - time_0, 4)
-                time_Dz = round(time_2 - time_1, 4)
-                time_Dy = round(time_3 - time_2, 4)
-                time_batch = round(time_4 - time_0, 4)
-
                 ED_loss_e += float(ed_loss.item())
                 V_loss_e += float(vae_loss.item())
                 D_z_loss_e += float(d_z_loss.item())
@@ -421,16 +387,6 @@ class AAE(nn.Module):
             time_epoch_1 = time.time()
             time_e = np.round((time_epoch_1 - time_epoch_0) / 60, 3)
 
-            #            contignames=np.loadtxt('Data/data/gi/names',dtype=str)
-            #            clusters_y_dict = self.get_latents(contignames, data_loader, last_epoch=False)
-            #            clusters_path_aae_y = os.path.join('/home/projects/cpr_10006/people/paupie/test_vamb_aamb_1_1_gi', 'aae_y_clusters_train.tsv')
-            #            clusters_y_split = vamb.vambtools.binsplit(clusters_y_dict, 'C')
-            #            with open(clusters_path_aae_y, 'w') as clustersfile:
-            #                _ = vamb.vambtools.write_clusters(clustersfile, clusters_y_split, min_size=200000, rename=False, cluster_prefix='aae_y_')
-            #            dataset='gi'
-            #            NC_genomes, NC_species, NC_genus = benchmark_2(clusters_path_aae_y, dataset, True ,0.95 , 0.9)
-            #            os.remove(clusters_path_aae_y)
-            #            # print trainning losses/others into log file
             if logfile is not None:
                 print(
                     "\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dz loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}".format(
@@ -485,10 +441,7 @@ class AAE(nn.Module):
         Output:
             y_clusters_dict ({clust_id : [contigs]})
             l_latents array"""
-        encoder = self._encode
         self.eval()
-
-        time0 = time.time()
 
         new_data_loader = _DataLoader(
             dataset=data_loader.dataset,
@@ -499,36 +452,36 @@ class AAE(nn.Module):
             pin_memory=data_loader.pin_memory,
         )
 
-        depths_array, tnf_array, _ = data_loader.dataset.tensors
+        depths_array, _, _ = data_loader.dataset.tensors
 
         length = len(depths_array)
         latent = np.empty((length, self.ld), dtype=np.float32)
         index_contigname = 0
         row = 0
-        # latent_matrix=np.zeros((,self.ld),dtype='float32')
         clust_y_dict = dict()
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         with torch.no_grad():
 
             for depths_in, tnfs_in, _ in new_data_loader:
+                nrows, _ = depths_in.shape
                 I = torch.cat((depths_in, tnfs_in), dim=1)
 
                 if self.usecuda:
-                    z_prior = torch.cuda.FloatTensor(I.shape[0], self.ld).normal_()
+                    z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()
                     z_prior.cuda()
                     ohc = RelaxedOneHotCategorical(
                         torch.tensor([0.15], device="cuda"),
-                        torch.ones([I.shape[0], self.y_len], device="cuda"),
+                        torch.ones([nrows, self.y_len], device="cuda"),
                     )
                     y_prior = ohc.sample()
                     y_prior = y_prior.cuda()
 
                 else:
                     z_prior = Variable(
-                        Tensor(np.random.normal(0, 1, (I.shape[0], self.ld)))
+                        Tensor(np.random.normal(0, 1, (nrows, self.ld)))
                     )
                     ohc = RelaxedOneHotCategorical(
-                        0.15, torch.ones([I.shape[0], self.y_len])
+                        0.15, torch.ones([nrows, self.y_len])
                     )
                     y_prior = ohc.sample()
 
@@ -536,7 +489,7 @@ class AAE(nn.Module):
                     depths_in = depths_in.cuda()
                     tnfs_in = tnfs_in.cuda()
 
-                if last_epoch is True:
+                if last_epoch:
                     mu, _, _, _, y_sample = self(depths_in, tnfs_in, z_prior, y_prior)[
                         0:5
                     ]
@@ -545,13 +498,13 @@ class AAE(nn.Module):
 
                 if self.usecuda:
                     Ys = y_sample.cpu().detach().numpy()
-                    if last_epoch is True:
+                    if last_epoch:
                         mu = mu.cpu().detach().numpy()
                         latent[row : row + len(mu)] = mu
                         row += len(mu)
                 else:
                     Ys = y_sample.detach().numpy()
-                    if last_epoch is True:
+                    if last_epoch:
                         mu = mu.detach().numpy()
                         latent[row : row + len(mu)] = mu
                         row += len(mu)
@@ -560,24 +513,17 @@ class AAE(nn.Module):
                 for _y in Ys:
                     contig_name = contignames[index_contigname]
                     contig_cluster = np.argmax(_y) + 1
-                    # contig_cluster_str = 'cluster_'+str(contig_cluster)
                     contig_cluster_str = str(contig_cluster)
 
-                    if contig_cluster_str not in clust_y_dict.keys():
+                    if contig_cluster_str not in clust_y_dict:
                         clust_y_dict[contig_cluster_str] = set()
 
-                    # else:
                     clust_y_dict[contig_cluster_str].add(contig_name)
 
                     index_contigname += 1
                 del Ys
-                # self.train()
-            # self.train()
 
-            # print(clust_y_dict.items())
-            if last_epoch is True:
+            if last_epoch:
                 return clust_y_dict, latent
             else:
                 return clust_y_dict
-        time1 = time.time()
-        time_Y = np.round(time1 - time0)
