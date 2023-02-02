@@ -1,0 +1,15 @@
+name: avamb
+channels:
+  - pytorch
+  - conda-forge
+  - bioconda
+dependencies:
+  - pytorch
+  - pip
+  - torchvision
+  - cudatoolkit=10.2
+  - pycoverm
+  - networkx
+  - BioPython
+  #- pip: I do not believe it's necessary since we already had installed vamb with pip before
+  #   - https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip # this must be modified 
