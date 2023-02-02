@@ -1,12 +1,11 @@
 import numpy as np
-import os
 import json
 import argparse
 
 
-def update_cluster_score_bin_path(path_checkm_ripped, cluster_score):
-    path_quality_s = os.path.join(path_checkm_ripped, "quality_report.tsv")
-
+def update_cluster_score_bin_path(
+    path_checkm_ripped: str, cluster_score: dict[str, tuple[float, float]]
+):
     c_com_con = np.loadtxt(
         path_checkm_ripped,
         delimiter="\t",
@@ -22,7 +21,7 @@ def update_cluster_score_bin_path(path_checkm_ripped, cluster_score):
         com, con = float(com), float(con)
         print(cluster, "scores were", cluster_score[cluster])
 
-        cluster_score[cluster] = [com, con]
+        cluster_score[cluster] = (com, con)
         print("and now are", cluster_score[cluster])
     return cluster_score
 
