@@ -22,7 +22,7 @@ def main(
     # Path to length.npz of contig length. Output by Vamb
     lengths_npz: Path,
     # Path to CheckM2 quality_report.tsv file
-    quality_report: dict[str,list()],
+    quality_report: dict[str, list],
     # List of paths to clusters.tsv files as output by Vamb.
     # Names of clusters must match those in CheckM2 quality_report,
     # and those of contigs match those in names_npz
@@ -33,11 +33,10 @@ def main(
     min_comp: float,
     # max contamination for bin to be included into the dereplication process
     max_cont: float,
-    bins_extension: str
+    bins_extension: str,
 ) -> None:
     # Load contig names
-    #contig_names: list[str] = list(vamb.vambtools.read_npz(names_npz))
-    contig_names: list[str] = list(np.loadtxt(names,dtype=object))
+    contig_names: list[str] = list(np.loadtxt(names, dtype=object))
 
     assert isinstance(contig_names, list)
     assert isinstance(contig_names[0], str)
@@ -47,8 +46,9 @@ def main(
     assert len(lengths) == len(contig_names)
 
     # Load CheckM2
-    (bin_names, qualities, bin_by_name) = load_checkm2(quality_report,min_comp, max_cont,bins_extension)
-    #print(bin_by_name)
+    (bin_names, qualities, bin_by_name) = load_checkm2(
+        quality_report, min_comp, max_cont, bins_extension
+    )
     # Load bins
     (bin_lengths, union_bins) = load_binnings(
         binnings, contig_names, lengths, bin_by_name
@@ -64,14 +64,13 @@ def main(
     with open(outpath, "w") as file:
         for bin in dereplicated:
             bin_name = bin_names[bin]
-            bin_name = bin_name.replace('.fna','')
+            bin_name = bin_name.replace(".fna", "")
             for contig in union_bins[bin]:
                 print(bin_name, contig_names[contig], sep="\t", file=file)
 
 
-# TODO: Change to list of paths
 def load_checkm2(
-    quality_report: dict[str,list()],
+    quality_report: dict[str, list],
     min_completeness: float,
     max_contamination: float,
     bins_extension: str,
@@ -83,7 +82,6 @@ def load_checkm2(
     """Extract all bin names and assign them either a BinId, or else None,
     if their completeness/contamination is so bad the bin should be discarded
     """
-    print('min comp ',min_completeness, ' max cont '  ,max_contamination)
     # This is None if the bin is to be discarded
     bin_by_name: dict[str, Optional[BinId]] = dict()
     bin_names: list[str] = []
@@ -92,12 +90,10 @@ def load_checkm2(
     # The file looks like this:
     # Name    Completeness    Contamination   Completeness_Model_Used Translation_Table_Used  Additional_Notes
     # AAE_UC_Y_1980340Ccluster_501--AAE_UC_v3_1980340Ccluster_2599    5.18    0.0     Neural Network (Specific Model) 11      None
-    
-    for cluster,scores in quality_report.items():
-        name=cluster+bins_extension
+
+    for cluster, scores in quality_report.items():
+        name = cluster + bins_extension
         comp, cont = scores
-        #print(name,comp,cont)
-        #name= name.replace('.fna','')
         completeness = float(comp) / 100
         contamination = float(cont) / 100
         assert 0.0 <= completeness <= 1.0
@@ -111,9 +107,7 @@ def load_checkm2(
         else:
             bin_by_name[name] = None
 
-    assert sum(1 for i in bin_by_name.values() if isinstance(i, int)) == len(
-        bin_names
-    )
+    assert sum(1 for i in bin_by_name.values() if isinstance(i, int)) == len(bin_names)
     return (bin_names, qualities, bin_by_name)
 
 
@@ -133,21 +127,18 @@ def load_binnings(
 
     # Load binnings
     n_union_bins = sum(1 for i in bin_by_name.values() if i is not None)
-    
+
     lengthof = dict(zip(contig_names, lengths))
-    
+
     union_bins: list[Optional[set[ContigId]]] = [None] * n_union_bins
     for binning_path in binnings:
         with open(binning_path) as file:
             clusters = vamb.vambtools.read_clusters(file)
-            clusters_filtered = filterclusters(clusters,lengthof)
+            clusters_filtered = filterclusters(clusters, lengthof)
             # filter by clusters larger than 200kbs
             for (bin_name, contigs) in clusters_filtered.items():
-                
-                #if bin_name.startswith('M_'):
-                #    bin_name += '.fa.gz'
-                #else:
-                bin_name += '.fna'
+
+                bin_name += ".fna"
                 # None is a valid value, so we use -1 as sentinel for missing
                 bin = bin_by_name.get(bin_name, -1)
                 if bin == -1:
@@ -155,7 +146,6 @@ def load_binnings(
                         f"Bin {bin_name} found in binning {binning_path}, but is not scored by CheckM2"
                     )
                 # Means: Below threshold, so skip it
-                    #continue
                 elif bin is None:
                     continue
                 else:
@@ -174,7 +164,7 @@ def load_binnings(
 
     for i in union_bins:
         assert isinstance(i, set)
-    union_bins_asserted: list[set[ContigId]] = union_bins # type: ignore
+    union_bins_asserted: list[set[ContigId]] = union_bins  # type: ignore
 
     for contigs in union_bins_asserted:
         bin_lengths.append(sum(lengths[contig] for contig in contigs))
@@ -183,8 +173,8 @@ def load_binnings(
 
 
 def filterclusters(
-    clusters: Mapping[str , set], 
-    lengthof: Mapping[str,int]) ->  Mapping[str , set] :
+    clusters: Mapping[str, set], lengthof: Mapping[str, int]
+) -> Mapping[str, set]:
     filtered_bins = dict()
     for medoid, contigs in clusters.items():
         binsize = sum(lengthof[contig] for contig in contigs)
@@ -195,16 +185,13 @@ def filterclusters(
     return filtered_bins
 
 
-
-
 def dereplicate(
     union_bins: Sequence[set[ContigId]],
     qualities: Sequence[tuple[float, float]],
     contig_lengths: np.ndarray,
     bin_lengths: Sequence[int],
-    threshold=float,
+    threshold: float,
 ) -> list[BinId]:
-    #print('min cov ',threshold)
     "Removes bins if they are too similar to another bin. Return list of kept bins"
     assert len(union_bins) == len(qualities) == len(bin_lengths)
 
@@ -234,8 +221,6 @@ def get_binsof(union_bins: Iterable[Iterable[ContigId]]) -> dict[ContigId, list[
 
 def bin_score(completeness: float, contamination: float) -> float:
     return completeness - 5 * contamination
-    #return 2*(completeness * (100-contamination))/(completeness * (100-contamination))
-
 
 def get_overlapping_bin_pairs(
     binsof: Mapping[ContigId, list[BinId]], qualities: Sequence[tuple[float, float]]
@@ -285,27 +270,36 @@ def compute_to_remove(
     return result
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cs_d", type=str, help="path bins_scores dictionary")
     parser.add_argument("--names", type=str, help="Contig names txt file path ")
     parser.add_argument("--lengths", type=str, help="Contig lengths npz file path ")
-    parser.add_argument("--output", type=str, help="Path output clusters generated by dereplicating bins")
-    parser.add_argument("--clusters", type=str, nargs='*', help="Path input clusters generated by aamb and vamb")
-    parser.add_argument("--cov", type=float,default=0.75, help="Min coverage ")
-    parser.add_argument("--comp", type=float,default=0.9 ,help="Min completeness ")
-    parser.add_argument("--cont", type=float,default=0.05 ,help="Min contamination ")
-    parser.add_argument("--bins_extension", type=str,default='.fna' ,help="Extension of the bins  ")
-
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Path output clusters generated by dereplicating bins",
+    )
+    parser.add_argument(
+        "--clusters",
+        type=str,
+        nargs="*",
+        help="Path input clusters generated by aamb and vamb",
+    )
+    parser.add_argument("--cov", type=float, default=0.75, help="Min coverage ")
+    parser.add_argument("--comp", type=float, default=0.9, help="Min completeness ")
+    parser.add_argument("--cont", type=float, default=0.05, help="Max contamination ")
+    parser.add_argument(
+        "--bins_extension", type=str, default=".fna", help="Extension of the bins  "
+    )
 
     opt = parser.parse_args()
     args = vars(parser.parse_args())
-    print(args)
     with open(opt.cs_d) as f:
-        cluster_scores=json.load(f)
+        cluster_scores = json.load(f)
 
-    main(outpath=opt.output,
+    main(
+        outpath=opt.output,
         names=opt.names,
         lengths_npz=opt.lengths,
         quality_report=cluster_scores,
@@ -313,6 +307,5 @@ if __name__ == '__main__':
         min_cov=opt.cov,
         min_comp=opt.comp,
         max_cont=opt.cont,
-        bins_extension=opt.bins_extension)
-
-
+        bins_extension=opt.bins_extension,
+    )

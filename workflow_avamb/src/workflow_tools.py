@@ -1,9 +1,9 @@
 import numpy as np
 import os
 import json
-import argparse
-
-from typing import cast
+from typing import cast Optional
+import vamb
+import shutil
 
 
 def get_cluster_score_bin_path(
@@ -38,28 +38,24 @@ def get_cluster_score_bin_path(
     return cluster_score, bin_path
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--s", type=str, help="path checkm2 that contains all samples")
-    parser.add_argument("--b", type=str, help="path all bins ")
-    parser.add_argument(
-        "--cs_d", type=str, help="cluster_score dictionary will be stored here"
+def update_cluster_score_bin_path(
+    path_checkm_ripped: str, cluster_score: dict[str, tuple[float, float]]
+) -> dict[str, tuple[float,float]] :
+    c_com_con = np.loadtxt(
+        path_checkm_ripped,
+        delimiter="\t",
+        skiprows=1,
+        usecols=(0, 1, 2),
+        dtype=str,
+        ndmin=2,
     )
-    parser.add_argument(
-        "--bp_d", type=str, help="bin_path dictionary will be stored here "
-    )
+    for row in c_com_con:
+        cluster, com, con = row
+        if "--" in cluster:
+            continue
+        com, con = float(com), float(con)
+        print(cluster, "scores were", cluster_score[cluster])
 
-    opt = parser.parse_args()
-
-    bins_set = set()
-    for sample in os.listdir(opt.b):
-        for bin_ in os.listdir(os.path.join(opt.b, sample)):
-            if ".fna" in bin_:
-                bins_set.add(bin_)
-
-    cluster_score, bin_path = get_cluster_score_bin_path(opt.s, opt.b, bins_set)
-    with open(opt.cs_d, "w") as f:
-        json.dump(cluster_score, f)
-
-    with open(opt.bp_d, "w") as f:
-        json.dump(bin_path, f)
+        cluster_score[cluster] = (com, con)
+        print("and now are", cluster_score[cluster])
+    return cluster_score
