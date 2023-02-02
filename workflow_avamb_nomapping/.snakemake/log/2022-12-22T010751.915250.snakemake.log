@@ -1,8 +1,0 @@
-Building DAG of jobs...
-InputFunctionExceptionin line 481 of /home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py:
-Error:
-  IndexError: list index out of range
-Wildcards:
-
-Traceback:
-  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py", line 383, in ripped_bins_avamb_check_output_f

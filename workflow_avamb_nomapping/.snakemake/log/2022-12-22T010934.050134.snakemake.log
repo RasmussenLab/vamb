@@ -1,8 +1,0 @@
-Building DAG of jobs...
-InputFunctionExceptionin line 481 of /home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py:
-Error:
-  ValueError: invalid literal for int() with base 10: 'aae_y_10\tS1CNODE_1588_length_4364_cov_133.668136\n'
-Wildcards:
-
-Traceback:
-  File "/home/projects/cpr_10006/projects/aamb/avamb/vamb/workflow_avamb/avamb.snake.conda.py", line 384, in ripped_bins_avamb_check_output_f

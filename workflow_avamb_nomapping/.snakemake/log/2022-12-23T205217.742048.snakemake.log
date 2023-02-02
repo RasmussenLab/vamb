@@ -1,6 +1,0 @@
-Building DAG of jobs...
-MissingInputException in rule run_avamb in line 61 of /home/projects/cpr_10006/projects/aamb/avamb/workflow_avamb_nomapping/avamb.snake.conda.py:
-Missing input files for rule run_avamb:
-    output: /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_z_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/aae_y_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/vae_clusters.tsv, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/contignames, /home/projects/cpr_10006/projects/aamb/tests/test_workflow_no_mapping/avamb_outdir/avamb/lengths.npz
-    affected files:
-        /home/projects/cpr_10006/people/paupie/aae_new/bam_files_sorted/urog/*.bam
