@@ -3,9 +3,10 @@ import os
 import sys
 from vamb.vambtools import concatenate_fasta
 SNAKEDIR = os.path.dirname(workflow.snakefile)
+print(os.path.join(SNAKEDIR, "src", "create_cluster_scores_bin_path_dict.py"))
+
 sys.path.append(os.path.join(SNAKEDIR, 'src'))
 
-import 
 
 def get_config(name, default, regex):
     res = config.get(name, default).strip()
@@ -192,12 +193,15 @@ rule run_avamb:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
         bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
     output:
-        outdir_avamb=directory(os.path.join(OUTDIR,"envs/dereplication.yaml")),
+        outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters.tsv"),
         contignames=os.path.join(OUTDIR,"avamb/contignames"),
-        contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz")
+        contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz"),
+
+
+
     params:
         walltime="86400",
         nodes="1",
@@ -216,7 +220,7 @@ rule run_avamb:
         {AVAMB_PRELOAD}
         vamb --outdir {output.outdir_avamb} --fasta {input.contigs} --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
         touch {log}
-        """"
+       	"""
 
 checkpoint samples_with_bins:
     input:        
@@ -244,8 +248,8 @@ def samples_with_bins_f(wildcards):
         
 rule run_checkm2_per_sample_all_bins:
     input:
-        bins_dir_sample=os.path.join(OUTDIR,"avamb/bins/{sample}"),
-        out_dir_checkm2=os.path.join(OUTDIR,"avamb/tmp/checkm2_all")
+        bins_dir_sample=os.path.join(OUTDIR,"avamb/bins/{sample}")
+        #out_dir_checkm2=os.path.join(OUTDIR,"avamb/tmp/checkm2_all")
     output:
         out_log_file=os.path.join(OUTDIR,"avamb/tmp/checkm2_all_{sample}_bins_finished.log")
     params:
@@ -259,7 +263,7 @@ rule run_checkm2_per_sample_all_bins:
            # checkm2 needs to download a database after being installed and cannot be installed with neither pip nor conda 
         "checkm2" 
     shell:
-        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {input.out_dir_checkm2}/{wildcards.sample} 2> {output.out_log_file}"
+        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} 2> {output.out_log_file}"
 
 rule cat_checkm2_all:
     input:
@@ -278,14 +282,12 @@ rule cat_checkm2_all:
             
 rule create_cluster_scores_bin_path_dictionaries:
     input:
-        checkm2_finished_log_file = os.path.join(OUTDIR,"avamb/tmp/checkm2_finished.txt"),
-        bins_dir = os.path.join(OUTDIR,'avamb','bins'),
-        checkm2_folder = os.path.join(OUTDIR,'avamb','tmp','checkm2_all')
+        checkm2_finished_log_file = os.path.join(OUTDIR,"avamb/tmp/checkm2_finished.txt")
     output:
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/bp_d_avamb.json"),
     params:
-        #path = os.path.join(os.path.dirname(SNAKEDIR), "src", "create_cluster_scores_bin_path_dict.py"),
+        path = os.path.join(SNAKEDIR, "src", "create_cluster_scores_bin_path_dict.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
@@ -295,21 +297,23 @@ rule create_cluster_scores_bin_path_dictionaries:
     conda:
         "envs/dereplication.yaml"
 
-    run:
-        from workflow_tools import get_cluster_score_bin_path
-        bins_set = set()
-        for sample in os.listdir(input.bins_dir) :
-            for bin_ in os.listdir(os.path.join(input.bins_dir, sample)):
-                if ".fna" in bin_:
-                    bins_set.add(bin_)
-
-        cluster_score, bin_path = get_cluster_score_bin_path(input.checkm2_folder,
-            input.bins_dir, 
-            bins_set)
-        with open(output.cluster_score_dict_path_avamb, "w") as f:
-            json.dump(cluster_score, f)
-        with open(output.bin_path_dict_path_avamb, "w") as f:
-            json.dump(bin_path, f)
+    #run:
+    #    from workflow_tools import get_cluster_score_bin_path
+    #    bins_set = set()
+    #    for sample in os.listdir(input.bins_dir) :
+    #        for bin_ in os.listdir(os.path.join(input.bins_dir, sample)):
+    #            if ".fna" in bin_:
+    #                bins_set.add(bin_)
+    #		
+    #    cluster_score, bin_path = get_cluster_score_bin_path(input.checkm2_folder,
+    #        input.bins_dir, 
+    #        bins_set)
+    #    with open(output.cluster_score_dict_path_avamb, "w") as f:
+    #        json.dump(cluster_score, f)
+    #    with open(output.bin_path_dict_path_avamb, "w") as f:
+    #        json.dump(bin_path, f)
+    shell:
+        "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
 rule run_drep_manual_vamb_z_y:
     input:
@@ -323,7 +327,7 @@ rule run_drep_manual_vamb_z_y:
     output:
         clusters_avamb_manual_drep=os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_clusters.tsv")
     params:
-        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "manual_drep_JN.py"),
+        path=os.path.join(SNAKEDIR, "src", "manual_drep_JN.py"),
         walltime="86400",
         nodes="1",
         ppn="5",
@@ -350,7 +354,7 @@ checkpoint create_ripped_bins_avamb:
         path_avamb_manually_drep_clusters_ripped = os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
         name_bins_ripped_file = os.path.join(OUTDIR,"avamb/tmp/bins_ripped_avamb.log")
     params:
-        path = os.path.join(os.path.dirname(SNAKEDIR), "src", "rip_bins.py"),
+        path = os.path.join(SNAKEDIR, "src", "rip_bins.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
@@ -365,7 +369,7 @@ checkpoint create_ripped_bins_avamb:
         --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz\
         -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/avamb/tmp/ripped_bins\
         --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} 
-        """"
+        """
 
 rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
@@ -378,7 +382,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         os.path.join(OUTDIR,"avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log")
 
     params:
-        path = os.path.join(os.path.dirname(SNAKEDIR), "src", "mv_bins_from_mdrep_clusters.py"),
+        path = os.path.join(SNAKEDIR, "src", "mv_bins_from_mdrep_clusters.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
@@ -428,7 +432,7 @@ rule run_checkm2_ripped_bins_avamb:
         """
         checkm2 predict --threads {CHECKM_PPN_r} --input {input}\
          --output-directory {output}/checkm2_out 2> {log}
-         """"
+        """
 
 rule update_cs_d_avamb:
     input:
@@ -437,7 +441,7 @@ rule update_cs_d_avamb:
     output:
         os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log")
     params:
-        #path = os.path.join(os.path.dirname(SNAKEDIR), "src", "update_cluster_scores_dict_after_ripping.py"),
+        path = os.path.join(SNAKEDIR, "src", "update_cluster_scores_dict_after_ripping.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
@@ -446,19 +450,19 @@ rule update_cs_d_avamb:
         5
     conda:
         "envs/dereplication.yaml"
-    run:
-        with open(input.cluster_score_dict_path_avamb) as f:
-            cluster_score = json.load(f)
-
-        cluster_score = update_cluster_score_bin_path(input.scores_bins_ripped, cluster_score)
-
-        with open(opt.cs_d, "w") as f:
-            json.dump(cluster_score, f)
-        with open(output,'w') as f:
-            f.write('Cluster scores updated\n')
-
-    #shell:
-    #    "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
+#    run:
+#        with open(input.cluster_score_dict_path_avamb) as f:
+#            cluster_score = json.load(f)
+#
+#        cluster_score = update_cluster_score_bin_path(input.scores_bins_ripped, cluster_score)
+#
+#        with open(opt.cs_d, "w") as f:
+#            json.dump(cluster_score, f)
+#        with open(output,'w') as f:
+#            f.write('Cluster scores updated\n')
+#
+    shell:
+        "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
 
 rule aggregate_nc_bins_avamb:
@@ -474,7 +478,7 @@ rule aggregate_nc_bins_avamb:
     output:
         os.path.join(OUTDIR,"avamb/tmp/contigs_transfer_finished_avamb.log")
     params:
-        path = os.path.join(os.path.dirname(SNAKEDIR), "src", "transfer_contigs_and_aggregate_all_nc_bins.py"),
+        path = os.path.join(SNAKEDIR, "src", "transfer_contigs_and_aggregate_all_nc_bins.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
@@ -485,11 +489,12 @@ rule aggregate_nc_bins_avamb:
         "envs/dereplication.yaml"
 
     shell:
-        """python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters}\
+        """
+	python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters}\
         --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped}\
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb}\
         --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C  2>  {output}
-        """"
+        """
 
 
 rule write_clusters_from_nc_folders:
@@ -502,7 +507,7 @@ rule write_clusters_from_nc_folders:
     log:
         os.path.join(OUTDIR,"avamb/tmp/final_avamb_clusters_written.log"),
     params:
-        path = os.path.join(os.path.dirname(SNAKEDIR), "src", "write_clusters_from_dereplicated_and_ripped_bins.sh"),
+        path = os.path.join(SNAKEDIR, "src", "write_clusters_from_dereplicated_and_ripped_bins.sh"),
         walltime = "86400",
         nodes = "1",
         ppn = "5",
