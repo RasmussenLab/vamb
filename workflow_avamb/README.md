@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install), create 2 conda environments: one named `avamb` and another named `checkm2` as follows:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install) and [vamb](https://github.com/RasmussenLab/vamb#installation). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for it:
 
 ```
  # Install CheckM2 in checkm2 environment
@@ -28,22 +28,8 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  cd  CheckM2  && python setup.py install && cd ..
  checkm2 database --download
  conda deactivate
- # Install Avamb in avamb environment
- conda config --append channels conda-forge
- conda config --append channels bioconda
- conda config --append channels pytorch
- mamba create -n avamb python=3.10
- mamba install -n avamb snakemake "samtools>=1.8" minimap2 pytorch torchvision cudatoolkit=10.2 networkx # we might have to add checkm2 whenever it's possible to install it through conda (mamba)
- conda activate avamb
- pip install pycoverm
- git clone https://github.com/RasmussenLab/avamb.git -b avamb_new
- cd avamb
- pip install -e .
- conda deactivate
 ```
-
-We only have access to `avamb` and the other programs when we are inside this specific conda environment, the same applies for `checkm2`. We can use `conda activate avamb` to activate the environment (the name of shell changes and should say something with avamb) and `conda deactivate` to get out of it again. Therefore, if you find an error further down it could simply be because you have not activated the environment.  
-
+However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
 
 ## Set up configuration with your data
 
@@ -94,14 +80,14 @@ When running the workflow use snakemake, give it the maximum number of cores you
 
 ```
 conda activate avamb
-snakemake --cores 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.py --use-conda
+snakemake --cores 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --use-conda
 ```
 
 If you want to use snakemake on a compute cluster using `qsub` we add the following `--cluster` option below. 
 ```
 
 conda activate avamb
-snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.py --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
+snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
 ```
 
 Note 1: If you want to re-run with different parameters of AVAMB you can change  `avamb_params` in the config-file, but remember to rename the  `outdir` configuration file entry, otherwise it will overwrite it.
