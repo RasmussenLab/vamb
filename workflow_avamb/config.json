@@ -13,5 +13,5 @@
    "checkm2_ppn_r": "30",
    "avamb_params": "-o C --minfasta 200000 ",
    "avamb_preload": "",
-   "outdir":"/home/ppierali/input_test_avamb/avamb_outdir"
+   "outdir": "/home/ppierali/input_test_avamb/avamb_outdir"
 }
