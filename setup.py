@@ -22,7 +22,7 @@ SETUP_METADATA = \
     "ext_modules": [Extension("vamb._vambtools",
                                sources=["src/_vambtools.pyx"],
                                language="c")],
-    "install_requires": ["numpy>=1.20", "torch>=1.13", "pysam>=0.14", "pycoverm","snakemake"],
+    "install_requires": ["numpy>=1.20", "torch>=1.13", "pysam>=0.14", "pycoverm"],
     "setup_requires": ['Cython>=0.29', "setuptools>=58.0"],
     "python_requires": ">=3.5",
     "classifiers":[

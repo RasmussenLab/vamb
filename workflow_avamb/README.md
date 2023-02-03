@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install) and [vamb](https://github.com/RasmussenLab/vamb#installation). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for it:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
 
 ```
  # Install CheckM2 in checkm2 environment
@@ -28,6 +28,15 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  cd  CheckM2  && python setup.py install && cd ..
  checkm2 database --download
  conda deactivate
+ # Install Avamb in avamb environment
+ conda config --add channels conda-forge
+ conda config --add channels bioconda
+ mamba create -n avamb python=3.9
+ mamba install -n avamb -c snakemake pip biopython
+ conda activate avamb 
+ #pip install vamb # uncomment once it's merged with avamb
+ git clone https://github.com/RasmussenLab/avamb.git -b avamb_new # remove once it's merged with vamb
+ cd avamb && pip install -e . && .. # remove once it's merged with avamb
 ```
 However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
 

@@ -82,7 +82,7 @@ rule cat_contigs:
     output:
         os.path.join(OUTDIR,"contigs.flt.fna.gz")
     params:
-        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "concatenate.py"),
+        path=os.path.join(os.path.dirname(SNAKEDIR), "../src", "concatenate.py"),
         walltime="864000",
         nodes="1",
         ppn="1",
@@ -91,8 +91,8 @@ rule cat_contigs:
         1
     log:
         os.path.join(OUTDIR,"log/contigs/catcontigs.log")
-    conda:
-        "envs/dereplication.yaml"
+    #conda:
+    #    "envs/dereplication.yaml"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -294,24 +294,8 @@ rule create_cluster_scores_bin_path_dictionaries:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
-
-    #run:
-    #    from workflow_tools import get_cluster_score_bin_path
-    #    bins_set = set()
-    #    for sample in os.listdir(input.bins_dir) :
-    #        for bin_ in os.listdir(os.path.join(input.bins_dir, sample)):
-    #            if ".fna" in bin_:
-    #                bins_set.add(bin_)
-    #		
-    #    cluster_score, bin_path = get_cluster_score_bin_path(input.checkm2_folder,
-    #        input.bins_dir, 
-    #        bins_set)
-    #    with open(output.cluster_score_dict_path_avamb, "w") as f:
-    #        json.dump(cluster_score, f)
-    #    with open(output.bin_path_dict_path_avamb, "w") as f:
-    #        json.dump(bin_path, f)
+    #conda:
+    #    "envs/dereplication.yaml"
     shell:
         "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
@@ -334,8 +318,8 @@ rule run_drep_manual_vamb_z_y:
         mem="10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
+    #conda:
+    #    "envs/dereplication.yaml"
 
     shell:
         """
@@ -361,8 +345,8 @@ checkpoint create_ripped_bins_avamb:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
+    #conda:
+    #    "envs/dereplication.yaml"
     shell: 
         """
         python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}\
@@ -389,8 +373,8 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
+    #conda:
+    #    "envs/dereplication.yaml"
 
     shell:
         """
@@ -426,8 +410,8 @@ rule run_checkm2_ripped_bins_avamb:
         mem=CHECKM_MEM_r
     threads:
         int(CHECKM_PPN_r)
-    conda:
-        "checkm2" 
+    #conda:
+    #    "checkm2" 
     shell:
         """
         checkm2 predict --threads {CHECKM_PPN_r} --input {input}\
@@ -448,19 +432,8 @@ rule update_cs_d_avamb:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
-#    run:
-#        with open(input.cluster_score_dict_path_avamb) as f:
-#            cluster_score = json.load(f)
-#
-#        cluster_score = update_cluster_score_bin_path(input.scores_bins_ripped, cluster_score)
-#
-#        with open(opt.cs_d, "w") as f:
-#            json.dump(cluster_score, f)
-#        with open(output,'w') as f:
-#            f.write('Cluster scores updated\n')
-#
+    #conda:
+    #    "envs/dereplication.yaml"
     shell:
         "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
@@ -485,9 +458,8 @@ rule aggregate_nc_bins_avamb:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
-
+    #conda:
+    #    "envs/dereplication.yaml"
     shell:
         """
 	python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters}\
@@ -514,8 +486,8 @@ rule write_clusters_from_nc_folders:
         mem = "10gb"
     threads:
         5
-    conda:
-        "envs/dereplication.yaml"
+    #conda:
+    #    "envs/dereplication.yaml"
     
     shell:
         "sh {params.path} -d {input.nc_bins} -o {output} 2> {log} "
