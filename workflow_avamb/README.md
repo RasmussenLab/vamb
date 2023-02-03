@@ -32,11 +32,12 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda config --add channels conda-forge
  conda config --add channels bioconda
  mamba create -n avamb python=3.9
- mamba install -n avamb -c snakemake pip biopython orderedset
- conda activate avamb 
+ mamba install -n avamb snakemake pip biopython netowrkx
+ conda activate avamb
+ pip install ordered-set 
  #pip install vamb # uncomment once it's merged with avamb
  git clone https://github.com/RasmussenLab/avamb.git -b avamb_new # remove once it's merged with vamb
- cd avamb && pip install -e . && .. # remove once it's merged with avamb
+ cd avamb && pip install -e . && cd .. # remove once it's merged with avamb
 ```
 However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
 
