@@ -74,23 +74,25 @@ for line in fh_in:
 # target
 rule all:
     input:
-        os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
-
+        #os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
+        os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log")
 rule cat_contigs:
     input:
         contigs_list
     output:
         os.path.join(OUTDIR,"contigs.flt.fna.gz")
     params:
-        path=os.path.join(os.path.dirname(SNAKEDIR), "../src", "concatenate.py"),
+        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "concatenate.py"),
         walltime="864000",
         nodes="1",
         ppn="1",
-        mem="10gb"
+        mem="5gb"
     threads:
         1
     log:
-        os.path.join(OUTDIR,"log/contigs/catcontigs.log")
+        o = os.path.join(OUTDIR,"log/contigs/catcontigs.o"),
+        e = os.path.join(OUTDIR,"log/contigs/catcontigs.e")
+
     #conda:
     #    "envs/dereplication.yaml"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
@@ -108,11 +110,15 @@ rule index:
     threads:
         1
     log:
-        os.path.join(OUTDIR,"log/contigs/index.log")
+        out_ind = os.path.join(OUTDIR,"log/contigs/index.log"),
+        o = os.path.join(OUTDIR,"log/contigs/index.o"),
+        e = os.path.join(OUTDIR,"log/contigs/index.e")
+ 
+
     conda: 
         "envs/minimap2.yaml"
     shell:
-        "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log}"
+        "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log.out_ind}"
 
 # This rule creates a SAM header from a FASTA file.
 # We need it because minimap2 for truly unknowable reasons will write
@@ -133,11 +139,14 @@ rule dict:
     threads:
         1
     log:
-        os.path.join(OUTDIR,"log/contigs/dict.log")
+        out_dict= os.path.join(OUTDIR,"log/contigs/dict.log"),
+        o = os.path.join(OUTDIR,"log/contigs/index.o"),
+        e = os.path.join(OUTDIR,"log/contigs/index.e")
+
     conda:
         "envs/samtools.yaml"
     shell:
-        "samtools dict {input} | cut -f1-3 > {output} 2> {log}"
+        "samtools dict {input} | cut -f1-3 > {output} 2> {log.out_dict}"
 
 rule minimap:
     input:
@@ -154,7 +163,10 @@ rule minimap:
     threads:
         int(MM_PPN)
     log:
-        os.path.join(OUTDIR,"log/map/{sample}.minimap.log")
+        out_minimap = os.path.join(OUTDIR,"log/map/{sample}.minimap.log"),
+        o = os.path.join(OUTDIR,"log/map/{sample}.minimap.o"),
+        e = os.path.join(OUTDIR,"log/map/{sample}.minimap.e")
+
     conda:
         "envs/minimap2.yaml"
     shell:
@@ -163,7 +175,7 @@ rule minimap:
         " | grep -v '^@'"
         " | cat {input.dict} - "
         " | samtools view -F 3584 -b - " # supplementary, duplicate read, fail QC check
-        " > {output.bam} 2> {log}"
+        " > {output.bam} 2> {log.out_minimap}"
 
 rule sort:
     input:
@@ -179,11 +191,14 @@ rule sort:
     threads:
         2
     log:
-        os.path.join(OUTDIR,"log/map/{sample}.sort.log")
+        out_sort = os.path.join(OUTDIR,"log/map/{sample}.sort.log"),
+        o = os.path.join(OUTDIR,"log/map/{sample}.sort.o"),
+        e = os.path.join(OUTDIR,"log/map/{sample}.sort.e")
+       
     conda:
         "envs/samtools.yaml"
     shell:
-        "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2>{log}"
+        "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2>{log.out_sort}"
 
 
 
@@ -192,16 +207,16 @@ rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
         bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
+        #contigs = os.path.join(OUTDIR,"contigs.flt.fna"),
+        #bam_files = os.path.join(OUTDIR,"mapped")
+
     output:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters.tsv"),
         contignames=os.path.join(OUTDIR,"avamb/contignames"),
-        contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz"),
-
-
-
+        contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz")
     params:
         walltime="86400",
         nodes="1",
@@ -210,16 +225,20 @@ rule run_avamb:
         cuda="--cuda" if CUDA else ""
     threads:
         int(avamb_threads)
-    
+    conda:
+        "avamb" 
+   
     log:
-        os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log")
+        vamb_out=os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log"),
+        o=os.path.join(OUTDIR,'log','run_avamb.out'),
+        e=os.path.join(OUTDIR,'log','run_avamb.err')
 
     shell:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
-        touch {log}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
+        touch {log.vamb_out}
        	"""
 
 checkpoint samples_with_bins:
@@ -232,6 +251,10 @@ checkpoint samples_with_bins:
         nodes="1",
         ppn="1",
         mem="1gb"
+    log:
+        o=os.path.join(OUTDIR,'log','samples_with_bins.out'),
+        e=os.path.join(OUTDIR,'log','samples_with_bins.err')
+
     threads:
         1
     shell:
@@ -259,8 +282,11 @@ rule run_checkm2_per_sample_all_bins:
         mem=CHECKM_MEM
     threads:
         int(CHECKM_PPN)
-    conda: # we are using an already created environment instead of creating a new one, I could not find a better solution since 
-           # checkm2 needs to download a database after being installed and cannot be installed with neither pip nor conda 
+    log:
+        o=os.path.join(OUTDIR,'log','checkm2_{sample}.out'),
+        e=os.path.join(OUTDIR,'log','checkm2_{sample}.err')
+
+    conda: 
         "checkm2" 
     shell:
         "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} 2> {output.out_log_file}"
@@ -273,10 +299,14 @@ rule cat_checkm2_all:
     params:
         walltime="86400",
         nodes="1",
-        ppn="2",
-        mem="5gb"
+        ppn="1",
+        mem="1gb"
     threads:
         1
+    log:
+        o=os.path.join(OUTDIR,'log','cat_checkm2.out'),
+        e=os.path.join(OUTDIR,'log','cat_checkm2.err')
+
     shell:
         "touch {output}"
             
@@ -290,12 +320,16 @@ rule create_cluster_scores_bin_path_dictionaries:
         path = os.path.join(SNAKEDIR, "src", "create_cluster_scores_bin_path_dict.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "4",
+        mem = "1gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
+    conda:
+        "avamb"   
+    log:
+        o=os.path.join(OUTDIR,'log','cs_bp_dicts.out'),
+        e=os.path.join(OUTDIR,'log','cs_bp_dicts.err')
+
     shell:
         "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
@@ -315,11 +349,14 @@ rule run_drep_manual_vamb_z_y:
         walltime="86400",
         nodes="1",
         ppn="5",
-        mem="10gb"
+        mem="5gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
+    conda:
+        "avamb"
+    log:
+        o=os.path.join(OUTDIR,'log','dereplication.out'),
+        e=os.path.join(OUTDIR,'log','dereplication.err')
 
     shell:
         """
@@ -345,8 +382,12 @@ checkpoint create_ripped_bins_avamb:
         mem = "10gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
+    conda:
+        "avamb"
+    log:
+        o=os.path.join(OUTDIR,'log','ripping.out'),
+        e=os.path.join(OUTDIR,'log','ripping.err')
+
     shell: 
         """
         python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}\
@@ -363,25 +404,26 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     output:
         clusters_avamb_after_drep_disjoint = os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
     log:
-        os.path.join(OUTDIR,"avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log")
+        log_fin=os.path.join(OUTDIR,"avamb/tmp/avamb_nc_clusters_and_bins_from_mdrep_clusters.log"),
+        o=os.path.join(OUTDIR,'log','dereplicated_nc_bins.out'),
+        e=os.path.join(OUTDIR,'log','dereplicated_nc_bins.err')
 
     params:
         path = os.path.join(SNAKEDIR, "src", "mv_bins_from_mdrep_clusters.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "4",
+        mem = "1gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
-
+    conda:
+        "avamb"
     shell:
         """
         python {params.path} --c {input.clusters_avamb_manual_drep} \
         --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins \
         --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} \
-        --bin_separator C 2> {log} 
+        --bin_separator C 2> {log.log_fin} 
         """
         
     
@@ -398,11 +440,14 @@ def ripped_bins_avamb_check_output_f(wildcards):
 
 rule run_checkm2_ripped_bins_avamb:
     input:
-        os.path.join(OUTDIR,"avamb/log/bins_ripped_avamb.log")
+        os.path.join(OUTDIR,"avamb/tmp/bins_ripped_avamb.log")
     output:
         os.path.join(OUTDIR,"avamb/tmp/ripped_bins/checkm2_out/quality_report.tsv")
     log:
-        os.path.join(OUTDIR,"avamb/tmp/checkm2_ripped_avamb_run_finished.log")
+        log_fin=os.path.join(OUTDIR,"avamb/tmp/checkm2_ripped_avamb_run_finished.log"),
+        o=os.path.join(OUTDIR,'log','checkm2_ripped.out'),
+        e=os.path.join(OUTDIR,'log','checkm2_ripped.err')
+
     params:
         walltime="86400",
         nodes="1",
@@ -410,12 +455,12 @@ rule run_checkm2_ripped_bins_avamb:
         mem=CHECKM_MEM_r
     threads:
         int(CHECKM_PPN_r)
-    #conda:
-    #    "checkm2" 
+    conda:
+        "checkm2" 
     shell:
         """
-        checkm2 predict --threads {CHECKM_PPN_r} --input {input}\
-         --output-directory {output}/checkm2_out 2> {log}
+        checkm2 predict --threads {CHECKM_PPN_r} --input {OUTDIR}/avamb/tmp/ripped_bins  \
+         --output-directory {OUTDIR}/avamb//tmp/ripped_bins/checkm2_out 2> {log.log_fin}
         """
 
 rule update_cs_d_avamb:
@@ -428,12 +473,16 @@ rule update_cs_d_avamb:
         path = os.path.join(SNAKEDIR, "src", "update_cluster_scores_dict_after_ripping.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "4",
+        mem = "1gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
+    conda:
+        "avamb" 
+    log:
+        o=os.path.join(OUTDIR,'log','update_cs_bp_dicts.out'),
+        e=os.path.join(OUTDIR,'log','update_cs_bp_dicst.err')
+
     shell:
         "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
 
@@ -443,7 +492,7 @@ rule aggregate_nc_bins_avamb:
         cs_updated_log = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log"),
         drep_clusters = os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_clusters.tsv"),
         drep_clusters_not_ripped = os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
-        scores_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins','checkm2_out','quality_report.tsv"),
+        scores_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins/checkm2_out/quality_report.tsv"),
         cluster_scores_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/bp_d_avamb.json"),
         path_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins"),
@@ -458,14 +507,20 @@ rule aggregate_nc_bins_avamb:
         mem = "10gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
+    conda:
+        "avamb" 
+
+    log:
+        o=os.path.join(OUTDIR,'log','aggregate_final_ncs.out'),
+        e=os.path.join(OUTDIR,'log','aggregate_final_ncs.err')
+
     shell:
         """
-	python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters}\
-        --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped}\
-        --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb}\
-        --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C  2>  {output}
+	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
+        --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} \
+        --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
+        --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C \
+        2>  {output}
         """
 
 
@@ -477,20 +532,23 @@ rule write_clusters_from_nc_folders:
     output:
         os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
     log:
-        os.path.join(OUTDIR,"avamb/tmp/final_avamb_clusters_written.log"),
+        log_fin=os.path.join(OUTDIR,"avamb/tmp/final_avamb_clusters_written.log"),
+        o=os.path.join(OUTDIR,'log','create_final_clusters.out'),
+        e=os.path.join(OUTDIR,'log','create_final_clusters.err')
+
     params:
         path = os.path.join(SNAKEDIR, "src", "write_clusters_from_dereplicated_and_ripped_bins.sh"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "4",
+        mem = "1gb"
     threads:
         5
-    #conda:
-    #    "envs/dereplication.yaml"
-    
+    conda:
+        "avamb" 
+
     shell:
-        "sh {params.path} -d {input.nc_bins} -o {output} 2> {log} "
+        "sh {params.path} -d {input.nc_bins} -o {output} 2> {log.log_fin} "
 
 rule workflow_finished:
     input:
@@ -504,5 +562,9 @@ rule workflow_finished:
         mem = "1gb"
     threads:
         1
+    log:
+        o=os.path.join(OUTDIR,'log','workflow_finished.out'),
+        e=os.path.join(OUTDIR,'log','workflow_finished.err')
     shell:
         "touch {output}"
+
