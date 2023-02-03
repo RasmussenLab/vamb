@@ -32,7 +32,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  conda config --add channels conda-forge
  conda config --add channels bioconda
  mamba create -n avamb python=3.9
- mamba install -n avamb -c snakemake pip biopython ordered_set
+ mamba install -n avamb -c snakemake pip biopython orderedset
  conda activate avamb 
  #pip install vamb # uncomment once it's merged with avamb
  git clone https://github.com/RasmussenLab/avamb.git -b avamb_new # remove once it's merged with vamb
