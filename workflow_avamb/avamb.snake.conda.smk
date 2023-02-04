@@ -3,7 +3,6 @@ import os
 import sys
 from vamb.vambtools import concatenate_fasta
 SNAKEDIR = os.path.dirname(workflow.snakefile)
-print(os.path.join(SNAKEDIR, "src", "create_cluster_scores_bin_path_dict.py"))
 
 sys.path.append(os.path.join(SNAKEDIR, 'src'))
 
@@ -74,8 +73,7 @@ for line in fh_in:
 # target
 rule all:
     input:
-        #os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
-        os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log")
+        os.path.join(OUTDIR,'avamb/tmp/workflow_finished_avamb.log')
 rule cat_contigs:
     input:
         contigs_list
@@ -92,9 +90,9 @@ rule cat_contigs:
     log:
         o = os.path.join(OUTDIR,"log/contigs/catcontigs.o"),
         e = os.path.join(OUTDIR,"log/contigs/catcontigs.e")
-
-    #conda:
-    #    "envs/dereplication.yaml"
+    
+    conda:
+        "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -202,13 +200,10 @@ rule sort:
 
 
 
-# Configurations for dereplication
 rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
         bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
-        #contigs = os.path.join(OUTDIR,"contigs.flt.fna"),
-        #bam_files = os.path.join(OUTDIR,"mapped")
 
     output:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
