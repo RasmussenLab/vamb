@@ -354,7 +354,7 @@ def calc_rpkm(
 
 
 def trainvae(
-    outdir: str,
+    outdir: Path,
     rpkms: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
@@ -1088,20 +1088,8 @@ def main():
     args = parser.parse_args()
 
     outdir: str = os.path.abspath(args.outdir)
-    fasta: Optional[Path] = args.fasta
-    composition: Optional[str] = args.composition
-    bamfiles: Optional[list[str]] = args.bamfiles
-    rpkm: Optional[str] = args.rpkm
-    minlength: int = args.minlength
 
-    if args.minid != 0.0 and bamfiles is None:
-        raise argparse.ArgumentTypeError(
-            "If minid is set, RPKM must be passed as bam files"
-        )
-
-    minid: float = args.minid
     nthreads: int = args.nthreads
-    minfasta: Optional[int] = args.minfasta
     noencode: bool = args.noencode
     nhiddens: Optional[list[int]] = args.nhiddens
     nlatent: int = args.nlatent
@@ -1126,74 +1114,7 @@ def main():
     batchsteps_aae: list[int] = args.batchsteps_aae
 
     lrate: float = args.lrate
-
-    windowsize: int = args.windowsize
-    minsuccesses: int = args.minsuccesses
-    minsize: int = args.minsize
     separator: Optional[str] = args.separator
-    
-    
-    ######################### CHECK INPUT/OUTPUT FILES #####################
-
-    # Outdir does not exist
-    #if os.path.exists(outdir):
-    #    raise FileExistsError(outdir)
-
-    # Outdir is in an existing parent dir
-    parentdir = os.path.dirname(outdir)
-    if parentdir and not os.path.isdir(parentdir):
-        raise NotADirectoryError(parentdir)
-
-    # Make sure only one TNF input is there
-    if not (composition is None) ^ (fasta is None):
-        raise argparse.ArgumentTypeError(
-            "Must specify either FASTA or composition path"
-        )
-
-    for path in (fasta, composition):
-        if path is not None and not os.path.isfile(path):
-            raise FileNotFoundError(path)
-
-    # Make sure only one RPKM input is there
-    if not ((bamfiles is None) ^ (rpkm is None)):
-        raise argparse.ArgumentTypeError(
-            "Must specify exactly one of BAM files or RPKM input"
-        )
-
-    if rpkm is not None and not os.path.isfile(rpkm):
-        raise FileNotFoundError("Not an existing non-directory file: " + rpkm)
-
-    if bamfiles is not None:
-        for bampath in bamfiles:
-            if not os.path.isfile(bampath):
-                raise FileNotFoundError(
-                    "Not an existing non-directory file: " + bampath
-                )
-
-            # Check this early, since I expect users will forget about this
-            if not vamb.parsebam.pycoverm.is_bam_sorted(bampath):
-                raise ValueError(f"BAM file {bampath} is not sorted by reference.")
-
-    # Check minfasta settings
-    if minfasta is not None and fasta is None:
-        raise argparse.ArgumentTypeError(
-            "If minfasta is not None, " "input fasta file must be given explicitly"
-        )
-
-    if minfasta is not None and minfasta < 0:
-        raise argparse.ArgumentTypeError(
-            "Minimum FASTA output size must be nonnegative"
-        )
-
-    ####################### CHECK ARGUMENTS FOR TNF AND BAMFILES ###########
-    if minlength < 250:
-        raise argparse.ArgumentTypeError("Minimum contig length must be at least 250")
-
-    if not isfinite(minid) or minid < 0.0 or minid > 1.0:
-        raise argparse.ArgumentTypeError("Minimum nucleotide ID must be in [0,1]")
-
-    if nthreads < 1:
-        raise argparse.ArgumentTypeError("Zero or negative subprocesses requested")
 
     ####################### CHECK VAE/AAE OPTIONS ################################
     if nhiddens is not None and any(i < 1 for i in nhiddens):
@@ -1215,36 +1136,6 @@ def main():
 
     if cuda and not torch.cuda.is_available():
         raise ModuleNotFoundError("Cuda is not available on your PyTorch installation")
-
-    ###################### CHECK TRAINING OPTIONS ####################
-    if nepochs < 1:
-        raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
-
-    if batchsize < 1:
-        raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
-
-    batchsteps = sorted(set(batchsteps))
-    if max(batchsteps, default=0) >= nepochs:
-        raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
-
-    if min(batchsteps, default=1) < 1:
-        raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
-
-    if lrate <= 0:
-        raise argparse.ArgumentTypeError("Learning rate must be positive")
-
-    ###################### CHECK CLUSTERING OPTIONS ####################
-    if minsize < 1:
-        raise argparse.ArgumentTypeError("Minimum cluster size must be at least 0")
-
-    if windowsize < 1:
-        raise argparse.ArgumentTypeError("Window size must be at least 1")
-
-    if minsuccesses < 1 or minsuccesses > windowsize:
-        raise argparse.ArgumentTypeError("Minimum cluster size must be in 1:windowsize")
-
-    if separator is not None and len(separator) == 0:
-        raise argparse.ArgumentTypeError("Binsplit separator cannot be an empty string")
 
     ###################### SET UP LAST PARAMS ############################
 
