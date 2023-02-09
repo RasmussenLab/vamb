@@ -1,4 +1,5 @@
 from typing import Optional, IO, Union
+from pathlib import Path
 import vamb.vambtools as _vambtools
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
@@ -79,7 +80,9 @@ def make_dataloader(
     # Normalize samples to have same depth
     sample_depths_sum = rpkm.sum(axis=0)
     if _np.any(sample_depths_sum == 0):
-        raise ValueError("One or more samples have zero depth in all sequences, so cannot be depth normalized")
+        raise ValueError(
+            "One or more samples have zero depth in all sequences, so cannot be depth normalized"
+        )
     rpkm *= 1_000_000 / sample_depths_sum
 
     # If multiple samples, also include nonzero depth as requirement for accept
@@ -94,11 +97,11 @@ def make_dataloader(
 
     if mask.sum() < batchsize:
         raise ValueError(
-            "Fewer sequences left after filtering than the batch size. " +
-            "This probably means you try to run on a too small dataset (below ~10k sequences), " + 
-            "or that nearly all sequences were filtered away. Check the log file, " + 
-            "and verify BAM file content is sensible."
-            )
+            "Fewer sequences left after filtering than the batch size. "
+            + "This probably means you try to run on a too small dataset (below ~10k sequences), "
+            + "or that nearly all sequences were filtered away. Check the log file, "
+            + "and verify BAM file content is sensible."
+        )
 
     _vambtools.numpy_inplace_maskarray(rpkm, mask)
     _vambtools.numpy_inplace_maskarray(tnf, mask)
@@ -516,7 +519,7 @@ class VAE(_nn.Module):
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
         logfile: Optional[IO[str]] = None,
-        modelfile: Union[None, str, IO[bytes]] = None,
+        modelfile: Union[None, str, Path, IO[bytes]] = None,
     ):
         """Train the autoencoder from depths array and tnf array.
 
