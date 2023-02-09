@@ -1,0 +1,26 @@
+[project]
+name = "vamb"
+dynamic = ["version"]
+dependencies = [
+    "numpy ~= 1.20",
+    "torch ~= 1.13",
+    "pycoverm ~= 0.6"
+]
+# Currently pycoverm does not have binaries for Python > 3.11.
+# The dependency resolver, will not error on Python 3.11, but attempt
+# to build pycoverm from source, but will not get the deps required for that.
+requires-python = "<3.12.*,>=3.9.0"
+scripts = {vamb = "vamb.__main__:main"}
+
+[metadata]
+author = "Pau Piera and Jakob Nybo Nissen"
+author_email = "jakobnybonissen@gmail.com"
+url = "https://github.com/RasmussenLab/vamb"
+description = "Variational and Adversarial autoencoders for Metagenomic Binning"
+license = "MIT"
+[tool.setuptools.dynamic]
+version = {attr = "vamb.__version__"}
+
+[build-system]
+requires = ["setuptools ~= 63.0", "Cython ~= 0.29"]
+build-backend = "setuptools.build_meta"
