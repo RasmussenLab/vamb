@@ -220,14 +220,13 @@ def trainaae(
     batchsteps: list[int],
     logfile: IO[str],
     contignames: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, dict]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, set[str]]]:
 
     begintime = time.time()/60
     log("\nCreating and training AAE", logfile)
     nsamples = rpkms.shape[1]
 
     assert len(rpkms) == len(tnfs)
-
 
     aae = aamb_encode.AAE(nsamples, nhiddens, nlatent_z, nlatent_y, sl, slr , alpha ,cuda)
 
@@ -236,7 +235,6 @@ def trainaae(
         rpkms, tnfs, lengths, batchsize, destroy=True, cuda=cuda
     )
     log("Created dataloader and mask", logfile, 1)
-    #vamb.vambtools.write_npz(os.path.join(outdir, "mask.npz"), mask)
     n_discarded = len(mask) - mask.sum()
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
@@ -255,9 +253,8 @@ def trainaae(
 
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
-    clusters_y_dict,latent = aae.get_latents(contignames, dataloader)
+    clusters_y_dict, latent = aae.get_latents(contignames, dataloader)
     vamb.vambtools.write_npz(os.path.join(outdir, "aae_z_latent.npz"), latent)
-    #vamb.vambtools.write_npz(os.path.join(outdir, "aae_y_latent.npz"), latenty_)
 
     del aae  # Needed to free "latent" array's memory references?
 
@@ -341,7 +338,7 @@ def write_fasta(
     contiglengths: np.ndarray,
     minfasta: int,
     logfile: IO[str],
-    separator: str,
+    separator: Optional[str],
 ) -> None:
     begintime = time.time()/60
 
@@ -551,7 +548,6 @@ def run(
         writing_bins_time = round(time.time()/60 - fin_cluster_latent, 2)
         log(f"\nVAE bins written in {writing_bins_time} minutes", logfile)
             
-        #log(f"\nCompleted Vamb in {elapsed} minutes", logfile)
     if 'aae' in model_selection:
         assert comp_metadata.nseqs == len(latent_z)
 
@@ -596,9 +592,9 @@ def run(
         clusterspath= os.path.join(outdir, "aae_y_clusters.tsv") 
          # Binsplit if given a separator
         if separator is not None:
-            maybe_split = vamb.vambtools.binsplit(clusters_y_dict, separator)
+            maybe_split = vamb.vambtools.binsplit(clusters_y_dict.items(), separator)
         else:
-            maybe_split = clusters_y_dict
+            maybe_split = clusters_y_dict.items()
         with open(clusterspath, "w") as clustersfile:
             clusternumber, ncontigs = vamb.vambtools.write_clusters(
                 clustersfile,
@@ -727,7 +723,7 @@ def main():
     # Model selection argument
     model_selection = parser.add_argument_group(title='Model selection', description=None)
 
-    model_selection.add_argument('--model', dest='model', metavar='', type=str, default='vae&aae',
+    model_selection.add_argument('--model', dest='model', metavar='', type=str, choices=["vae", "aae", "vae&aae"], default='vae&aae',
                          help='Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae&aae), [vae&aae]')
 
     # VAE arguments
@@ -832,9 +828,6 @@ def main():
                         default=256, help='starting batch size AAE [256]')
     aaetrainos.add_argument('--q_aae', dest='batchsteps_aae', metavar='', type=int, nargs='*',
                         default=[25,50], help='double batch size at epochs AAE [25,50]')
-    aaetrainos.add_argument('--r_aae', dest='lrate_aae',  metavar='',type=float,
-                        default=1e-3, help='learning rate AAE [0.001]')
-
     # Clustering arguments
     clusto = parser.add_argument_group(title="Clustering options", description=None)
     clusto.add_argument(
@@ -924,8 +917,6 @@ def main():
     batchsteps_aae: list[int] = args.batchsteps_aae
 
     lrate: float = args.lrate
-    
-    lrate_aae: float = args.lrate_aae
 
     windowsize: int = args.windowsize
     minsuccesses: int = args.minsuccesses

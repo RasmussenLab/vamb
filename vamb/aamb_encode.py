@@ -27,7 +27,7 @@ class AAE(nn.Module):
     def __init__(
         self,
         nsamples: int,
-        nhiddens: int,
+        nhiddens: list[int],
         nlatent_l: int,
         nlatent_y,
         sl: float,
