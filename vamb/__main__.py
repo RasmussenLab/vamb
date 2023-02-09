@@ -497,7 +497,7 @@ def trainaae(
     alpha: Optional[float],  # set automatically if None
     sl: float,
     slr: float,
-    temp: Optional[float] ,
+    temp: Optional[float],
     cuda: bool,
     batchsize: int,
     nepochs: int,
@@ -513,7 +513,7 @@ def trainaae(
 
     assert len(rpkms) == len(tnfs)
 
-    aae = aamb_encode.AAE(nsamples, nhiddens, nlatent_z, nlatent_y, sl, slr , alpha ,cuda)
+    aae = aamb_encode.AAE(nsamples, nhiddens, nlatent_z, nlatent_y, sl, slr, alpha,cuda)
 
     log("Created AAE", logfile,1)
     dataloader, mask = vamb.encode.make_dataloader(
@@ -674,7 +674,6 @@ def run(
     vae_options: VAEOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,
-    noencode: bool,
     nhiddens_aae: Optional[list[int]],
     nlatent_aae_z: int,
     nlatent_aae_y: int,
@@ -711,13 +710,6 @@ def run(
     timepoint_gernerate_input=time.time()/60
     time_generating_input= round(timepoint_gernerate_input-begintime,2)
    
-    if noencode:
-        elapsed = round(time.time()/60 - begintime, 2)
-        log(
-            f"\nNoencode set, skipping encoding and clustering.\n\nCompleted Avamb in {elapsed} minutes",
-            logfile,
-        )
-        return None
     log(f"\nTNF and coabundances generated in {time_generating_input}", logfile, 1)
 
     if 'vae' in model_selection:
@@ -885,7 +877,7 @@ def run(
                 separator
             )
         time_writing_bins_y=time.time()/60
-        writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins , 2)
+        writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins, 2)
         log(f"\nAAE y bins written in {writing_bins_time_y} minutes", logfile)
       
 def main():
@@ -979,11 +971,7 @@ def main():
         default=None,
         help="minimum bin size to output as fasta [None = no files]",
     )
-    inputos.add_argument(
-        "--noencode",
-        help="Output tnfs and abundances only, do not encode or cluster [False]",
-        action="store_true",
-    )
+
     # Model selection argument
     model_selection = parser.add_argument_group(title='Model selection', description=None)
 
@@ -1143,9 +1131,6 @@ def main():
 
     outdir: str = os.path.abspath(args.outdir)
 
-    nthreads: int = args.nthreads
-    noencode: bool = args.noencode
-
     nhiddens_aae: Optional[list[int]] = args.nhiddens_aae
     nlatent_aae_z: int = args.nlatent_aae_z
     nlatent_aae_y: int = args.nlatent_aae_y
@@ -1162,18 +1147,7 @@ def main():
     lrate: float = args.lrate
     separator: Optional[str] = args.separator
 
-    ###################### SET UP LAST PARAMS ############################
-
-    # This doesn't actually work, but maybe the PyTorch folks will fix it sometime.
-    torch.set_num_threads(nthreads)
-
     ################### RUN PROGRAM #########################
-    try:
-        os.mkdir(outdir)
-    except FileExistsError:
-        pass
-    except:
-        raise
     if "aae" in args.model:
         try:
             os.mkdir(os.path.join(outdir,'tmp')) # needed for dereplication logs and files
@@ -1199,8 +1173,6 @@ def main():
             pass
         except:
             raise
-    
-    logpath = os.path.join(outdir, "log.txt")
 
     comp_options = CompositionOptions(
         args.fasta, args.composition, args.min_contig_length
@@ -1242,7 +1214,16 @@ def main():
         args.cuda
     )
 
-    with open(logpath, "w") as logfile:
+    torch.set_num_threads(vamb_options.n_threads)
+
+    try:
+        os.mkdir(vamb_options.out_dir)
+    except FileExistsError:
+        pass
+    except:
+        raise
+
+    with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(
             vamb_options,
             comp_options,
@@ -1250,7 +1231,6 @@ def main():
             vae_options,
             training_options,
             cluster_options,
-            noencode=noencode,
             nhiddens_aae=nhiddens_aae,
             nlatent_aae_z=nlatent_aae_z,
             nlatent_aae_y=nlatent_aae_y,
