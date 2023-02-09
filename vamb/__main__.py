@@ -627,7 +627,6 @@ def run(
     batchsteps: list[int],
     batchsteps_aae: list[int],
     separator: Optional[str],
-    minfasta: Optional[int],
     model_selection: str,
     logfile: IO[str]
 ):
@@ -743,15 +742,15 @@ def run(
 
         del latent
 
-        if minfasta is not None and fastapath is not None:
-            # We have already checked fastapath is not None if minfasta is not None.
+        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
+            # We have already checked fastapath is not None if vamb_options.min_fasta_output_size is not None.
             write_fasta(
                 vamb_options.out_dir,
                 clusterspath,
                 fastapath,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
-                minfasta,
+                vamb_options.min_fasta_output_size,
                 logfile,
                 separator
             )
@@ -782,7 +781,7 @@ def run(
 
         del latent_z
 
-        if minfasta is not None and fastapath is not None:
+        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
             # We have already checked fastapath is not None if minfasta is not None.
             write_fasta(
                 vamb_options.out_dir,
@@ -790,7 +789,7 @@ def run(
                 fastapath,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
-                minfasta,
+                vamb_options.min_fasta_output_size,
                 logfile,
                 separator
             )
@@ -817,7 +816,7 @@ def run(
         print("", file=logfile)
         log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
         time_start_writin_z_bins=time.time()/60
-        if minfasta is not None and fastapath is not None:
+        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
             # We have already checked fastapath is not None if minfasta is not None.
             write_fasta(
                 vamb_options.out_dir,
@@ -825,7 +824,7 @@ def run(
                 fastapath,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
-                minfasta,
+                vamb_options.min_fasta_output_size,
                 logfile,
                 separator
             )
@@ -1284,7 +1283,7 @@ def main():
             raise
     
     logpath = os.path.join(outdir, "log.txt")
-
+    
     comp_options = CompositionOptions(
         args.fasta, args.composition, args.min_contig_length
     )
@@ -1341,7 +1340,6 @@ def main():
             batchsteps=batchsteps,
             batchsteps_aae=batchsteps_aae,
             separator=separator,
-            minfasta=minfasta,
             model_selection=args.model,
             logfile=logfile,
         )
