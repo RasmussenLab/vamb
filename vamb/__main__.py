@@ -31,7 +31,100 @@ sys.path.append(parentdir)
 
 from vamb import aamb_encode
 
-################################# DEFINE FUNCTIONS ##########################
+class FASTAPath(type(Path())):
+    pass
+
+
+
+class CompositionPath(type(Path())):
+    pass
+
+
+class CompositionOptions:
+    __slots__ = ["path", "min_contig_length"]
+
+    def __init__(
+        self, fastapath: Optional[Path], npzpath: Optional[Path], min_contig_length: int
+    ):
+        assert isinstance(fastapath, (Path, type(None)))
+        assert isinstance(npzpath, (Path, type(None)))
+        assert isinstance(min_contig_length, int)
+
+        if min_contig_length < 250:
+            raise argparse.ArgumentTypeError(
+                "Minimum contig length must be at least 250"
+            )
+
+        if not (fastapath is None) ^ (npzpath is None):
+            raise argparse.ArgumentTypeError(
+                "Must specify either FASTA or composition path"
+            )
+
+        for path in (fastapath, npzpath):
+            if path is not None and not path.is_file():
+                raise FileNotFoundError(path)
+
+        if fastapath is not None:
+            self.path = FASTAPath(fastapath)
+        else:
+            assert npzpath is not None
+            self.path = CompositionPath(npzpath)
+        self.min_contig_length = min_contig_length
+
+class VambOptions:
+    __slots__ = [
+        "out_dir",
+        "n_threads",
+        "comp_options",
+        "min_fasta_output_size",
+        "cuda",
+    ]
+
+    def __init__(
+        self,
+        out_dir: Path,
+        n_threads: int,
+        comp_options: CompositionOptions,
+        min_fasta_output_size: Optional[int],
+        cuda: bool,
+    ):
+        assert isinstance(out_dir, Path)
+        assert isinstance(n_threads, int)
+        assert isinstance(comp_options, CompositionOptions)
+        assert isinstance(min_fasta_output_size, (int, type(None)))
+        assert isinstance(cuda, bool)
+
+        # Outdir does not exist
+        if out_dir.exists():
+            raise FileExistsError(out_dir)
+
+        # Outdir is in an existing parent dir
+        if not out_dir.parent.is_dir():
+            raise NotADirectoryError(parentdir)
+        self.out_dir = out_dir
+
+        if n_threads < 1:
+            raise ValueError(f"Must pass at least 1 thread, not {n_threads}")
+        self.n_threads = n_threads
+
+        if min_fasta_output_size is not None:
+            if not isinstance(comp_options.path, FASTAPath):
+                raise argparse.ArgumentTypeError(
+                    "If minfasta is not None, "
+                    "input fasta file must be given explicitly"
+                )
+            if min_fasta_output_size < 0:
+                raise argparse.ArgumentTypeError(
+                    "Minimum FASTA output size must be nonnegative"
+                )
+        self.min_fasta_output_size = min_fasta_output_size
+
+        if cuda and not torch.cuda.is_available():
+            raise ModuleNotFoundError(
+                "Cuda is not available on your PyTorch installation"
+            )
+        self.cuda = cuda
+
 
 
 def log(string: str, logfile: IO[str], indent: int = 0):
@@ -40,37 +133,37 @@ def log(string: str, logfile: IO[str], indent: int = 0):
 
 
 def calc_tnf(
-    outdir: str,
-    fastapath: Optional[str],
-    npzpath: Optional[str],
-    mincontiglength: int,
+    options: CompositionOptions,
+    outdir: Path,
     logfile: IO[str],
 ) -> vamb.parsecontigs.Composition:
-    begintime = time.time()/60
+    begintime = time.time()
     log("\nLoading TNF", logfile, 0)
-    log(f"Minimum sequence length: {mincontiglength}", logfile, 1)
+    log(f"Minimum sequence length: {options.min_contig_length}", logfile, 1)
 
-    if npzpath is not None:
-        log(f"Loading composition from npz {npzpath}", logfile, 1)
-        composition = vamb.parsecontigs.Composition.load(npzpath)
-        composition.filter_min_length(mincontiglength)
+    path = options.path
+
+    if isinstance(path, CompositionPath):
+        log(f"Loading composition from npz {path}", logfile, 1)
+        composition = vamb.parsecontigs.Composition.load(str(path))
+        composition.filter_min_length(options.min_contig_length)
     else:
-        assert fastapath is not None
-        log(f"Loading data from FASTA file {fastapath}", logfile, 1)
-        with vamb.vambtools.Reader(fastapath) as file:
+        assert isinstance(path, FASTAPath)
+        log(f"Loading data from FASTA file {path}", logfile, 1)
+        with vamb.vambtools.Reader(str(path)) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, minlength=mincontiglength
+                file, minlength=options.min_contig_length
             )
-        composition.save(os.path.join(outdir, "composition.npz"))
+        composition.save(outdir.joinpath("composition.npz"))
 
-    elapsed = round(time.time()/60 - begintime, 2)
+    elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
     log(
         f"Kept {composition.count_bases()} bases in {composition.nseqs} sequences",
         logfile,
         1,
     )
-    log(f"Processed TNF in {elapsed} minutes", logfile, 1)
+    log(f"Processed TNF in {elapsed} seconds", logfile, 1)
 
     return composition
 
@@ -377,6 +470,8 @@ def write_fasta(
 
 
 def run(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
     outdir: str,
     fastapath: Optional[str],
     compositionpath: Optional[str],  ## ??? 
@@ -418,10 +513,10 @@ def run(
 
     log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
     log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
-    begintime = time.time()/60
-    
+    begintime = time.time()
+
     # Get TNFs, save as npz
-    composition = calc_tnf(outdir, fastapath, compositionpath, mincontiglength, logfile)
+    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
     
     
     # Parse BAMs, save as npz
@@ -1078,8 +1173,22 @@ def main():
     
     logpath = os.path.join(outdir, "log.txt")
 
+    comp_options = CompositionOptions(
+        args.fasta, args.composition, args.min_contig_length
+    )
+
+    vamb_options = VambOptions(
+        args.outdir,
+        args.nthreads,
+        comp_options,
+        args.min_fasta_output_size,
+        args.cuda
+    )
+
     with open(logpath, "w") as logfile:
         run(
+            vamb_options,
+            comp_options,
             outdir,
             fasta,
             composition,
