@@ -143,6 +143,77 @@ class AbundanceOptions:
 
         self.refcheck = refcheck
 
+class VAEOptions:
+    __slots__ = ["nhiddens", "nlatent", "alpha", "beta", "dropout"]
+
+    def __init__(
+        self,
+        nhiddens: Optional[list[int]],
+        nlatent: int,
+        alpha: Optional[float],
+        beta: float,
+        dropout: Optional[float],
+    ):
+        assert isinstance(nhiddens, (list, type(None)))
+        assert isinstance(nlatent, int)
+        assert isinstance(alpha, (float, type(None)))
+        assert isinstance(beta, float)
+        assert isinstance(dropout, (float, type(None)))
+
+        if nhiddens is not None and any(i < 1 for i in nhiddens):
+            raise argparse.ArgumentTypeError(
+                f"Minimum 1 neuron per layer, not {min(nhiddens)}"
+            )
+        self.nhiddens = nhiddens
+
+        if nlatent < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 latent neuron, not {nlatent}")
+        self.nlatent = nlatent
+
+        if alpha is not None and (alpha <= 0 or alpha) >= 1:
+            raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
+        self.alpha = alpha
+
+        if beta <= 0 or not isfinite(beta):
+            raise argparse.ArgumentTypeError("beta cannot be negative or zero")
+        self.beta = beta
+
+        if dropout is not None and (dropout < 0 or dropout >= 1):
+            raise argparse.ArgumentTypeError("dropout must be in 0 <= d < 1")
+        self.dropout = dropout
+
+
+class TrainingOptions:
+    __slots__ = ["nepochs", "batchsize", "batchsteps", "lrate"]
+
+    def __init__(
+        self, nepochs: int, batchsize: int, batchsteps: list[int], lrate: float
+    ):
+        assert isinstance(nepochs, int)
+        assert isinstance(batchsize, int)
+        assert isinstance(batchsteps, list)
+        assert isinstance(lrate, float)
+
+        if nepochs < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
+        self.nepochs = nepochs
+
+        if batchsize < 1:
+            raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
+        self.batchsize = batchsize
+
+        batchsteps = sorted(set(batchsteps))
+        if max(batchsteps, default=0) >= self.nepochs:
+            raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
+
+        if min(batchsteps, default=1) < 1:
+            raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
+        self.batchsteps = batchsteps
+
+        if lrate <= 0.0:
+            raise argparse.ArgumentTypeError("Learning rate must be positive")
+        self.lrate = lrate
+
 
 class ClusterOptions:
     __slots__ = [
@@ -352,26 +423,17 @@ def calc_rpkm(
 
     return abundance
 
-
 def trainvae(
-    outdir: Path,
+    vae_options: VAEOptions,
+    training_options: TrainingOptions,
+    vamb_options: VambOptions,
     rpkms: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
-    nhiddens: Optional[list[int]],  # set automatically if None
-    nlatent: int,
-    alpha: Optional[float],  # set automatically if None
-    beta: float,
-    dropout: Optional[float],  # set automatically if None
-    cuda: bool,
-    batchsize: int,
-    nepochs: int,
-    lrate: float,
-    batchsteps: list[int],
     logfile: IO[str],
 ) -> tuple[np.ndarray, np.ndarray]:
 
-    begintime = time.time()/60
+    begintime = time.time()
     log("\nCreating and training VAE", logfile)
 
     assert len(rpkms) == len(tnfs)
@@ -379,31 +441,36 @@ def trainvae(
     nsamples = rpkms.shape[1]
     vae = vamb.encode.VAE(
         nsamples,
-        nhiddens=nhiddens,
-        nlatent=nlatent,
-        alpha=alpha,
-        beta=beta,
-        dropout=dropout,
-        cuda=cuda,
+        nhiddens=vae_options.nhiddens,
+        nlatent=vae_options.nlatent,
+        alpha=vae_options.alpha,
+        beta=vae_options.beta,
+        dropout=vae_options.dropout,
+        cuda=vamb_options.cuda,
     )
 
     log("Created VAE", logfile, 1)
     dataloader, mask = vamb.encode.make_dataloader(
-        rpkms, tnfs, lengths, batchsize, destroy=True, cuda=cuda
+        rpkms,
+        tnfs,
+        lengths,
+        training_options.batchsize,
+        destroy=True,
+        cuda=vamb_options.cuda,
     )
     log("Created dataloader and mask", logfile, 1)
-    vamb.vambtools.write_npz(os.path.join(outdir, "mask.npz"), mask)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
     n_discarded = len(mask) - mask.sum()
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
     print("", file=logfile)
 
-    modelpath = os.path.join(outdir, "model.pt")
+    modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         dataloader,
-        nepochs=nepochs,
-        lrate=lrate,
-        batchsteps=batchsteps,
+        nepochs=training_options.nepochs,
+        lrate=training_options.lrate,
+        batchsteps=training_options.batchsteps,
         logfile=logfile,
         modelfile=modelpath,
     )
@@ -411,11 +478,11 @@ def trainvae(
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
     latent = vae.encode(dataloader)
-    vamb.vambtools.write_npz(os.path.join(outdir, "latent.npz"), latent)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
-    elapsed = round(time.time()/60 - begintime, 2)
-    log(f"Trained VAE and encoded in {elapsed} minutes", logfile, 1)
+    elapsed = round(time.time() - begintime, 2)
+    log(f"Trained VAE and encoded in {elapsed} seconds", logfile, 1)
 
     return mask, latent
 
@@ -604,26 +671,21 @@ def run(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
+    vae_options: VAEOptions,
+    training_options: TrainingOptions,
     cluster_options: ClusterOptions,
     noencode: bool,
-    nhiddens: Optional[list[int]],
     nhiddens_aae: Optional[list[int]],
-    nlatent: int,
     nlatent_aae_z: int,
     nlatent_aae_y: int,
-    nepochs: int,
     nepochs_aae: int,
-    batchsize: int,
     batchsize_aae: int,    
     cuda: bool,
     alpha: Optional[float],
-    beta: float,
-    dropout: Optional[float],
     sl: float,
     slr: float,
     temp: float,
     lrate: float,
-    batchsteps: list[int],
     batchsteps_aae: list[int],
     separator: Optional[str],
     model_selection: str,
@@ -662,20 +724,12 @@ def run(
         begin_train_vae=time.time()/60
         # Train, save model
         mask, latent = trainvae(
-            vamb_options.out_dir,
+            vae_options,
+            training_options,
+            vamb_options,
             abundance.matrix,
             composition.matrix,
             composition.metadata.lengths,
-            nhiddens,
-            nlatent,
-            alpha,
-            beta,
-            dropout,
-            cuda,
-            batchsize,
-            nepochs,
-            lrate,
-            batchsteps,
             logfile,
         )
         fin_train_vae=time.time()/60
@@ -1091,8 +1145,6 @@ def main():
 
     nthreads: int = args.nthreads
     noencode: bool = args.noencode
-    nhiddens: Optional[list[int]] = args.nhiddens
-    nlatent: int = args.nlatent
 
     nhiddens_aae: Optional[list[int]] = args.nhiddens_aae
     nlatent_aae_z: int = args.nlatent_aae_z
@@ -1100,42 +1152,15 @@ def main():
 
 
     alpha: Optional[float] = args.alpha
-    beta: float = args.beta
-    dropout: Optional[float] = args.dropout
     cuda: bool = args.cuda
-    nepochs: int = args.nepochs
 
     nepochs_aae: int = args.nepochs_aae
-
-    batchsize: int = args.batchsize
-    batchsteps: list[int] = args.batchsteps
 
     batchsize_aae: int = args.batchsize_aae
     batchsteps_aae: list[int] = args.batchsteps_aae
 
     lrate: float = args.lrate
     separator: Optional[str] = args.separator
-
-    ####################### CHECK VAE/AAE OPTIONS ################################
-    if nhiddens is not None and any(i < 1 for i in nhiddens):
-        raise argparse.ArgumentTypeError(
-            f"Minimum 1 neuron per layer, not {min(nhiddens)}"
-        )
-
-    if nlatent < 1:
-        raise argparse.ArgumentTypeError(f"Minimum 1 latent neuron, not {nlatent}")
-
-    if alpha is not None and (alpha <= 0 or alpha >= 1):
-        raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
-
-    if beta <= 0:
-        raise argparse.ArgumentTypeError("beta cannot be negative or zero")
-
-    if dropout is not None and (dropout < 0 or dropout >= 1):
-        raise argparse.ArgumentTypeError("dropout must be in 0 <= d < 1")
-
-    if cuda and not torch.cuda.is_available():
-        raise ModuleNotFoundError("Cuda is not available on your PyTorch installation")
 
     ###################### SET UP LAST PARAMS ############################
 
@@ -1189,6 +1214,18 @@ def main():
         not args.norefcheck,
     )
 
+    vae_options = VAEOptions(
+        args.nhiddens,
+        args.nlatent,
+        args.alpha,
+        args.beta,
+        args.dropout,
+    )
+
+    training_options = TrainingOptions(
+        args.nepochs, args.batchsize, args.batchsteps, args.lrate
+    )
+
     cluster_options = ClusterOptions(
         args.window_size,
         args.min_successes,
@@ -1210,26 +1247,21 @@ def main():
             vamb_options,
             comp_options,
             abundance_options,
+            vae_options,
+            training_options,
             cluster_options,
             noencode=noencode,
-            nhiddens=nhiddens,
             nhiddens_aae=nhiddens_aae,
-            nlatent=nlatent,
             nlatent_aae_z=nlatent_aae_z,
             nlatent_aae_y=nlatent_aae_y,
-            nepochs=nepochs,
             nepochs_aae=nepochs_aae,
-            batchsize=batchsize,
             batchsize_aae=batchsize_aae,
             cuda=cuda,
             alpha=alpha,
-            beta=beta,
-            dropout=dropout,
             sl=args.sl,
             slr=args.slr,
             temp=args.temp,
             lrate=lrate,
-            batchsteps=batchsteps,
             batchsteps_aae=batchsteps_aae,
             separator=separator,
             model_selection=args.model,
