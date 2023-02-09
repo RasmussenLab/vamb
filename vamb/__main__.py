@@ -35,7 +35,6 @@ class FASTAPath(type(Path())):
     pass
 
 
-
 class CompositionPath(type(Path())):
     pass
 
@@ -70,6 +69,79 @@ class CompositionOptions:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
         self.min_contig_length = min_contig_length
+
+
+class AbundancePath(type(Path())):
+    pass
+
+
+class JGIPath(type(Path())):
+    pass
+
+
+class AbundanceOptions:
+    __slots__ = ["path", "min_alignment_id", "refcheck"]
+
+    def __init__(
+        self,
+        bampaths: Optional[list[Path]],
+        abundancepath: Optional[Path],
+        jgipath: Optional[Path],
+        min_alignment_id: Optional[float],
+        refcheck: bool,
+    ):
+        assert isinstance(bampaths, (list, type(None)))
+        assert isinstance(abundancepath, (Path, type(None)))
+        assert isinstance(jgipath, (Path, type(None)))
+        assert isinstance(min_alignment_id, (float, type(None)))
+        assert isinstance(refcheck, bool)
+
+        # Make sure only one RPKM input is there
+        if not ((bampaths is None) + (abundancepath is None) + (jgipath is None)) != 1:
+            raise argparse.ArgumentTypeError(
+                "Must specify exactly one of BAM files, abundance NPZ or JGI file input"
+            )
+
+        if abundancepath is not None:
+            if not abundancepath.is_file():
+                raise FileNotFoundError(
+                    f'Not an existing non-directory file: "{str(abundancepath)}"'
+                )
+            self.path = AbundancePath(abundancepath)
+
+        elif bampaths is not None:
+            for bampath in bampaths:
+                if not bampath.is_file():
+                    raise FileNotFoundError(
+                        f'Not an existing non-directory file: "{str(bampath)}"'
+                    )
+            self.path = bampaths
+
+        if jgipath is not None:
+            if not jgipath.is_file():
+                raise FileNotFoundError(
+                    f'Not an existing non-directory file: "{str(jgipath)}"'
+                )
+            self.path = JGIPath(jgipath)
+
+        if min_alignment_id is not None:
+            if bampaths is None:
+                raise argparse.ArgumentTypeError(
+                    "If minid is set, RPKM must be passed as bam files"
+                )
+            if (
+                not isfinite(min_alignment_id)
+                or min_alignment_id < 0.0
+                or min_alignment_id > 1.0
+            ):
+                raise argparse.ArgumentTypeError(
+                    "Minimum nucleotide ID must be in [0,1]"
+                )
+            self.min_alignment_id = min_alignment_id
+        else:
+            self.min_alignment_id = 0.0
+
+        self.refcheck = refcheck
 
 class VambOptions:
     __slots__ = [
@@ -169,61 +241,65 @@ def calc_tnf(
 
 
 def calc_rpkm(
-    outdir: str,
-    bampaths: Optional[list[str]],
-    npzpath: Optional[str],
+    abundance_options: AbundanceOptions,
+    outdir: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
-    verify_refhash: bool,
-    minid: float,
     nthreads: int,
     logfile: IO[str],
 ) -> vamb.parsebam.Abundance:
 
-    begintime = time.time()/60
+    begintime = time.time()
     log("\nLoading depths", logfile)
     log(
-        f'Reference hash: {comp_metadata.refhash.hex() if verify_refhash else "None"}',
+        f'Reference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else "None"}',
         logfile,
         1,
     )
 
-    # If rpkm is given, we load directly from .npz file
-    if npzpath is not None:
-        log(f"Loading depths from npz array {npzpath}", logfile, 1)
+    path = abundance_options.path
+    if isinstance(path, AbundancePath):
+        log(f"Loading depths from npz array {str(path)}", logfile, 1)
         abundance = vamb.parsebam.Abundance.load(
-            npzpath, comp_metadata.refhash if verify_refhash else None
+            path, comp_metadata.refhash if abundance_options.refcheck else None
         )
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
         if abundance.nseqs != comp_metadata.nseqs:
-            assert not verify_refhash
+            assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
             )
 
+    elif isinstance(path, JGIPath):
+        log(f"Loading depths from JGI path {str(path)}", logfile, 1)
+        with open(path) as file:
+            abundance = vamb.parsebam.Abundance.from_jgi_filehandle(
+                file, comp_metadata, abundance_options.refcheck
+            )
+
     else:
-        assert bampaths is not None
-        log(f"Parsing {len(bampaths)} BAM files with {nthreads} threads", logfile, 1)
+        assert isinstance(path, list)
+        log(f"Parsing {len(path)} BAM files with {nthreads} threads", logfile, 1)
 
         abundance = vamb.parsebam.Abundance.from_files(
-            [str(i) for i in bampaths],
-            Path(os.path.join(outdir, "tmp")),
+            [str(i) for i in path],
+            outdir.joinpath("tmp"),
             comp_metadata,
-            verify_refhash,
-            minid,
+            abundance_options.refcheck,
+            abundance_options.min_alignment_id,
             nthreads,
         )
-        abundance.save(Path(os.path.join(outdir, "abundance.npz")))
+        abundance.save(outdir.joinpath("abundance.npz"))
 
     log(f"Min identity: {abundance.minid}\n", logfile, 1)
     log("Order of columns is:", logfile, 1)
     log("\n\t".join(abundance.samplenames), logfile, 1)
 
-    elapsed = round(time.time()/60 - begintime, 2)
+    elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
-    log(f"Processed RPKM in {elapsed} minutes", logfile, 1)
+    log(f"Processed RPKM in {elapsed} seconds", logfile, 1)
 
     return abundance
 
@@ -472,16 +548,10 @@ def write_fasta(
 def run(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
     outdir: str,
     fastapath: Optional[str],
-    compositionpath: Optional[str],  ## ??? 
-    bampaths: Optional[list[str]],  #
-    rpkmpath: Optional[str],
-    mincontiglength: int,
-    norefcheck: bool,
     noencode: bool,
-    minid: float,
-    nthreads: int,
     nhiddens: Optional[list[int]],
     nhiddens_aae: Optional[list[int]],
     nlatent: int,
@@ -521,13 +591,10 @@ def run(
     
     # Parse BAMs, save as npz
     abundance = calc_rpkm(
-        outdir,
-        bampaths,
-        rpkmpath,
+        abundance_options,
+        vamb_options.out_dir,
         composition.metadata,
-        not norefcheck,
-        minid,
-        nthreads,
+        vamb_options.n_threads,
         logfile,
     )
     timepoint_gernerate_input=time.time()/60
@@ -986,7 +1053,6 @@ def main():
 
     minid: float = args.minid
     nthreads: int = args.nthreads
-    norefcheck: bool = args.norefcheck
     minfasta: Optional[int] = args.minfasta
     noencode: bool = args.noencode
     nhiddens: Optional[list[int]] = args.nhiddens
@@ -1185,20 +1251,22 @@ def main():
         args.cuda
     )
 
+    abundance_options = AbundanceOptions(
+        args.bampaths,
+        args.abundancepath,
+        args.jgipath,
+        args.min_alignment_id,
+        not args.norefcheck,
+    )
+
     with open(logpath, "w") as logfile:
         run(
             vamb_options,
             comp_options,
+            abundance_options,
             outdir,
             fasta,
-            composition,
-            bamfiles,
-            rpkm,
-            mincontiglength=minlength,
-            norefcheck=norefcheck,
             noencode=noencode,
-            minid=minid,
-            nthreads=nthreads,
             nhiddens=nhiddens,
             nhiddens_aae=nhiddens_aae,
             nlatent=nlatent,
