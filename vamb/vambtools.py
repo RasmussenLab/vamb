@@ -12,7 +12,7 @@ import collections as _collections
 from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
-from pathlib import PurePath as _PurePath
+from pathlib import Path
 
 
 class PushArray:
@@ -160,7 +160,7 @@ class Reader:
     TEST LINE
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: Union[str, Path]):
         self.filename = filename
 
         with open(self.filename, "rb") as f:
@@ -335,7 +335,7 @@ def write_clusters(
     min_size: int = 1,
     header: Optional[str] = None,
     rename: bool = True,
-    cluster_prefix= str,
+    cluster_prefix: str = "",
 ) -> tuple[int, int]:
     """Writes clusters to an open filehandle.
     Inputs:
@@ -377,7 +377,7 @@ def write_clusters(
         if rename:
             clustername = cluster_prefix + "cluster_" + str(clusternumber + 1)
         else:
-            clustername = cluster_prefix +  str(clusternumber + 1)
+            clustername = cluster_prefix + str(clusternumber + 1)
 
         for contig in contigs:
             print(clustername, contig, sep="\t", file=filehandle)
@@ -392,7 +392,7 @@ def write_clusters(
     return clusternumber, ncontigs
 
 
-def read_clusters(filehandle: Iterable[str], min_size: int =1) -> dict[str, set[str]]:
+def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set[str]]:
     """Read clusters from a file as created by function `writeclusters`.
 
     Inputs:
@@ -418,12 +418,12 @@ def read_clusters(filehandle: Iterable[str], min_size: int =1) -> dict[str, set[
 
 
 def write_bins(
-    directory: Union[str, _PurePath],
+    directory: Union[str, Path],
     bins: dict[str, set[str]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 250,
     minsize: int = 0,
-    separator: str = None,
+    separator: Optional[str] = None,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
 
@@ -477,7 +477,9 @@ def write_bins(
     for binname, contigs in bins.items():
         size = 0
         if separator is not None:
-            binsample=next(iter(contigs)).split(separator)[0]
+            binsample = next(iter(contigs)).split(separator)[0]
+        else:
+            binsample = None
         for contig in contigs:
             byteslen = byteslen_by_id.get(contig)
             if byteslen is None:
@@ -488,10 +490,10 @@ def write_bins(
 
         if size < minsize:
             continue
-        # added by pau to split bin files into sample dirs
-        if separator is not None:
-       
-            bin_dir=_os.path.join(directory,binsample)
+
+        # Split bin files into sample dirs
+        if binsample is not None:
+            bin_dir = _os.path.join(directory,binsample)
             try:
                 _os.mkdir(bin_dir)
             except FileExistsError:
@@ -499,11 +501,11 @@ def write_bins(
             except:
                 raise
         else:
-            bin_dir=directory
+            bin_dir = directory
+    
         # Print bin to file
         filename = _os.path.join(bin_dir, binname + ".fna")
 
-        #filename = _os.path.join(directory, binname + ".fna")
         with open(filename, "wb") as file:
             for contig in contigs:
                 file.write(_gzip.decompress(byteslen_by_id[contig][0]))
