@@ -12,6 +12,7 @@ import datetime
 import time
 from math import isfinite
 from typing import Optional, IO
+from pathlib import Path
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -114,9 +115,14 @@ def calc_rpkm(
         log(f"Parsing {len(bampaths)} BAM files with {nthreads} threads", logfile, 1)
 
         abundance = vamb.parsebam.Abundance.from_files(
-            bampaths, comp_metadata, verify_refhash, minid, nthreads
+            [str(i) for i in bampaths],
+            Path(os.path.join(outdir, "tmp")),
+            comp_metadata,
+            verify_refhash,
+            minid,
+            nthreads,
         )
-        abundance.save(os.path.join(outdir, "abundance.npz"))
+        abundance.save(Path(os.path.join(outdir, "abundance.npz")))
 
     log(f"Min identity: {abundance.minid}\n", logfile, 1)
     log("Order of columns is:", logfile, 1)
@@ -214,7 +220,7 @@ def trainaae(
     batchsteps: list[int],
     logfile: IO[str],
     contignames: np.ndarray
-) -> tuple[np.ndarray, np.ndarray,dict()]:
+) -> tuple[np.ndarray, np.ndarray, dict]:
 
     begintime = time.time()/60
     log("\nCreating and training AAE", logfile)

@@ -10,8 +10,11 @@ import os as _os
 import numpy as _np
 from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
-import vamb.vambtools as _vambtools
+from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
+from collections.abc import Iterator
+from pathlib import Path
+import shutil
 
 _ncpu = _os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
@@ -49,16 +52,17 @@ class Abundance:
     def nsamples(self) -> int:
         return len(self.samplenames)
 
-    def verify_refhash(self, refhash: bytes) -> None:
-        if self.refhash != refhash:
+    @staticmethod
+    def verify_refhash(refhash: bytes, target_refhash: bytes) -> None:
+        if refhash != target_refhash:
             raise ValueError(
-                f"BAM files reference name hash to {self.refhash.hex()}, "
-                f"expected {refhash.hex()}. "
+                f"At least one BAM file reference name hash to {refhash.hex()}, "
+                f"expected {target_refhash.hex()}. "
                 "Make sure all BAM and FASTA headers are identical "
                 "and in the same order."
             )
 
-    def save(self, io: Union[str, IO[bytes]]):
+    def save(self, io: Union[Path, IO[bytes]]):
         _np.savez_compressed(
             io,
             matrix=self.matrix,
@@ -68,16 +72,18 @@ class Abundance:
         )
 
     @classmethod
-    def load(cls: type[A], io: Union[str, IO[bytes]], refhash: Optional[bytes]) -> A:
+    def load(
+        cls: type[A], io: Union[str, Path, IO[bytes]], refhash: Optional[bytes]
+    ) -> A:
         arrs = _np.load(io, allow_pickle=True)
         abundance = cls(
-            _vambtools.validate_input_array(arrs["matrix"]),
+            vambtools.validate_input_array(arrs["matrix"]),
             arrs["samplenames"],
             arrs["minid"].item(),
             arrs["refhash"].item(),
         )
         if refhash is not None:
-            abundance.verify_refhash(refhash)
+            cls.verify_refhash(abundance.refhash, refhash)
 
         return abundance
 
@@ -85,6 +91,7 @@ class Abundance:
     def from_files(
         cls: type[A],
         paths: list[str],
+        cache_directory: Optional[Path],
         comp_metadata: CompositionMetaData,
         verify_refhash: bool,
         minid: float,
@@ -92,6 +99,8 @@ class Abundance:
     ) -> A:
         """Input:
         paths: List of paths to BAM files
+        cache_directory: Where to store temp parts of the larger matrix, if reading multiple
+           BAM files in chunks. Required if len(paths) > min(16, nthreads)
         comp_metadata: CompositionMetaData of sequence catalogue used to make BAM files
         verify_refhash: Whether to verify composition and BAM references are the same
         minid: Discard any reads with nucleotide identity less than this
@@ -100,6 +109,10 @@ class Abundance:
         if minid < 0 or minid > 1:
             raise ValueError(f"minid must be between 0 and 1, not {minid}")
 
+        # Workaround: Currently pycoverm has a bug where it filters contigs when mindid == 0
+        # (issue #7). Can be solved by setting it to a low value
+        minid = minid if minid > 0.001 else 0.001
+
         for path in paths:
             if not _os.path.isfile(path):
                 raise FileNotFoundError(path)
@@ -107,36 +120,178 @@ class Abundance:
             if not pycoverm.is_bam_sorted(path):
                 raise ValueError(f"Path {path} is not sorted by reference.")
 
-        # Workaround: Currently pycoverm has a bug where it filters contigs when mindid == 0
-        # (issue #7). Can be solved by setting it to a low value
-        _minid = minid if minid > 0.001 else 0.001
-        headers, coverage = pycoverm.get_coverages_from_bam(
+        if nthreads < 1:
+            raise ValueError(f"nthreads must be > 0, not {nthreads}")
+
+        chunksize = min(nthreads, len(paths))
+
+        # We cap it to 16 threads, max. This will prevent pycoverm from consuming a huge amount
+        # of memory if given a crapload of threads, and most programs will probably be IO bound
+        # when reading 16 files at a time.
+        chunksize = min(chunksize, 16)
+
+        # If it can be done in memory, do so
+        if chunksize >= len(paths):
+            (matrix, refhash) = cls.run_pycoverm(
+                paths,
+                minid,
+                comp_metadata.refhash if verify_refhash else None,
+                comp_metadata.mask,
+            )
+            return cls(matrix, paths, minid, refhash)
+        # Else, we load it in chunks, then assemble afterwards
+        else:
+            if cache_directory is None:
+                raise ValueError(
+                    "If min(16, nthreads) < len(paths), cache_directory must not be None"
+                )
+            return cls.chunkwise_loading(
+                paths,
+                cache_directory,
+                chunksize,
+                minid,
+                comp_metadata.refhash if verify_refhash else None,
+                comp_metadata.mask,
+            )
+
+    @classmethod
+    def chunkwise_loading(
+        cls: type[A],
+        paths: list[str],
+        cache_directory: Path,
+        nthreads: int,
+        minid: float,
+        target_refhash: Optional[bytes],
+        mask: _np.ndarray,
+    ) -> A:
+        _os.mkdir(cache_directory)
+
+        chunks = [
+            (i, min(len(paths), i + nthreads)) for i in range(0, len(paths), nthreads)
+        ]
+        filenames = [
+            _os.path.join(cache_directory, str(i) + ".npz") for i in range(len(chunks))
+        ]
+        assert len(chunks) > 1
+
+        # Load from BAM and store them chunkwise
+        refhash = None
+        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+            (matrix, refhash) = cls.run_pycoverm(
+                paths[chunkstart:chunkstop],
+                minid,
+                target_refhash,
+                mask,
+            )
+            vambtools.write_npz(filename, matrix)
+
+        # Initialize matrix, the load them chunkwise. Delete the temp files when done
+        matrix = _np.empty((mask.sum(), len(paths)), dtype=_np.float32)
+        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+            matrix[:, chunkstart:chunkstop] = vambtools.read_npz(filename)
+
+        shutil.rmtree(cache_directory)
+
+        assert refhash is not None
+        return cls(matrix, paths, minid, refhash)
+
+    @staticmethod
+    def run_pycoverm(
+        paths: list[str],
+        minid: float,
+        target_refhash: Optional[bytes],
+        mask: _np.ndarray,
+    ) -> tuple[_np.ndarray, bytes]:
+        (headers, coverage) = pycoverm.get_coverages_from_bam(
             paths,
-            threads=nthreads,
-            min_identity=_minid,
+            threads=len(paths),
+            min_identity=minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
             trim_upper=0.1,
             trim_lower=0.1,
         )
 
-        assert len(headers) == len(coverage)
-        assert coverage.shape[1] == len(paths)
+        assert coverage.shape == (len(headers), len(paths))
 
         # Filter length, using comp_metadata's mask, which has been set by minlength
-        if len(comp_metadata.mask) != len(headers):
+        if len(mask) != len(headers):
             raise ValueError(
-                f"CompositionMetaData was created with {len(comp_metadata.mask)} sequences, "
+                f"CompositionMetaData was created with {len(mask)} sequences, "
                 f"but number of refs in BAM files are {len(headers)}."
             )
 
-        headers = [h for (h, m) in zip(headers, comp_metadata.mask) if m]
-        _vambtools.numpy_inplace_maskarray(coverage, comp_metadata.mask)
+        headers = [h for (h, m) in zip(headers, mask) if m]
+        vambtools.numpy_inplace_maskarray(coverage, mask)
+        refhash = vambtools.hash_refnames(headers)
 
-        refhash = _vambtools.hash_refnames(headers)
-        abundance = cls(coverage, paths, minid, refhash)
+        if target_refhash is not None:
+            Abundance.verify_refhash(refhash, target_refhash)
 
-        # Check refhash
+        return (coverage, refhash)
+
+    @classmethod
+    def from_jgi_filehandle(
+        cls: type[A],
+        filehandle: Iterator[str],
+        comp_metadata: CompositionMetaData,
+        verify_refhash: bool,
+    ) -> A:
+        # Check header
+        header = next(filehandle)
+        fields = header.strip().split("\t")
+        if not fields[:3] == ["contigName", "contigLen", "totalAvgDepth"]:
+            raise ValueError(
+                'Input file format error: First columns should be "contigName,"'
+                '"contigLen" and "totalAvgDepth"'
+            )
+
+        sample_names = []
+        for fieldno in range(3, len(fields)):
+            field = fields[fieldno]
+            if fieldno % 2 == 0:
+                if not field.endswith("-var"):
+                    raise ValueError(
+                        f'Header of column {fieldno + 1} does not end with "-var" as expected'
+                    )
+            else:
+                if field.endswith("-var"):
+                    raise ValueError(
+                        f'Header of column {fieldno + 1} unexpectedly ends with "-var"'
+                    )
+                sample_names.append(field)
+
+        # Load identifiers and mean abundance in each sample for each ref
+        columns = range(3, len(fields), 2)
+        array = vambtools.PushArray(_np.float32)
+        identifiers = list()
+
+        for row in filehandle:
+            fields = row.split("\t")
+            for col in columns:
+                array.append(float(fields[col]))
+
+            identifiers.append(fields[0])
+
+        # Mask
+        if len(identifiers) != len(comp_metadata.mask):
+            raise ValueError(
+                f"CompositionMetaData was created with {len(comp_metadata.mask)} sequences, "
+                f"but number of ref sequences in JGI file is {len(identifiers)}."
+            )
+        identifiers = [h for (h, m) in zip(identifiers, comp_metadata.mask) if m]
+
+        matrix = array.take()
+        matrix.shape = (len(matrix) // len(columns), len(columns))
+        matrix = vambtools.validate_input_array(matrix)
+        vambtools.numpy_inplace_maskarray(matrix, comp_metadata.mask)
+
+        assert matrix.shape[1] == len(sample_names)
+
+        # Refhash
+        refhash = vambtools.hash_refnames(identifiers)
+        abundance = cls(matrix, sample_names, 0.0, refhash)
+
         if verify_refhash:
-            abundance.verify_refhash(comp_metadata.refhash)
+            cls.verify_refhash(refhash, comp_metadata.refhash)
 
         return abundance
