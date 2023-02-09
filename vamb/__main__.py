@@ -605,7 +605,6 @@ def run(
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
     cluster_options: ClusterOptions,
-    fastapath: Optional[Path],
     noencode: bool,
     nhiddens: Optional[list[int]],
     nhiddens_aae: Optional[list[int]],
@@ -742,12 +741,13 @@ def run(
 
         del latent
 
-        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
-            # We have already checked fastapath is not None if vamb_options.min_fasta_output_size is not None.
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
             write_fasta(
                 vamb_options.out_dir,
                 clusterspath,
-                fastapath,
+                path,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
                 vamb_options.min_fasta_output_size,
@@ -781,12 +781,13 @@ def run(
 
         del latent_z
 
-        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
-            # We have already checked fastapath is not None if minfasta is not None.
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
             write_fasta(
                 vamb_options.out_dir,
                 clusterspath,
-                fastapath,
+                path,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
                 vamb_options.min_fasta_output_size,
@@ -816,12 +817,13 @@ def run(
         print("", file=logfile)
         log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
         time_start_writin_z_bins=time.time()/60
-        if vamb_options.min_fasta_output_size is not None and fastapath is not None:
-            # We have already checked fastapath is not None if minfasta is not None.
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
             write_fasta(
                 vamb_options.out_dir,
                 clusterspath,
-                fastapath,
+                path,
                 comp_metadata.identifiers,
                 comp_metadata.lengths,
                 vamb_options.min_fasta_output_size,
@@ -1283,7 +1285,7 @@ def main():
             raise
     
     logpath = os.path.join(outdir, "log.txt")
-    
+
     comp_options = CompositionOptions(
         args.fasta, args.composition, args.min_contig_length
     )
@@ -1318,7 +1320,6 @@ def main():
             comp_options,
             abundance_options,
             cluster_options,
-            fasta,
             noencode=noencode,
             nhiddens=nhiddens,
             nhiddens_aae=nhiddens_aae,
