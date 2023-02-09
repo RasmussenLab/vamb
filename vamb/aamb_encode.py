@@ -13,6 +13,7 @@ import torch
 
 from torch.utils.data import DataLoader as _DataLoader
 
+from collections.abc import Sequence
 from typing import Optional, IO, Union
 
 random_seed = 42
@@ -432,7 +433,7 @@ class AAE(nn.Module):
         return None
 
     ########### funciton that retrieves the clusters from Y latents
-    def get_latents(self, contignames: list[str], data_loader, last_epoch: bool = True):
+    def get_latents(self, contignames: Sequence[str], data_loader, last_epoch: bool = True):
         """Retrieve the categorical latent representation (y) and the contiouous latents (l) of the inputs
 
         Inputs:

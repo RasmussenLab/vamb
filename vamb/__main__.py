@@ -13,6 +13,7 @@ import time
 from math import isfinite
 from typing import Optional, IO
 from pathlib import Path
+from collections.abc import Sequence
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -28,8 +29,6 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
-
-from vamb import aamb_encode
 
 class FASTAPath(type(Path())):
     pass
@@ -504,7 +503,7 @@ def trainaae(
     lrate: float,
     batchsteps: list[int],
     logfile: IO[str],
-    contignames: np.ndarray
+    contignames: Sequence[str]
 ) -> tuple[np.ndarray, np.ndarray, dict[str, set[str]]]:
 
     begintime = time.time()/60
@@ -513,7 +512,7 @@ def trainaae(
 
     assert len(rpkms) == len(tnfs)
 
-    aae = aamb_encode.AAE(nsamples, nhiddens, nlatent_z, nlatent_y, sl, slr, alpha,cuda)
+    aae = vamb.aamb_encode.AAE(nsamples, nhiddens, nlatent_z, nlatent_y, sl, slr, alpha,cuda)
 
     log("Created AAE", logfile,1)
     dataloader, mask = vamb.encode.make_dataloader(
@@ -553,7 +552,7 @@ def cluster(
     cluster_options: ClusterOptions,
     clusterspath: Path,
     latent: np.ndarray,
-    contignames: np.ndarray,  # of dtype object
+    contignames: Sequence[str],  # of dtype object
     cuda: bool,
     logfile: IO[str],
     cluster_prefix: str,
@@ -625,7 +624,7 @@ def write_fasta(
     outdir: Path,
     clusterspath: Path,
     fastapath: Path,
-    contignames: np.ndarray,  # of object
+    contignames: Sequence[str],  # of object
     contiglengths: np.ndarray,
     minfasta: int,
     logfile: IO[str],
