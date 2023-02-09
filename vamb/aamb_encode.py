@@ -13,7 +13,7 @@ import torch
 
 from torch.utils.data import DataLoader as _DataLoader
 
-from typing import Optional
+from typing import Optional, IO, Union
 
 random_seed = 42
 torch.manual_seed(random_seed)
@@ -175,7 +175,7 @@ class AAE(nn.Module):
         loss = ce * ce_weight + sse * sse_weight
         return loss, ce, sse
 
-    def forward(self, depths_in, tnfs_in, z_prior, y_prior):
+    def forward(self, depths_in, tnfs_in):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in)
         z_latent = self._reparameterization(mu, logvar)
         depths_out, tnfs_out = self._decode(z_latent, y_latent)
@@ -189,7 +189,14 @@ class AAE(nn.Module):
     # ----------
 
     def trainmodel(
-        self, data_loader, nepochs, batchsteps, T, lr, logfile=None, modelfile=None
+        self,
+        data_loader,
+        nepochs: int,
+        batchsteps: list[int],
+        T,
+        lr: float,
+        logfile: Optional[IO[str]] = None,
+        modelfile: Union[None, str, IO[bytes]] = None,
     ):
 
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
@@ -290,12 +297,8 @@ class AAE(nn.Module):
                     y_prior = y_prior.cuda()
 
                 else:
-                    z_prior = Variable(
-                        Tensor(np.random.normal(0, 1, (nrows, self.ld)))
-                    )
-                    ohc = RelaxedOneHotCategorical(
-                        T, torch.ones([nrows, self.y_len])
-                    )
+                    z_prior = Variable(Tensor(np.random.normal(0, 1, (nrows, self.ld))))
+                    ohc = RelaxedOneHotCategorical(T, torch.ones([nrows, self.y_len]))
                     y_prior = ohc.sample()
 
                 del ohc
@@ -429,7 +432,7 @@ class AAE(nn.Module):
         return None
 
     ########### funciton that retrieves the clusters from Y latents
-    def get_latents(self, contignames, data_loader, last_epoch=True):
+    def get_latents(self, contignames: list[str], data_loader, last_epoch: bool = True):
         """Retrieve the categorical latent representation (y) and the contiouous latents (l) of the inputs
 
         Inputs:
@@ -464,8 +467,6 @@ class AAE(nn.Module):
 
             for depths_in, tnfs_in, _ in new_data_loader:
                 nrows, _ = depths_in.shape
-                I = torch.cat((depths_in, tnfs_in), dim=1)
-
                 if self.usecuda:
                     z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()
                     z_prior.cuda()
@@ -477,9 +478,7 @@ class AAE(nn.Module):
                     y_prior = y_prior.cuda()
 
                 else:
-                    z_prior = Variable(
-                        Tensor(np.random.normal(0, 1, (nrows, self.ld)))
-                    )
+                    z_prior = Variable(Tensor(np.random.normal(0, 1, (nrows, self.ld))))
                     ohc = RelaxedOneHotCategorical(
                         0.15, torch.ones([nrows, self.y_len])
                     )
