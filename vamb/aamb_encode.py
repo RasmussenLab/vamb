@@ -30,7 +30,7 @@ class AAE(nn.Module):
         nsamples: int,
         nhiddens: list[int],
         nlatent_l: int,
-        nlatent_y,
+        nlatent_y: int,
         sl: float,
         slr: float,
         alpha: Optional[float],
@@ -413,7 +413,7 @@ class AAE(nn.Module):
                 try:
                     checkpoint = {
                         "state": self.state_dict(),
-                        "optimizer_ED": optimizer_ED.state_dict(),
+                        "optimizer_E": optimizer_E.state_dict(),
                         "optimizer_D_z": optimizer_D_z.state_dict(),
                         "optimizer_D_y": optimizer_D_y.state_dict(),
                         "nsamples": self.num_samples,
