@@ -181,13 +181,13 @@ class VAEOptions:
 class AAEOptions:
     def __init__(
         self,
-        nhiddens: Optional[list[int]],
+        nhiddens: int,
         nlatent_z: int,
         nlatent_y: int,
         sl: float,
         slr: float,
     ):
-        assert isinstance(nhiddens, (list, type(None)))
+        assert isinstance(nhiddens, int)
         assert isinstance(nlatent_z, int)
         assert isinstance(nlatent_y, int)
         assert isinstance(sl, float)
@@ -1161,7 +1161,6 @@ def main():
         dest="nhiddens_aae",
         metavar="",
         type=int,
-        nargs="+",
         default=547,
         help="hidden neurons AAE [547]",
     )
@@ -1363,7 +1362,7 @@ def main():
     except:
         raise
 
-    if "aae" in args.model:
+    if aae_options is not None:
         try:
             os.mkdir(
                 vamb_options.out_dir.joinpath("tmp")

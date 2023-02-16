@@ -28,7 +28,7 @@ class AAE(nn.Module):
     def __init__(
         self,
         nsamples: int,
-        nhiddens: list[int],
+        nhiddens: int,
         nlatent_l: int,
         nlatent_y: int,
         sl: float,
@@ -414,6 +414,7 @@ class AAE(nn.Module):
                     checkpoint = {
                         "state": self.state_dict(),
                         "optimizer_E": optimizer_E.state_dict(),
+                        "optimizer_D": optimizer_D.state_dict(),
                         "optimizer_D_z": optimizer_D_z.state_dict(),
                         "optimizer_D_y": optimizer_D_y.state_dict(),
                         "nsamples": self.num_samples,
