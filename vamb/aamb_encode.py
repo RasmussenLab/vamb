@@ -323,7 +323,7 @@ class AAE(nn.Module):
                     y_latent,
                     d_z_latent,
                     d_y_latent,
-                ) = self(depths_in, tnfs_in, z_prior, y_prior)
+                ) = self(depths_in, tnfs_in)
 
                 vae_loss, ce, sse = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out
@@ -491,11 +491,11 @@ class AAE(nn.Module):
                     tnfs_in = tnfs_in.cuda()
 
                 if last_epoch:
-                    mu, _, _, _, y_sample = self(depths_in, tnfs_in, z_prior, y_prior)[
+                    mu, _, _, _, y_sample = self(depths_in, tnfs_in)[
                         0:5
                     ]
                 else:
-                    y_sample = self(depths_in, tnfs_in, z_prior, y_prior)[4]
+                    y_sample = self(depths_in, tnfs_in)[4]
 
                 if self.usecuda:
                     Ys = y_sample.cpu().detach().numpy()
