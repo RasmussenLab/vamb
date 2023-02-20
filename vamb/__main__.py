@@ -290,9 +290,9 @@ class TrainingOptions:
         lrate: float,
     ):
         assert isinstance(lrate, float)
-
-        assert (encoder_options.vae_options is None) != (vae_options is None)
-        assert (encoder_options.aae_options is None) != (aae_options is None)
+        
+        assert (encoder_options.vae_options is None) == (vae_options is None)
+        assert (encoder_options.aae_options is None) == (aae_options is None)
 
         if lrate <= 0.0:
             raise argparse.ArgumentTypeError("Learning rate must be positive")
@@ -466,6 +466,7 @@ def calc_rpkm(
     path = abundance_options.path
     if isinstance(path, AbundancePath):
         log(f"Loading depths from npz array {str(path)}", logfile, 1)
+        
         abundance = vamb.parsebam.Abundance.load(
             path, comp_metadata.refhash if abundance_options.refcheck else None
         )
@@ -933,8 +934,8 @@ def run(
 
         clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
         # Binsplit if given a separator
-        if separator is not None:
-            maybe_split = vamb.vambtools.binsplit(clusters_y_dict.items(), separator)
+        if cluster_options.binsplit_separator is not None:
+            maybe_split = vamb.vambtools.binsplit(clusters_y_dict.items(), cluster_options.binsplit_separator)
         else:
             maybe_split = clusters_y_dict.items()
         with open(clusterspath, "w") as clustersfile:
@@ -998,7 +999,11 @@ def main():
     # Positional arguments
     reqos = parser.add_argument_group(title="Output (required)", description=None)
     reqos.add_argument(
-        "--outdir", metavar="", required=True, help="output directory to create"
+        "--outdir", 
+        metavar="",
+        type=Path, 
+        required=True, 
+        help="output directory to create"
     )
 
     # TNF arguments
@@ -1006,16 +1011,34 @@ def main():
         title="TNF input (either fasta or all .npz files required)"
     )
     tnfos.add_argument("--fasta", metavar="", type=Path, help="path to fasta file")
-    tnfos.add_argument("--composition", metavar="", help="path to .npz of composition")
+    tnfos.add_argument("--composition", metavar="",type=Path, help="path to .npz of composition")
 
     # RPKM arguments
     rpkmos = parser.add_argument_group(
         title="RPKM input (either BAMs or .npz required)"
     )
     rpkmos.add_argument(
-        "--bamfiles", metavar="", help="paths to (multiple) BAM files", nargs="+"
+        "--bamfiles", 
+        dest='bampaths',
+        metavar="", 
+        type=Path,
+        help="paths to (multiple) BAM files", 
+        nargs="+"
     )
-    rpkmos.add_argument("--rpkm", metavar="", help="path to .npz of RPKM (abundances)")
+    rpkmos.add_argument(
+        "--rpkm", 
+        metavar="",
+        dest="abundancepath",
+        type=Path,  
+        help="path to .npz of RPKM (abundances)"
+    )
+    rpkmos.add_argument(
+        "--jgi", 
+        metavar="",
+        dest="jgipath",
+        type=Path,  
+        help="path to JGI text file of abundances"
+    )
 
     # Optional arguments
     inputos = parser.add_argument_group(title="IO options", description=None)
@@ -1030,10 +1053,10 @@ def main():
     )
     inputos.add_argument(
         "-z",
-        dest="minid",
+        dest="min_alignment_id",
         metavar="",
         type=float,
-        default=0.0,
+        default=None,
         help="ignore reads with nucleotide identity below this [0.0]",
     )
     inputos.add_argument(
@@ -1053,7 +1076,7 @@ def main():
     )
     inputos.add_argument(
         "--minfasta",
-        dest="minfasta",
+        dest="min_fasta_output_size",
         metavar="",
         type=int,
         default=None,
@@ -1238,7 +1261,7 @@ def main():
     clusto = parser.add_argument_group(title="Clustering options", description=None)
     clusto.add_argument(
         "-w",
-        dest="windowsize",
+        dest="window_size",
         metavar="",
         type=int,
         default=200,
@@ -1246,7 +1269,7 @@ def main():
     )
     clusto.add_argument(
         "-u",
-        dest="minsuccesses",
+        dest="min_successes",
         metavar="",
         type=int,
         default=20,
@@ -1254,7 +1277,7 @@ def main():
     )
     clusto.add_argument(
         "-i",
-        dest="minsize",
+        dest="min_cluster_size",
         metavar="",
         type=int,
         default=1,
@@ -1262,7 +1285,7 @@ def main():
     )
     clusto.add_argument(
         "-c",
-        dest="maxclusters",
+        dest="max_clusters",
         metavar="",
         type=int,
         default=None,
@@ -1270,7 +1293,7 @@ def main():
     )
     clusto.add_argument(
         "-o",
-        dest="separator",
+        dest="binsplit_separator",
         metavar="",
         type=str,
         default=None,
@@ -1284,7 +1307,9 @@ def main():
     args = parser.parse_args()
 
     comp_options = CompositionOptions(
-        args.fasta, args.composition, args.min_contig_length
+        #args.fasta, args.composition, args.min_contig_length
+        args.fasta, args.composition, args.minlength
+
     )
 
     abundance_options = AbundanceOptions(
@@ -1292,6 +1317,7 @@ def main():
         args.abundancepath,
         args.jgipath,
         args.min_alignment_id,
+
         not args.norefcheck,
     )
 
@@ -1361,11 +1387,10 @@ def main():
         pass
     except:
         raise
-
     if aae_options is not None:
         try:
             os.mkdir(
-                vamb_options.out_dir.joinpath("tmp")
+                vamb_options.out_dir.joinpath("tmp_dr")
             )  # needed for dereplication logs and files
         except FileExistsError:
             pass
@@ -1373,7 +1398,7 @@ def main():
             raise
         try:
             os.mkdir(
-                vamb_options.out_dir.joinpath("tmp", "ripped_bins")
+                vamb_options.out_dir.joinpath("tmp_dr", "ripped_bins")
             )  # needed for dereplication logs and files
         except FileExistsError:
             pass
@@ -1381,7 +1406,7 @@ def main():
             raise
         try:
             os.mkdir(
-                vamb_options.out_dir.joinpath("tmp", "checkm2_all")
+                vamb_options.out_dir.joinpath("tmp_dr", "checkm2_all")
             )  # needed for dereplication logs and files
         except FileExistsError:
             pass
