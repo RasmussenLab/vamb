@@ -34,3 +34,4 @@ from . import parsecontigs
 from . import cluster
 from . import benchmark
 from . import encode
+from . import aamb_encode
