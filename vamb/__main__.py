@@ -29,6 +29,13 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
+def try_make_dir(name):
+    try:
+        os.mkdir(name)
+    except FileExistsError:
+        pass
+    except:
+        raise
 
 class FASTAPath(type(Path())):
     pass
@@ -493,7 +500,7 @@ def calc_rpkm(
 
         abundance = vamb.parsebam.Abundance.from_files(
             [str(i) for i in path],
-            outdir.joinpath("tmp"),
+            outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
             abundance_options.refcheck,
             abundance_options.min_alignment_id,
@@ -1307,7 +1314,6 @@ def main():
     args = parser.parse_args()
 
     comp_options = CompositionOptions(
-        #args.fasta, args.composition, args.min_contig_length
         args.fasta, args.composition, args.minlength
 
     )
@@ -1381,45 +1387,13 @@ def main():
 
     torch.set_num_threads(vamb_options.n_threads)
 
-    try:
-        os.mkdir(vamb_options.out_dir)
-    except FileExistsError:
-        pass
-    except:
-        raise
+    try_make_dir(vamb_options.out_dir)
+    try_make_dir(vamb_options.out_dir.joinpath("tmp"))
+
     if aae_options is not None:
-        try:
-            os.mkdir(
-                vamb_options.out_dir.joinpath("tmp_dr")
-            )  # needed for dereplication logs and files
-        except FileExistsError:
-            pass
-        except:
-            raise
-        try:
-            os.mkdir(
-                vamb_options.out_dir.joinpath("tmp_dr", "ripped_bins")
-            )  # needed for dereplication logs and files
-        except FileExistsError:
-            pass
-        except:
-            raise
-        try:
-            os.mkdir(
-                vamb_options.out_dir.joinpath("tmp_dr", "checkm2_all")
-            )  # needed for dereplication logs and files
-        except FileExistsError:
-            pass
-        except:
-            raise
-        try:
-            os.mkdir(
-                vamb_options.out_dir.joinpath("NC_bins")
-            )  # needed for dereplication logs and files
-        except FileExistsError:
-            pass
-        except:
-            raise
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "ripped_bins"))
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "checkm2_all"))
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "NC_bins"))
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(
