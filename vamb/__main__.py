@@ -11,8 +11,9 @@ import torch
 import datetime
 import time
 from math import isfinite
-from typing import Optional, IO, Union
+from typing import Optional, IO
 from pathlib import Path
+from collections.abc import Sequence
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -28,10 +29,16 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
+def try_make_dir(name):
+    try:
+        os.mkdir(name)
+    except FileExistsError:
+        pass
+    except:
+        raise
 
 class FASTAPath(type(Path())):
     pass
-
 
 
 class CompositionPath(type(Path())):
@@ -144,19 +151,18 @@ class AbundanceOptions:
 
 
 class VAEOptions:
-    __slots__ = ["nhiddens", "nlatent", "alpha", "beta", "dropout", "cuda"]
+    __slots__ = ["nhiddens", "nlatent", "beta", "dropout"]
 
     def __init__(
         self,
         nhiddens: Optional[list[int]],
         nlatent: int,
-        alpha: Optional[float],
         beta: float,
         dropout: Optional[float],
     ):
         assert isinstance(nhiddens, (list, type(None)))
         assert isinstance(nlatent, int)
-        assert isinstance(alpha, (float, type(None)))
+
         assert isinstance(beta, float)
         assert isinstance(dropout, (float, type(None)))
 
@@ -170,10 +176,6 @@ class VAEOptions:
             raise argparse.ArgumentTypeError(f"Minimum 1 latent neuron, not {nlatent}")
         self.nlatent = nlatent
 
-        if alpha is not None and (alpha <= 0 or alpha) >= 1:
-            raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
-        self.alpha = alpha
-
         if beta <= 0 or not isfinite(beta):
             raise argparse.ArgumentTypeError("beta cannot be negative or zero")
         self.beta = beta
@@ -183,16 +185,59 @@ class VAEOptions:
         self.dropout = dropout
 
 
-class TrainingOptions:
-    __slots__ = ["nepochs", "batchsize", "batchsteps", "lrate"]
+class AAEOptions:
+    def __init__(
+        self,
+        nhiddens: int,
+        nlatent_z: int,
+        nlatent_y: int,
+        sl: float,
+        slr: float,
+    ):
+        assert isinstance(nhiddens, int)
+        assert isinstance(nlatent_z, int)
+        assert isinstance(nlatent_y, int)
+        assert isinstance(sl, float)
+        assert isinstance(slr, float)
+
+        self.nhiddens = nhiddens
+        self.nlatent_z = nlatent_z
+        self.nlatent_y = nlatent_y
+        self.sl = sl
+        self.slr = slr
+
+
+class EncoderOptions:
+    __slots__ = ["vae_options", "aae_options", "alpha"]
 
     def __init__(
-        self, nepochs: int, batchsize: int, batchsteps: list[int], lrate: float
+        self,
+        vae_options: Optional[VAEOptions],
+        aae_options: Optional[AAEOptions],
+        alpha: Optional[float],
     ):
+        assert isinstance(alpha, (float, type(None)))
+        assert isinstance(vae_options, (VAEOptions, type(None)))
+        assert isinstance(aae_options, (AAEOptions, type(None)))
+
+        if alpha is not None and (alpha <= 0 or alpha) >= 1:
+            raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
+        self.alpha = alpha
+
+        if vae_options is None and aae_options is None:
+            raise argparse.ArgumentTypeError(
+                "You must specify either VAE or AAE or both as encoders, cannot run with no encoders."
+            )
+
+        self.vae_options = vae_options
+        self.aae_options = aae_options
+
+
+class VAETrainingOptions:
+    def __init__(self, nepochs: int, batchsize: int, batchsteps: list[int]):
         assert isinstance(nepochs, int)
         assert isinstance(batchsize, int)
         assert isinstance(batchsteps, list)
-        assert isinstance(lrate, float)
 
         if nepochs < 1:
             raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
@@ -210,8 +255,58 @@ class TrainingOptions:
             raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
         self.batchsteps = batchsteps
 
+
+class AAETrainingOptions:
+    def __init__(
+        self,
+        nepochs: int,
+        batchsize: int,
+        batchsteps: list[int],
+        temp: Optional[float],
+    ):
+        assert isinstance(nepochs, int)
+        assert isinstance(batchsize, int)
+        assert isinstance(batchsteps, list)
+
+        if nepochs < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
+        self.nepochs = nepochs
+
+        if batchsize < 1:
+            raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
+        self.batchsize = batchsize
+
+        batchsteps = sorted(set(batchsteps))
+        if max(batchsteps, default=0) >= self.nepochs:
+            raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
+
+        if min(batchsteps, default=1) < 1:
+            raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
+        self.batchsteps = batchsteps
+
+        assert isinstance(temp, (float, type(None)))
+        self.temp = temp
+
+
+class TrainingOptions:
+    def __init__(
+        self,
+        encoder_options: EncoderOptions,
+        vae_options: Optional[VAETrainingOptions],
+        aae_options: Optional[AAETrainingOptions],
+        lrate: float,
+    ):
+        assert isinstance(lrate, float)
+        
+        assert (encoder_options.vae_options is None) == (vae_options is None)
+        assert (encoder_options.aae_options is None) == (aae_options is None)
+
         if lrate <= 0.0:
             raise argparse.ArgumentTypeError("Learning rate must be positive")
+        self.lrate = lrate
+
+        self.vae_options = vae_options
+        self.aae_options = aae_options
         self.lrate = lrate
 
 
@@ -378,6 +473,7 @@ def calc_rpkm(
     path = abundance_options.path
     if isinstance(path, AbundancePath):
         log(f"Loading depths from npz array {str(path)}", logfile, 1)
+        
         abundance = vamb.parsebam.Abundance.load(
             path, comp_metadata.refhash if abundance_options.refcheck else None
         )
@@ -404,7 +500,7 @@ def calc_rpkm(
 
         abundance = vamb.parsebam.Abundance.from_files(
             [str(i) for i in path],
-            outdir.joinpath("tmp"),
+            outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
             abundance_options.refcheck,
             abundance_options.min_alignment_id,
@@ -425,9 +521,10 @@ def calc_rpkm(
 
 def trainvae(
     vae_options: VAEOptions,
-    training_options: TrainingOptions,
+    training_options: VAETrainingOptions,
     vamb_options: VambOptions,
-    outdir: Path,
+    lrate: float,
+    alpha: Optional[float],
     rpkms: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
@@ -444,7 +541,7 @@ def trainvae(
         nsamples,
         nhiddens=vae_options.nhiddens,
         nlatent=vae_options.nlatent,
-        alpha=vae_options.alpha,
+        alpha=alpha,
         beta=vae_options.beta,
         dropout=vae_options.dropout,
         cuda=vamb_options.cuda,
@@ -460,17 +557,17 @@ def trainvae(
         cuda=vamb_options.cuda,
     )
     log("Created dataloader and mask", logfile, 1)
-    vamb.vambtools.write_npz(os.path.join(outdir, "mask.npz"), mask)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
     n_discarded = len(mask) - mask.sum()
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
     print("", file=logfile)
 
-    modelpath = outdir.joinpath("model.pt")
+    modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         dataloader,
         nepochs=training_options.nepochs,
-        lrate=training_options.lrate,
+        lrate=lrate,
         batchsteps=training_options.batchsteps,
         logfile=logfile,
         modelfile=modelpath,
@@ -479,7 +576,7 @@ def trainvae(
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
     latent = vae.encode(dataloader)
-    vamb.vambtools.write_npz(os.path.join(outdir, "latent.npz"), latent)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
@@ -488,13 +585,78 @@ def trainvae(
     return mask, latent
 
 
+def trainaae(
+    rpkms: np.ndarray,
+    tnfs: np.ndarray,
+    lengths: np.ndarray,
+    aae_options: AAEOptions,
+    training_options: AAETrainingOptions,
+    vamb_options: VambOptions,
+    lrate: float,
+    alpha: Optional[float],  # set automatically if None
+    logfile: IO[str],
+    contignames: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray, dict[str, set[str]]]:
+
+    begintime = time.time() / 60
+    log("\nCreating and training AAE", logfile)
+    nsamples = rpkms.shape[1]
+
+    assert len(rpkms) == len(tnfs)
+
+    aae = vamb.aamb_encode.AAE(
+        nsamples,
+        aae_options.nhiddens,
+        aae_options.nlatent_z,
+        aae_options.nlatent_y,
+        aae_options.sl,
+        aae_options.slr,
+        alpha,
+        _cuda=vamb_options.cuda,
+    )
+
+    log("Created AAE", logfile, 1)
+    dataloader, mask = vamb.encode.make_dataloader(
+        rpkms, tnfs, lengths, training_options.batchsize, destroy=True, cuda=vamb_options.cuda
+    )
+    log("Created dataloader and mask", logfile, 1)
+    n_discarded = len(mask) - mask.sum()
+    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
+    log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
+    print("", file=logfile)
+
+    modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
+    aae.trainmodel(
+        dataloader,
+        training_options.nepochs,
+        training_options.batchsteps,
+        training_options.temp,
+        lrate,
+        logfile,
+        modelpath,
+    )
+
+    print("", file=logfile)
+    log("Encoding to latent representation", logfile, 1)
+    clusters_y_dict, latent = aae.get_latents(contignames, dataloader)
+    vamb.vambtools.write_npz(os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent)
+
+    del aae  # Needed to free "latent" array's memory references?
+
+    elapsed = round(time.time() / 60 - begintime, 2)
+    log(f"Trained AAE and encoded in {elapsed} minutes", logfile, 1)
+
+    return mask, latent, clusters_y_dict
+
+
 def cluster(
     cluster_options: ClusterOptions,
     clusterspath: Path,
     latent: np.ndarray,
-    contignames: np.ndarray,  # of dtype object
+    contignames: Sequence[str],  # of dtype object
     cuda: bool,
     logfile: IO[str],
+    cluster_prefix: str,
 ) -> None:
     begintime = time.time()
 
@@ -549,6 +711,7 @@ def cluster(
             max_clusters=cluster_options.max_clusters,
             min_size=cluster_options.min_cluster_size,
             rename=False,
+            cluster_prefix=cluster_prefix,
         )
 
     print("", file=logfile)
@@ -562,15 +725,16 @@ def write_fasta(
     outdir: Path,
     clusterspath: Path,
     fastapath: Path,
-    contignames: np.ndarray,  # of object
+    contignames: Sequence[str],  # of object
     contiglengths: np.ndarray,
     minfasta: int,
     logfile: IO[str],
+    separator: Optional[str],
 ) -> None:
-    begintime = time.time()
+    begintime = time.time() / 60
 
     log("\nWriting FASTA files", logfile)
-    log("Minimum FASTA size: {minfasta}", logfile, 1)
+    log("Minimum FASTA size: " + str(minfasta), logfile, 1)
     assert len(contignames) == len(contiglengths)
 
     lengthof = dict(zip(contignames, contiglengths))
@@ -591,7 +755,11 @@ def write_fasta(
 
     with vamb.vambtools.Reader(fastapath) as file:
         vamb.vambtools.write_bins(
-            outdir.joinpath("bins"), filtered_clusters, file, maxbins=None
+            outdir.joinpath("bins"),
+            filtered_clusters,
+            file,
+            maxbins=None,
+            separator=separator,
         )
 
     ncontigs = sum(map(len, filtered_clusters.values()))
@@ -599,19 +767,23 @@ def write_fasta(
     print("", file=logfile)
     log(f"Wrote {ncontigs} contigs to {nfiles} FASTA files", logfile, 1)
 
-    elapsed = round(time.time() - begintime, 2)
-    log(f"Wrote FASTA in {elapsed} seconds", logfile, 1)
+    elapsed = round(time.time() / 60 - begintime, 2)
+    log(f"Wrote FASTA in {elapsed} minutes", logfile, 1)
 
 
 def run(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    vae_options: VAEOptions,
+    encoder_options: EncoderOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,
     logfile: IO[str],
 ):
+    vae_options = encoder_options.vae_options
+    aae_options = encoder_options.aae_options
+    vae_training_options = training_options.vae_options
+    aae_training_options = training_options.aae_options
 
     log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
     log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
@@ -628,66 +800,192 @@ def run(
         vamb_options.n_threads,
         logfile,
     )
+    timepoint_gernerate_input = time.time() / 60
+    time_generating_input = round(timepoint_gernerate_input - begintime, 2)
 
-    # Train, save model
-    mask, latent = trainvae(
-        vae_options,
-        training_options,
-        vamb_options,
-        vamb_options.out_dir,
-        abundance.matrix,
-        composition.matrix,
-        composition.metadata.lengths,
-        logfile,
-    )
+    log(f"\nTNF and coabundances generated in {time_generating_input}", logfile, 1)
+
+    if vae_options is not None:
+        assert vae_training_options is not None
+        begin_train_vae = time.time() / 60
+        # Train, save model
+        mask, latent = trainvae(
+            vae_options=vae_options,
+            training_options=vae_training_options,
+            vamb_options=vamb_options,
+            lrate=training_options.lrate,
+            alpha=encoder_options.alpha,
+            rpkms=abundance.matrix,
+            tnfs=composition.matrix,
+            lengths=composition.metadata.lengths,
+            logfile=logfile,
+        )
+        fin_train_vae = time.time() / 60
+        time_training_vae = round(fin_train_vae - begin_train_vae, 2)
+        log(f"\nVAE trained in {time_training_vae}", logfile, 1)
+
+    if aae_options is not None:
+        assert aae_training_options is not None
+        begin_train_aae = time.time() / 60
+        # Train, save model
+        mask, latent_z, clusters_y_dict = trainaae(
+            rpkms=abundance.matrix,
+            tnfs=composition.matrix,
+            lengths=composition.metadata.lengths,
+            aae_options=aae_options,
+            vamb_options=vamb_options,
+            training_options=aae_training_options,
+            lrate=training_options.lrate,
+            alpha=encoder_options.alpha,
+            logfile=logfile,
+            contignames=composition.metadata.identifiers,
+        )
+        fin_train_aae = time.time() / 60
+        time_training_aae = round(fin_train_aae - begin_train_aae, 2)
+        log(f"\nAAE trained in {time_training_aae}", logfile, 1)
 
     # Free up memory
     comp_metadata = composition.metadata
     del composition, abundance
 
     comp_metadata.filter_mask(mask)  # type: ignore
-    assert comp_metadata.nseqs == len(latent)
 
-    # Cluster, save tsv file
-    clusterspath = vamb_options.out_dir.joinpath("clusters.tsv")
-    cluster(
-        cluster_options,
-        clusterspath,
-        latent,
+    # Write contignames and contiglengths needed for dereplication purposes
+    np.savetxt(
+        vamb_options.out_dir.joinpath("contignames"),
         comp_metadata.identifiers,
-        vamb_options.cuda,
-        logfile,
+        fmt="%s",
     )
+    np.savez(vamb_options.out_dir.joinpath("lengths.npz"), comp_metadata.lengths)
 
-    del latent
+    if vae_options is not None:
+        assert comp_metadata.nseqs == len(latent)
 
-    if vamb_options.min_fasta_output_size is not None:
-        path = comp_options.path
-        assert isinstance(path, FASTAPath)
-        write_fasta(
-            vamb_options.out_dir,
+        begin_cluster_latent = time.time() / 60
+        # Cluster, save tsv file
+        clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
+        cluster(
+            cluster_options,
             clusterspath,
-            path,
+            latent,
             comp_metadata.identifiers,
-            comp_metadata.lengths,
-            vamb_options.min_fasta_output_size,
+            vamb_options.cuda,
             logfile,
+            "vae_",
         )
 
-    elapsed = round(time.time() - begintime, 2)
-    log(f"\nCompleted Vamb in {elapsed} seconds", logfile)
+        fin_cluster_latent = time.time() / 60
+        time_clustering_latent = round(fin_cluster_latent - begin_cluster_latent, 2)
+        log(f"\nVAE latent clustered in {time_clustering_latent}", logfile, 1)
+
+        del latent
+
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
+            write_fasta(
+                vamb_options.out_dir,
+                clusterspath,
+                path,
+                comp_metadata.identifiers,
+                comp_metadata.lengths,
+                vamb_options.min_fasta_output_size,
+                logfile,
+                separator=cluster_options.binsplit_separator,
+            )
+
+        writing_bins_time = round(time.time() / 60 - fin_cluster_latent, 2)
+        log(f"\nVAE bins written in {writing_bins_time} minutes", logfile)
+
+    if aae_options is not None:
+        assert comp_metadata.nseqs == len(latent_z)
+
+        begin_cluster_latent_z = time.time() / 60
+        # Cluster, save tsv file
+        clusterspath = vamb_options.out_dir.joinpath("aae_z_clusters.tsv")
+
+        cluster(
+            cluster_options,
+            clusterspath,
+            latent_z,
+            comp_metadata.identifiers,
+            vamb_options.cuda,
+            logfile,
+            "aae_z",
+        )
+
+        fin_cluster_latent_z = time.time() / 60
+        time_clustering_latent_z = round(
+            fin_cluster_latent_z - begin_cluster_latent_z, 2
+        )
+        log(f"\nAAE z latent clustered in {time_clustering_latent_z}", logfile, 1)
+
+        del latent_z
+
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
+            write_fasta(
+                vamb_options.out_dir,
+                clusterspath,
+                path,
+                comp_metadata.identifiers,
+                comp_metadata.lengths,
+                vamb_options.min_fasta_output_size,
+                logfile,
+                separator=cluster_options.binsplit_separator,
+            )
+        time_writing_bins_z = time.time() / 60
+        writing_bins_time_z = round(time_writing_bins_z - fin_cluster_latent_z, 2)
+        log(f"\nAAE z bins written in {writing_bins_time_z} minutes", logfile)
+
+        clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
+        # Binsplit if given a separator
+        if cluster_options.binsplit_separator is not None:
+            maybe_split = vamb.vambtools.binsplit(clusters_y_dict.items(), cluster_options.binsplit_separator)
+        else:
+            maybe_split = clusters_y_dict.items()
+        with open(clusterspath, "w") as clustersfile:
+            clusternumber, ncontigs = vamb.vambtools.write_clusters(
+                clustersfile,
+                maybe_split,
+                max_clusters=cluster_options.max_clusters,
+                min_size=cluster_options.min_cluster_size,
+                rename=False,
+                cluster_prefix="aae_y_",
+            )
+
+        print("", file=logfile)
+        log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
+        time_start_writin_z_bins = time.time() / 60
+        if vamb_options.min_fasta_output_size is not None:
+            path = comp_options.path
+            assert isinstance(path, FASTAPath)
+            write_fasta(
+                vamb_options.out_dir,
+                clusterspath,
+                path,
+                comp_metadata.identifiers,
+                comp_metadata.lengths,
+                vamb_options.min_fasta_output_size,
+                logfile,
+                separator=cluster_options.binsplit_separator,
+            )
+        time_writing_bins_y = time.time() / 60
+        writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins, 2)
+        log(f"\nAAE y bins written in {writing_bins_time_y} minutes", logfile)
 
 
 def main():
-    doc = f"""Vamb: Variational autoencoders for metagenomic binning.
+    doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
     
     Version: {'.'.join([str(i) for i in vamb.__version__])}
 
     Default use, good for most datasets:
-    vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
+    vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C 
 
-    For advanced use and extensions of Vamb, check documentation of the package
-    at https://github.com/RasmussenLab/vamb."""
+    For advanced use and extensions of Avamb, check documentation of the package
+    at https://github.com/RasmussenLab/vamb."""  # must be updated with the new github
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,
@@ -708,11 +1006,11 @@ def main():
     # Positional arguments
     reqos = parser.add_argument_group(title="Output (required)", description=None)
     reqos.add_argument(
-        "--outdir",
+        "--outdir", 
         metavar="",
-        type=Path,
-        required=True,
-        help="output directory to create",
+        type=Path, 
+        required=True, 
+        help="output directory to create"
     )
 
     # TNF arguments
@@ -720,35 +1018,33 @@ def main():
         title="TNF input (either fasta or all .npz files required)"
     )
     tnfos.add_argument("--fasta", metavar="", type=Path, help="path to fasta file")
-    tnfos.add_argument(
-        "--composition", metavar="", type=Path, help="path to .npz of composition"
-    )
+    tnfos.add_argument("--composition", metavar="",type=Path, help="path to .npz of composition")
 
     # RPKM arguments
     rpkmos = parser.add_argument_group(
         title="RPKM input (either BAMs or .npz required)"
     )
     rpkmos.add_argument(
-        "--bamfiles",
-        metavar="",
-        dest="bampaths",
+        "--bamfiles", 
+        dest='bampaths',
+        metavar="", 
         type=Path,
-        help="paths to (multiple) BAM files",
-        nargs="+",
+        help="paths to (multiple) BAM files", 
+        nargs="+"
     )
     rpkmos.add_argument(
-        "--rpkm",
+        "--rpkm", 
         metavar="",
         dest="abundancepath",
-        type=Path,
-        help="path to .npz of RPKM (abundances)",
+        type=Path,  
+        help="path to .npz of RPKM (abundances)"
     )
     rpkmos.add_argument(
-        "--jgi",
+        "--jgi", 
         metavar="",
         dest="jgipath",
-        type=Path,
-        help="path to JGI text file of abundances",
+        type=Path,  
+        help="path to JGI text file of abundances"
     )
 
     # Optional arguments
@@ -756,7 +1052,7 @@ def main():
 
     inputos.add_argument(
         "-m",
-        dest="min_contig_length",
+        dest="minlength",
         metavar="",
         type=int,
         default=250,
@@ -792,6 +1088,21 @@ def main():
         type=int,
         default=None,
         help="minimum bin size to output as fasta [None = no files]",
+    )
+
+    # Model selection argument
+    model_selection = parser.add_argument_group(
+        title="Model selection", description=None
+    )
+
+    model_selection.add_argument(
+        "--model",
+        dest="model",
+        metavar="",
+        type=str,
+        choices=["vae", "aae", "vae&aae"],
+        default="vae&aae",
+        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae&aae), [vae&aae]",
     )
 
     # VAE arguments
@@ -872,7 +1183,87 @@ def main():
         default=1e-3,
         help="learning rate [0.001]",
     )
+    # AAE arguments
+    aaeos = parser.add_argument_group(title="AAE options", description=None)
 
+    aaeos.add_argument(
+        "--n_aae",
+        dest="nhiddens_aae",
+        metavar="",
+        type=int,
+        default=547,
+        help="hidden neurons AAE [547]",
+    )
+    aaeos.add_argument(
+        "--z_aae",
+        dest="nlatent_aae_z",
+        metavar="",
+        type=int,
+        default=283,
+        help="latent neurons AAE continuous latent space  [283]",
+    )
+    aaeos.add_argument(
+        "--y_aae",
+        dest="nlatent_aae_y",
+        metavar="",
+        type=int,
+        default=700,
+        help="latent neurons AAE categorical latent space [700]",
+    )
+    aaeos.add_argument(
+        "--sl_aae",
+        dest="sl",
+        metavar="",
+        type=float,
+        default=0.00964,
+        help="loss scale between reconstruction loss and adversarial losses [0.00964] ",
+    )
+    aaeos.add_argument(
+        "--slr_aae",
+        dest="slr",
+        metavar="",
+        type=float,
+        default=0.5,
+        help="loss scale between reconstruction adversarial losses [0.5] ",
+    )
+    aaeos.add_argument(
+        "--aae_temp",
+        dest="temp",
+        metavar="",
+        type=float,
+        default=0.1596,
+        help=" Temperature of the softcategorical prior [0.1596]",
+    )
+
+    aaetrainos = parser.add_argument_group(
+        title="Training options AAE", description=None
+    )
+
+    aaetrainos.add_argument(
+        "--e_aae",
+        dest="nepochs_aae",
+        metavar="",
+        type=int,
+        default=70,
+        help="epochs AAE [70]",
+    )
+    aaetrainos.add_argument(
+        "--t_aae",
+        dest="batchsize_aae",
+        metavar="",
+        type=int,
+        default=256,
+        help="starting batch size AAE [256]",
+    )
+    aaetrainos.add_argument(
+        "--q_aae",
+        dest="batchsteps_aae",
+        metavar="",
+        type=int,
+        nargs="*",
+        default=[25, 50],
+        help="double batch size at epochs AAE [25,50]",
+    )
     # Clustering arguments
     clusto = parser.add_argument_group(title="Clustering options", description=None)
     clusto.add_argument(
@@ -921,8 +1312,10 @@ def main():
         sys.exit()
 
     args = parser.parse_args()
+
     comp_options = CompositionOptions(
-        args.fasta, args.composition, args.min_contig_length
+        args.fasta, args.composition, args.minlength
+
     )
 
     abundance_options = AbundanceOptions(
@@ -930,19 +1323,54 @@ def main():
         args.abundancepath,
         args.jgipath,
         args.min_alignment_id,
+
         not args.norefcheck,
     )
 
-    vae_options = VAEOptions(
-        args.nhiddens,
-        args.nlatent,
-        args.alpha,
-        args.beta,
-        args.dropout,
-    )
+    if args.model in ("vae", "vae&aae"):
+        vae_options = VAEOptions(
+            nhiddens=args.nhiddens,
+            nlatent=args.nlatent,
+            beta=args.beta,
+            dropout=args.dropout,
+        )
 
+        vae_training_options = VAETrainingOptions(
+            nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
+        )
+    else:
+        assert args.model == "aae"
+        vae_options = None
+        vae_training_options = None
+
+    if args.model in ("aae", "vae&aae"):
+        aae_options = AAEOptions(
+            nhiddens=args.nhiddens_aae,
+            nlatent_z=args.nlatent_aae_z,
+            nlatent_y=args.nlatent_aae_y,
+            sl=args.sl,
+            slr=args.slr,
+        )
+
+        aae_training_options = AAETrainingOptions(
+            nepochs=args.nepochs_aae,
+            batchsize=args.batchsize_aae,
+            batchsteps=args.batchsteps_aae,
+            temp=args.temp,
+        )
+    else:
+        assert args.model == "vae"
+        aae_options = None
+        aae_training_options = None
+
+    encoder_options = EncoderOptions(
+        vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
+    )
     training_options = TrainingOptions(
-        args.nepochs, args.batchsize, args.batchsteps, args.lrate
+        encoder_options=encoder_options,
+        vae_options=vae_training_options,
+        aae_options=aae_training_options,
+        lrate=args.lrate,
     )
 
     cluster_options = ClusterOptions(
@@ -954,30 +1382,27 @@ def main():
     )
 
     vamb_options = VambOptions(
-        args.outdir,
-        args.nthreads,
-        comp_options,
-        args.min_fasta_output_size,
-        args.cuda
+        args.outdir, args.nthreads, comp_options, args.min_fasta_output_size, args.cuda
     )
 
     torch.set_num_threads(vamb_options.n_threads)
 
-    try:
-        os.mkdir(vamb_options.out_dir)
-    except FileExistsError:
-        pass
-    except:
-        raise
+    try_make_dir(vamb_options.out_dir)
+    try_make_dir(vamb_options.out_dir.joinpath("tmp"))
+
+    if aae_options is not None:
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "ripped_bins"))
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "checkm2_all"))
+        try_make_dir(vamb_options.out_dir.joinpath("tmp", "NC_bins"))
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(
-            vamb_options,
-            comp_options,
-            abundance_options,
-            vae_options,
-            training_options,
-            cluster_options,
+            vamb_options=vamb_options,
+            comp_options=comp_options,
+            abundance_options=abundance_options,
+            encoder_options=encoder_options,
+            training_options=training_options,
+            cluster_options=cluster_options,
             logfile=logfile,
         )
 
