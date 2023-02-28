@@ -15,7 +15,7 @@ Similar to Vamb, Avamb leverages sequence composition information from a contig 
 Avamb has shown to reconstruct 23% more high quality bins as well as to increase the bins quality.
 For more information, please check the [Avamb snakemake page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb).
 
-Avamb pre-print can be found here [biorxiv](<insert biorXv link>) 
+The Avamb pre-print can be found here [biorxiv](https://doi.org/10.1101/2023.02.27.527078). 
 
 
 # Installation
