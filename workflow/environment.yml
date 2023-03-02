@@ -1,0 +1,14 @@
+name: vamb
+channels:
+  - bioconda
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - snakemake=7.18
+  - samtools>=1.16
+  - minimap2
+  - checkm-genome
+  - pytorch=1.13
+  - torchvision
+  - cudatoolkit

@@ -1,0 +1,17 @@
+{
+   "contigs": "contigs.txt",
+   "sample_data": "samples2data.txt",
+   "index_size": "3G",
+   "min_contig_size": "2000",
+   "minimap_mem": "15gb",
+   "minimap_ppn": "15",
+   "avamb_mem": "15gb",
+   "avamb_ppn": "30",
+   "checkm2_mem": "15gb",
+   "checkm2_ppn": "15",
+   "checkm2_mem_r": "30gb",
+   "checkm2_ppn_r": "30",
+   "avamb_params": "-o C --minfasta 200000 ",
+   "avamb_preload": "",
+   "outdir": "avamb_outdir"
+}
