@@ -10,8 +10,7 @@ from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-
-from torch.utils.data import DataLoader as _DataLoader
+from vamb.encode import set_batchsize
 
 from collections.abc import Sequence
 from typing import Optional, IO, Union
@@ -252,14 +251,7 @@ class AAE(nn.Module):
 
         for epoch_i in range(nepochs):
             if epoch_i in batchsteps:
-                data_loader = _DataLoader(
-                    dataset=data_loader.dataset,
-                    batch_size=data_loader.batch_size * 2,
-                    shuffle=True,
-                    drop_last=True,
-                    num_workers=data_loader.num_workers,
-                    pin_memory=data_loader.pin_memory,
-                )
+                data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
 
             (
                 ED_loss_e,
@@ -448,15 +440,7 @@ class AAE(nn.Module):
             l_latents array"""
         self.eval()
 
-        new_data_loader = _DataLoader(
-            dataset=data_loader.dataset,
-            batch_size=data_loader.batch_size,
-            shuffle=False,
-            drop_last=False,
-            num_workers=1,
-            pin_memory=data_loader.pin_memory,
-        )
-
+        new_data_loader = set_batchsize(data_loader, 256, drop_last=False)
         depths_array, _, _ = data_loader.dataset.tensors
 
         length = len(depths_array)
