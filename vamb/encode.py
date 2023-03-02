@@ -30,6 +30,15 @@ import torch as _torch
 
 _torch.manual_seed(0)
 
+def set_batchsize(data_loader: _DataLoader, batch_size: int, drop_last=True) -> _DataLoader:
+    return _DataLoader(
+        dataset=data_loader.dataset,
+        batch_size= batch_size,
+        shuffle=True,
+        drop_last=drop_last,
+        num_workers=data_loader.num_workers,
+        pin_memory=data_loader.pin_memory,
+    )
 
 def make_dataloader(
     rpkm: _np.ndarray,
@@ -358,14 +367,7 @@ class VAE(_nn.Module):
         epoch_celoss = 0.0
 
         if epoch in batchsteps:
-            data_loader = _DataLoader(
-                dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,  # type: ignore
-                shuffle=True,
-                drop_last=True,
-                num_workers=data_loader.num_workers,
-                pin_memory=data_loader.pin_memory,
-            )
+            data_loader =  set_batchsize(data_loader, data_loader.batch_size * 2)
 
         for depths_in, tnf_in, weights in data_loader:
             depths_in.requires_grad = True
@@ -420,14 +422,7 @@ class VAE(_nn.Module):
 
         self.eval()
 
-        new_data_loader = _DataLoader(
-            dataset=data_loader.dataset,
-            batch_size=data_loader.batch_size,
-            shuffle=False,
-            drop_last=False,
-            num_workers=1,
-            pin_memory=data_loader.pin_memory,
-        )
+        new_data_loader = set_batchsize(data_loader, 256, drop_last=False)
 
         depths_array, _, _ = data_loader.dataset.tensors
         length = len(depths_array)

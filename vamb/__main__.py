@@ -14,6 +14,7 @@ from math import isfinite
 from typing import Optional, IO
 from pathlib import Path
 from collections.abc import Sequence
+from torch.utils.data import DataLoader
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -449,7 +450,7 @@ def calc_tnf(
         logfile,
         1,
     )
-    log(f"Processed TNF in {elapsed} seconds", logfile, 1)
+    log(f"Processed TNF in {elapsed} seconds.", logfile, 1)
 
     return composition
 
@@ -514,7 +515,7 @@ def calc_rpkm(
 
     elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
-    log(f"Processed RPKM in {elapsed} seconds", logfile, 1)
+    log(f"Processed RPKM in {elapsed} seconds.", logfile, 1)
 
     return abundance
 
@@ -525,18 +526,14 @@ def trainvae(
     vamb_options: VambOptions,
     lrate: float,
     alpha: Optional[float],
-    rpkms: np.ndarray,
-    tnfs: np.ndarray,
-    lengths: np.ndarray,
+    data_loader: DataLoader,
     logfile: IO[str],
-) -> tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray:
 
     begintime = time.time()
     log("\nCreating and training VAE", logfile)
 
-    assert len(rpkms) == len(tnfs)
-
-    nsamples = rpkms.shape[1]
+    nsamples = data_loader.dataset.tensors[0].shape[1]
     vae = vamb.encode.VAE(
         nsamples,
         nhiddens=vae_options.nhiddens,
@@ -548,24 +545,9 @@ def trainvae(
     )
 
     log("Created VAE", logfile, 1)
-    dataloader, mask = vamb.encode.make_dataloader(
-        rpkms,
-        tnfs,
-        lengths,
-        training_options.batchsize,
-        destroy=True,
-        cuda=vamb_options.cuda,
-    )
-    log("Created dataloader and mask", logfile, 1)
-    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
-    n_discarded = len(mask) - mask.sum()
-    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
-    log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
-    print("", file=logfile)
-
     modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
-        dataloader,
+        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
         nepochs=training_options.nepochs,
         lrate=lrate,
         batchsteps=training_options.batchsteps,
@@ -575,20 +557,18 @@ def trainvae(
 
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
-    latent = vae.encode(dataloader)
+    latent = vae.encode(data_loader)
     vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    log(f"Trained VAE and encoded in {elapsed} seconds", logfile, 1)
+    log(f"Trained VAE and encoded in {elapsed} seconds.", logfile, 1)
 
-    return mask, latent
+    return latent
 
 
 def trainaae(
-    rpkms: np.ndarray,
-    tnfs: np.ndarray,
-    lengths: np.ndarray,
+    data_loader: DataLoader,
     aae_options: AAEOptions,
     training_options: AAETrainingOptions,
     vamb_options: VambOptions,
@@ -596,13 +576,11 @@ def trainaae(
     alpha: Optional[float],  # set automatically if None
     logfile: IO[str],
     contignames: Sequence[str],
-) -> tuple[np.ndarray, np.ndarray, dict[str, set[str]]]:
+) -> tuple[np.ndarray, dict[str, set[str]]]:
 
-    begintime = time.time() / 60
+    begintime = time.time()
     log("\nCreating and training AAE", logfile)
-    nsamples = rpkms.shape[1]
-
-    assert len(rpkms) == len(tnfs)
+    nsamples = data_loader.dataset.tensors[0].shape[1]
 
     aae = vamb.aamb_encode.AAE(
         nsamples,
@@ -616,18 +594,9 @@ def trainaae(
     )
 
     log("Created AAE", logfile, 1)
-    dataloader, mask = vamb.encode.make_dataloader(
-        rpkms, tnfs, lengths, training_options.batchsize, destroy=True, cuda=vamb_options.cuda
-    )
-    log("Created dataloader and mask", logfile, 1)
-    n_discarded = len(mask) - mask.sum()
-    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
-    log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
-    print("", file=logfile)
-
     modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
     aae.trainmodel(
-        dataloader,
+        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
         training_options.nepochs,
         training_options.batchsteps,
         training_options.temp,
@@ -638,15 +607,15 @@ def trainaae(
 
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
-    clusters_y_dict, latent = aae.get_latents(contignames, dataloader)
+    clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
     vamb.vambtools.write_npz(os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent)
 
     del aae  # Needed to free "latent" array's memory references?
 
-    elapsed = round(time.time() / 60 - begintime, 2)
-    log(f"Trained AAE and encoded in {elapsed} minutes", logfile, 1)
+    elapsed = round(time.time() - begintime, 2)
+    log(f"Trained AAE and encoded in {elapsed} seconds.", logfile, 1)
 
-    return mask, latent, clusters_y_dict
+    return latent, clusters_y_dict
 
 
 def cluster(
@@ -718,7 +687,7 @@ def cluster(
     log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
-    log(f"Clustered contigs in {elapsed} seconds", logfile, 1)
+    log(f"Clustered contigs in {elapsed} seconds.", logfile, 1)
 
 
 def write_fasta(
@@ -731,7 +700,7 @@ def write_fasta(
     logfile: IO[str],
     separator: Optional[str],
 ) -> None:
-    begintime = time.time() / 60
+    begintime = time.time()
 
     log("\nWriting FASTA files", logfile)
     log("Minimum FASTA size: " + str(minfasta), logfile, 1)
@@ -767,8 +736,8 @@ def write_fasta(
     print("", file=logfile)
     log(f"Wrote {ncontigs} contigs to {nfiles} FASTA files", logfile, 1)
 
-    elapsed = round(time.time() / 60 - begintime, 2)
-    log(f"Wrote FASTA in {elapsed} minutes", logfile, 1)
+    elapsed = round(time.time() - begintime, 2)
+    log(f"Wrote FASTA in {elapsed} seconds.", logfile, 1)
 
 
 def run(
@@ -800,38 +769,51 @@ def run(
         vamb_options.n_threads,
         logfile,
     )
-    timepoint_gernerate_input = time.time() / 60
-    time_generating_input = round(timepoint_gernerate_input - begintime, 2)
+    time_generating_input = round(time.time() - begintime, 2)
+    log(f"\nTNF and coabundances generated in {time_generating_input} seconds.", logfile, 1)
 
-    log(f"\nTNF and coabundances generated in {time_generating_input}", logfile, 1)
+    data_loader, mask = vamb.encode.make_dataloader(
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        256, # dummy value - we change this before using the actual loader
+        destroy=True,
+        cuda=vamb_options.cuda,
+    )
+    composition.metadata.filter_mask(mask)
 
+    print("", file=logfile)
+    log("Created dataloader and mask", logfile, 0)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
+    n_discarded = len(mask) - mask.sum()
+    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
+    log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
+
+    latent = None
     if vae_options is not None:
         assert vae_training_options is not None
-        begin_train_vae = time.time() / 60
+        begin_train_vae = time.time()
         # Train, save model
-        mask, latent = trainvae(
+        latent = trainvae(
             vae_options=vae_options,
             training_options=vae_training_options,
             vamb_options=vamb_options,
             lrate=training_options.lrate,
             alpha=encoder_options.alpha,
-            rpkms=abundance.matrix,
-            tnfs=composition.matrix,
-            lengths=composition.metadata.lengths,
+            data_loader=data_loader,
             logfile=logfile,
         )
-        fin_train_vae = time.time() / 60
-        time_training_vae = round(fin_train_vae - begin_train_vae, 2)
-        log(f"\nVAE trained in {time_training_vae}", logfile, 1)
+        time_training_vae = round(time.time() - begin_train_vae, 2)
+        print("", file=logfile)
 
+    clusters_y_dict = None
+    latent_z = None
     if aae_options is not None:
         assert aae_training_options is not None
-        begin_train_aae = time.time() / 60
+        begin_train_aae = time.time()
         # Train, save model
-        mask, latent_z, clusters_y_dict = trainaae(
-            rpkms=abundance.matrix,
-            tnfs=composition.matrix,
-            lengths=composition.metadata.lengths,
+        latent_z, clusters_y_dict = trainaae(
+            data_loader=data_loader,
             aae_options=aae_options,
             vamb_options=vamb_options,
             training_options=aae_training_options,
@@ -840,15 +822,12 @@ def run(
             logfile=logfile,
             contignames=composition.metadata.identifiers,
         )
-        fin_train_aae = time.time() / 60
-        time_training_aae = round(fin_train_aae - begin_train_aae, 2)
-        log(f"\nAAE trained in {time_training_aae}", logfile, 1)
+        time_training_aae = round(time.time() - begin_train_aae, 2)
+        print("", file=logfile)
 
     # Free up memory
     comp_metadata = composition.metadata
     del composition, abundance
-
-    comp_metadata.filter_mask(mask)  # type: ignore
 
     # Write contignames and contiglengths needed for dereplication purposes
     np.savetxt(
@@ -859,9 +838,8 @@ def run(
     np.savez(vamb_options.out_dir.joinpath("lengths.npz"), comp_metadata.lengths)
 
     if vae_options is not None:
+        assert latent is not None
         assert comp_metadata.nseqs == len(latent)
-
-        begin_cluster_latent = time.time() / 60
         # Cluster, save tsv file
         clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
         cluster(
@@ -873,12 +851,10 @@ def run(
             logfile,
             "vae_",
         )
-
-        fin_cluster_latent = time.time() / 60
-        time_clustering_latent = round(fin_cluster_latent - begin_cluster_latent, 2)
-        log(f"\nVAE latent clustered in {time_clustering_latent}", logfile, 1)
+        log(f"VAE latent clustered", logfile, 1)
 
         del latent
+        fin_cluster_latent = time.time()
 
         if vamb_options.min_fasta_output_size is not None:
             path = comp_options.path
@@ -894,13 +870,13 @@ def run(
                 separator=cluster_options.binsplit_separator,
             )
 
-        writing_bins_time = round(time.time() / 60 - fin_cluster_latent, 2)
-        log(f"\nVAE bins written in {writing_bins_time} minutes", logfile)
+        writing_bins_time = round(time.time() - fin_cluster_latent, 2)
+        log(f"VAE bins written in {writing_bins_time} seconds.", logfile, 1)
 
     if aae_options is not None:
+        assert latent_z is not None
+        assert clusters_y_dict is not None
         assert comp_metadata.nseqs == len(latent_z)
-
-        begin_cluster_latent_z = time.time() / 60
         # Cluster, save tsv file
         clusterspath = vamb_options.out_dir.joinpath("aae_z_clusters.tsv")
 
@@ -914,11 +890,8 @@ def run(
             "aae_z",
         )
 
-        fin_cluster_latent_z = time.time() / 60
-        time_clustering_latent_z = round(
-            fin_cluster_latent_z - begin_cluster_latent_z, 2
-        )
-        log(f"\nAAE z latent clustered in {time_clustering_latent_z}", logfile, 1)
+        fin_cluster_latent_z = time.time()
+        log(f"AAE z latent clustered.", logfile, 1)
 
         del latent_z
 
@@ -935,9 +908,9 @@ def run(
                 logfile,
                 separator=cluster_options.binsplit_separator,
             )
-        time_writing_bins_z = time.time() / 60
+        time_writing_bins_z = time.time()
         writing_bins_time_z = round(time_writing_bins_z - fin_cluster_latent_z, 2)
-        log(f"\nAAE z bins written in {writing_bins_time_z} minutes", logfile)
+        log(f"AAE z bins written in {writing_bins_time_z} seconds.", logfile, 1)
 
         clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
         # Binsplit if given a separator
@@ -957,7 +930,7 @@ def run(
 
         print("", file=logfile)
         log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-        time_start_writin_z_bins = time.time() / 60
+        time_start_writin_z_bins = time.time()
         if vamb_options.min_fasta_output_size is not None:
             path = comp_options.path
             assert isinstance(path, FASTAPath)
@@ -971,10 +944,11 @@ def run(
                 logfile,
                 separator=cluster_options.binsplit_separator,
             )
-        time_writing_bins_y = time.time() / 60
+        time_writing_bins_y = time.time()
         writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins, 2)
-        log(f"\nAAE y bins written in {writing_bins_time_y} minutes", logfile)
+        log(f"AAE y bins written in {writing_bins_time_y} seconds.", logfile, 1)
 
+    log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
 
 def main():
     doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
@@ -1101,8 +1075,8 @@ def main():
         metavar="",
         type=str,
         choices=["vae", "aae", "vae&aae"],
-        default="vae&aae",
-        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae&aae), [vae&aae]",
+        default="vae",
+        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae&aae), [vae]",
     )
 
     # VAE arguments
@@ -1343,6 +1317,17 @@ def main():
         vae_options = None
         vae_training_options = None
 
+        for (name, arg, default) in [
+            ("-n", args.nhiddens, None),
+            ("-l", args.nlatent, 32),
+            ("-b", args.beta, 200.0),
+            ("-d", args.dropout, None),
+            ("-t", args.batchsize, 256),
+            ("-q", args.batchsteps, [25, 75, 150, 225])
+        ]:
+            if arg != default:
+                raise ValueError(f"VAE model not used, but VAE-specific arg \"{name}\" used")
+
     if args.model in ("aae", "vae&aae"):
         aae_options = AAEOptions(
             nhiddens=args.nhiddens_aae,
@@ -1362,6 +1347,20 @@ def main():
         assert args.model == "vae"
         aae_options = None
         aae_training_options = None
+
+        for (name, arg, default) in [
+            ("--n_aae", args.nhiddens_aae, 547),
+            ("--z_aae", args.nlatent_aae_z, 283),
+            ("--y_aae", args.nlatent_aae_y, 700),
+            ("--sl_aae", args.sl, 0.00964),
+            ("--slr_aae", args.slr, 0.5),
+            ("--aae_temp", args.temp, 0.1596),
+            ("--e_aae", args.nepochs_aae, 70),
+            ("--t_aae", args.batchsize_aae, 256),
+            ("--q_aae", args.batchsteps_aae, [25, 50]),
+        ]:
+            if arg != default:
+                raise ValueError(f"AAE model not used, but AAE-specific arg \"{name}\" used")
 
     encoder_options = EncoderOptions(
         vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
