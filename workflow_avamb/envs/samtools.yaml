@@ -1,5 +1,5 @@
-name: metabat2
+name: samtools
 channels:
   - bioconda
 dependencies:
-  - metabat2
+  - samtools

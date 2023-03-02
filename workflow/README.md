@@ -8,7 +8,7 @@ In short it will:
 1. Filter contigs for 2000bp and rename them to conform with the multi-split workflow
 2. Index resulting contig-file with minimap2 and create a sequence dictionary
 3. Map reads with minimap2 to the combined contig set
-4. Sort bam-files and create a jgi-count matrix by running individual samples in parallel 
+4. Sort bam-files
 5. Run Vamb to bin the contigs
 6. Determine completeness and contamination of the bins using CheckM
 ```
@@ -16,19 +16,13 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), make a conda environment named `vamb` and herefter install all the dependencies needed.
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), then use the `environment.yml` file to make a conda environment named `vamb`:
 
 ```
- conda install -c conda-forge mamba
- mamba create -n vamb python=3.7
- mamba install -n vamb -c conda-forge -c bioconda snakemake
- mamba install -n vamb -c conda-forge -c bioconda "samtools>=1.8"
- mamba install -n vamb -c bioconda minimap2 pysam checkm-genome 
- mamba install -n vamb -c bioconda/label/cf201901 metabat2
- mamba install -n vamb -c pytorch pytorch torchvision cudatoolkit=10.2
- conda activate vamb
- pip install https://github.com/RasmussenLab/vamb/archive/v3.0.3.zip
- conda deactivate
+conda env create -f environment.yml
+conda activate vamb
+pip install https://github.com/RasmussenLab/vamb/archive/v3.0.2.zip
+conda deactivate
 ```
 
 We only have access to `vamb` and the other programs when we are inside this specific conda environment. We can use `conda activate vamb` to activate the environment (the name of shell changes and should say something with vamb) and `conda deactivate` to get out of it again. Therefore, if you can an error further down it could simply be because you have not activated the environment.  
@@ -115,4 +109,3 @@ Using a GPU can speed up Vamb considerably - especially when you are binning mil
 Note that I could not get `vamb` to work with `cuda` on our cluster when installing from bioconda. Therefore I added a line to preload cuda toolkit to the configuration file that will load this module when running `vamb`. 
 
 Please let us know if you have any issues and we can try to help out.
-
