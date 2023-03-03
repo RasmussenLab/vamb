@@ -440,7 +440,7 @@ class AAE(nn.Module):
             l_latents array"""
         self.eval()
 
-        new_data_loader = set_batchsize(data_loader, 256, drop_last=False)
+        new_data_loader = set_batchsize(data_loader, 256, encode=True)
         depths_array, _, _ = data_loader.dataset.tensors
 
         length = len(depths_array)
