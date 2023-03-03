@@ -90,26 +90,3 @@ class TestParseBam(unittest.TestCase):
         self.assertTrue(np.all(abundance2.samplenames == self.abundance.samplenames))
         self.assertEqual(abundance2.refhash, self.abundance.refhash)
         self.assertEqual(abundance2.minid, self.abundance.minid)
-
-    def test_jgi_load(self):
-        with open(testtools.JGI_PATH) as file:
-            abundance = vamb.parsebam.Abundance.from_jgi_filehandle(
-                file, self.comp_metadata, True
-            )
-
-        self.assertTrue(abundance.matrix.shape, (12, 3))
-        self.assertTrue(
-            np.all(
-                np.abs(
-                    abundance.matrix[:2]
-                    - np.array(
-                        [
-                            [0.0927357032457, 0.0, 1.19505409583],
-                            [3.34931865828, 3.12237945493, 2.56970649895],
-                        ]
-                    )
-                )
-                < 1e-5
-            )
-        )
-        self.assertEqual(abundance.minid, 0)

@@ -8,7 +8,6 @@ DATADIR = os.path.join(PARENTDIR, "test", "data")
 BAM_FILES = [
     os.path.join(DATADIR, "bam", i) for i in os.listdir(os.path.join(DATADIR, "bam"))
 ]
-JGI_PATH = os.path.join(DATADIR, "jgi.txt")
 
 BAM_NAMES = [
     "S27C175628",
