@@ -42,7 +42,7 @@ def set_batchsize(data_loader: _DataLoader, batch_size: int, encode=False) -> _D
         batch_size= batch_size,
         shuffle=not encode,
         drop_last=not encode,
-        num_workers=data_loader.num_workers,
+        num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
 
@@ -428,7 +428,7 @@ class VAE(_nn.Module):
 
         self.eval()
 
-        new_data_loader = set_batchsize(data_loader, 256, encode=True)
+        new_data_loader = set_batchsize(data_loader, data_loader.batch_size, encode=True)
 
         depths_array, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
