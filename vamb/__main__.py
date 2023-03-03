@@ -82,10 +82,6 @@ class AbundancePath(type(Path())):
     pass
 
 
-class JGIPath(type(Path())):
-    pass
-
-
 class AbundanceOptions:
     __slots__ = ["path", "min_alignment_id", "refcheck"]
 
@@ -93,20 +89,18 @@ class AbundanceOptions:
         self,
         bampaths: Optional[list[Path]],
         abundancepath: Optional[Path],
-        jgipath: Optional[Path],
         min_alignment_id: Optional[float],
         refcheck: bool,
     ):
         assert isinstance(bampaths, (list, type(None)))
         assert isinstance(abundancepath, (Path, type(None)))
-        assert isinstance(jgipath, (Path, type(None)))
         assert isinstance(min_alignment_id, (float, type(None)))
         assert isinstance(refcheck, bool)
 
         # Make sure only one RPKM input is there
-        if not ((bampaths is None) + (abundancepath is None) + (jgipath is None)) != 1:
+        if not (bampaths is not None) + (abundancepath is not None) == 1:
             raise argparse.ArgumentTypeError(
-                "Must specify exactly one of BAM files, abundance NPZ or JGI file input"
+                "Must specify exactly one of BAM files or abundance NPZ file input"
             )
 
         if abundancepath is not None:
@@ -123,13 +117,6 @@ class AbundanceOptions:
                         f'Not an existing non-directory file: "{str(bampath)}"'
                     )
             self.path = bampaths
-
-        if jgipath is not None:
-            if not jgipath.is_file():
-                raise FileNotFoundError(
-                    f'Not an existing non-directory file: "{str(jgipath)}"'
-                )
-            self.path = JGIPath(jgipath)
 
         if min_alignment_id is not None:
             if bampaths is None:
@@ -487,14 +474,6 @@ def calc_rpkm(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
             )
-
-    elif isinstance(path, JGIPath):
-        log(f"Loading depths from JGI path {str(path)}", logfile, 1)
-        with open(path) as file:
-            abundance = vamb.parsebam.Abundance.from_jgi_filehandle(
-                file, comp_metadata, abundance_options.refcheck
-            )
-
     else:
         assert isinstance(path, list)
         log(f"Parsing {len(path)} BAM files with {nthreads} threads", logfile, 1)
@@ -1013,13 +992,6 @@ def main():
         type=Path,  
         help="path to .npz of RPKM (abundances)"
     )
-    rpkmos.add_argument(
-        "--jgi", 
-        metavar="",
-        dest="jgipath",
-        type=Path,  
-        help="path to JGI text file of abundances"
-    )
 
     # Optional arguments
     inputos = parser.add_argument_group(title="IO options", description=None)
@@ -1295,7 +1267,6 @@ def main():
     abundance_options = AbundanceOptions(
         args.bampaths,
         args.abundancepath,
-        args.jgipath,
         args.min_alignment_id,
 
         not args.norefcheck,
