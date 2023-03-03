@@ -30,12 +30,18 @@ import torch as _torch
 
 _torch.manual_seed(0)
 
-def set_batchsize(data_loader: _DataLoader, batch_size: int, drop_last=True) -> _DataLoader:
+def set_batchsize(data_loader: _DataLoader, batch_size: int, encode=False) -> _DataLoader:
+    """Effectively copy the data loader, but with a different batch size.
+
+    The `encode` option is used to copy the dataloader to use before encoding.
+    This will not drop the last minibatch whose size may not be the requested
+    batch size, and will also not shuffle the data.
+    """
     return _DataLoader(
         dataset=data_loader.dataset,
         batch_size= batch_size,
-        shuffle=True,
-        drop_last=drop_last,
+        shuffle=not encode,
+        drop_last=not encode,
         num_workers=data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
@@ -422,7 +428,7 @@ class VAE(_nn.Module):
 
         self.eval()
 
-        new_data_loader = set_batchsize(data_loader, 256, drop_last=False)
+        new_data_loader = set_batchsize(data_loader, 256, encode=True)
 
         depths_array, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
