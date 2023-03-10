@@ -36,8 +36,12 @@ CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 -m 2000 ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
 
+MIN_COMP = get_config("min_comp", "0.9", r".*")
+MAX_CONT = get_config("max_cont", "0.05", r".*")
+
 OUTDIR= get_config("outdir", "outdir_avamb", r".*")
 
+print(MIN_COMP, MAX_CONT)
 try:
     os.makedirs(os.path.join(OUTDIR,"log"), exist_ok=True)
 except FileExistsError:
@@ -232,7 +236,7 @@ rule run_avamb:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files}/*sorted.bam {params.cuda} {AVAMB_PARAMS}
         touch {log.vamb_out}
        	"""
 
@@ -284,7 +288,10 @@ rule run_checkm2_per_sample_all_bins:
     conda: 
         "checkm2" 
     shell:
-        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} 2> {output.out_log_file}"
+        """
+        checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna\
+         --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}
+        """
 
 rule cat_checkm2_all:
     input:
@@ -326,7 +333,9 @@ rule create_cluster_scores_bin_path_dictionaries:
         e=os.path.join(OUTDIR,'log','cs_bp_dicts.err')
 
     shell:
-        "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
+        """python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb}\
+         --bp_d {output.bin_path_dict_path_avamb} 
+         """
 
 rule run_drep_manual_vamb_z_y:
     input:
@@ -357,7 +366,7 @@ rule run_drep_manual_vamb_z_y:
         """
         python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
         --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
-        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}
+        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb} --comp {MIN_COMP} --cont {MAX_CONT}
         """
 
 
@@ -418,7 +427,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         python {params.path} --c {input.clusters_avamb_manual_drep} \
         --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins \
         --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} \
-        --bin_separator C 2> {log.log_fin} 
+        --bin_separator C --comp {MIN_COMP} --cont {MAX_CONT} 2> {log.log_fin} 
         """
         
     
@@ -455,7 +464,7 @@ rule run_checkm2_ripped_bins_avamb:
     shell:
         """
         checkm2 predict --threads {CHECKM_PPN_r} --input {OUTDIR}/avamb/tmp/ripped_bins  \
-         --output-directory {OUTDIR}/avamb//tmp/ripped_bins/checkm2_out 2> {log.log_fin}
+         --output-directory {OUTDIR}/avamb//tmp/ripped_bins/checkm2_out > {log.log_fin}
         """
 
 rule update_cs_d_avamb:
@@ -514,8 +523,9 @@ rule aggregate_nc_bins_avamb:
 	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
         --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
-        --br {input.path_bins_ripped} -d{OUTDIR}/avamb/NC_bins --bin_separator C \
-        2>  {output}
+        --br {input.path_bins_ripped} -d {OUTDIR}/avamb/NC_bins --bin_separator C \
+        --comp {MIN_COMP} --cont {MAX_CONT}
+        >  {output}
         """
 
 
@@ -543,7 +553,7 @@ rule write_clusters_from_nc_folders:
         "avamb" 
 
     shell:
-        "sh {params.path} -d {input.nc_bins} -o {output} 2> {log.log_fin} "
+        "sh {params.path} -d {input.nc_bins} -o {output} > {log.log_fin} "
 
 rule workflow_finished:
     input:
