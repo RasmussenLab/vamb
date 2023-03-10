@@ -91,7 +91,8 @@ def write_nc_bins_from_mdrep_clusters(
         sample = cluster_sample[cluster]
         src_bin = os.path.join(path_bins_folder, sample, cluster + ".fna")
         trg_bin = os.path.join(path_nc_bins_folder, sample, cluster + ".fna")
-        shutil.move(src_bin, trg_bin)
+        #shutil.move(src_bin, trg_bin)
+        shutil.copy(src_bin, trg_bin)
 
 
 def write_quality_report(
