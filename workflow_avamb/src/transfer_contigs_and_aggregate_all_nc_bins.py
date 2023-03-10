@@ -118,9 +118,10 @@ def mv_nc_not_r_nc_bins(
                 "Bin %s has no intersection with any other bin so it is directly moved from %s to %s"
                 % (cluster, src_bin, trg_bin)
             )
-            shutil.copy(
+            #shutil.copy(
 
             #shutil.move(
+            os.symlink(
                 src_bin, trg_bin
             )  # this should be changed to mv once we assure it works properly
             nc_clusters_unchanged.add(cluster)
@@ -173,7 +174,9 @@ def mv_single_ripped_nc_bins(
                 )
                 
                 #shutil.move(src_bin, trg_bin)
-                shutil.copy(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
+
 
                 nc_clusters_ripped_single.add(cluster)
     return nc_clusters_ripped_single
@@ -256,7 +259,8 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
                 #shutil.move(src_bin, trg_bin)
-                shutil.copy(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_A_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_A_name, src_bin))
             # and bin B not
@@ -268,7 +272,8 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
                 #shutil.move(src_bin, trg_bin)
-                shutil.copy(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_B_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_B_name, src_bin)
@@ -289,7 +294,8 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
                 #shutil.move(src_bin, trg_bin)
-                shutil.copy(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_B_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_B_name, src_bin))
             # and bin A not
@@ -301,7 +307,8 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
                 #shutil.move(src_bin, trg_bin)
-                shutil.copy(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_A_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_A_name, src_bin)
