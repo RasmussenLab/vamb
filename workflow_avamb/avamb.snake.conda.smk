@@ -236,7 +236,7 @@ rule run_avamb:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files}/*sorted.bam {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
         touch {log.vamb_out}
        	"""
 
@@ -366,7 +366,8 @@ rule run_drep_manual_vamb_z_y:
         """
         python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
         --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
-        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb} --comp {MIN_COMP} --cont {MAX_CONT}
+        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}\
+         --comp {MIN_COMP} --cont {MAX_CONT}
         """
 
 
