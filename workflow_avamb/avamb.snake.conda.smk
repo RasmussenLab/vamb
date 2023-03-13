@@ -41,7 +41,6 @@ MAX_CONT = get_config("max_cont", "0.05", r".*")
 
 OUTDIR= get_config("outdir", "outdir_avamb", r".*")
 
-print(MIN_COMP, MAX_CONT)
 try:
     os.makedirs(os.path.join(OUTDIR,"log"), exist_ok=True)
 except FileExistsError:
