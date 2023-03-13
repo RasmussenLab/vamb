@@ -107,7 +107,7 @@ def mv_nc_not_r_nc_bins(
     nc_clusters_unchanged = set()
     for cluster in cluster_not_r_contigs.keys():
         comp, cont = cluster_scores[cluster]
-        if comp > min_comp and cont < max_cont:
+        if comp >= min_comp and cont <= max_cont:
 
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],cluster+'.fna')
             src_bin = bin_path[cluster + ".fna"]
@@ -159,7 +159,7 @@ def mv_single_ripped_nc_bins(
         assert comp == comp_
         assert cont == cont_
         
-        if comp > min_comp and cont < max_cont:
+        if comp >= min_comp and cont <= max_cont:
             # cluster = bin_name.replace('.fna','')
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],bin_name+'.fna')
             src_bin = bin_path[cluster + ".fna"]
@@ -252,7 +252,7 @@ def choose_best_ripped_bin_and_mv_if_nc(
             )
 
             # bin_A keeps the contigs
-            if cluster_A_complet > min_comp and cluster_A_cont < max_cont:
+            if cluster_A_complet >= min_comp and cluster_A_cont <= max_cont:
                 bin_A_name = cluster_A_r + ".fna"
                 src_bin = bin_path[bin_A_name]
                 trg_bin = os.path.join(
@@ -264,7 +264,7 @@ def choose_best_ripped_bin_and_mv_if_nc(
                 nc_clusters_unchanged.add(cluster_A_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_A_name, src_bin))
             # and bin B not
-            if cluster_B_r_complet > min_comp and cluster_B_r_cont < max_cont:
+            if cluster_B_r_complet >= min_comp and cluster_B_r_cont <= max_cont:
                 bin_B_ripped_name = cluster_B_r + "--" + cluster_A_r + ".fna"
                 bin_B_name = cluster_B_r + ".fna"
                 src_bin = os.path.join(path_bins_ripped, bin_B_ripped_name)
@@ -287,7 +287,7 @@ def choose_best_ripped_bin_and_mv_if_nc(
             )
 
             # bin_B keeps the contigs
-            if cluster_B_complet > min_comp and cluster_B_cont < max_cont:
+            if cluster_B_complet >= min_comp and cluster_B_cont <= max_cont:
                 bin_B_name = cluster_B_r + ".fna"
                 src_bin = bin_path[bin_B_name]
                 trg_bin = os.path.join(
@@ -299,7 +299,7 @@ def choose_best_ripped_bin_and_mv_if_nc(
                 nc_clusters_unchanged.add(cluster_B_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_B_name, src_bin))
             # and bin A not
-            if cluster_A_r_complet > min_comp and cluster_A_r_cont < max_cont:
+            if cluster_A_r_complet >= min_comp and cluster_A_r_cont <= max_cont:
                 bin_A_ripped_name = cluster_A_r + "--" + cluster_B_r + ".fna"
                 bin_A_name = cluster_A_r + ".fna"
                 src_bin = os.path.join(path_bins_ripped, bin_A_ripped_name)
