@@ -118,9 +118,6 @@ def mv_nc_not_r_nc_bins(
                 "Bin %s has no intersection with any other bin so it is directly moved from %s to %s"
                 % (cluster, src_bin, trg_bin)
             )
-            #shutil.copy(
-
-            #shutil.move(
             os.symlink(
                 src_bin, trg_bin
             )  # this should be changed to mv once we assure it works properly
