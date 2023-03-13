@@ -172,9 +172,6 @@ def mv_single_ripped_nc_bins(
                     "Bin %s was ripped because of meaningless edges or pairing and afterwards no intersection was shared with any other bin so it is moved from %s to %s"
                     % (cluster, src_bin, trg_bin)
                 )
-                
-                #shutil.move(src_bin, trg_bin)
-                #shutil.copy(src_bin, trg_bin)
                 os.symlink(src_bin, trg_bin)
 
 
