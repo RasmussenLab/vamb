@@ -44,7 +44,7 @@ if __name__ == "__main__":
     with open(opt.cs_d) as f:
         cluster_score = json.load(f)
 
-    cluster_score = update_cluster_score_bin_path(opt.s, cluster_score)
+    cluster_score_ = update_cluster_score_bin_path(opt.s, cluster_score)
 
     with open(opt.cs_d, "w") as f:
-        json.dump(cluster_score, f)
+        json.dump(cluster_score_, f)

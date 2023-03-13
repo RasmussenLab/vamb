@@ -37,7 +37,7 @@ def main(
     # Given all the clusters that have no connection (no intersection) with any other cluster
     # mv them to the final bins folder that contains the final set of NC bins if they are NC
     nc_clusters_unchanged = mv_nc_not_r_nc_bins(
-        cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path
+        cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
     )
 
     # Given the checkM2 scores for all ripped bins, create a dictionary
@@ -55,6 +55,8 @@ def main(
         drep_folder,
         path_run,
         path_bins_ripped,
+        min_comp,
+        max_cont
     )
 
     # for the bins that have been ripped because of meaningless edges and after the ripping present
@@ -98,14 +100,14 @@ def get_cluster_sample(cluster_contigs, bin_separator):
 
 
 def mv_nc_not_r_nc_bins(
-    cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path
+    cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
 ):
 
     """mv not ripped NC bins from bins folder to drep folder"""
     nc_clusters_unchanged = set()
     for cluster in cluster_not_r_contigs.keys():
         comp, cont = cluster_scores[cluster]
-        if comp > 90 and cont < 5:
+        if comp >= min_comp and cont <= max_cont:
 
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],cluster+'.fna')
             src_bin = bin_path[cluster + ".fna"]
@@ -116,7 +118,7 @@ def mv_nc_not_r_nc_bins(
                 "Bin %s has no intersection with any other bin so it is directly moved from %s to %s"
                 % (cluster, src_bin, trg_bin)
             )
-            shutil.move(
+            os.symlink(
                 src_bin, trg_bin
             )  # this should be changed to mv once we assure it works properly
             nc_clusters_unchanged.add(cluster)
@@ -135,6 +137,8 @@ def mv_single_ripped_nc_bins(
     cluster_score,
     path_run,
     cluster_sample,
+    min_comp,
+    max_cont
 ):
     """Mv nc bins that were ripped only because they had meaningless edges"""
     nc_clusters_ripped_single = set()
@@ -148,10 +152,11 @@ def mv_single_ripped_nc_bins(
 
         comp, cont = float(comp), float(cont)
         comp_, cont_ = cluster_score[cluster]
+        
         assert comp == comp_
         assert cont == cont_
-
-        if comp > min_comp and cont < max_cont:
+        
+        if comp >= min_comp and cont <= max_cont:
             # cluster = bin_name.replace('.fna','')
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],bin_name+'.fna')
             src_bin = bin_path[cluster + ".fna"]
@@ -164,7 +169,9 @@ def mv_single_ripped_nc_bins(
                     "Bin %s was ripped because of meaningless edges or pairing and afterwards no intersection was shared with any other bin so it is moved from %s to %s"
                     % (cluster, src_bin, trg_bin)
                 )
-                shutil.move(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
+
+
                 nc_clusters_ripped_single.add(cluster)
     return nc_clusters_ripped_single
 
@@ -201,6 +208,8 @@ def choose_best_ripped_bin_and_mv_if_nc(
     drep_folder,
     path_run,
     path_bins_ripped,
+    min_comp,
+    max_cont
 ):
 
     nc_clusters_unchanged, nc_clusters_ripped = set(), set()
@@ -237,24 +246,28 @@ def choose_best_ripped_bin_and_mv_if_nc(
             )
 
             # bin_A keeps the contigs
-            if cluster_A_complet > 90 and cluster_A_cont < 5:
+            if cluster_A_complet >= min_comp and cluster_A_cont <= max_cont:
                 bin_A_name = cluster_A_r + ".fna"
                 src_bin = bin_path[bin_A_name]
                 trg_bin = os.path.join(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
-                shutil.move(src_bin, trg_bin)
+                #shutil.move(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_A_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_A_name, src_bin))
             # and bin B not
-            if cluster_B_r_complet > 90 and cluster_B_r_cont < 5:
+            if cluster_B_r_complet >= min_comp and cluster_B_r_cont <= max_cont:
                 bin_B_ripped_name = cluster_B_r + "--" + cluster_A_r + ".fna"
                 bin_B_name = cluster_B_r + ".fna"
                 src_bin = os.path.join(path_bins_ripped, bin_B_ripped_name)
                 trg_bin = os.path.join(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
-                shutil.move(src_bin, trg_bin)
+                #shutil.move(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_B_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_B_name, src_bin)
@@ -268,24 +281,28 @@ def choose_best_ripped_bin_and_mv_if_nc(
             )
 
             # bin_B keeps the contigs
-            if cluster_B_complet > 90 and cluster_B_cont < 5:
+            if cluster_B_complet >= min_comp and cluster_B_cont <= max_cont:
                 bin_B_name = cluster_B_r + ".fna"
                 src_bin = bin_path[bin_B_name]
                 trg_bin = os.path.join(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
-                shutil.move(src_bin, trg_bin)
+                #shutil.move(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_B_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_B_name, src_bin))
             # and bin A not
-            if cluster_A_r_complet > 90 and cluster_A_r_cont < 5:
+            if cluster_A_r_complet >= min_comp and cluster_A_r_cont <= max_cont:
                 bin_A_ripped_name = cluster_A_r + "--" + cluster_B_r + ".fna"
                 bin_A_name = cluster_A_r + ".fna"
                 src_bin = os.path.join(path_bins_ripped, bin_A_ripped_name)
                 trg_bin = os.path.join(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
-                shutil.move(src_bin, trg_bin)
+                #shutil.move(src_bin, trg_bin)
+                #shutil.copy(src_bin, trg_bin)
+                os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_A_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_A_name, src_bin)
@@ -384,6 +401,6 @@ if __name__ == "__main__":
         bin_path,
         path_bins_ripped,
         bin_separator,
-        opt.comp,
-        opt.cont,
+        opt.comp*100,
+        opt.cont*100,
     )
