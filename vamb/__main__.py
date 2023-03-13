@@ -1046,9 +1046,9 @@ def main():
         dest="model",
         metavar="",
         type=str,
-        choices=["vae", "aae", "vae&aae"],
+        choices=["vae", "aae", "vae-aae"],
         default="vae",
-        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae&aae), [vae]",
+        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae-aae), [vae]",
     )
 
     # VAE arguments
@@ -1272,7 +1272,7 @@ def main():
         not args.norefcheck,
     )
 
-    if args.model in ("vae", "vae&aae"):
+    if args.model in ("vae", "vae-aae"):
         vae_options = VAEOptions(
             nhiddens=args.nhiddens,
             nlatent=args.nlatent,
@@ -1299,7 +1299,7 @@ def main():
             if arg != default:
                 raise ValueError(f"VAE model not used, but VAE-specific arg \"{name}\" used")
 
-    if args.model in ("aae", "vae&aae"):
+    if args.model in ("aae", "vae-aae"):
         aae_options = AAEOptions(
             nhiddens=args.nhiddens_aae,
             nlatent_z=args.nlatent_aae_z,
@@ -1363,7 +1363,7 @@ def main():
     if aae_options is not None:
         try_make_dir(vamb_options.out_dir.joinpath("tmp", "ripped_bins"))
         try_make_dir(vamb_options.out_dir.joinpath("tmp", "checkm2_all"))
-        try_make_dir(vamb_options.out_dir.joinpath("tmp", "NC_bins"))
+        try_make_dir(vamb_options.out_dir.joinpath( "NC_bins"))
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(

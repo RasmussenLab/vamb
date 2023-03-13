@@ -78,7 +78,10 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "checkm2_ppn_r": "15",
    "avamb_params": "-o C -m 2000 --minfasta 500000",
    "avamb_preload": "",
-   "outdir":"avamb_outdir"
+   "outdir":"avamb_outdir",
+   "min_comp": "0.9",
+   "max_cont": "0.05"
+
 }
 
 ```
@@ -95,7 +98,7 @@ If you want to use snakemake on a compute cluster using `qsub` we add the follow
 ```
 
 conda activate avamb
-snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem}" 
+snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem} -e {log.e} -o {log.o}" 
 ```
 
 Note 1: If you want to re-run with different parameters of AVAMB you can change  `avamb_params` in the config-file, but remember to rename the  `outdir` configuration file entry, otherwise it will overwrite it.
@@ -118,7 +121,10 @@ Using a GPU can speed up Avamb considerably - especially when you are binning mi
    "checkm_ppn": "10",   
    "avamb_params": "-o C -m 2000 --minfasta 500000 --outdir avamb --cuda",
    "avamb_preload": "module load cuda/toolkit/10.2.89;",
-   "outdir":"avamb_outdir"
+   "outdir":"avamb_outdir",
+   "min_comp": "0.9",
+   "max_cont": "0.05"
+
 }
 ```
 
