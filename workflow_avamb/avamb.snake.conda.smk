@@ -36,9 +36,6 @@ CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 -m 2000 ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
 
-MIN_COMP = get_config("min_comp", "0.9", r".*")
-MAX_CONT = get_config("max_cont", "0.05", r".*")
-
 OUTDIR= get_config("outdir", "outdir_avamb", r".*")
 
 try:
@@ -95,7 +92,7 @@ rule cat_contigs:
         e = os.path.join(OUTDIR,"log/contigs/catcontigs.e")
     
     conda:
-        "avamb"
+        "avamb_test"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -224,7 +221,7 @@ rule run_avamb:
     threads:
         int(avamb_threads)
     conda:
-        "avamb" 
+        "avamb_test" 
    
     log:
         vamb_out=os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log"),
@@ -235,7 +232,7 @@ rule run_avamb:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files}/*sorted.bam {params.cuda} {AVAMB_PARAMS}
         touch {log.vamb_out}
        	"""
 
@@ -287,10 +284,7 @@ rule run_checkm2_per_sample_all_bins:
     conda: 
         "checkm2" 
     shell:
-        """
-        checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna\
-         --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}
-        """
+        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/avamb/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
 
 rule cat_checkm2_all:
     input:
@@ -326,15 +320,13 @@ rule create_cluster_scores_bin_path_dictionaries:
     threads:
         5
     conda:
-        "avamb"   
+        "avamb_test"   
     log:
         o=os.path.join(OUTDIR,'log','cs_bp_dicts.out'),
         e=os.path.join(OUTDIR,'log','cs_bp_dicts.err')
 
     shell:
-        """python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb}\
-         --bp_d {output.bin_path_dict_path_avamb} 
-         """
+        "python {params.path}  --s {OUTDIR}/avamb/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
 rule run_drep_manual_vamb_z_y:
     input:
@@ -356,7 +348,7 @@ rule run_drep_manual_vamb_z_y:
     threads:
         5
     conda:
-        "avamb"
+        "avamb_test"
     log:
         o=os.path.join(OUTDIR,'log','dereplication.out'),
         e=os.path.join(OUTDIR,'log','dereplication.err')
@@ -365,8 +357,7 @@ rule run_drep_manual_vamb_z_y:
         """
         python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
         --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
-        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}\
-         --comp {MIN_COMP} --cont {MAX_CONT}
+        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}
         """
 
 
@@ -387,7 +378,7 @@ checkpoint create_ripped_bins_avamb:
     threads:
         5
     conda:
-        "avamb"
+        "avamb_test"
     log:
         o=os.path.join(OUTDIR,'log','ripping.out'),
         e=os.path.join(OUTDIR,'log','ripping.err')
@@ -421,13 +412,13 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     threads:
         5
     conda:
-        "avamb"
+        "avamb_test"
     shell:
         """
         python {params.path} --c {input.clusters_avamb_manual_drep} \
         --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins \
         --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} \
-        --bin_separator C --comp {MIN_COMP} --cont {MAX_CONT} 2> {log.log_fin} 
+        --bin_separator C 2> {log.log_fin} 
         """
         
     
@@ -472,7 +463,7 @@ rule update_cs_d_avamb:
         scores_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins/checkm2_out/quality_report.tsv"),
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb.json")
     output:
-        os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log")
+        os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updated.json")
     params:
         path = os.path.join(SNAKEDIR, "src", "update_cluster_scores_dict_after_ripping.py"),
         walltime = "86400",
@@ -482,22 +473,25 @@ rule update_cs_d_avamb:
     threads:
         5
     conda:
-        "avamb" 
+        "avamb_test" 
     log:
         o=os.path.join(OUTDIR,'log','update_cs_bp_dicts.out'),
-        e=os.path.join(OUTDIR,'log','update_cs_bp_dicst.err')
-
+        e=os.path.join(OUTDIR,'log','update_cs_bp_dicst.err'),
+        log_fin = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updated.log")
     shell:
-        "python {params.path} --s {input.scores_bins_ripped}  --cs_d {input.cluster_score_dict_path_avamb} 2> {output}"
+        """
+        python {params.path} --s {input.scores_bins_ripped} \
+         --cs_d {input.cluster_score_dict_path_avamb} --cs_d_o {output} > {log.log_fin}
+         """
 
 
 rule aggregate_nc_bins_avamb:
     input:
-        cs_updated_log = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updted.log"),
+        cs_updated_log = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updated.log"),
         drep_clusters = os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_clusters.tsv"),
         drep_clusters_not_ripped = os.path.join(OUTDIR,"avamb/tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
         scores_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins/checkm2_out/quality_report.tsv"),
-        cluster_scores_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb.json"),
+        cluster_scores_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/cs_d_avamb_updated.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"avamb/tmp/bp_d_avamb.json"),
         path_bins_ripped = os.path.join(OUTDIR,"avamb/tmp/ripped_bins"),
         checkm_finished_file = os.path.join(OUTDIR,"avamb/tmp/checkm2_ripped_avamb_run_finished.log")
@@ -512,7 +506,7 @@ rule aggregate_nc_bins_avamb:
     threads:
         5
     conda:
-        "avamb" 
+        "avamb_test" 
 
     log:
         o=os.path.join(OUTDIR,'log','aggregate_final_ncs.out'),
@@ -524,7 +518,6 @@ rule aggregate_nc_bins_avamb:
         --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
         --br {input.path_bins_ripped} -d {OUTDIR}/avamb/NC_bins --bin_separator C \
-        --comp {MIN_COMP} --cont {MAX_CONT}
         >  {output}
         """
 
@@ -550,10 +543,12 @@ rule write_clusters_from_nc_folders:
     threads:
         5
     conda:
-        "avamb" 
-
+        "avamb_test" 
+   
     shell:
-        "sh {params.path} -d {input.nc_bins} -o {output} > {log.log_fin} "
+        "sh {params.path} -d {input.nc_bins} -o {output} ;"
+        "touch {log.log_fin} "
+        
 
 rule workflow_finished:
     input:
@@ -572,4 +567,3 @@ rule workflow_finished:
         e=os.path.join(OUTDIR,'log','workflow_finished.err')
     shell:
         "touch {output}"
-
