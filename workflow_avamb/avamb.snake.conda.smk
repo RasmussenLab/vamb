@@ -92,7 +92,7 @@ rule cat_contigs:
         e = os.path.join(OUTDIR,"log/contigs/catcontigs.e")
     
     conda:
-        "avamb_test"
+        "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 rule index:
@@ -221,7 +221,7 @@ rule run_avamb:
     threads:
         int(avamb_threads)
     conda:
-        "avamb_test" 
+        "avamb" 
    
     log:
         vamb_out=os.path.join(OUTDIR,"avamb/tmp/avamb_finished.log"),
@@ -320,7 +320,7 @@ rule create_cluster_scores_bin_path_dictionaries:
     threads:
         5
     conda:
-        "avamb_test"   
+        "avamb"   
     log:
         o=os.path.join(OUTDIR,'log','cs_bp_dicts.out'),
         e=os.path.join(OUTDIR,'log','cs_bp_dicts.err')
@@ -348,7 +348,7 @@ rule run_drep_manual_vamb_z_y:
     threads:
         5
     conda:
-        "avamb_test"
+        "avamb"
     log:
         o=os.path.join(OUTDIR,'log','dereplication.out'),
         e=os.path.join(OUTDIR,'log','dereplication.err')
@@ -378,7 +378,7 @@ checkpoint create_ripped_bins_avamb:
     threads:
         5
     conda:
-        "avamb_test"
+        "avamb"
     log:
         o=os.path.join(OUTDIR,'log','ripping.out'),
         e=os.path.join(OUTDIR,'log','ripping.err')
@@ -412,7 +412,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     threads:
         5
     conda:
-        "avamb_test"
+        "avamb"
     shell:
         """
         python {params.path} --c {input.clusters_avamb_manual_drep} \
@@ -473,7 +473,7 @@ rule update_cs_d_avamb:
     threads:
         5
     conda:
-        "avamb_test" 
+        "avamb" 
     log:
         o=os.path.join(OUTDIR,'log','update_cs_bp_dicts.out'),
         e=os.path.join(OUTDIR,'log','update_cs_bp_dicst.err'),
@@ -506,7 +506,7 @@ rule aggregate_nc_bins_avamb:
     threads:
         5
     conda:
-        "avamb_test" 
+        "avamb" 
 
     log:
         o=os.path.join(OUTDIR,'log','aggregate_final_ncs.out'),
@@ -543,7 +543,7 @@ rule write_clusters_from_nc_folders:
     threads:
         5
     conda:
-        "avamb_test" 
+        "avamb" 
    
     shell:
         "sh {params.path} -d {input.nc_bins} -o {output} ;"
