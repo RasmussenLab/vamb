@@ -11,7 +11,7 @@
    "checkm2_ppn": "15",
    "checkm2_mem_r": "30gb",
    "checkm2_ppn_r": "30",
-   "avamb_params": "-o C --minfasta 200000 ",
+   "avamb_params": " --model vae-aae  -o C --minfasta 200000 ",
    "avamb_preload": "",
    "outdir": "avamb_outdir",
    "min_comp": "0.9",
