@@ -13,12 +13,17 @@ requires-python = "<3.12.*,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [metadata]
-authors = [{name="Pau Piera", email="pau.piera@cpr.ku.dk"}, {name="Jakob Nybo Nissen", email="jakobnybonissen@gmail.com"}]
+authors = [
+    {name="Jakob Nybo Nissen", email="jakobnybonissen@gmail.com"},
+    {name="Pau Piera", email="pau.piera@cpr.ku.dk"},
+    {name="Simon Rasmussen", email="simon.rasmussen@cpr.ku.dk"}
+]
 url = "https://github.com/RasmussenLab/vamb"
 description = "Variational and Adversarial autoencoders for Metagenomic Binning"
 license = "MIT"
 [tool.setuptools.dynamic]
 version = {attr = "vamb.__version__"}
+readme = {file = "README.md"}
 
 [build-system]
 requires = ["setuptools ~= 63.0", "Cython ~= 0.29"]
