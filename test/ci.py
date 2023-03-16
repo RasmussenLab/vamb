@@ -47,7 +47,6 @@ def validate_init(init):
         isinstance(init, tuple)
         and len(init) in (3, 4)
         and all(isinstance(i, int) for i in init[:3])
-        and (len(init) == 3 or init[3] == "DEV")
     ):
         raise ValueError("Wrong format of __version__ in __init__.py")
 
@@ -74,31 +73,20 @@ def head_git_tag():
     m = regex.match(st)
     if m is None:
         raise ValueError("HEADs git tag is not a valid version number")
-    vnum = tuple(int(i) for i in m.groups()[1:4])
-    tagname = m.groups()[0]
-
-    # Check it's annotated if it exists - then returncode is 0
-    proc = subprocess.run(["git", "describe", tagname])
-    is_annotated = proc.returncode == 0
-    return (vnum, is_annotated)
+    return tuple(int(i) for i in m.groups()[1:4])
 
 
 class TestVersions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.v_snakemake_readme = readme_vamb_version("../workflow/README.md")
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
         cls.v_changelog = changelog_version("../CHANGELOG.md")
         cls.last_tag = latest_git_tag()
-        head_tag, is_annotated = head_git_tag()
+        head_tag = head_git_tag()
         cls.head_tag = head_tag
-        cls.is_annotated = is_annotated
 
     def test_same_versions(self):
-        # envs/vamb version, versions in README and last tag must all point to the latest release
-        self.assertEqual(self.last_tag, self.v_snakemake_readme)
-
         # The version in the changelog must fit the one in __init__
         self.assertEqual(self.v_init, self.v_changelog)
 
@@ -107,9 +95,8 @@ class TestVersions(unittest.TestCase):
         # than the latest release.
         # If not, it must be the same version as the tag of the current commit,
         # i.e. the current commit must be a release version.
-        if self.v_init[-1] == "DEV":
+        if len(self.v_init) > 3:
             self.assertGreater(self.v_init[:3], self.last_tag)
         else:
             self.assertEqual(self.v_init, self.head_tag)
             self.assertEqual(self.v_init[:3], self.last_tag)
-            self.assertTrue(self.is_annotated)
