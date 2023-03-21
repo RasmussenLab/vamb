@@ -29,19 +29,14 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  checkm2 database --download
  conda deactivate
  # Install Avamb in avamb environment
- conda config --add channels conda-forge
- conda config --add channels bioconda
  mamba create -n avamb python=3.9
- mamba install -n avamb snakemake pip biopython netowrkx
- conda activate avamb
- pip install ordered-set 
- pip install vamb 
+ mamba env update -n avamb --file envs/avamb.yaml
 ```
 However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
 
 ## Set up configuration with your data
 
-To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: 
+To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: s
 
 `contigs.txt` contains paths to each of the per-sample assemblies:
 ```
