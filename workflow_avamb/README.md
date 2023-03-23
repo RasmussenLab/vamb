@@ -22,10 +22,10 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
 ```
  # Install CheckM2 in checkm2 environment
  git clone https://github.com/chklovski/CheckM2.git 
- mamba create -n checkm2 
- mamba env update -n checkm2 --file CheckM2/checkm2.yml
+ mamba create -n checkm2 python=3.9.13
+ mamba env update -n checkm2 --file envs/checkm2.yml
  conda activate checkm2
- cd  CheckM2  && python setup.py install && cd ..
+ cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
  checkm2 database --download
  conda deactivate
  # Install Avamb in avamb environment
@@ -76,7 +76,6 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "outdir":"avamb_outdir",
    "min_comp": "0.9",
    "max_cont": "0.05"
-
 }
 
 ```
