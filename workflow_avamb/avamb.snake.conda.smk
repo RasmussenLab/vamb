@@ -1,7 +1,8 @@
 import re
 import os
 import sys
-from vamb.vambtools import concatenate_fasta
+from vamb.vambtools import concatenate_fasta, hash_refnames
+import numpy as np
 SNAKEDIR = os.path.dirname(workflow.snakefile)
 
 sys.path.append(os.path.join(SNAKEDIR, 'src'))
@@ -20,7 +21,8 @@ def get_config(name, default, regex):
 CONTIGS = get_config("contigs", "contigs.txt", r".*") # each line is a contigs path from a given sample
 SAMPLE_DATA = get_config("sample_data", "samples2data.txt", r".*") # each line is composed by 3 elements: sample id, forward_reads_path , backward_reads_path
 INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
-MIN_CONTIG_SIZE = get_config("min_contig_size", "2000", r"[1-9]\d*$")
+MIN_CONTIG_SIZE = int(get_config("min_contig_size", "2000", r"[1-9]\d*$"))
+MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
 MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*gb$")
 MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
@@ -35,6 +37,9 @@ CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 
 AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 -m 2000 ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
+
+MIN_COMP = get_config("min_comp", "0.9", r".*")
+MAX_CONT = get_config("max_cont", "0.05", r".*")
 
 OUTDIR= get_config("outdir", "outdir_avamb", r".*")
 
@@ -199,13 +204,114 @@ rule sort:
     shell:
         "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2> {log.out_sort}"
 
+# Extract header lengths from a BAM file in order to determine which headers
+# to filter from the abundance (i.e. get the mask)
+rule get_headers:
+    input:
+        os.path.join(OUTDIR, "mapped", f"{IDS[1]}.sort.bam")
+    output:
+        os.path.join(OUTDIR,"abundances/headers.txt")
+    params:
+        script=os.path.join(SNAKEDIR, "src", "create_mask.py"),
+        walltime = "86400",
+        nodes = "1",
+        ppn = "1",
+        mem = "4gb"
+
+    conda:
+        "envs/samtools.yaml"
+    log:
+        head = os.path.join(OUTDIR,"log/abundance/headers.log"),
+        o = os.path.join(OUTDIR,"log/abundance/get_headers.o"),
+        e = os.path.join(OUTDIR,"log/abundance/get_headers.e")
+
+    shell:
+        "samtools view -H {input}"
+        " | grep '^@SQ'"
+        " | cut -f 2,3"
+        " > {output} 2> {log.head} "
+ 
+# Using the headers above, compute the mask and the refhash
+rule abundance_mask:
+    input:
+        os.path.join(OUTDIR,"abundances/headers.txt")
+    output:
+        os.path.join(OUTDIR,"abundances/mask_refhash.npz")
+
+    log:
+        mask = os.path.join(OUTDIR,"log/abundance/mask.log"),
+        o = os.path.join(OUTDIR,"log/abundance/mask.o"),
+        e = os.path.join(OUTDIR,"log/abundance/mask.e")
+    params:
+        path = os.path.join(SNAKEDIR, "src", "abundances_mask.py"),
+        walltime = "86400",
+        nodes = "1",
+        ppn = "4",
+        mem = "1gb"
+    conda:
+        "avamb"
+
+    shell:
+        """
+        python {params.path} --h {input} --msk {output} --minsize {MIN_CONTIG_SIZE} 2> {log.mask}
+        """
+
+
+# For every sample, compute the abundances given the mask and refhash above
+rule bam_abundance:
+    input:
+        bampath=os.path.join(OUTDIR,"mapped/{sample}.sort.bam"),
+        mask_refhash=os.path.join(OUTDIR,"abundances/mask_refhash.npz")
+    output:
+        os.path.join(OUTDIR,"abundances/{sample}.npz")
+    params:
+        path = os.path.join(SNAKEDIR, "src", "write_abundances.py"),
+        walltime = "86400",
+        nodes = "1",
+        ppn = "4",
+        mem = "1gb"
+    conda:
+        "avamb"
+    log:
+        bam = os.path.join(OUTDIR,"log/abundance/bam_abundance_{sample}.log"),
+        o = os.path.join(OUTDIR,"log/abundance/{sample}.bam_abundance.o"),
+        e = os.path.join(OUTDIR,"log/abundance/{sample}.bam_abundance.e")
+
+    shell:
+        """
+        python {params.path} --msk {input.mask_refhash} --b {input.bampath} --min_id {MIN_IDENTITY} --out {output} 2> {log.bam}
+        """
+    
+# Merge the abundances to a single Abundance object and save it
+rule create_abundances:
+    input:
+        npzpaths=expand(os.path.join(OUTDIR,"abundances/{sample}.npz"), sample=IDS),
+        mask_refhash=os.path.join(OUTDIR,"abundances/mask_refhash.npz")
+    output:
+        os.path.join(OUTDIR,"abundance.npz")
+    params:
+        path = os.path.join(SNAKEDIR, "src", "create_abundances.py"),
+        walltime = "86400",
+        nodes = "1",
+        ppn = "4",
+        mem = "1gb"
+    conda:
+        "avamb"
+    log:
+        create_abs = os.path.join(OUTDIR,"log/abundance/create_abundances.log"),
+        o = os.path.join(OUTDIR,"log/abundance/create_abundances.o"),
+        e = os.path.join(OUTDIR,"log/abundance/create_abundances.e")
+
+    shell:
+        """
+        python {params.path} --msk {input.mask_refhash} --ab {input.npzpaths} --min_id {MIN_IDENTITY} --out {output} 2> {log.create_abs}
+        """
 
 
 rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        bam_files=expand(os.path.join(OUTDIR,"mapped/{sample}.sort.bam"), sample=IDS)
-
+        abundance=os.path.join(OUTDIR,"abundance.npz")
     output:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
@@ -233,7 +339,7 @@ rule run_avamb:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads}  --bamfiles {input.bam_files} {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} {params.cuda} {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/avamb/NC_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins
@@ -361,7 +467,8 @@ rule run_drep_manual_vamb_z_y:
         """
         python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
         --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
-        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}
+        --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}\
+        --comp {MIN_COMP} --cont {MAX_CONT}
         """
 
 
