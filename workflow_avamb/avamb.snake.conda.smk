@@ -35,7 +35,7 @@ CHECKM_MEM_r = get_config("checkm2_mem_r", "30gb", r"[1-9]\d*gb$")
 CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 
 
-AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 -m 2000 ", r".*")
+AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000  ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
 
 MIN_COMP = get_config("min_comp", "0.9", r".*")
@@ -339,7 +339,7 @@ rule run_avamb:
         """
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} -m {MIN_CONTIG_SIZE}  {params.cuda} {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/avamb/NC_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins
