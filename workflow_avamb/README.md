@@ -55,7 +55,7 @@ sample_4    reads/sample_4.r1.fq.gz    reads/sample_4.r2.fq.gz
 
 ```
 
-Then the configuration file (`config.json`). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `mem` and `ppn` shows the amount of memory and cores set aside for minimap2, AVAMB, CheckM2 and CheckM2 dereplicate, `avamb_params` gives the parameters used by AVAMB, finally `outdir` points to the directory that wiil be created and where all output files will be stored. Here we tell it to use the multi-split approach (`-o C`), to skip contigs smaller than 2kb (`-m 2000`) and to write all bins larger than 500kb as fasta (`--minfasta 500000`). With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "12gb"`).
+Then the configuration file (`config.json`). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `min_contig_size` defines the minimum contig length considered for binning; `min_identity` referes to the minimum read alignment threshold for the contig abundances calculation; `mem` and `ppn` shows the amount of memory and cores set aside for minimap2, avamb, CheckM2 and CheckM2 dereplicate, `avamb_params` gives the parameters used by avamb, finally `outdir` points to the directory that wiil be created and where all output files will be stored. Here we tell it to use the multi-split approach (`-o C`) and to write all bins larger than 500kb as fasta (`--minfasta 500000`). With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "12gb"`).
 
 ```
 {
@@ -63,6 +63,7 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "sample_data": "samples2data.txt",
    "index_size": "3G",
    "min_contig_size": "2000",
+   "min_identity": "0.95",
    "minimap_mem": "15gb",
    "minimap_ppn": "10",
    "avamb_mem": "10gb",
@@ -134,19 +135,23 @@ Using a GPU can speed up Avamb considerably - especially when you are binning mi
    "contigs": "contigs.txt",
    "sample_data": "samples2data.txt",
    "index_size": "3G",
+   "min_contig_size": "2000",
+   "min_identity": "0.95",
    "minimap_mem": "15gb",
    "minimap_ppn": "10",
    "avamb_mem": "10gb",
-   "avamb_ppn": "10:gpus=1",
-   "checkm_mem": "25gb",
-   "checkm_ppn": "10",   
-   "avamb_params": "-o C -m 2000 --minfasta 500000 --outdir avamb --cuda",
+   "avamb_ppn": "10",
+   "checkm2_mem": "30gb",
+   "checkm2_ppn": "30",
+   "checkm2_mem_r": "15gb",
+   "checkm2_ppn_r": "15",
+   "avamb_params": "-o C --minfasta 500000 --cuda",
    "avamb_preload": "module load cuda/toolkit/10.2.89;",
    "outdir":"avamb_outdir",
    "min_comp": "0.9",
    "max_cont": "0.05"
-
 }
+
 ```
 
 Note that I could not get `avamb` to work with `cuda` on our cluster when installing from bioconda. Therefore I added a line to preload cuda toolkit to the configuration file that will load this module when running `avamb`. 
