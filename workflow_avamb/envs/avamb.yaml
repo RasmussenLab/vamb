@@ -12,4 +12,4 @@ dependencies:
 
 - pip:
   - ordered-set==4.1.0
-  - vamb
+#  - vamb
