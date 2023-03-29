@@ -20,17 +20,20 @@ The nice thing about using snakemake for this is that it will keep track of whic
 To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
 
 ```
+ # Install Avamb in avamb environment
+ git clone https://github.com/RasmussenLab/vamb.git 
+ mamba create -n avamb python=3.9.16
+ mamba env update -n avamb --file vamb/workflow_avamb/envs/avamb.yaml
+ conda activate avamb 
+ cd vamb && pip install -e . && cd ..
  # Install CheckM2 in checkm2 environment
  git clone https://github.com/chklovski/CheckM2.git 
- mamba create -n checkm2 python=3.8.1
- mamba env update -n checkm2 --file envs/checkm2.yml
+ mamba create -n checkm2 python=3.8
+ mamba env update -n checkm2 --file vamb/workflow_avamb/envs/checkm2.yml
  conda activate checkm2
  cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
  checkm2 database --download
  conda deactivate
- # Install Avamb in avamb environment
- mamba create -n avamb python=3.9
- mamba env update -n avamb --file envs/avamb.yaml
 ```
 However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
 
