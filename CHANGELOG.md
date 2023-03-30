@@ -1,11 +1,16 @@
 # Changelog
 
-## Unreleased - v4.0.0-DEV
-Version 4 is a thorough rewrite of major parts of Vamb.
+## v4.0.1
+* Fix Random.choice for Tensor on Python 3.11. See issue #148
+
+## v4.0.0
+Version 4 is a thorough rewrite of major parts of Vamb that has taken more than a year.
+Vamb now ships with with an upgraded dual variational autoencoder (VAE) and
+adversatial autoencoder (AAE) model, usable in a CheckM based workflow.
 The code quality and test suite has gotten significant upgrades, making Vamb
 more stable and robust to bugs.
-Vamb version is slightly faster and produces slightly better bins than v3.
-The user interface has only gotten slight changes.
+Vamb version is slightly faster and produces better bins than v3.
+The user interface has gotten limited changes.
 
 ### Breaking changes
 * The official API of Vamb is now defined only in terms of its command-line
@@ -14,11 +19,8 @@ The user interface has only gotten slight changes.
   If you are using Vamb as a Python package, it means you should precisely
   specify the full version of Vamb used in order to ensure reproducibility.
 * Benchmark procedure has been changed, so benchmark results are incompatible
-  with results from v3.
-  In v3, a complete bin was defined as the total set of covered basepairs in any
-  contig from the input assembly. In v4, it's defined as the genome of origin,
-  from where contigs are sampled.
-  This new procedure is more fair, more intuitive and easier to compute.
+  with results from v3. Benchmarking is now considered an implementation detail,
+  and is not stable across releases.
 * Vamb no longer outputs TNF, sequence names and sequence lengths as .npz files.
   Instead, it produces a `composition.npz` that contains all this information
   and more.
@@ -33,15 +35,18 @@ The user interface has only gotten slight changes.
   (though read the Notable changes section below).
   
 ### New features
+* Vamb now included an optional AAE model along the VAE model.
+  Users may run the VAE model, where it behaves similarly to v3, or run the mixed
+  VAE/AAE model, in which both models will be run on the same dataset.
+* The Snakemake workflow has been rehauled, and how defaults to using
+  the VAE/AAE combined model, using CheckM to dereplicate.
 * Vamb is now more easily installed via pip: `pip install vamb`. We have fixed
   a bunch of issues that caused installation problems.
-* Added new flag: `--noencode`. With this flag, Vamb stops after producing the
-  composition and depth outputs, and does not encode nor cluster.
-  This can be used to produce the input data of Vamb to other clustering models.
 * By default, Vamb gzip compresses FASTA files written using the `--minfasta`
   flag.
 
-### Notable changes
+### Notable other changes
+* Using the combined VAE-AAE workflow, the user can get significantly better bins.
 * Vamb now uses `CoverM` internally to calculate abundances. This means it is
   significantly faster and more accurate than before.
   Thus, we no longer recommend users computing depths with MetaBAT2's JGI tool.

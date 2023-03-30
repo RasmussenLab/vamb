@@ -529,11 +529,11 @@ def _wander_medoid(
     )
 
     while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
-        sampled_medoid = int(rng.choice(cluster).item())
+        sampled_medoid = int(cluster[rng.randrange(len(cluster))].item())
 
         # Prevent sampling same medoid multiple times.
         while sampled_medoid in tried:
-            sampled_medoid = int(rng.choice(cluster).item())
+            sampled_medoid = int(cluster[rng.randrange(len(cluster))].item())
 
         tried.add(sampled_medoid)
 
