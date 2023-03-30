@@ -26,13 +26,13 @@ def changelog_version(path):
     with open(path) as file:
         next(file)  # header
         textline = next(filter(None, map(str.strip, file)))
-    regex = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)*(?:-([A-Za-z]+))")
+    regex = re.compile(r"## v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z]+)?")
     m = regex.search(textline)
     if m is None:
         raise ValueError("Could not find version in first non-header line of CHANGELOG")
     g = m.groups()
     v_nums = (int(g[0]), int(g[1]), int(g[2]))
-    return v_nums if g[3] is None else (*v_nums, g[3])
+    return v_nums
 
 
 def readme_vamb_version(path):
