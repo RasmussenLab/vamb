@@ -1,5 +1,7 @@
 # Changelog
 
+## v4.0.2-DEV
+
 ## v4.0.1
 * Fix Random.choice for Tensor on Python 3.11. See issue #148
 
