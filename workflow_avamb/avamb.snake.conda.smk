@@ -212,7 +212,6 @@ rule get_headers:
     output:
         os.path.join(OUTDIR,"abundances/headers.txt")
     params:
-        script=os.path.join(SNAKEDIR, "src", "create_mask.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "1",
@@ -285,12 +284,13 @@ rule bam_abundance:
 # Merge the abundances to a single Abundance object and save it
 rule create_abundances:
     input:
-        npzpaths=expand(os.path.join(OUTDIR,"abundances/{sample}.npz"), sample=IDS),
-        mask_refhash=os.path.join(OUTDIR,"abundances/mask_refhash.npz")
+        npzpaths=expand(os.path.join(OUTDIR,"abundances","{sample}.npz"), sample=IDS),
+        mask_refhash=os.path.join(OUTDIR,"abundances","mask_refhash.npz")
     output:
         os.path.join(OUTDIR,"abundance.npz")
     params:
         path = os.path.join(SNAKEDIR, "src", "create_abundances.py"),
+        abundance_dir = os.path.join(OUTDIR, "abundances"),
         walltime = "86400",
         nodes = "1",
         ppn = "4",
@@ -303,9 +303,8 @@ rule create_abundances:
         e = os.path.join(OUTDIR,"log/abundance/create_abundances.e")
 
     shell:
-        """
-        python {params.path} --msk {input.mask_refhash} --ab {input.npzpaths} --min_id {MIN_IDENTITY} --out {output} 2> {log.create_abs}
-        """
+        "python {params.path} --msk {input.mask_refhash} --ab {input.npzpaths} --min_id {MIN_IDENTITY} --out {output} 2> {log.create_abs} && "
+        "rm -r {params.abundance_dir}"
 
 
 rule run_avamb:
