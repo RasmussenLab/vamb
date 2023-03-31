@@ -336,10 +336,13 @@ rule run_avamb:
 
     shell:
         """
+        rm -rf {OUTDIR}/abundances
+        rm -rf {OUTDIR}/contigs.flt.dict
+        rm -f {OUTDIR}/contigs.flt.mmi
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
         vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} -m {MIN_CONTIG_SIZE}  {params.cuda} {AVAMB_PARAMS}
-        mkdir -p {OUTDIR}/avamb/NC_bins
+        mkdir -p {OUTDIR}/Final_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins
         touch {log.vamb_out}
@@ -505,7 +508,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
         clusters_avamb_manual_drep = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),   
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
-        nc_bins_path = os.path.join(OUTDIR,"avamb/NC_bins")
+        nc_bins_path = os.path.join(OUTDIR,"Final_bins")
     output:
         clusters_avamb_after_drep_disjoint = os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
     log:
@@ -528,7 +531,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         python {params.path} --c {input.clusters_avamb_manual_drep} \
         --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins \
         --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} \
-        --bin_separator C 2> {log.log_fin} 
+        --bin_separator C --comp {MIN_COMP}   --cont  {MAX_CONT}  2> {log.log_fin} 
         """
         
     
@@ -627,15 +630,15 @@ rule aggregate_nc_bins_avamb:
 	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
         --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
-        --br {input.path_bins_ripped} -d {OUTDIR}/avamb/NC_bins --bin_separator C \
-        >  {output}
+        --br {input.path_bins_ripped} -d {OUTDIR}/Final_bins --bin_separator C \
+        --comp {MIN_COMP}  --cont {MAX_CONT}  >  {output}
         """
 
 
 rule write_clusters_from_nc_folders:
     input:
         contigs_transfered_log = os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log"),
-        nc_bins = os.path.join(OUTDIR,"avamb/NC_bins")
+        nc_bins = os.path.join(OUTDIR,"Final_bins")
                
     output:
         os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
@@ -677,7 +680,21 @@ rule workflow_finished:
         e=os.path.join(OUTDIR,'log','workflow_finished.err')
     shell:
         """
+        rm -r {OUTDIR}/tmp/checkm2_all/*/protein_files
+        rm -r {OUTDIR}/tmp/ripped_bins
+        mkdir {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/tmp/*log  {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/tmp/*json  {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/tmp/*tsv  {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/tmp/*txt  {OUTDIR}/tmp/snakemake_tmp/
+        
+        mv {OUTDIR}/tmp/checkm2_all  {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/avamb/avamb_manual_drep_disjoint_clusters.tsv  {OUTDIR}/Final_clusters.tsv
+        mv {OUTDIR}/abundance.npz {OUTDIR}/tmp/
+        mv {OUTDIR}/mapped {OUTDIR}/tmp/
+        mv {OUTDIR}/contigs.flt.fna.gz {OUTDIR}/tmp/
+
+
         touch {output}
-        rm -r {OUTDIR}/tmp
         """
 
