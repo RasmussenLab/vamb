@@ -26,13 +26,13 @@ def changelog_version(path):
     with open(path) as file:
         next(file)  # header
         textline = next(filter(None, map(str.strip, file)))
-    regex = re.compile(r"## v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z]+)?")
+    regex = re.compile(r"## v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z]+)?)")
     m = regex.search(textline)
     if m is None:
         raise ValueError("Could not find version in first non-header line of CHANGELOG")
     g = m.groups()
-    v_nums = (int(g[0]), int(g[1]), int(g[2]))
-    return v_nums
+    v_nums = (int(g[0]), int(g[1]), int(g[2]), g[3])
+    return v_nums[:3] if not v_nums[3] else v_nums
 
 
 def readme_vamb_version(path):
@@ -81,7 +81,7 @@ class TestVersions(unittest.TestCase):
     def setUpClass(cls):
         validate_init(vamb.__version__)
         cls.v_init = vamb.__version__
-        cls.v_changelog = changelog_version("../CHANGELOG.md")
+        cls.v_changelog = changelog_version("CHANGELOG.md")
         cls.last_tag = latest_git_tag()
         head_tag = head_git_tag()
         cls.head_tag = head_tag

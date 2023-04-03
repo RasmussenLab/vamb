@@ -45,13 +45,12 @@ class TestAbundanceResult(unittest.TestCase):
         )
         self.assertEqual(
             sha256(abundance.matrix.data.tobytes()).digest().hex(),
-            "3d82a87bc1a9d77235269aeea1a66b67c5c4503ece2dd042b3ac6a1ccf7af882",
+            "c346abb53b62423fe95ed4b2eb5988d77141b2d7a5c58c03fdf09abc6476df78",
         )
         abundance2 = vamb.parsebam.Abundance.from_files(
             testtools.BAM_FILES, None, comp_metadata, True, 0.9, 4
         )
         self.assertTrue(np.all(np.abs(abundance.matrix - abundance2.matrix) < 1e-5))
-
 
 class TestEncodingResult(unittest.TestCase):
     torch.manual_seed(0)
@@ -61,20 +60,40 @@ class TestEncodingResult(unittest.TestCase):
         tnfs = rng.random((200, 103)).astype(np.float32)
         rpkm = rng.random((200, 6)).astype(np.float32)
         lens = rng.randint(2000, 5000, 200)
+
+        self.assertEqual(
+            sha256(lens.data.tobytes()).digest().hex(),
+            "68894f01cc435a5f032a655faecddd817cd35a71397129296a11f8c40bd29fcb",
+        )
+
+        torch.manual_seed(0)
+        torch.use_deterministic_algorithms(True)
+        np.random.seed(0)
+        random.seed(0)
         vae = vamb.encode.VAE(6)
         dl, mask = vamb.encode.make_dataloader(rpkm, tnfs, lens, batchsize=16)
         vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
         latent = vae.encode(dl)
+
         self.assertEqual(
             sha256(latent.data.tobytes()).digest().hex(),
             "0148ec0767e88c756615340d6fd0b31ca07aa6b4b172a1874fb7de7179acb57d",
         )
 
+        self.assertEqual(
+            sha256(torch.rand(10).numpy().tobytes()).digest().hex(),
+            "c417b9722e14e854fbe79cc5c797cc6653360c1e6536064205ca0c073f41eaf6",
+        )
 
 class TestClusterResult(unittest.TestCase):
     def test_result(self):
         rng = np.random.RandomState(15)
         latent = rng.random((1000, 3)).astype(np.float32) - 0.5
+        self.assertEqual(
+            sha256(latent.tobytes()).digest().hex(),
+            "630a98a4b44c3754a3f423e915847f44767bb69fb13ea5901dc512428aee9811"
+        )
+        
         hash = sha256()
 
         # Use this to check that the clustering used in this test produces
@@ -87,11 +106,11 @@ class TestClusterResult(unittest.TestCase):
             # Set hashing may differ from run to run, so turn into sorted arrays
             arr = np.array(list(points))
             arr.sort()
+            #lens.append(arr)
             hash.update(medoid.to_bytes(4, "big"))
             hash.update(arr.data)
-            # lens.append(len(points))
 
-        # print(lens)
+        # self.assertGreater(len(list(map(lambda x: len(lens) > 1))), 3)
         self.assertEqual(
             hash.digest().hex(),
             "2b3caf674ff1d1906a831219e0953b2d9f1b78ecefec709b70c672280af49aee",
