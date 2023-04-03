@@ -771,7 +771,6 @@ def run(
     latent = None
     if vae_options is not None:
         assert vae_training_options is not None
-        begin_train_vae = time.time()
         # Train, save model
         latent = trainvae(
             vae_options=vae_options,
@@ -782,14 +781,12 @@ def run(
             data_loader=data_loader,
             logfile=logfile,
         )
-        time_training_vae = round(time.time() - begin_train_vae, 2)
         print("", file=logfile)
 
     clusters_y_dict = None
     latent_z = None
     if aae_options is not None:
         assert aae_training_options is not None
-        begin_train_aae = time.time()
         # Train, save model
         latent_z, clusters_y_dict = trainaae(
             data_loader=data_loader,
@@ -801,7 +798,6 @@ def run(
             logfile=logfile,
             contignames=composition.metadata.identifiers,
         )
-        time_training_aae = round(time.time() - begin_train_aae, 2)
         print("", file=logfile)
 
     # Free up memory
@@ -866,7 +862,7 @@ def run(
             comp_metadata.identifiers,
             vamb_options.cuda,
             logfile,
-            "aae_z",
+            "aae_z_",
         )
 
         fin_cluster_latent_z = time.time()
