@@ -9,7 +9,6 @@ source ~/.bashrc
 conda init bash
 conda activate vamb_env
 
-nepoch=500
-dataset=$1
+nepoch=2
 
-python3 train_mmseq_genus.py  --nepoch $nepoch --cuda  --dataset $dataset
+python3 train_mmseq_almeida.py  --nepoch $nepoch --cuda  --dataset almeida
