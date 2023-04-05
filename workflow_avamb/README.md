@@ -11,10 +11,10 @@ In short it will:
 4. Sort bam-files
 5. Run Vamb and Aamb to bin the contigs, generating 3 sets of bins: vae_bins, aae_z_bins and aae_y_bins
 6. Determine completeness and contamination of the bins using CheckM2
-7. Dereplicate near complete bins, assuring contigs are present in one bin only.
+7. Dereplicate near complete (or whichever completeness and contamination thresholds were set), assuring contigs are present in one bin only.
 ```
 
-The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub).
+The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub). Keep in mind that there are three different paths (named directed acyclic graphs in snakemake) that can be executed by snakemake depending on the outputs generated during the workflow, complicating a bit the interpretation of the snakemake file. That's why we added some comments for each rule briefily explaining their purpose. Feel free to reach us if you encounter any problems.  
 
 ## Installation 
 To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
