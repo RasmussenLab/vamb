@@ -75,11 +75,12 @@ for line in fh_in:
     line = line.rstrip()
     contigs_list.append(line)
 
-# target
+# target rule
 rule all:
     input:
         os.path.join(OUTDIR,'log/workflow_finished_avamb.log')
 
+# Filter contigs for 2000bp and rename them to conform with the multi-split workflow 
 rule cat_contigs:
     input:
         contigs_list
@@ -101,6 +102,7 @@ rule cat_contigs:
         "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
+# Index resulting contig-file with minimap2
 rule index:
     input:
         contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
@@ -152,6 +154,7 @@ rule dict:
     shell:
         "samtools dict {input} | cut -f1-3 > {output} 2> {log.out_dict}"
 
+# Generate bam files 
 rule minimap:
     input:
         fq = lambda wildcards: sample2path[wildcards.sample],
@@ -181,6 +184,7 @@ rule minimap:
         " | samtools view -F 3584 -b - " # supplementary, duplicate read, fail QC check
         " > {output.bam} 2> {log.out_minimap}"
 
+# Sort bam files
 rule sort:
     input:
         os.path.join(OUTDIR,"mapped/{sample}.bam")
@@ -306,7 +310,7 @@ rule create_abundances:
         "python {params.path} --msk {input.mask_refhash} --ab {input.npzpaths} --min_id {MIN_IDENTITY} --out {output} 2> {log.create_abs} && "
         "rm -r {params.abundance_dir}"
 
-
+# Generate the 3 sets of clusters and bins
 rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
@@ -348,6 +352,7 @@ rule run_avamb:
         touch {log.vamb_out}
         """
 
+# Evaluate in which samples bins were generated
 checkpoint samples_with_bins:
     input:        
         os.path.join(OUTDIR,"tmp/avamb_finished.log")
@@ -375,7 +380,7 @@ def samples_with_bins_f(wildcards):
         samples_with_bins_paths=expand(os.path.join(OUTDIR,"tmp/checkm2_all_{sample}_bins_finished.log"),sample=samples_with_bins)
         return samples_with_bins_paths
 
-        
+# Run CheckM2 for each sample with bins        
 rule run_checkm2_per_sample_all_bins:
     input:
         bins_dir_sample=os.path.join(OUTDIR,"avamb/bins/{sample}")
@@ -398,6 +403,7 @@ rule run_checkm2_per_sample_all_bins:
     shell:
         "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
 
+# this rule will be executed when all CheckM2 runs per sample finish, so it can move to the next step 
 rule cat_checkm2_all:
     input:
         samples_with_bins_f
@@ -416,7 +422,10 @@ rule cat_checkm2_all:
 
     shell:
         "touch {output}"
-            
+
+# Generate a 2 python dictionaries stored in json files:
+#   - {bin : [completeness, contamination]}             
+#   - {bin : bin_path}             
 rule create_cluster_scores_bin_path_dictionaries:
     input:
         checkm2_finished_log_file = os.path.join(OUTDIR,"tmp/checkm2_finished.txt")
@@ -440,6 +449,7 @@ rule create_cluster_scores_bin_path_dictionaries:
     shell:
         "python {params.path}  --s {OUTDIR}/tmp/checkm2_all --b {OUTDIR}/avamb/bins --cs_d {output.cluster_score_dict_path_avamb} --bp_d {output.bin_path_dict_path_avamb} "
 
+# Filter bins within the completeness and contamination thresholds defined and dereplicate them (min default cov=75% of the smallest bin, 100% identity)
 rule run_drep_manual_vamb_z_y:
     input:
         cluster_score_dict_path_avamb=os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
@@ -473,7 +483,11 @@ rule run_drep_manual_vamb_z_y:
         --comp {MIN_COMP} --cont {MAX_CONT}
         """
 
-
+# Evaluate if after the dereplication step (previous rule), still there are contigs present in more than one bin.
+# If that's the case, for each pair of bins sharing a contig(s), create 2 extra bins that miss the intersecting contig(s), 
+# which are called ripped bins since we ripped off contig(s) 
+# If a contig is shared among three bins, it will automatically be removed from the bin where the contig represents the shortes
+# length relative to the entire bin length.
 checkpoint create_ripped_bins_avamb:
     input:
         path_avamb_manually_drep_clusters = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),
@@ -503,7 +517,8 @@ checkpoint create_ripped_bins_avamb:
         -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/tmp/ripped_bins\
         --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} 
         """
-
+# If after run_drep_manual_vamb_z_y rule (dereplication rule), there are no contigs present in more than one bin,
+# the dereplication is finished, so we can create the final clusters and the final bins.
 rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
         clusters_avamb_manual_drep = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),   
@@ -545,7 +560,7 @@ def ripped_bins_avamb_check_output_f(wildcards):
         else:
             return os.path.join(OUTDIR,"tmp/final_avamb_clusters_written.log")
 
-
+# If any ripped bins have been generated on the create_ripped_bins_avamb rule, run CheckM2 on the ripped_bins
 rule run_checkm2_ripped_bins_avamb:
     input:
         os.path.join(OUTDIR,"tmp/bins_ripped_avamb.log")
@@ -570,7 +585,8 @@ rule run_checkm2_ripped_bins_avamb:
         checkm2 predict --threads {CHECKM_PPN_r} --input {OUTDIR}/tmp/ripped_bins  \
          --output-directory {OUTDIR}/tmp/ripped_bins/checkm2_out > {log.log_fin}
         """
-
+# As explained in rule create_ripped_bins_avamb, contigs present in three bins were removed from the larger bin.
+# This rule updates the quality scores after removing such contig(s).
 rule update_cs_d_avamb:
     input:
         scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
@@ -597,7 +613,8 @@ rule update_cs_d_avamb:
          --cs_d {input.cluster_score_dict_path_avamb} --cs_d_o {output} > {log.log_fin}
          """
 
-
+# For each pair of bins sharing a contig(s), determine which bin keeps the contig(s) by evaluating the decrease of the 
+# bin scores. Move all dereplicated bins to the Final_bins folder. 
 rule aggregate_nc_bins_avamb:
     input:
         cs_updated_log = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.log"),
@@ -634,7 +651,7 @@ rule aggregate_nc_bins_avamb:
         --comp {MIN_COMP}  --cont {MAX_CONT}  >  {output}
         """
 
-
+# Write final clusters from the Final_bins folder
 rule write_clusters_from_nc_folders:
     input:
         contigs_transfered_log = os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log"),
@@ -662,7 +679,7 @@ rule write_clusters_from_nc_folders:
         "sh {params.path} -d {input.nc_bins} -o {output} ;"
         "touch {log.log_fin} "
         
-
+# Rename and move some files and folders 
 rule workflow_finished:
     input:
         ripped_bins_avamb_check_output_f
