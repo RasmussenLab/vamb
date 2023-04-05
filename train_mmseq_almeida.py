@@ -4,7 +4,6 @@ import argparse
 import pickle
 import numpy as np
 import pandas as pd
-import cupy as cp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--nepoch", type=int, default=500)

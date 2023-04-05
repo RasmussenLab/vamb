@@ -28,6 +28,7 @@ from . import cluster
 from . import benchmark
 from . import encode
 from . import aamb_encode
+from . import semisupervised_encode
 
 __all__ = [
     "vambtools",
@@ -37,4 +38,5 @@ __all__ = [
     "benchmark",
     "encode",
     "aamb_encode",
+    "semisupervised_encode",
 ]

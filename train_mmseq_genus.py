@@ -30,10 +30,8 @@ MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.
 with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
     composition = vamb.parsecontigs.Composition.from_file(contigfile)
 
-bampaths = [BAM_PATH + filename for filename in os.listdir(BAM_PATH) if filename.endswith('.bam')]
-abundance = vamb.parsebam.Abundace.from_files(bampaths)
-
-rpkms, tnfs, lengths = abundance.matrix, composition.matrix, composition.metadata.lengths
+rpkms = vamb.vambtools.read_npz(ABUNDANCE_PATH)
+tnfs, lengths = composition.matrix, composition.metadata.lengths
 contignames = composition.metadata.identifiers
 
 df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
