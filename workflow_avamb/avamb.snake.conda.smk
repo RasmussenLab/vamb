@@ -146,8 +146,8 @@ rule dict:
         1
     log:
         out_dict= os.path.join(OUTDIR,"log/contigs/dict.log"),
-        o = os.path.join(OUTDIR,"log/contigs/index.o"),
-        e = os.path.join(OUTDIR,"log/contigs/index.e")
+        o = os.path.join(OUTDIR,"log/contigs/dict.o"),
+        e = os.path.join(OUTDIR,"log/contigs/dict.e")
 
     conda:
         "envs/samtools.yaml"
@@ -332,12 +332,10 @@ rule run_avamb:
         int(avamb_threads)
     conda:
         "avamb" 
-   
     log:
         vamb_out=os.path.join(OUTDIR,"tmp/avamb_finished.log"),
         o=os.path.join(OUTDIR,'log','run_avamb.out'),
         e=os.path.join(OUTDIR,'log','run_avamb.err')
-
     shell:
         """
         rm -rf {OUTDIR}/abundances
@@ -352,7 +350,7 @@ rule run_avamb:
         touch {log.vamb_out}
         """
 
-# Evaluate in which samples bins were generated
+# Evaluate in which samples bins were reconstructed
 checkpoint samples_with_bins:
     input:        
         os.path.join(OUTDIR,"tmp/avamb_finished.log")
@@ -381,10 +379,9 @@ def samples_with_bins_f(wildcards):
         return samples_with_bins_paths
 
 # Run CheckM2 for each sample with bins        
+#input:
+#    bins_dir_sample = os.path.join(OUTDIR,"avamb/bins/{sample}")
 rule run_checkm2_per_sample_all_bins:
-    input:
-        bins_dir_sample=os.path.join(OUTDIR,"avamb/bins/{sample}")
-        #out_dir_checkm2=os.path.join(OUTDIR,"tmp/checkm2_all")
     output:
         out_log_file=os.path.join(OUTDIR,"tmp/checkm2_all_{sample}_bins_finished.log")
     params:
@@ -401,7 +398,8 @@ rule run_checkm2_per_sample_all_bins:
     conda: 
         "checkm2" 
     shell:
-        "checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
+        "checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
+        #"checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
 
 # this rule will be executed when all CheckM2 runs per sample finish, so it can move to the next step 
 rule cat_checkm2_all:
@@ -522,8 +520,8 @@ checkpoint create_ripped_bins_avamb:
 rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
         clusters_avamb_manual_drep = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),   
-        cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
-        nc_bins_path = os.path.join(OUTDIR,"Final_bins")
+        cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json")
+        #nc_bins_path = os.path.join(OUTDIR,"Final_bins")
     output:
         clusters_avamb_after_drep_disjoint = os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
     log:
@@ -545,7 +543,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         """
         python {params.path} --c {input.clusters_avamb_manual_drep} \
         --cf  {output.clusters_avamb_after_drep_disjoint}  --b {OUTDIR}/avamb/bins \
-        --cs_d  {input.cluster_score_dict_path_avamb} --d  {input.nc_bins_path} \
+        --cs_d  {input.cluster_score_dict_path_avamb} --d  {OUTDIR}/Final_bins \
         --bin_separator C --comp {MIN_COMP}   --cont  {MAX_CONT}  2> {log.log_fin} 
         """
         
@@ -583,13 +581,15 @@ rule run_checkm2_ripped_bins_avamb:
     shell:
         """
         checkm2 predict --threads {CHECKM_PPN_r} --input {OUTDIR}/tmp/ripped_bins  \
-         --output-directory {OUTDIR}/tmp/ripped_bins/checkm2_out > {log.log_fin}
+         --output-directory {OUTDIR}/tmp/ripped_bins/checkm2_out 
+        touch {log.log_fin}
         """
 # As explained in rule create_ripped_bins_avamb, contigs present in three bins were removed from the larger bin.
 # This rule updates the quality scores after removing such contig(s).
 rule update_cs_d_avamb:
     input:
-        scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
+        #scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
+        chck2_finished = os.path.join(OUTDIR,"tmp/checkm2_ripped_avamb_run_finished.log"),
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json")
     output:
         os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.json")
@@ -609,7 +609,7 @@ rule update_cs_d_avamb:
         log_fin = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.log")
     shell:
         """
-        python {params.path} --s {input.scores_bins_ripped} \
+        python {params.path} --s {OUTDIR}/tmp/ripped_bins/checkm2_out/quality_report.tsv \
          --cs_d {input.cluster_score_dict_path_avamb} --cs_d_o {output} > {log.log_fin}
          """
 
@@ -620,10 +620,10 @@ rule aggregate_nc_bins_avamb:
         cs_updated_log = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.log"),
         drep_clusters = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),
         drep_clusters_not_ripped = os.path.join(OUTDIR,"tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
-        scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
+        #scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
         cluster_scores_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"tmp/bp_d_avamb.json"),
-        path_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins"),
+        #path_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins"),
         checkm_finished_file = os.path.join(OUTDIR,"tmp/checkm2_ripped_avamb_run_finished.log")
     output:
         os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log")
@@ -645,17 +645,18 @@ rule aggregate_nc_bins_avamb:
     shell:
         """
 	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
-        --cnr {input.drep_clusters_not_ripped} --sbr {input.scores_bins_ripped} \
+        --cnr {input.drep_clusters_not_ripped} --sbr {OUTDIR}/tmp/ripped_bins/checkm2_out/quality_report.tsv \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
-        --br {input.path_bins_ripped} -d {OUTDIR}/Final_bins --bin_separator C \
+        --br {OUTDIR}/tmp/ripped_bins -d {OUTDIR}/Final_bins --bin_separator C \
         --comp {MIN_COMP}  --cont {MAX_CONT}  >  {output}
+        rm -r {OUTDIR}/tmp/ripped_bins/checkm2_out/protein_files >>  {output}
         """
 
 # Write final clusters from the Final_bins folder
 rule write_clusters_from_nc_folders:
     input:
-        contigs_transfered_log = os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log"),
-        nc_bins = os.path.join(OUTDIR,"Final_bins")
+        contigs_transfered_log = os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log")
+        #nc_bins = os.path.join(OUTDIR,"Final_bins")
                
     output:
         os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
@@ -676,7 +677,7 @@ rule write_clusters_from_nc_folders:
         "avamb"
    
     shell:
-        "sh {params.path} -d {input.nc_bins} -o {output} ;"
+        "sh {params.path} -d {OUTDIR}/Final_bins -o {output} ;"
         "touch {log.log_fin} "
         
 # Rename and move some files and folders 
@@ -698,12 +699,15 @@ rule workflow_finished:
     shell:
         """
         rm -r {OUTDIR}/tmp/checkm2_all/*/protein_files
-        rm -r {OUTDIR}/tmp/ripped_bins
+        
+        rm -r {OUTDIR}/avamb/bins
+        
         mkdir {OUTDIR}/tmp/snakemake_tmp/
         mv {OUTDIR}/tmp/*log  {OUTDIR}/tmp/snakemake_tmp/
         mv {OUTDIR}/tmp/*json  {OUTDIR}/tmp/snakemake_tmp/
         mv {OUTDIR}/tmp/*tsv  {OUTDIR}/tmp/snakemake_tmp/
         mv {OUTDIR}/tmp/*txt  {OUTDIR}/tmp/snakemake_tmp/
+        mv {OUTDIR}/tmp/ripped_bins {OUTDIR}/tmp/snakemake_tmp/
         
         mv {OUTDIR}/tmp/checkm2_all  {OUTDIR}/tmp/snakemake_tmp/
         mv {OUTDIR}/avamb/avamb_manual_drep_disjoint_clusters.tsv  {OUTDIR}/Final_clusters.tsv
@@ -711,6 +715,7 @@ rule workflow_finished:
         mv {OUTDIR}/mapped {OUTDIR}/tmp/
         mv {OUTDIR}/contigs.flt.fna.gz {OUTDIR}/tmp/
 
+        
 
         touch {output}
         """
