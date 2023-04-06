@@ -379,8 +379,6 @@ def samples_with_bins_f(wildcards):
         return samples_with_bins_paths
 
 # Run CheckM2 for each sample with bins        
-#input:
-#    bins_dir_sample = os.path.join(OUTDIR,"avamb/bins/{sample}")
 rule run_checkm2_per_sample_all_bins:
     output:
         out_log_file=os.path.join(OUTDIR,"tmp/checkm2_all_{sample}_bins_finished.log")
@@ -399,7 +397,6 @@ rule run_checkm2_per_sample_all_bins:
         "checkm2" 
     shell:
         "checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
-        #"checkm2 predict --threads {threads} --input {input.bins_dir_sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
 
 # this rule will be executed when all CheckM2 runs per sample finish, so it can move to the next step 
 rule cat_checkm2_all:
@@ -521,7 +518,6 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     input:
         clusters_avamb_manual_drep = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),   
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json")
-        #nc_bins_path = os.path.join(OUTDIR,"Final_bins")
     output:
         clusters_avamb_after_drep_disjoint = os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
     log:
@@ -588,7 +584,6 @@ rule run_checkm2_ripped_bins_avamb:
 # This rule updates the quality scores after removing such contig(s).
 rule update_cs_d_avamb:
     input:
-        #scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
         chck2_finished = os.path.join(OUTDIR,"tmp/checkm2_ripped_avamb_run_finished.log"),
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json")
     output:
@@ -620,10 +615,8 @@ rule aggregate_nc_bins_avamb:
         cs_updated_log = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.log"),
         drep_clusters = os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv"),
         drep_clusters_not_ripped = os.path.join(OUTDIR,"tmp/avamb_manual_drep_not_ripped_clusters.tsv"),
-        #scores_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins/checkm2_out/quality_report.tsv"),
         cluster_scores_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb_updated.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"tmp/bp_d_avamb.json"),
-        #path_bins_ripped = os.path.join(OUTDIR,"tmp/ripped_bins"),
         checkm_finished_file = os.path.join(OUTDIR,"tmp/checkm2_ripped_avamb_run_finished.log")
     output:
         os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log")
@@ -656,7 +649,6 @@ rule aggregate_nc_bins_avamb:
 rule write_clusters_from_nc_folders:
     input:
         contigs_transfered_log = os.path.join(OUTDIR,"tmp/contigs_transfer_finished_avamb.log")
-        #nc_bins = os.path.join(OUTDIR,"Final_bins")
                
     output:
         os.path.join(OUTDIR,"avamb/avamb_manual_drep_disjoint_clusters.tsv")
