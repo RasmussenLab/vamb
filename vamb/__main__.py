@@ -1354,12 +1354,6 @@ def main():
     torch.set_num_threads(vamb_options.n_threads)
 
     try_make_dir(vamb_options.out_dir)
-    try_make_dir(vamb_options.out_dir.joinpath("tmp"))
-
-    if aae_options is not None:
-        try_make_dir(vamb_options.out_dir.joinpath("tmp", "ripped_bins"))
-        try_make_dir(vamb_options.out_dir.joinpath("tmp", "checkm2_all"))
-        try_make_dir(vamb_options.out_dir.joinpath( "NC_bins"))
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
         run(

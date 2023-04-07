@@ -3,6 +3,7 @@
    "sample_data": "samples2data.txt",
    "index_size": "3G",
    "min_contig_size": "2000",
+   "min_identity": "0.95",
    "minimap_mem": "15gb",
    "minimap_ppn": "15",
    "avamb_mem": "15gb",

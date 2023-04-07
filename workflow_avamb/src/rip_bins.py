@@ -256,20 +256,30 @@ def make_all_components_pair(
                         cl_i_cl_j_edge_weight: float = graph_clusters.get_edge_data(
                             cl_i, cl_j
                         )["weight"]
+                        # if the weight as key in the dict and is mapping to different clusters (nodes)
+                        # then add a insignificant value to the weight so we can add the weight with 
+                        # different clusters (nodes)
                         if (
                             cl_i_cl_j_edge_weight in weight_edges.keys()
                             and weight_edges[cl_i_cl_j_edge_weight] != {cl_i, cl_j}
                         ):
                             cl_i_cl_j_edge_weight += 1 * 10**-30
                         weight_edges[cl_i_cl_j_edge_weight] = {cl_i, cl_j}
+                        
 
-            dsc_sorted_weights: list[float] = [min(weight_edges.keys())]
+
+            #dsc_sorted_weights: list[float] = [min(weight_edges.keys())]
+
+            dsc_sorted_weights: list[float] = sorted(list(weight_edges.keys()))
+            
             i = 0
             component_len = len(component)
+             
+            print(dsc_sorted_weights,len(dsc_sorted_weights), len(component),weight_edges.keys())
             while component_len > 2:
                 weight_i = dsc_sorted_weights[i]
                 cl_i, cl_j = weight_edges[weight_i]
-
+                print(weight_i,cl_i, cl_j)
                 cluster_updated = move_intersection_to_smaller_cluster(
                     graph_clusters,
                     cl_i,
@@ -290,6 +300,7 @@ def make_all_components_pair(
                 )
 
                 i += 1
+            
 
     components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
