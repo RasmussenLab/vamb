@@ -1,0 +1,14 @@
+name: avamb
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+- python=3.9.16
+- snakemake=7.22.0
+- pip=23.0.1
+- biopython=1.81
+- networkx=3.0
+
+- pip:
+  - ordered-set==4.1.0
