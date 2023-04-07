@@ -99,6 +99,13 @@ conda activate avamb
 snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem} -e {log.e} -o {log.o}" 
 ```
 
+Or if you want to use snakemake on a compute cluster using `slurm`, we add the following `--slurm` option below.
+```
+
+conda activate avamb
+snakemake --slurm   --cores 20 --jobs 10 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda  
+```
+
 Note 1: If you want to re-run with different parameters of AVAMB you can change  `avamb_params` in the config-file, but remember to rename the  `outdir` configuration file entry, otherwise it will overwrite it.
 
 ## Outputs
