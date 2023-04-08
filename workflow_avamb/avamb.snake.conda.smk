@@ -24,14 +24,14 @@ INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
 MIN_CONTIG_SIZE = int(get_config("min_contig_size", "2000", r"[1-9]\d*$"))
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
-MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*gb$")
+MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*GB$")
 MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
-AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*gb$")
+AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*GB$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
 
-CHECKM_MEM = get_config("checkm2_mem", "10gb", r"[1-9]\d*gb$")
+CHECKM_MEM = get_config("checkm2_mem", "10gb", r"[1-9]\d*GB$")
 CHECKM_PPN = get_config("checkm2_ppn", "10", r"[1-9]\d*$")
-CHECKM_MEM_r = get_config("checkm2_mem_r", "30gb", r"[1-9]\d*gb$")
+CHECKM_MEM_r = get_config("checkm2_mem_r", "30gb", r"[1-9]\d*GB$")
 CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 
 
@@ -91,7 +91,8 @@ rule cat_contigs:
         walltime="864000",
         nodes="1",
         ppn="1",
-        mem="5gb"
+    resources:
+        mem="5GB"
     threads:
         1
     log:
@@ -111,8 +112,9 @@ rule index:
     params:
         walltime="864000",
         nodes="1",
-        ppn="1",
-        mem="90gb"
+        ppn="1"
+    resources:
+        mem="90GB"
     threads:
         1
     log:
@@ -140,8 +142,9 @@ rule dict:
     params:
         walltime="864000",
         nodes="1",
-        ppn="1",
-        mem="10gb"
+        ppn="1"
+    resources:
+        mem="10GB"
     threads:
         1
     log:
@@ -165,7 +168,8 @@ rule minimap:
     params:
         walltime="864000",
         nodes="1",
-        ppn=MM_PPN,
+        ppn=MM_PPN
+    resources:
         mem=MM_MEM
     threads:
         int(MM_PPN)
@@ -194,8 +198,9 @@ rule sort:
         walltime="864000",
         nodes="1",
         ppn="2",
-        mem="15gb",
         prefix=os.path.join(OUTDIR,"mapped/tmp.{sample}")
+    resources:
+        mem="15GB"
     threads:
         2
     log:
@@ -218,9 +223,11 @@ rule get_headers:
     params:
         walltime = "86400",
         nodes = "1",
-        ppn = "1",
-        mem = "4gb"
-
+        ppn = "1"
+    resources:
+        mem = "4GB"
+    threads:
+        1
     conda:
         "envs/samtools.yaml"
     log:
@@ -249,8 +256,11 @@ rule abundance_mask:
         path = os.path.join(SNAKEDIR, "src", "abundances_mask.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
+    threads:
+        4
     conda:
         "avamb"
 
@@ -271,8 +281,11 @@ rule bam_abundance:
         path = os.path.join(SNAKEDIR, "src", "write_abundances.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
+    threads:
+        4
     conda:
         "avamb"
     log:
@@ -297,8 +310,11 @@ rule create_abundances:
         abundance_dir = os.path.join(OUTDIR, "abundances"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
+    threads:
+        4
     conda:
         "avamb"
     log:
@@ -326,8 +342,9 @@ rule run_avamb:
         walltime="86400",
         nodes="1",
         ppn=AVAMB_PPN,
-        mem=AVAMB_MEM,
         cuda="--cuda" if CUDA else ""
+    resources:
+        mem=AVAMB_MEM
     threads:
         int(avamb_threads)
     conda:
@@ -359,8 +376,9 @@ checkpoint samples_with_bins:
     params:
         walltime="300",
         nodes="1",
-        ppn="1",
-        mem="1gb"
+        ppn="1"
+    resources:
+        mem="1GB"
     log:
         o=os.path.join(OUTDIR,'log','samples_with_bins.out'),
         e=os.path.join(OUTDIR,'log','samples_with_bins.err')
@@ -385,7 +403,8 @@ rule run_checkm2_per_sample_all_bins:
     params:
         walltime="86400",
         nodes="1",
-        ppn=CHECKM_PPN,
+        ppn=CHECKM_PPN
+    resources:
         mem=CHECKM_MEM
     threads:
         int(CHECKM_PPN)
@@ -407,8 +426,9 @@ rule cat_checkm2_all:
     params:
         walltime="86400",
         nodes="1",
-        ppn="1",
-        mem="1gb"
+        ppn="1"
+    resources:
+        mem="1GB"
     threads:
         1
     log:
@@ -431,10 +451,11 @@ rule create_cluster_scores_bin_path_dictionaries:
         path = os.path.join(SNAKEDIR, "src", "create_cluster_scores_bin_path_dict.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
     threads:
-        5
+        4
     conda:
         "avamb"
     log:
@@ -460,8 +481,9 @@ rule run_drep_manual_vamb_z_y:
         path=os.path.join(SNAKEDIR, "src", "manual_drep_JN.py"),
         walltime="86400",
         nodes="1",
-        ppn="5",
-        mem="5gb"
+        ppn="5"
+    resources:
+        mem="5GB"
     threads:
         5
     conda:
@@ -495,8 +517,9 @@ checkpoint create_ripped_bins_avamb:
         path = os.path.join(SNAKEDIR, "src", "rip_bins.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "5"
+    resources:
+        mem = "10GB"
     threads:
         5
     conda:
@@ -529,10 +552,11 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
         path = os.path.join(SNAKEDIR, "src", "mv_bins_from_mdrep_clusters.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
     threads:
-        5
+        4
     conda:
         "avamb"
     shell:
@@ -568,7 +592,8 @@ rule run_checkm2_ripped_bins_avamb:
     params:
         walltime="86400",
         nodes="1",
-        ppn=CHECKM_PPN_r,
+        ppn=CHECKM_PPN_r
+    resources:
         mem=CHECKM_MEM_r
     threads:
         int(CHECKM_PPN_r)
@@ -592,10 +617,11 @@ rule update_cs_d_avamb:
         path = os.path.join(SNAKEDIR, "src", "update_cluster_scores_dict_after_ripping.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "4"
+    resources:
+        mem = "1GB"
     threads:
-        5
+        4
     conda:
         "avamb" 
     log:
@@ -624,8 +650,9 @@ rule aggregate_nc_bins_avamb:
         path = os.path.join(SNAKEDIR, "src", "transfer_contigs_and_aggregate_all_nc_bins.py"),
         walltime = "86400",
         nodes = "1",
-        ppn = "5",
-        mem = "10gb"
+        ppn = "5"
+    resources:
+        mem = "10GB"
     threads:
         5
     conda:
@@ -661,10 +688,11 @@ rule write_clusters_from_nc_folders:
         path = os.path.join(SNAKEDIR, "src", "write_clusters_from_dereplicated_and_ripped_bins.sh"),
         walltime = "86400",
         nodes = "1",
-        ppn = "4",
-        mem = "1gb"
+        ppn = "1"
+    resources:
+        mem = "1GB"
     threads:
-        5
+        1
     conda:
         "avamb"
    
@@ -681,8 +709,9 @@ rule workflow_finished:
     params:
         walltime = "86400",
         nodes = "1",
-        ppn = "1",
-        mem = "1gb"
+        ppn = "1"
+    resources:
+        mem = "1GB"
     threads:
         1
     log:

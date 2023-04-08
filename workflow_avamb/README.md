@@ -67,15 +67,15 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "index_size": "3G",
    "min_contig_size": "2000",
    "min_identity": "0.95",
-   "minimap_mem": "15gb",
+   "minimap_mem": "15GB",
    "minimap_ppn": "10",
-   "avamb_mem": "10gb",
+   "avamb_mem": "10GB",
    "avamb_ppn": "10",
-   "checkm2_mem": "30gb",
+   "checkm2_mem": "30GB",
    "checkm2_ppn": "30",
-   "checkm2_mem_r": "15gb",
+   "checkm2_mem_r": "15GB",
    "checkm2_ppn_r": "15",
-   "avamb_params": "  --model vae-aae   -o C -m 2000 --minfasta 500000",
+   "avamb_params": "  --model vae-aae   -o C  --minfasta 500000",
    "avamb_preload": "",
    "outdir":"avamb_outdir",
    "min_comp": "0.9",
@@ -96,7 +96,7 @@ If you want to use snakemake on a compute cluster using `qsub` we add the follow
 ```
 
 conda activate avamb
-snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={params.mem} -e {log.e} -o {log.o}" 
+snakemake --jobs 20 --configfile /path/to/vamb/workflow_avamb/config.json --snakefile /path/to/vamb/workflow_avamb/avamb.snake.conda.smk --latency-wait 60 --use-conda --cluster "qsub -l walltime={params.walltime} -l nodes=1:ppn={params.ppn} -l mem={resources.mem} -e {log.e} -o {log.o}" 
 ```
 
 Or if you want to use snakemake on a compute cluster using `slurm`, we add the following `--slurm` option below.
@@ -144,13 +144,13 @@ Using a GPU can speed up Avamb considerably - especially when you are binning mi
    "index_size": "3G",
    "min_contig_size": "2000",
    "min_identity": "0.95",
-   "minimap_mem": "15gb",
+   "minimap_mem": "15GB",
    "minimap_ppn": "10",
-   "avamb_mem": "10gb",
+   "avamb_mem": "10GB",
    "avamb_ppn": "10",
-   "checkm2_mem": "30gb",
+   "checkm2_mem": "30GB",
    "checkm2_ppn": "30",
-   "checkm2_mem_r": "15gb",
+   "checkm2_mem_r": "15GB",
    "checkm2_ppn_r": "15",
    "avamb_params": " --model vae-aae  -o C --minfasta 500000 --cuda",
    "avamb_preload": "module load cuda/toolkit/10.2.89;",
