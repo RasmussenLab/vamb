@@ -268,8 +268,6 @@ def make_all_components_pair(
                         
 
 
-            #dsc_sorted_weights: list[float] = [min(weight_edges.keys())]
-
             dsc_sorted_weights: list[float] = sorted(list(weight_edges.keys()))
             
             i = 0
