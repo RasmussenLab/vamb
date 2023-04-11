@@ -1,10 +1,9 @@
 import numpy as np 
 import argparse 
-import os 
-import vamb
-from vamb.vambtools import concatenate_fasta, hash_refnames
+from vamb.vambtools import hash_refnames
+from pathlib import Path
 
-def abundances_mask(headers, mask_refhash, min_contig_size):
+def abundances_mask(headers: Path, mask_refhash: Path, min_contig_size: int):
     """# Using the headers above, compute the mask and the refhash"""
     
     mask = []
@@ -31,11 +30,11 @@ def abundances_mask(headers, mask_refhash, min_contig_size):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--h", type=str, help=" Headers file")
-    parser.add_argument("--msk", type=str, help="mask refhash")
+    parser.add_argument("--h", type=Path, help=" Headers file")
+    parser.add_argument("--msk", type=Path, help="mask refhash")
     
     parser.add_argument(
-        "--minsize", type=float, help="min contig size"
+        "--minsize", type=int, help="min contig size"
     )
 
     opt = parser.parse_args()
