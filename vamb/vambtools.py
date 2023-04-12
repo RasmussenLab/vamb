@@ -470,8 +470,6 @@ def write_bins(
         _os.mkdir(directory)
     except FileExistsError:
         pass
-    except:
-        raise
 
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
@@ -498,8 +496,6 @@ def write_bins(
                 _os.mkdir(bin_dir)
             except FileExistsError:
                 pass
-            except:
-                raise
         else:
             bin_dir = directory
 

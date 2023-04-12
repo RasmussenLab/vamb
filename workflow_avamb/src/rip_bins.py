@@ -450,10 +450,10 @@ if __name__ == "__main__":
 
     clusters_path = (
         opt.ci
-    )  #  os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_clusters.tsv')
+    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_clusters.tsv')
     clusters_not_ripped_path = (
         opt.co
-    )  #   os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_not_ripped_clusters.tsv')
+    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_not_ripped_clusters.tsv')
 
     with open(clusters_path) as file:
         cluster_contigs = vamb.vambtools.read_clusters(file)

@@ -1,4 +1,3 @@
-import os
 import unittest
 import io
 import numpy as np
