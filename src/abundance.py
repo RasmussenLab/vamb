@@ -2,6 +2,7 @@ import sys
 import os
 import argparse
 import numpy as np
+import vamb
 
 parser = argparse.ArgumentParser(
     description="""Command-line bin abundance estimator.
@@ -25,10 +26,6 @@ args = parser.parse_args()
 for infile in (args.rpkmpath, args.clusterspath, args.headerpath):
     if not os.path.isfile(infile):
         raise FileNotFoundError(infile)
-
-# Load Vamb
-sys.path.append("../vamb")
-import vamb
 
 # Load in files
 with open(args.headerpath) as file:

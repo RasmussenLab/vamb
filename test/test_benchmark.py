@@ -1,7 +1,6 @@
 from math import sqrt
 import unittest
 import io
-import re
 
 from vamb.benchmark import Contig, Genome, Reference, Binning
 
@@ -306,10 +305,13 @@ class TestBenchmark(unittest.TestCase):
         buffer = io.StringIO(s)
 
         with self.assertRaises(ValueError):
-            _bins = Binning.from_file(buffer, self.reference)
+            Binning.from_file(buffer, self.reference)
 
         buffer.seek(0)
-        _bins = Binning.from_file(buffer, self.reference, disjoint=False)
+        # Does not raise an error
+        self.assertIsInstance(
+            Binning.from_file(buffer, self.reference, disjoint=False), Binning
+        )
 
     def test_binning_strain_counter(self):
         # This approach is simple and easy to verify to be correct, but very inefficient.
