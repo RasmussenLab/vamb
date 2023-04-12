@@ -1,11 +1,10 @@
 import numpy as np 
 import argparse 
-import os 
 import vamb
 from pathlib import Path
 
 
-def create_abundances(abundances, mask_refhash, min_id , outfile):
+def create_abundances(abundances: list[Path], mask_refhash: Path, min_id: float, outfile: Path):
     """Merge the abundances to a single Abundance object and save it"""
     refhash = np.load(mask_refhash)["refhash"]
     
@@ -25,13 +24,13 @@ def create_abundances(abundances, mask_refhash, min_id , outfile):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--msk", type=str, help="mask refhash")
+    parser.add_argument("--msk", type=Path, help="mask refhash")
     parser.add_argument("--ab", type=Path, nargs="+", help=" abundancaes list of files")
     parser.add_argument(
         "--min_id", type=float, help="min identity for alignment"
     )
     parser.add_argument(
-        "--out", type=str, help="abundances outfile"
+        "--out", type=Path, help="abundances outfile"
     )
 
     opt = parser.parse_args()

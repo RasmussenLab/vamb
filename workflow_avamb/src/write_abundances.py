@@ -1,11 +1,10 @@
 import numpy as np 
 import argparse 
-import os 
 import vamb
+from pathlib import Path
 
 
-
-def write_abundances(mask_refhash,bampath,min_identity, outfile):
+def write_abundances(mask_refhash: Path,bampath: Path,min_identity: float, outfile: Path):
     """For every sample, compute the abundances given the mask and refhashes"""
     loadnpz = np.load(mask_refhash)
     refhash = loadnpz["refhash"]
@@ -25,13 +24,13 @@ def write_abundances(mask_refhash,bampath,min_identity, outfile):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--msk", type=str, help="mask refhash")
-    parser.add_argument("--b", type=str, help=" bam path")
+    parser.add_argument("--msk", type=Path, help="mask refhash")
+    parser.add_argument("--b", type=Path, help=" bam path")
     parser.add_argument(
         "--min_id", type=float, help="min identity for alignment"
     )
     parser.add_argument(
-        "--out", type=str, help="abundances outfile"
+        "--out", type=Path, help="abundances outfile"
     )
 
     opt = parser.parse_args()

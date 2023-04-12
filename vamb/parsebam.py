@@ -90,7 +90,7 @@ class Abundance:
     @classmethod
     def from_files(
         cls: type[A],
-        paths: list[str],
+        paths: list[Path],
         cache_directory: Optional[Path],
         comp_metadata: CompositionMetaData,
         verify_refhash: bool,
@@ -138,7 +138,7 @@ class Abundance:
                 comp_metadata.refhash if verify_refhash else None,
                 comp_metadata.mask,
             )
-            return cls(matrix, paths, minid, refhash)
+            return cls(matrix, [str(p) for p in paths], minid, refhash)
         # Else, we load it in chunks, then assemble afterwards
         else:
             if cache_directory is None:
@@ -157,7 +157,7 @@ class Abundance:
     @classmethod
     def chunkwise_loading(
         cls: type[A],
-        paths: list[str],
+        paths: list[Path],
         cache_directory: Path,
         nthreads: int,
         minid: float,
@@ -193,11 +193,11 @@ class Abundance:
         shutil.rmtree(cache_directory)
 
         assert refhash is not None
-        return cls(matrix, paths, minid, refhash)
+        return cls(matrix, [str(p) for p in paths], minid, refhash)
 
     @staticmethod
     def run_pycoverm(
-        paths: list[str],
+        paths: list[Path],
         minid: float,
         target_refhash: Optional[bytes],
         mask: _np.ndarray,
