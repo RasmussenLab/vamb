@@ -22,6 +22,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 np.random.seed(random_seed)
 
+
 ############################################################################# MODEL ###########################################################
 class AAE(nn.Module):
     def __init__(
@@ -105,7 +106,6 @@ class AAE(nn.Module):
 
     ## Reparametrisation trick
     def _reparameterization(self, mu, logvar):
-
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
 
         std = torch.exp(logvar / 2)
@@ -198,7 +198,6 @@ class AAE(nn.Module):
         logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, IO[bytes]] = None,
     ):
-
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         batchsteps_set = set(batchsteps)
         ncontigs, _ = data_loader.dataset.tensors[0].shape
@@ -426,7 +425,9 @@ class AAE(nn.Module):
         return None
 
     ########### funciton that retrieves the clusters from Y latents
-    def get_latents(self, contignames: Sequence[str], data_loader, last_epoch: bool = True):
+    def get_latents(
+        self, contignames: Sequence[str], data_loader, last_epoch: bool = True
+    ):
         """Retrieve the categorical latent representation (y) and the contiouous latents (l) of the inputs
 
         Inputs:
@@ -450,7 +451,6 @@ class AAE(nn.Module):
         clust_y_dict = dict()
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         with torch.no_grad():
-
             for depths_in, tnfs_in, _ in new_data_loader:
                 nrows, _ = depths_in.shape
                 if self.usecuda:
@@ -475,9 +475,7 @@ class AAE(nn.Module):
                     tnfs_in = tnfs_in.cuda()
 
                 if last_epoch:
-                    mu, _, _, _, y_sample = self(depths_in, tnfs_in)[
-                        0:5
-                    ]
+                    mu, _, _, _, y_sample = self(depths_in, tnfs_in)[0:5]
                 else:
                     y_sample = self(depths_in, tnfs_in)[4]
 

@@ -126,6 +126,6 @@ class TestPairs(unittest.TestCase):
         self.assertTrue(all(len(i[1]) > 0 for i in pairs))
         self.assertTrue(sum(map(lambda i: len(i[1]), pairs)), len(nameset))
         allmembers = set()
-        for (medoid, mems) in pairs:
+        for medoid, mems in pairs:
             allmembers.update(mems)
         self.assertEqual(allmembers, nameset)

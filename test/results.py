@@ -52,6 +52,7 @@ class TestAbundanceResult(unittest.TestCase):
         )
         self.assertTrue(np.all(np.abs(abundance.matrix - abundance2.matrix) < 1e-5))
 
+
 class TestEncodingResult(unittest.TestCase):
     torch.manual_seed(0)
 
@@ -85,15 +86,16 @@ class TestEncodingResult(unittest.TestCase):
             "c417b9722e14e854fbe79cc5c797cc6653360c1e6536064205ca0c073f41eaf6",
         )
 
+
 class TestClusterResult(unittest.TestCase):
     def test_result(self):
         rng = np.random.RandomState(15)
         latent = rng.random((1000, 3)).astype(np.float32) - 0.5
         self.assertEqual(
             sha256(latent.tobytes()).digest().hex(),
-            "630a98a4b44c3754a3f423e915847f44767bb69fb13ea5901dc512428aee9811"
+            "630a98a4b44c3754a3f423e915847f44767bb69fb13ea5901dc512428aee9811",
         )
-        
+
         hash = sha256()
 
         # Use this to check that the clustering used in this test produces
@@ -106,7 +108,7 @@ class TestClusterResult(unittest.TestCase):
             # Set hashing may differ from run to run, so turn into sorted arrays
             arr = np.array(list(points))
             arr.sort()
-            #lens.append(arr)
+            # lens.append(arr)
             hash.update(medoid.to_bytes(4, "big"))
             hash.update(arr.data)
 

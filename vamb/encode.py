@@ -30,7 +30,10 @@ import torch as _torch
 
 _torch.manual_seed(0)
 
-def set_batchsize(data_loader: _DataLoader, batch_size: int, encode=False) -> _DataLoader:
+
+def set_batchsize(
+    data_loader: _DataLoader, batch_size: int, encode=False
+) -> _DataLoader:
     """Effectively copy the data loader, but with a different batch size.
 
     The `encode` option is used to copy the dataloader to use before encoding.
@@ -39,12 +42,13 @@ def set_batchsize(data_loader: _DataLoader, batch_size: int, encode=False) -> _D
     """
     return _DataLoader(
         dataset=data_loader.dataset,
-        batch_size= batch_size,
+        batch_size=batch_size,
         shuffle=not encode,
         drop_last=not encode,
         num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
+
 
 def make_dataloader(
     rpkm: _np.ndarray,
@@ -373,7 +377,7 @@ class VAE(_nn.Module):
         epoch_celoss = 0.0
 
         if epoch in batchsteps:
-            data_loader =  set_batchsize(data_loader, data_loader.batch_size * 2)
+            data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
 
         for depths_in, tnf_in, weights in data_loader:
             depths_in.requires_grad = True
@@ -428,7 +432,9 @@ class VAE(_nn.Module):
 
         self.eval()
 
-        new_data_loader = set_batchsize(data_loader, data_loader.batch_size, encode=True)
+        new_data_loader = set_batchsize(
+            data_loader, data_loader.batch_size, encode=True
+        )
 
         depths_array, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
