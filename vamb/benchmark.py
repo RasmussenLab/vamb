@@ -231,7 +231,7 @@ class Bin:
         by_source: defaultdict[tuple[Genome, str], list[Contig]] = defaultdict(list)
         for contig in self.contigs:
             by_source[(genomeof[contig], contig.subject)].append(contig)
-        for ((genome, _), contigs) in by_source.items():
+        for (genome, _), contigs in by_source.items():
             self.intersections[genome] = self.intersections.get(
                 genome, 0
             ) + self._intersection(contigs)
@@ -353,7 +353,7 @@ class Reference:
     def load_bins(self, bins: Iterable[tuple[str, Iterable[str]]]) -> list[Bin]:
         """Convert a set of bin names to a list of Bins"""
         result: list[Bin] = list()
-        for (binname, contignames) in bins:
+        for binname, contignames in bins:
             contigs = (self.contig_by_name[name] for name in contignames)
             result.append(Bin.from_contigs(binname, contigs, self.genomeof))
 
@@ -367,12 +367,12 @@ class Reference:
     @classmethod
     def from_dict(cls: type[R], json_dict: dict[str, Any]) -> R:
         instance = cls()
-        for (genomename, sourcesdict) in json_dict["genomes"].items():
+        for genomename, sourcesdict in json_dict["genomes"].items():
             genome = Genome(genomename)
             instance._add_genome(genome)
-            for (sourcename, (sourcelen, contigdict)) in sourcesdict.items():
+            for sourcename, (sourcelen, contigdict) in sourcesdict.items():
                 genome.add(sourcename, sourcelen)
-                for (contigname, (start, end)) in contigdict.items():
+                for contigname, (start, end) in contigdict.items():
                     # JSON format is 1-indexed and includes endpoints, whereas
                     # Contig struct is not, so compensate.
                     contig = Contig(contigname, sourcename, start - 1, end)
@@ -380,8 +380,8 @@ class Reference:
 
         for _ in range(len(json_dict["taxmaps"]) - 1):
             instance.taxmaps.append(dict())
-        for (level, taxmap) in enumerate(json_dict["taxmaps"]):
-            for (child, parent) in taxmap.items():
+        for level, taxmap in enumerate(json_dict["taxmaps"]):
+            for child, parent in taxmap.items():
                 instance._add_taxonomy(level, child, parent)
 
         return instance
@@ -394,10 +394,10 @@ class Reference:
         for genome in self.genomes:
             source_dict: dict[str, list[Any]] = dict()
             genome_dict[genome.name] = source_dict
-            for (sourcename, length) in genome.sources.items():
+            for sourcename, length in genome.sources.items():
                 source_dict[sourcename] = [length, dict()]
 
-        for (contig, genome) in self.genomeof.items():
+        for contig, genome in self.genomeof.items():
             # JSON format is 1-indexes and includes endpoints, whereas
             # Contig struct is not, so compensate.
             genome_dict[genome.name][contig.subject][1][contig.name] = [
@@ -407,7 +407,7 @@ class Reference:
 
         for taxmap in self.taxmaps:
             d: dict[str, str] = dict()
-            for (child, parent) in taxmap.items():
+            for child, parent in taxmap.items():
                 if parent is not None:
                     d[child] = parent
             if len(d) > 0:
@@ -581,10 +581,10 @@ class Binning:
         precisions: tuple[float] = self.precisions
         bitvectors: dict[str, int] = dict()
 
-        for (cladename, d) in rp_by_name.items():
+        for cladename, d in rp_by_name.items():
             bitvector = 0
-            for (recall, precision) in d.values():
-                for (i, (min_recall, min_precision)) in enumerate(
+            for recall, precision in d.values():
+                for i, (min_recall, min_precision) in enumerate(
                     product(recalls, precisions)
                 ):
                     if recall >= min_recall and precision >= min_precision:
@@ -605,8 +605,8 @@ class Binning:
         result: dict[tuple[float, float], int] = {
             (r, p): 0 for (r, p) in product(recalls, precisions)
         }
-        for (_, bitvector) in bitvectors.items():
-            for (i, rp) in enumerate(product(recalls, precisions)):
+        for _, bitvector in bitvectors.items():
+            for i, rp in enumerate(product(recalls, precisions)):
                 result[rp] += (bitvector >> i) & 1
 
         return result
@@ -615,7 +615,7 @@ class Binning:
         self, fromrank: int, rp_by_name: dict[str, dict[Bin, tuple[float, float]]]
     ) -> dict[str, dict[Bin, tuple[float, float]]]:
         result: dict[str, dict[Bin, tuple[float, float]]] = dict()
-        for (child, parent) in self.reference.taxmaps[fromrank].items():
+        for child, parent in self.reference.taxmaps[fromrank].items():
             # If no parent clade, we just name the "parent" same as child
             if parent is None:
                 parent = child
@@ -624,7 +624,7 @@ class Binning:
                 result[parent] = dict()
 
             parent_dict = result[parent]
-            for (bin, (old_recall, old_prec)) in rp_by_name[child].items():
+            for bin, (old_recall, old_prec) in rp_by_name[child].items():
                 (new_recall, new_prec) = parent_dict.get(bin, (0.0, 0.0))
                 parent_dict[bin] = (max(old_recall, new_recall), old_prec + new_prec)
 

@@ -21,7 +21,6 @@ def main(
     min_comp,
     max_cont,
 ):
-
     # {cluster:sample} dictionary for the manually drep clusters
     cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
     for sample in set(cluster_sample.values()):
@@ -33,7 +32,13 @@ def main(
     # Given all the clusters that have no connection (no intersection) with any other cluster
     # mv them to the final bins folder that contains the final set of NC bins if they are NC
     nc_clusters_unchanged = mv_nc_not_r_nc_bins(
-        cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
+        cluster_not_r_contigs,
+        cluster_sample,
+        cluster_scores,
+        drep_folder,
+        bin_path,
+        min_comp,
+        max_cont,
     )
 
     # Given the checkM2 scores for all ripped bins, create a dictionary
@@ -52,7 +57,7 @@ def main(
         path_run,
         path_bins_ripped,
         min_comp,
-        max_cont
+        max_cont,
     )
 
     # for the bins that have been ripped because of meaningless edges and after the ripping present
@@ -95,15 +100,19 @@ def get_cluster_sample(cluster_contigs, bin_separator):
 
 
 def mv_nc_not_r_nc_bins(
-    cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
+    cluster_not_r_contigs,
+    cluster_sample,
+    cluster_scores,
+    drep_folder,
+    bin_path,
+    min_comp,
+    max_cont,
 ):
-
     """mv not ripped NC bins from bins folder to drep folder"""
     nc_clusters_unchanged = set()
     for cluster in cluster_not_r_contigs.keys():
         comp, cont = cluster_scores[cluster]
         if comp >= min_comp and cont <= max_cont:
-
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],cluster+'.fna')
             src_bin = bin_path[cluster + ".fna"]
             trg_bin = os.path.join(
@@ -113,9 +122,7 @@ def mv_nc_not_r_nc_bins(
                 "Bin %s has no intersection with any other bin so it is directly moved from %s to %s"
                 % (cluster, src_bin, trg_bin)
             )
-            shutil.move(
-                src_bin, trg_bin
-            )  
+            shutil.move(src_bin, trg_bin)
 
             nc_clusters_unchanged.add(cluster)
     return nc_clusters_unchanged
@@ -134,7 +141,7 @@ def mv_single_ripped_nc_bins(
     path_run,
     cluster_sample,
     min_comp,
-    max_cont
+    max_cont,
 ):
     """Mv nc bins that were ripped only because they had meaningless edges"""
     nc_clusters_ripped_single = set()
@@ -148,10 +155,10 @@ def mv_single_ripped_nc_bins(
 
         comp, cont = float(comp), float(cont)
         comp_, cont_ = cluster_score[cluster]
-        
+
         assert comp == comp_
         assert cont == cont_
-        
+
         if comp >= min_comp and cont <= max_cont:
             src_bin = bin_path[cluster + ".fna"]
 
@@ -164,7 +171,6 @@ def mv_single_ripped_nc_bins(
                     % (cluster, src_bin, trg_bin)
                 )
                 shutil.move(src_bin, trg_bin)
-
 
                 nc_clusters_ripped_single.add(cluster)
     return nc_clusters_ripped_single
@@ -202,14 +208,12 @@ def choose_best_ripped_bin_and_mv_if_nc(
     path_run,
     path_bins_ripped,
     min_comp,
-    max_cont
+    max_cont,
 ):
-
     nc_clusters_unchanged, nc_clusters_ripped = set(), set()
     clusters_already_processed = set()
     """So given 2 ripped bins that miss the interseciton, we have to choose who keeps the contigs"""
     for cluster_A_r, cluster_B_r in cluster_r_pairs:
-
         if (
             cluster_A_r in clusters_already_processed
             or cluster_B_r in clusters_already_processed
@@ -385,6 +389,6 @@ if __name__ == "__main__":
         bin_path,
         path_bins_ripped,
         bin_separator,
-        opt.comp*100,
-        opt.cont*100,
+        opt.comp * 100,
+        opt.cont * 100,
     )

@@ -30,6 +30,7 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
+
 def try_make_dir(name):
     try:
         os.mkdir(name)
@@ -37,6 +38,7 @@ def try_make_dir(name):
         pass
     except:
         raise
+
 
 class FASTAPath(type(Path())):
     pass
@@ -285,7 +287,7 @@ class TrainingOptions:
         lrate: float,
     ):
         assert isinstance(lrate, float)
-        
+
         assert (encoder_options.vae_options is None) == (vae_options is None)
         assert (encoder_options.aae_options is None) == (aae_options is None)
 
@@ -449,7 +451,6 @@ def calc_rpkm(
     nthreads: int,
     logfile: IO[str],
 ) -> vamb.parsebam.Abundance:
-
     begintime = time.time()
     log("\nLoading depths", logfile)
     log(
@@ -461,7 +462,7 @@ def calc_rpkm(
     path = abundance_options.path
     if isinstance(path, AbundancePath):
         log(f"Loading depths from npz array {str(path)}", logfile, 1)
-        
+
         abundance = vamb.parsebam.Abundance.load(
             path, comp_metadata.refhash if abundance_options.refcheck else None
         )
@@ -508,7 +509,6 @@ def trainvae(
     data_loader: DataLoader,
     logfile: IO[str],
 ) -> np.ndarray:
-
     begintime = time.time()
     log("\nCreating and training VAE", logfile)
 
@@ -556,7 +556,6 @@ def trainaae(
     logfile: IO[str],
     contignames: Sequence[str],
 ) -> tuple[np.ndarray, dict[str, set[str]]]:
-
     begintime = time.time()
     log("\nCreating and training AAE", logfile)
     nsamples = data_loader.dataset.tensors[0].shape[1]
@@ -587,7 +586,9 @@ def trainaae(
     print("", file=logfile)
     log("Encoding to latent representation", logfile, 1)
     clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
-    vamb.vambtools.write_npz(os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent)
+    vamb.vambtools.write_npz(
+        os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
+    )
 
     del aae  # Needed to free "latent" array's memory references?
 
@@ -749,13 +750,17 @@ def run(
         logfile,
     )
     time_generating_input = round(time.time() - begintime, 2)
-    log(f"\nTNF and coabundances generated in {time_generating_input} seconds.", logfile, 1)
+    log(
+        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
+        logfile,
+        1,
+    )
 
     data_loader, mask = vamb.encode.make_dataloader(
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
-        256, # dummy value - we change this before using the actual loader
+        256,  # dummy value - we change this before using the actual loader
         destroy=True,
         cuda=vamb_options.cuda,
     )
@@ -890,7 +895,9 @@ def run(
         clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
         # Binsplit if given a separator
         if cluster_options.binsplit_separator is not None:
-            maybe_split = vamb.vambtools.binsplit(clusters_y_dict.items(), cluster_options.binsplit_separator)
+            maybe_split = vamb.vambtools.binsplit(
+                clusters_y_dict.items(), cluster_options.binsplit_separator
+            )
         else:
             maybe_split = clusters_y_dict.items()
         with open(clusterspath, "w") as clustersfile:
@@ -925,6 +932,7 @@ def run(
 
     log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
 
+
 def main():
     doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
     
@@ -955,11 +963,11 @@ def main():
     # Positional arguments
     reqos = parser.add_argument_group(title="Output (required)", description=None)
     reqos.add_argument(
-        "--outdir", 
+        "--outdir",
         metavar="",
-        type=Path, 
-        required=True, 
-        help="output directory to create"
+        type=Path,
+        required=True,
+        help="output directory to create",
     )
 
     # TNF arguments
@@ -967,26 +975,28 @@ def main():
         title="TNF input (either fasta or all .npz files required)"
     )
     tnfos.add_argument("--fasta", metavar="", type=Path, help="path to fasta file")
-    tnfos.add_argument("--composition", metavar="",type=Path, help="path to .npz of composition")
+    tnfos.add_argument(
+        "--composition", metavar="", type=Path, help="path to .npz of composition"
+    )
 
     # RPKM arguments
     rpkmos = parser.add_argument_group(
         title="RPKM input (either BAMs or .npz required)"
     )
     rpkmos.add_argument(
-        "--bamfiles", 
-        dest='bampaths',
-        metavar="", 
+        "--bamfiles",
+        dest="bampaths",
+        metavar="",
         type=Path,
-        help="paths to (multiple) BAM files", 
-        nargs="+"
+        help="paths to (multiple) BAM files",
+        nargs="+",
     )
     rpkmos.add_argument(
-        "--rpkm", 
+        "--rpkm",
         metavar="",
         dest="abundancepath",
-        type=Path,  
-        help="path to .npz of RPKM (abundances)"
+        type=Path,
+        help="path to .npz of RPKM (abundances)",
     )
 
     # Optional arguments
@@ -1255,16 +1265,12 @@ def main():
 
     args = parser.parse_args()
 
-    comp_options = CompositionOptions(
-        args.fasta, args.composition, args.minlength
-
-    )
+    comp_options = CompositionOptions(args.fasta, args.composition, args.minlength)
 
     abundance_options = AbundanceOptions(
         args.bampaths,
         args.abundancepath,
         args.min_alignment_id,
-
         not args.norefcheck,
     )
 
@@ -1284,16 +1290,18 @@ def main():
         vae_options = None
         vae_training_options = None
 
-        for (name, arg, default) in [
+        for name, arg, default in [
             ("-n", args.nhiddens, None),
             ("-l", args.nlatent, 32),
             ("-b", args.beta, 200.0),
             ("-d", args.dropout, None),
             ("-t", args.batchsize, 256),
-            ("-q", args.batchsteps, [25, 75, 150, 225])
+            ("-q", args.batchsteps, [25, 75, 150, 225]),
         ]:
             if arg != default:
-                raise ValueError(f"VAE model not used, but VAE-specific arg \"{name}\" used")
+                raise ValueError(
+                    f'VAE model not used, but VAE-specific arg "{name}" used'
+                )
 
     if args.model in ("aae", "vae-aae"):
         aae_options = AAEOptions(
@@ -1315,7 +1323,7 @@ def main():
         aae_options = None
         aae_training_options = None
 
-        for (name, arg, default) in [
+        for name, arg, default in [
             ("--n_aae", args.nhiddens_aae, 547),
             ("--z_aae", args.nlatent_aae_z, 283),
             ("--y_aae", args.nlatent_aae_y, 700),
@@ -1327,7 +1335,9 @@ def main():
             ("--q_aae", args.batchsteps_aae, [25, 50]),
         ]:
             if arg != default:
-                raise ValueError(f"AAE model not used, but AAE-specific arg \"{name}\" used")
+                raise ValueError(
+                    f'AAE model not used, but AAE-specific arg "{name}" used'
+                )
 
     encoder_options = EncoderOptions(
         vae_options=vae_options, aae_options=aae_options, alpha=args.alpha

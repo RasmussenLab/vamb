@@ -5,9 +5,9 @@ import vamb
 
 PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATADIR = os.path.join(PARENTDIR, "test", "data")
-BAM_FILES = sorted([
-    os.path.join(DATADIR, "bam", i) for i in os.listdir(os.path.join(DATADIR, "bam"))
-])
+BAM_FILES = sorted(
+    [os.path.join(DATADIR, "bam", i) for i in os.listdir(os.path.join(DATADIR, "bam"))]
+)
 
 BAM_NAMES = [
     "S27C175628",

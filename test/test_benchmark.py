@@ -200,7 +200,7 @@ class TestBenchmark(unittest.TestCase):
         genomes = {g.name: g for g in self.reference.genomes}
         pairs = [("C1", "gA"), ("C2", "gA"), ("C4", "gC")]
 
-        for (binname, gname) in pairs:
+        for binname, gname in pairs:
             self.assertEqual(
                 bins[binname].f1(genomes[gname]),
                 bins[binname].fscore(1.0, genomes[gname]),
@@ -314,7 +314,7 @@ class TestBenchmark(unittest.TestCase):
     def test_binning_strain_counter(self):
         # This approach is simple and easy to verify to be correct, but very inefficient.
         # Strain-level counter (level = 0)
-        for ((min_recall, min_precision), n_obs) in self.binning.counters[0].items():
+        for (min_recall, min_precision), n_obs in self.binning.counters[0].items():
             n_exp = 0
             for genome in self.reference.genomes:
                 for bin in self.binning.bins:
@@ -333,9 +333,9 @@ class TestBenchmark(unittest.TestCase):
 
         genomes = {g.name: g for g in self.reference.genomes}
         for rank in (1, 2):
-            for ((min_recall, min_precision), n_obs) in counters[rank].items():
+            for (min_recall, min_precision), n_obs in counters[rank].items():
                 seen = {c: False for c in genomesof[rank - 1]}
-                for (clade, genomenames) in genomesof[rank - 1].items():
+                for clade, genomenames in genomesof[rank - 1].items():
                     for bin in self.binning.bins:
                         rec = 0.0
                         prec = 0.0
