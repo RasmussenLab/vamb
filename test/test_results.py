@@ -34,12 +34,13 @@ class TestCompositionResult(unittest.TestCase):
         self.assertIsInstance(comp, vamb.parsecontigs.Composition)
 
     if TEST_UNSTABLE_HASHES:
+
         def test_result(self):
             comp = vamb.parsecontigs.Composition.from_file(self.io)
             self.assertEqual(
                 sha256(comp.matrix.data.tobytes()).digest().hex(),
                 "9e9a2d7b021654e874894722bdd6cd3eda18bed03fabd32a9440e806a8ab1bd1",
-           )
+            )
 
 
 class TestAbundanceResult(unittest.TestCase):
@@ -51,7 +52,6 @@ class TestAbundanceResult(unittest.TestCase):
             np.ones(len(testtools.BAM_SEQ_LENS), dtype=bool),
             2000,
         )
-        
 
     def test_runs(self):
         abundance = vamb.parsebam.Abundance.from_files(
@@ -60,6 +60,7 @@ class TestAbundanceResult(unittest.TestCase):
         self.assertIsInstance(abundance, vamb.parsebam.Abundance)
 
     if TEST_UNSTABLE_HASHES:
+
         def test_result(self):
             abundance = vamb.parsebam.Abundance.from_files(
                 testtools.BAM_FILES, "/tmp/tmpbam", self.comp_metadata, True, 0.9, 2
@@ -83,7 +84,6 @@ class TestEncodingResult(unittest.TestCase):
         cls.rpkm = rng.random((200, 6)).astype(np.float32)
         cls.lens = rng.randint(2000, 5000, 200)
 
-    
     def test_runs(self):
         self.assertEqual(
             sha256(self.lens.data.tobytes()).digest().hex(),
@@ -91,15 +91,17 @@ class TestEncodingResult(unittest.TestCase):
         )
 
         vae = vamb.encode.VAE(6)
-        dl, mask = vamb.encode.make_dataloader(self.rpkm.copy(), self.tnfs, self.lens, batchsize=16)
+        dl, mask = vamb.encode.make_dataloader(
+            self.rpkm.copy(), self.tnfs, self.lens, batchsize=16
+        )
         vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
         latent = vae.encode(dl)
 
         self.assertIsInstance(latent, np.ndarray)
         self.assertIsInstance(mask, np.ndarray)
 
-
     if TEST_UNSTABLE_HASHES:
+
         def test_result(self):
             torch.manual_seed(0)
             torch.use_deterministic_algorithms(True)
@@ -134,6 +136,7 @@ class TestClusterResult(unittest.TestCase):
         )
 
     if TEST_UNSTABLE_HASHES:
+
         def test_result(self):
             hash = sha256()
 
