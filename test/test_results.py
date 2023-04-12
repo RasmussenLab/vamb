@@ -8,6 +8,12 @@ from hashlib import sha256
 import vamb
 import testtools
 
+# PyTorch cannot be made stable, so we cannot run CI on the result
+# of pytorch training.
+# Nonetheless, you can enable it locally with this switch here,
+# which can be useful sometimes.
+TEST_UNSTABLE_HASHES = False
+
 
 class TestCompositionResult(unittest.TestCase):
     io = io.BytesIO()
@@ -56,35 +62,36 @@ class TestAbundanceResult(unittest.TestCase):
 class TestEncodingResult(unittest.TestCase):
     torch.manual_seed(0)
 
-    def test_result(self):
-        rng = np.random.RandomState(15)
-        tnfs = rng.random((200, 103)).astype(np.float32)
-        rpkm = rng.random((200, 6)).astype(np.float32)
-        lens = rng.randint(2000, 5000, 200)
+    if TEST_UNSTABLE_HASHES:
+        def test_result(self):
+            rng = np.random.RandomState(15)
+            tnfs = rng.random((200, 103)).astype(np.float32)
+            rpkm = rng.random((200, 6)).astype(np.float32)
+            lens = rng.randint(2000, 5000, 200)
 
-        self.assertEqual(
-            sha256(lens.data.tobytes()).digest().hex(),
-            "68894f01cc435a5f032a655faecddd817cd35a71397129296a11f8c40bd29fcb",
-        )
+            self.assertEqual(
+                sha256(lens.data.tobytes()).digest().hex(),
+                "68894f01cc435a5f032a655faecddd817cd35a71397129296a11f8c40bd29fcb",
+            )
 
-        torch.manual_seed(0)
-        torch.use_deterministic_algorithms(True)
-        np.random.seed(0)
-        random.seed(0)
-        vae = vamb.encode.VAE(6)
-        dl, mask = vamb.encode.make_dataloader(rpkm, tnfs, lens, batchsize=16)
-        vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
-        latent = vae.encode(dl)
+            torch.manual_seed(0)
+            torch.use_deterministic_algorithms(True)
+            np.random.seed(0)
+            random.seed(0)
+            vae = vamb.encode.VAE(6)
+            dl, mask = vamb.encode.make_dataloader(rpkm, tnfs, lens, batchsize=16)
+            vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
+            latent = vae.encode(dl)
 
-        self.assertEqual(
-            sha256(latent.data.tobytes()).digest().hex(),
-            "0148ec0767e88c756615340d6fd0b31ca07aa6b4b172a1874fb7de7179acb57d",
-        )
+            self.assertEqual(
+                sha256(latent.data.tobytes()).digest().hex(),
+                "0148ec0767e88c756615340d6fd0b31ca07aa6b4b172a1874fb7de7179acb57d",
+            )
 
-        self.assertEqual(
-            sha256(torch.rand(10).numpy().tobytes()).digest().hex(),
-            "c417b9722e14e854fbe79cc5c797cc6653360c1e6536064205ca0c073f41eaf6",
-        )
+            self.assertEqual(
+                sha256(torch.rand(10).numpy().tobytes()).digest().hex(),
+                "c417b9722e14e854fbe79cc5c797cc6653360c1e6536064205ca0c073f41eaf6",
+            )
 
 
 class TestClusterResult(unittest.TestCase):
