@@ -117,7 +117,7 @@ class Abundance:
             if not _os.path.isfile(path):
                 raise FileNotFoundError(path)
 
-            if not pycoverm.is_bam_sorted(path):
+            if not pycoverm.is_bam_sorted(str(path)):
                 raise ValueError(f"Path {path} is not sorted by reference.")
 
         if nthreads < 1:
@@ -203,7 +203,7 @@ class Abundance:
         mask: _np.ndarray,
     ) -> tuple[_np.ndarray, bytes]:
         (headers, coverage) = pycoverm.get_coverages_from_bam(
-            paths,
+            [str(p) for p in paths],
             threads=len(paths),
             min_identity=minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.
