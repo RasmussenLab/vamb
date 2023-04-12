@@ -39,7 +39,7 @@ However, despite avamb and CheckM2 being in different environments, snakemake wi
 
 ## Set up configuration with your data
 
-To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: s
+To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples:
 
 `contigs.txt` contains paths to each of the per-sample assemblies:
 ```
@@ -147,7 +147,7 @@ Using a GPU can speed up Avamb considerably - especially when you are binning mi
    "minimap_mem": "15GB",
    "minimap_ppn": "10",
    "avamb_mem": "10GB",
-   "avamb_ppn": "10",
+   "avamb_ppn": "10:gpus=1",
    "checkm2_mem": "30GB",
    "checkm2_ppn": "30",
    "checkm2_mem_r": "15GB",
