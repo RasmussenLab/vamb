@@ -24,42 +24,32 @@ _MEDOID_RADIUS = 0.05
 _DELTA_X = 0.005
 _XMAX = 0.3
 
-# This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
-# of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
+# This is the PDF of normal with µ=0, s=0.007 from -0.05 to 0.05 with intervals
+# of DELTA_X, for a total of 21 values. We multiply by _DELTA_X so the density
 # of one point sums to approximately one
 _NORMALPDF = _DELTA_X * _Tensor(
     [
-        2.43432053e-11,
-        9.13472041e-10,
-        2.66955661e-08,
-        6.07588285e-07,
-        1.07697600e-05,
-        1.48671951e-04,
-        1.59837411e-03,
-        1.33830226e-02,
-        8.72682695e-02,
-        4.43184841e-01,
-        1.75283005e00,
-        5.39909665e00,
-        1.29517596e01,
-        2.41970725e01,
-        3.52065327e01,
-        3.98942280e01,
-        3.52065327e01,
-        2.41970725e01,
-        1.29517596e01,
-        5.39909665e00,
-        1.75283005e00,
-        4.43184841e-01,
-        8.72682695e-02,
-        1.33830226e-02,
-        1.59837411e-03,
-        1.48671951e-04,
-        1.07697600e-05,
-        6.07588285e-07,
-        2.66955661e-08,
-        9.13472041e-10,
-        2.43432053e-11,
+        4.75194233e-10,
+        6.05159597e-08,
+        4.62689743e-06,
+        2.12388502e-04,
+        5.85319933e-03,
+        9.68449122e-02,
+        9.62014211e-01,
+        5.73729721e00,
+        2.05425518e01,
+        4.41593444e01,
+        5.69917543e01,
+        4.41593444e01,
+        2.05425518e01,
+        5.73729721e00,
+        9.62014211e-01,
+        9.68449122e-02,
+        5.85319933e-03,
+        2.12388502e-04,
+        4.62689743e-06,
+        6.05159597e-08,
+        4.75194233e-10,
     ]
 )
 
@@ -366,6 +356,7 @@ def _calc_densities(
 ) -> _Tensor:
     """Given an array of histogram, smoothes the histogram."""
     pdf_len = len(pdf)
+    halflen = pdf_len // 2
 
     if cuda:
         histogram = histogram.cpu()
@@ -374,7 +365,7 @@ def _calc_densities(
     for i in range(len(densities) - pdf_len + 1):
         densities[i : i + pdf_len] += pdf * histogram[i]
 
-    densities = densities[15:-15]
+    densities = densities[halflen:-halflen]
 
     return densities
 
