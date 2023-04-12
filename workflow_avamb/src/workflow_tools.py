@@ -37,7 +37,7 @@ def get_cluster_score_bin_path(
 
 def update_cluster_score_bin_path(
     path_checkm_ripped: str, cluster_score: dict[str, tuple[float, float]]
-) -> dict[str, tuple[float,float]] :
+) -> dict[str, tuple[float, float]]:
     c_com_con = np.loadtxt(
         path_checkm_ripped,
         delimiter="\t",

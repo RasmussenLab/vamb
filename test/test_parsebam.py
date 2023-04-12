@@ -33,7 +33,9 @@ class TestParseBam(unittest.TestCase):
         cp = CompositionMetaData(m.identifiers, m.lengths, m.mask, m.minlength)
         cp.refhash = b"a" * 32  # write bad refhash
         with self.assertRaises(ValueError):
-            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, None, cp, True, 0.97, 4)
+            vamb.parsebam.Abundance.from_files(
+                testtools.BAM_FILES, None, cp, True, 0.97, 4
+            )
 
     def test_bad_metadata_mask(self):
         m = self.comp_metadata
@@ -46,7 +48,9 @@ class TestParseBam(unittest.TestCase):
             m.identifiers[:-1], m.lengths[:-1], m.mask[:-3], m.minlength
         )
         with self.assertRaises(ValueError):
-            vamb.parsebam.Abundance.from_files(testtools.BAM_FILES, None, cp, True, 0.97, 4)
+            vamb.parsebam.Abundance.from_files(
+                testtools.BAM_FILES, None, cp, True, 0.97, 4
+            )
 
     def test_badfile(self):
         with self.assertRaises(FileNotFoundError):

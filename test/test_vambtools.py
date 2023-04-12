@@ -402,7 +402,7 @@ class TestWriteClusters(unittest.TestCase):
         read = set()
         read_names = set()
 
-        for (k, v) in clusters:
+        for k, v in clusters:
             allcontigs.update(v)
 
         for line in lines:
@@ -410,7 +410,7 @@ class TestWriteClusters(unittest.TestCase):
             printed.add(contig)
             printed_names.add(name)
 
-        for (k, v) in vamb.vambtools.read_clusters(io.StringIO(str)).items():
+        for k, v in vamb.vambtools.read_clusters(io.StringIO(str)).items():
             read.update(v)
             read_names.add(k)
 

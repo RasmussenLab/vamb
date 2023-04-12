@@ -176,7 +176,7 @@ class Abundance:
 
         # Load from BAM and store them chunkwise
         refhash = None
-        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+        for filename, (chunkstart, chunkstop) in zip(filenames, chunks):
             (matrix, refhash) = cls.run_pycoverm(
                 paths[chunkstart:chunkstop],
                 minid,
@@ -187,7 +187,7 @@ class Abundance:
 
         # Initialize matrix, the load them chunkwise. Delete the temp files when done
         matrix = _np.empty((mask.sum(), len(paths)), dtype=_np.float32)
-        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+        for filename, (chunkstart, chunkstop) in zip(filenames, chunks):
             matrix[:, chunkstart:chunkstop] = vambtools.read_npz(filename)
 
         shutil.rmtree(cache_directory)
