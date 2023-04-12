@@ -47,8 +47,6 @@ try:
     os.makedirs(os.path.join(OUTDIR,"log"), exist_ok=True)
 except FileExistsError:
     pass
-except:
-    raise
 
 
 # parse if GPUs is needed #

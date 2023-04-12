@@ -1,4 +1,3 @@
-from Bio import SeqIO
 import os
 import numpy as np
 import argparse
@@ -24,10 +23,7 @@ def main(
     # {cluster:sample} dictionary for the manually drep clusters
     cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
     for sample in set(cluster_sample.values()):
-        try:
-            os.makedirs(os.path.join(path_run, drep_folder, sample))
-        except:
-            pass
+        os.makedirs(os.path.join(path_run, drep_folder, sample), exist_ok=True)
 
     # Given all the clusters that have no connection (no intersection) with any other cluster
     # mv them to the final bins folder that contains the final set of NC bins if they are NC
@@ -344,7 +340,7 @@ if __name__ == "__main__":
 
     path_run = (
         opt.r
-    )  #'/Users/mbv396/aamb/vamb_aamb_on_cami2/oral/manual_drep/vamb_aamb_cpu_jgi_oral_310122_run_2_manual_drep_disjoint2_copy/'
+    )  # '/Users/mbv396/aamb/vamb_aamb_on_cami2/oral/manual_drep/vamb_aamb_cpu_jgi_oral_310122_run_2_manual_drep_disjoint2_copy/'
 
     path_clusters = (
         opt.c
@@ -370,7 +366,7 @@ if __name__ == "__main__":
         path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
     )
 
-    drep_folder = opt.d  #'drep_trial'
+    drep_folder = opt.d  # 'drep_trial'
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)

@@ -28,3 +28,13 @@ from . import cluster
 from . import benchmark
 from . import encode
 from . import aamb_encode
+
+__all__ = [
+    "vambtools",
+    "parsebam",
+    "parsecontigs",
+    "cluster",
+    "benchmark",
+    "encode",
+    "aamb_encode",
+]

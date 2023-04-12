@@ -12,7 +12,6 @@ from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
-from collections.abc import Iterator
 from pathlib import Path
 import shutil
 

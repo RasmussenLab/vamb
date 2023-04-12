@@ -4,7 +4,6 @@
 import numpy as np
 from math import log
 import time
-from torch.utils.data.dataset import TensorDataset as TensorDataset
 from torch.autograd import Variable
 from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn

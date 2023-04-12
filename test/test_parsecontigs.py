@@ -1,10 +1,8 @@
 import io
 import unittest
 import random
-import string
 import numpy as np
 
-import vamb
 import testtools
 from vamb.parsecontigs import Composition, CompositionMetaData
 

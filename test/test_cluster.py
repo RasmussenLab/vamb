@@ -79,17 +79,17 @@ class TestClusterer(unittest.TestCase):
 
     def test_normalization(self):
         hash_before = md5(self.data.data.tobytes()).digest().hex()
-        gen = vamb.cluster.ClusterGenerator(self.data)
+        vamb.cluster.ClusterGenerator(self.data)
         self.assertEqual(hash_before, md5(self.data.data.tobytes()).digest().hex())
         cp = self.data.copy()
-        gen = vamb.cluster.ClusterGenerator(cp, destroy=True)
+        vamb.cluster.ClusterGenerator(cp, destroy=True)
         hash_after = md5(cp.data.tobytes()).digest().hex()
         self.assertNotEqual(hash_before, hash_after)
 
         # Rows are permuted by the clusterer. We use xor to check the rows
         # are still essentially the same.
         before_xor = self.xor_rows_hash(cp)
-        gen = vamb.cluster.ClusterGenerator(cp, destroy=True, normalized=True)
+        vamb.cluster.ClusterGenerator(cp, destroy=True, normalized=True)
         self.assertEqual(before_xor, self.xor_rows_hash(cp))
 
     def test_cluster(self):

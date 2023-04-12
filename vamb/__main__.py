@@ -36,8 +36,6 @@ def try_make_dir(name):
         os.mkdir(name)
     except FileExistsError:
         pass
-    except:
-        raise
 
 
 class FASTAPath(type(Path())):
@@ -831,7 +829,7 @@ def run(
             logfile,
             "vae_",
         )
-        log(f"VAE latent clustered", logfile, 1)
+        log("VAE latent clustered", logfile, 1)
 
         del latent
         fin_cluster_latent = time.time()
@@ -871,7 +869,7 @@ def run(
         )
 
         fin_cluster_latent_z = time.time()
-        log(f"AAE z latent clustered.", logfile, 1)
+        log("AAE z latent clustered.", logfile, 1)
 
         del latent_z
 
@@ -935,11 +933,11 @@ def run(
 
 def main():
     doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
-    
+
     Version: {'.'.join([str(i) for i in vamb.__version__])}
 
     Default use, good for most datasets:
-    vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C 
+    vamb --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
 
     For advanced use and extensions of Avamb, check documentation of the package
     at https://github.com/RasmussenLab/vamb."""  # must be updated with the new github
