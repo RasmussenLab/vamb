@@ -1,9 +1,7 @@
 from Bio import SeqIO
 import os
 import numpy as np
-from collections import OrderedDict
 import argparse
-from time import time
 import vamb
 import shutil
 from ordered_set import OrderedSet
@@ -13,12 +11,10 @@ import json
 def main(
     path_run,
     cluster_contigs,
-    # clusters_scores_ar,
     cluster_scores,
     cluster_not_r_contigs,
     ripped_bins_scores_ar,
     drep_folder,
-    # path_bins,
     bin_path,
     path_bins_ripped,
     bin_separator,

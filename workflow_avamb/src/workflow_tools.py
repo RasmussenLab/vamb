@@ -1,9 +1,6 @@
 import numpy as np
 import os
-import json
-from typing import cast, Optional
-import vamb
-import shutil
+from typing import cast
 
 
 def get_cluster_score_bin_path(

@@ -479,7 +479,7 @@ def calc_rpkm(
         log(f"Parsing {len(path)} BAM files with {nthreads} threads", logfile, 1)
 
         abundance = vamb.parsebam.Abundance.from_files(
-            [str(i) for i in path],
+            path,
             outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
             abundance_options.refcheck,
