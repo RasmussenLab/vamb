@@ -128,6 +128,7 @@ class ClusterGenerator:
     __slots__ = [
         "maxsteps",
         "minsuccesses",
+        "maxsuccesses",
         "cuda",
         "rng",
         "matrix",
@@ -154,7 +155,12 @@ class ClusterGenerator:
 """
 
     def _check_params(
-        self, matrix: _np.ndarray, maxsteps: int, windowsize: int, minsuccesses: int
+        self,
+        matrix: _np.ndarray,
+        maxsteps: int,
+        windowsize: int,
+        minsuccesses: int,
+        maxsuccesses: int,
     ) -> None:
         """Checks matrix, and maxsteps."""
 
@@ -170,6 +176,13 @@ class ClusterGenerator:
         if minsuccesses < 1 or minsuccesses > windowsize:
             raise ValueError(
                 f"minsuccesses must be between 1 and windowsize, not {minsuccesses}"
+            )
+
+        # Maxsuccesses can be above windowsize, in which case the criteria are
+        # never made stricter
+        if maxsuccesses <= minsuccesses:
+            raise ValueError(
+                f"maxsuccesses must be above minsuccesses, but they are {maxsuccesses} and {minsuccesses}"
             )
 
         if len(matrix) < 1:
@@ -192,12 +205,13 @@ class ClusterGenerator:
         matrix: _np.ndarray,
         maxsteps: int = 25,
         windowsize: int = 200,
-        minsuccesses: int = 20,
+        minsuccesses: int = 15,
+        maxsuccesses: int = 30,
         destroy: bool = False,
         normalized: bool = False,
         cuda: bool = False,
     ):
-        self._check_params(matrix, maxsteps, windowsize, minsuccesses)
+        self._check_params(matrix, maxsteps, windowsize, minsuccesses, maxsuccesses)
         if not destroy:
             matrix = matrix.copy()
 
@@ -217,6 +231,7 @@ class ClusterGenerator:
 
         self.maxsteps: int = maxsteps
         self.minsuccesses: int = minsuccesses
+        self.maxsuccesses = maxsuccesses
         self.cuda: bool = cuda
         self.rng: _random.Random = _random.Random(0)
 
@@ -319,15 +334,27 @@ class ClusterGenerator:
                 self.successes += success
                 self.attempts.append(success)
 
-                # If less than minsuccesses of the last maxlen attempts were successful,
-                # we relax the clustering criteria and reset counting successes.
-                if (
-                    len(self.attempts) == self.attempts.maxlen
-                    and self.successes < self.minsuccesses
-                ):
-                    self.peak_valley_ratio += 0.1
-                    self.attempts.clear()
-                    self.successes = 0
+                # We dynamically change the peak/valley ratio depending on the number of successes:
+                # If too many clusters fail, we relax the criteria by raising the P/V ratio and vice versa
+                if len(self.attempts) == self.attempts.maxlen:
+                    resize = False
+                    if (
+                        self.successes < self.minsuccesses
+                        and self.peak_valley_ratio < 0.56
+                    ):
+                        resize = True
+                        self.peak_valley_ratio = self.peak_valley_ratio + 0.05
+
+                    elif (
+                        self.successes > self.maxsuccesses
+                        and self.peak_valley_ratio >= 0.14
+                    ):
+                        resize = True
+                        self.peak_valley_ratio = self.peak_valley_ratio - 0.05
+
+                    if resize:
+                        self.attempts.clear()
+                        self.successes = 0
 
         # These are the points of the final cluster AFTER establishing the threshold used
         assert isinstance(distances, _Tensor)
@@ -335,7 +362,7 @@ class ClusterGenerator:
         isdefault = (
             success is None
             and threshold == _DEFAULT_RADIUS
-            and self.peak_valley_ratio > 0.55
+            and self.peak_valley_ratio > 0.58
         )
 
         cluster = Cluster(
@@ -432,7 +459,7 @@ def _find_threshold(
         success = False
 
     # If ratio has been set to 0.6, we do not accept returning no threshold.
-    if threshold is None and peak_valley_ratio > 0.55:
+    if threshold is None and peak_valley_ratio > 0.58:
         threshold = _DEFAULT_RADIUS
         success = None
 
