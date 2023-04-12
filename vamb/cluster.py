@@ -17,7 +17,7 @@ import vamb.vambtools as _vambtools
 from typing import Optional
 from collections.abc import Sequence, Iterable
 
-_DEFAULT_RADIUS = 0.06
+_DEFAULT_RADIUS = 0.15
 # Distance within which to search for medoid point
 _MEDOID_RADIUS = 0.05
 
@@ -427,7 +427,7 @@ def _find_threshold(
         x += delta_x
 
     # Don't allow a threshold too high - this is relaxed with p_v_ratio
-    if threshold is not None and threshold > 0.2 + peak_valley_ratio:
+    if threshold is not None and threshold > 0.2 + 0.15 * peak_valley_ratio:
         threshold = None
         success = False
 
