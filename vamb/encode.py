@@ -144,8 +144,7 @@ def make_dataloader(
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
     weightstensor = _torch.from_numpy(weights)
-    # n_workers = 4 if cuda else 1
-    n_workers = 0
+    n_workers = 4 if cuda else 1
     dataset = _TensorDataset(depthstensor, tnftensor, weightstensor)
     dataloader = _DataLoader(
         dataset=dataset,

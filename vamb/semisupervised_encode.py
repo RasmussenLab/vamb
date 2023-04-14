@@ -31,12 +31,9 @@ def kld_gauss(p_mu, p_std, q_mu, q_std):
 
 
 def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
-    # n_workers = 4 if cuda else 1
-    n_workers = 0
+    n_workers = 4 if cuda else 1
     dataloader, mask = _encode.make_dataloader(rpkm, tnf, lengths, batchsize, destroy, cuda)
-    print('after make dataloader')
     depthstensor, tnftensor, weightstensor = dataloader.dataset.tensors
-    print('after tensors')
     return depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask
 
 
