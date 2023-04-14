@@ -66,27 +66,29 @@ def make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader
     train_x_iterator = dataloader_vamb.__iter__()
     train_y_iterator = dataloader_labels.__iter__()
 
-    ds, ts, ls = shapes
+    ds, ts, ws, ls = shapes
 
     d_all = _torch.zeros((1, ds))
     d_u_all = _torch.zeros((1, ds))
     t_all = _torch.zeros((1, ts))
     t_u_all = _torch.zeros((1, ts))
+    w_all = _torch.zeros((1, ws))
+    w_u_all = _torch.zeros((1, ws))
     l_all = _torch.zeros((1, ls))
     l_u_all = _torch.zeros((1, ls))
 
     for i in range(len(dataloader_vamb)):
         try:
-            d, t, l = next(train_xy_iterator)
+            d, t, w, l = next(train_xy_iterator)
         except StopIteration:
             train_xy_iterator = dataloader_joint.__iter__()
-            d, t, l = next(train_xy_iterator)
+            d, t, w, l = next(train_xy_iterator)
 
         try:
-            d_u, t_u = next(train_x_iterator)
+            d_u, t_u, w_u = next(train_x_iterator)
         except StopIteration:
             train_x_iterator = dataloader_vamb.__iter__()
-            d_u, t_u = next(train_x_iterator)
+            d_u, t_u, w_u = next(train_x_iterator)
 
         try:
             l_u = next(train_y_iterator)
@@ -96,12 +98,14 @@ def make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader
 
         d_all = _torch.cat([d_all, d])
         t_all = _torch.cat([t_all, t])
+        w_all = _torch.cat([w_all, w])
         l_all = _torch.cat([l_all, l])
         d_u_all = _torch.cat([d_u_all, d_u])
         t_u_all = _torch.cat([t_u_all, t_u])
+        w_u_all = _torch.cat([w_u_all, w_u])
         l_u_all = _torch.cat([l_u_all, l_u[0]])
 
-    dataset_all = _TensorDataset(d_all[1:, :], t_all[1:, :], l_all[1:, :], d_u_all[1:, :], t_u_all[1:, :], l_u_all[1:, :])
+    dataset_all = _TensorDataset(d_all[1:, :], t_all[1:, :], w_all[1:, :], l_all[1:, :], d_u_all[1:, :], t_u_all[1:, :], w_u_all[1:, :], l_u_all[1:, :])
     dataloader_all = _DataLoader(dataset=dataset_all, batch_size=batchsize, drop_last=True,
                         shuffle=True, num_workers=dataloader_joint.num_workers, pin_memory=cuda)
     return dataloader_all

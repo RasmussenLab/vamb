@@ -33,13 +33,9 @@ contignames = composition.metadata.identifiers
 df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
 df_mmseq_genus = df_mmseq[(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
 df_mmseq_genus['genus'] = df_mmseq_genus[8].str.split(';').str[5]
-contigs = np.array(contignames)
-classes_order = np.array(df_mmseq_genus['genus'])
 
-print('started argwhere')
-ind_in = np.in1d(contigs, classes_order)
-indices_mmseq = np.arange(len(contigs))[ind_in][contigs[ind_in].argsort()][classes_order.argsort().argsort()]
-print('ended argwhere')
+ind_map = {c: i for i, c in enumerate(contignames)}
+indices_mmseq = [ind_map[c] for c in df_mmseq_genus[0]]
 
 classes_order = list(df_mmseq_genus['genus'])
 vae = vamb.semisupervised_encode.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set(classes_order)), cuda=CUDA)
@@ -47,11 +43,11 @@ vae = vamb.semisupervised_encode.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set
 with open(f'indices_mmseq_genus_{DATASET}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-dataloader_vamb, mask = vamb.semisupervised_encode.make_dataloader(rpkms, tnfs)
+dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs)
 dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], classes_order)
 dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], classes_order)
 
-shapes = (rpkms.shape[1], 103, len(set(classes_order)))
+shapes = (rpkms.shape[1], 103, 1, len(set(classes_order)))
 dataloader = vamb.semisupervised_encode.make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader_labels, shapes)
 with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
