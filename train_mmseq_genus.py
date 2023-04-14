@@ -19,13 +19,15 @@ print(args)
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
 DATASET = args['dataset']
-DEPTH_PATH = f'/home/projects/cpr_10006/projects/vamb/data/datasets/cami2_{DATASET}'
+# DEPTH_PATH = f'/home/projects/cpr_10006/projects/vamb/data/datasets/cami2_{DATASET}'
+DEPTH_PATH = f'/Users/nmb127/Documents/vamb_data_all/cami2_{DATASET}'
 PATH_CONTIGS = f'{DEPTH_PATH}/contigs_2kbp.fna.gz'
 BAM_PATH = f'{DEPTH_PATH}/bam_sorted'
 ABUNDANCE_PATH = f'{DEPTH_PATH}/depths.npz'
 MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}.pt'
 N_EPOCHS = args['nepoch']
-MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
+# MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
+MMSEQ_PATH = f'/Users/nmb127/Documents/vamb_data_all/mmseq2/{DATASET}_taxonomy.tsv'
 
 with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
     composition = vamb.parsecontigs.Composition.from_file(contigfile)
@@ -48,10 +50,13 @@ vae = vamb.semisupervised_encode.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set
 with open(f'indices_mmseq_genus_{DATASET}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+print('here')
 dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+print('here1')
 dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
+print('here2')
 dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
-
+print('here3')
 shapes = (rpkms.shape[1], 103, 1, len(set(classes_order)))
 dataloader = vamb.semisupervised_encode.make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader_labels, shapes)
 with open(MODEL_PATH, 'wb') as modelfile:

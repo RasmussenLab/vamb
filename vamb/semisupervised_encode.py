@@ -31,9 +31,12 @@ def kld_gauss(p_mu, p_std, q_mu, q_std):
 
 
 def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
-    n_workers = 4 if cuda else 1
+    # n_workers = 4 if cuda else 1
+    n_workers = 0
     dataloader, mask = _encode.make_dataloader(rpkm, tnf, lengths, batchsize, destroy, cuda)
+    print('after make dataloader')
     depthstensor, tnftensor, weightstensor = dataloader.dataset.tensors
+    print('after tensors')
     return depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask
 
 
@@ -470,19 +473,22 @@ class VAEVAE(object):
         _, labels_in_indices = labels_in.max(dim=1)
         ce_labels = _nn.CrossEntropyLoss()(labels_out, labels_in_indices)
         ce_labels_weight = 1. #TODO: figure out
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
+
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
         sse_weight = self.VAEVamb.alpha / self.VAEVamb.ntnf
         kld_weight = 1 / (self.VAEVamb.nlatent * self.VAEVamb.beta)
+        reconstruction_loss = ce * ce_weight + sse * sse_weight + ce_labels*ce_labels_weight
 
         kld_vamb = kld_gauss(mu_sup, logsigma_sup, mu_vamb_unsup, logsigma_vamb_unsup)
         kld_labels = kld_gauss(mu_sup, logsigma_sup, mu_labels_unsup, logsigma_labels_unsup)
         kld = kld_vamb + kld_labels
+        kld_loss = kld * kld_weight
 
-        loss = (ce * ce_weight + sse * sse_weight + ce_labels*ce_labels_weight + kld * kld_weight)*weights
+        loss = (reconstruction_loss + kld_loss) * weights
 
         _, labels_out_indices = labels_out.max(dim=1)
         _, labels_in_indices = labels_in.max(dim=1)
-        return loss, ce, sse, ce_labels, kld_vamb, kld_labels, _torch.sum(labels_out_indices == labels_in_indices)
+        return loss.mean(), ce.mean(), sse.mean(), ce_labels, kld_vamb.mean(), kld_labels.mean(), _torch.sum(labels_out_indices == labels_in_indices)
 
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         metrics = [

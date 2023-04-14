@@ -144,7 +144,8 @@ def make_dataloader(
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
     weightstensor = _torch.from_numpy(weights)
-    n_workers = 4 if cuda else 1
+    # n_workers = 4 if cuda else 1
+    n_workers = 0
     dataset = _TensorDataset(depthstensor, tnftensor, weightstensor)
     dataloader = _DataLoader(
         dataset=dataset,
@@ -345,7 +346,6 @@ class VAE(_nn.Module):
         reconstruction_loss = ce * ce_weight + sse * sse_weight
         kld_loss = kld * kld_weight
         loss = (reconstruction_loss + kld_loss) * weights
-
         return loss.mean(), ce.mean(), sse.mean(), kld.mean()
 
     def trainepoch(
