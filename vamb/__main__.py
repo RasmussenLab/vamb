@@ -374,8 +374,9 @@ class VambOptions:
             raise FileExistsError(out_dir)
 
         # Outdir is in an existing parent dir
-        if not out_dir.parent.is_dir():
-            raise NotADirectoryError(parentdir)
+        parent_dir = out_dir.parent
+        if not parent_dir.is_dir():
+            raise NotADirectoryError(parent_dir)
         self.out_dir = out_dir
 
         if n_threads < 1:
