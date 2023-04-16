@@ -190,7 +190,7 @@ class Composition:
                 Composition._convert(raw, projected)
 
             lengths.append(len(entry))
-            contignames.append(entry.header)
+            contignames.append(entry.identifier)
 
         # Convert rest of contigs
         Composition._convert(raw, projected)

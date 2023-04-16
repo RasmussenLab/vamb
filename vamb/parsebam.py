@@ -57,8 +57,9 @@ class Abundance:
             raise ValueError(
                 f"At least one BAM file reference name hash to {refhash.hex()}, "
                 f"expected {target_refhash.hex()}. "
-                "Make sure all BAM and FASTA headers are identical "
-                "and in the same order."
+                "Make sure all BAM and FASTA identifiers are identical "
+                "and in the same order. "
+                "Note that the identifier is the header before any whitespace."
             )
 
     def save(self, io: Union[Path, IO[bytes]]):
