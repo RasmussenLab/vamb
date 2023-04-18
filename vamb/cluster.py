@@ -206,6 +206,7 @@ class ClusterGenerator:
         destroy: bool = False,
         normalized: bool = False,
         cuda: bool = False,
+        seed: int = 0,
     ):
         self._check_params(matrix, maxsteps, windowsize, minsuccesses)
         if not destroy:
@@ -213,8 +214,8 @@ class ClusterGenerator:
 
         # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
         # track of which points are which.
-        _np.random.RandomState(0).shuffle(matrix)
-        indices = _np.random.RandomState(0).permutation(len(matrix))
+        _np.random.Generator(_np.random.PCG64(seed)).shuffle(matrix)
+        indices = _np.random.Generator(_np.random.PCG64(seed)).permutation(len(matrix))
         indices = _torch.from_numpy(indices)
         torch_matrix = _torch.from_numpy(matrix)
 
@@ -228,7 +229,7 @@ class ClusterGenerator:
         self.maxsteps: int = maxsteps
         self.minsuccesses: int = minsuccesses
         self.cuda: bool = cuda
-        self.rng: _random.Random = _random.Random(0)
+        self.rng: _random.Random = _random.Random(seed)
 
         self.matrix = torch_matrix
         # This refers to the indices of the original matrix. As we remove points, these
