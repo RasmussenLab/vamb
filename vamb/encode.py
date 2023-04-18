@@ -28,8 +28,6 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 import numpy as _np
 import torch as _torch
 
-_torch.manual_seed(0)
-
 
 def set_batchsize(
     data_loader: _DataLoader, batch_size: int, encode=False
@@ -191,6 +189,7 @@ class VAE(_nn.Module):
         beta: float = 200.0,
         dropout: Optional[float] = 0.2,
         cuda: bool = False,
+        seed: int = 0,
     ):
         if nlatent < 1:
             raise ValueError(f"Minimum 1 latent neuron, not {nlatent}")
@@ -220,6 +219,7 @@ class VAE(_nn.Module):
         if not (0 <= dropout < 1):
             raise ValueError(f"dropout must be 0 <= dropout < 1, not {dropout}")
 
+        _torch.manual_seed(seed)
         super(VAE, self).__init__()
 
         # Initialize simple attributes

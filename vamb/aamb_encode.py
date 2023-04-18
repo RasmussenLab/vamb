@@ -14,13 +14,6 @@ from vamb.encode import set_batchsize
 from collections.abc import Sequence
 from typing import Optional, IO, Union
 
-random_seed = 42
-torch.manual_seed(random_seed)
-torch.cuda.manual_seed(random_seed)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-np.random.seed(random_seed)
-
 
 ############################################################################# MODEL ###########################################################
 class AAE(nn.Module):
@@ -34,11 +27,17 @@ class AAE(nn.Module):
         slr: float,
         alpha: Optional[float],
         _cuda: bool,
+        seed: int,
     ):
         if nsamples is None:
             raise ValueError(
                 f"Number of samples  should be provided to define the encoder input layer as well as the categorical latent dimension, not {nsamples}"
             )
+
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
         super(AAE, self).__init__()
         if alpha is None:
@@ -54,6 +53,7 @@ class AAE(nn.Module):
         self.slr = slr
         self.alpha = alpha
         self.usecuda = _cuda
+        self.rng = np.random.Generator(np.random.PCG64(seed))
 
         # encoder
         self.encoder = nn.Sequential(
@@ -108,7 +108,7 @@ class AAE(nn.Module):
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
 
         std = torch.exp(logvar / 2)
-        sampled_z = Variable(Tensor(np.random.normal(0, 1, (mu.size(0), self.ld))))
+        sampled_z = Variable(Tensor(self.rng.normal(0, 1, (mu.size(0), self.ld))))
 
         if self.usecuda:
             sampled_z = sampled_z.cuda()
@@ -288,7 +288,7 @@ class AAE(nn.Module):
                     y_prior = y_prior.cuda()
 
                 else:
-                    z_prior = Variable(Tensor(np.random.normal(0, 1, (nrows, self.ld))))
+                    z_prior = Variable(Tensor(self.rng.normal(0, 1, (nrows, self.ld))))
                     ohc = RelaxedOneHotCategorical(T, torch.ones([nrows, self.y_len]))
                     y_prior = ohc.sample()
 
@@ -463,7 +463,7 @@ class AAE(nn.Module):
                     y_prior = y_prior.cuda()
 
                 else:
-                    z_prior = Variable(Tensor(np.random.normal(0, 1, (nrows, self.ld))))
+                    z_prior = Variable(Tensor(self.rng.normal(0, 1, (nrows, self.ld))))
                     ohc = RelaxedOneHotCategorical(
                         0.15, torch.ones([nrows, self.y_len])
                     )

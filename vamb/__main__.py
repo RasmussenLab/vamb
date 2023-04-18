@@ -352,6 +352,7 @@ class VambOptions:
         "n_threads",
         "comp_options",
         "min_fasta_output_size",
+        "seed",
         "cuda",
     ]
 
@@ -361,12 +362,14 @@ class VambOptions:
         n_threads: int,
         comp_options: CompositionOptions,
         min_fasta_output_size: Optional[int],
+        seed: int,
         cuda: bool,
     ):
         assert isinstance(out_dir, Path)
         assert isinstance(n_threads, int)
         assert isinstance(comp_options, CompositionOptions)
         assert isinstance(min_fasta_output_size, (int, type(None)))
+        assert isinstance(seed, int)
         assert isinstance(cuda, bool)
 
         # Outdir does not exist
@@ -399,6 +402,7 @@ class VambOptions:
             raise ModuleNotFoundError(
                 "Cuda is not available on your PyTorch installation"
             )
+        self.seed = seed
         self.cuda = cuda
 
 
@@ -520,6 +524,7 @@ def trainvae(
         beta=vae_options.beta,
         dropout=vae_options.dropout,
         cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
     )
 
     log("Created VAE", logfile, 1)
@@ -568,6 +573,7 @@ def trainaae(
         aae_options.slr,
         alpha,
         _cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
     )
 
     log("Created AAE", logfile, 1)
@@ -602,7 +608,7 @@ def cluster(
     clusterspath: Path,
     latent: np.ndarray,
     contignames: Sequence[str],  # of dtype object
-    cuda: bool,
+    vamb_options: VambOptions,
     logfile: IO[str],
     cluster_prefix: str,
 ) -> None:
@@ -617,7 +623,7 @@ def cluster(
     )
     log(f"Max clusters: {cluster_options.max_clusters}", logfile, 1)
     log(f"Min cluster size: {cluster_options.min_cluster_size}", logfile, 1)
-    log(f"Use CUDA for clustering: {cuda}", logfile, 1)
+    log(f"Use CUDA for clustering: {vamb_options.cuda}", logfile, 1)
     log(
         "Separator: {}".format(
             None
@@ -634,7 +640,8 @@ def cluster(
         minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
-        cuda=cuda,
+        cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
     )
 
     renamed = (
@@ -826,7 +833,7 @@ def run(
             clusterspath,
             latent,
             comp_metadata.identifiers,
-            vamb_options.cuda,
+            vamb_options,
             logfile,
             "vae_",
         )
@@ -864,7 +871,7 @@ def run(
             clusterspath,
             latent_z,
             comp_metadata.identifiers,
-            vamb_options.cuda,
+            vamb_options,
             logfile,
             "aae_z_",
         )
@@ -967,6 +974,16 @@ def main():
         type=Path,
         required=True,
         help="output directory to create",
+    )
+
+    # Other arguments
+    otheros = parser.add_argument_group(title="Other options", description=None)
+    otheros.add_argument(
+        "--seed",
+        metavar="",
+        type=Optional[int],
+        default=0,
+        help="Random seed [random] (determinism not guaranteed)",
     )
 
     # TNF arguments
@@ -1357,7 +1374,12 @@ def main():
     )
 
     vamb_options = VambOptions(
-        args.outdir, args.nthreads, comp_options, args.min_fasta_output_size, args.cuda
+        args.outdir,
+        args.nthreads,
+        comp_options,
+        args.min_fasta_output_size,
+        args.seed,
+        args.cuda,
     )
 
     torch.set_num_threads(vamb_options.n_threads)
