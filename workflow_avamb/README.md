@@ -39,7 +39,7 @@ However, despite avamb and CheckM2 being in different environments, snakemake wi
 
 ## Set up configuration with your data
 
-To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples: s
+To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.tsv`). Example files are included and described here for an example dataset of four samples: 
 
 `contigs.txt` contains paths to each of the per-sample assemblies:
 ```
@@ -49,7 +49,7 @@ assemblies/contigs.sample_3.fna.gz
 assemblies/contigs.sample_4.fna.gz
 ```
 
-`samples2data.txt` contains sample name, path to read-pair1 and path to read-pair2 (tab-separated):
+`samples2data.tsv` contains sample name, path to read-pair1 and path to read-pair2 (tab-separated):
 ```
 sample_1    reads/sample_1.r1.fq.gz    reads/sample_1.r2.fq.gz
 sample_2    reads/sample_2.r1.fq.gz    reads/sample_2.r2.fq.gz
@@ -58,14 +58,15 @@ sample_4    reads/sample_4.r1.fq.gz    reads/sample_4.r2.fq.gz
 
 ```
 
-Then the configuration file (`config.json`). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `min_contig_size` defines the minimum contig length considered for binning; `min_identity` referes to the minimum read alignment threshold for the contig abundances calculation; `mem` and `ppn` shows the amount of memory and cores set aside for minimap2, avamb, CheckM2 and CheckM2 dereplicate, `avamb_params` gives the parameters used by avamb, finally `outdir` points to the directory that wiil be created and where all output files will be stored. Here we tell it to use the multi-split approach (`-o C`) and to write all bins larger than 500kb as fasta (`--minfasta 500000`). With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "12gb"`).
+Then the configuration file (`config.json`). The first two lines points to the files containing contigs and read information; `index_size` is size of the minimap2 index(es); `min_contig_size` defines the minimum contig length considered for binning; `min_bin_size` defines the minimum bin length that will be written as fasta file; `min_identity` referes to the minimum read alignment threshold for the contig abundances calculation; `mem` and `ppn` shows the amount of memory and cores set aside for minimap2, avamb, CheckM2 and CheckM2 dereplicate, `avamb_params` gives the parameters used by avamb, finally `outdir` points to the directory that wiil be created and where all output files will be stored. Here we tell it to use the multi-split approach (`-o C`) and to run both the vae (VAMB) and the aae (AAMB) models. With regard to `index_size`  this is the amount of Gbases that minimap will map to at the same time. You can increase the size of this if you have more memory available on your machine (a value of `12G` can be run using `"minimap_mem": "12gb"`).
 
 ```
 {
    "contigs": "contigs.txt",
-   "sample_data": "samples2data.txt",
+   "sample_data": "samples2data.tsv",
    "index_size": "3G",
    "min_contig_size": "2000",
+   "min_bin_size": "200000",
    "min_identity": "0.95",
    "minimap_mem": "15GB",
    "minimap_ppn": "10",
@@ -75,7 +76,7 @@ Then the configuration file (`config.json`). The first two lines points to the f
    "checkm2_ppn": "30",
    "checkm2_mem_r": "15GB",
    "checkm2_ppn_r": "15",
-   "avamb_params": "  --model vae-aae   -o C  --minfasta 500000",
+   "avamb_params": "  --model vae-aae   -o C ",
    "avamb_preload": "",
    "outdir":"avamb_outdir",
    "min_comp": "0.9",
@@ -140,9 +141,10 @@ Using a GPU can speed up Avamb considerably - especially when you are binning mi
 ```
 {
    "contigs": "contigs.txt",
-   "sample_data": "samples2data.txt",
+   "sample_data": "samples2data.tsv",
    "index_size": "3G",
    "min_contig_size": "2000",
+   "min_bin_size": "200000",
    "min_identity": "0.95",
    "minimap_mem": "15GB",
    "minimap_ppn": "10",

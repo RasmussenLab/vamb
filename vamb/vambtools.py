@@ -564,7 +564,7 @@ def concatenate_fasta(
 
     Output: None
     """
-
+    
     identifiers: set[str] = set()
     for (inpathno, inpath) in enumerate(inpaths):
         try:
@@ -577,7 +577,7 @@ def concatenate_fasta(
                 for entry in byte_iterfasta(infile):
                     if len(entry) < minlength:
                         continue
-
+                    
                     if rename:
                         entry.rename(f"S{inpathno + 1}C{entry.identifier}".encode())
 

@@ -34,6 +34,7 @@ def main(
     # max contamination for bin to be included into the dereplication process
     max_cont: float,
     bins_extension: str,
+    min_bin_size: int,
 ) -> None:
     # Load contig names
     contig_names: list[str] = list(np.loadtxt(names, dtype=object))
@@ -51,7 +52,7 @@ def main(
     )
     # Load bins
     (bin_lengths, union_bins) = load_binnings(
-        binnings, contig_names, lengths, bin_by_name
+        binnings, contig_names, lengths, bin_by_name, min_bin_size
     )
     del bin_by_name
 
@@ -116,6 +117,7 @@ def load_binnings(
     contig_names: Sequence[str],
     lengths: np.ndarray,
     bin_by_name: Mapping[str, Optional[BinId]],
+    min_bin_size: int,
 ) -> tuple[list[int], list[set[ContigId]]]:
     """
     Load clusters.tsv files from each binning, and filter away those assigned to be discarded based on CheckM2 data.
@@ -134,7 +136,7 @@ def load_binnings(
     for binning_path in binnings:
         with open(binning_path) as file:
             clusters = vamb.vambtools.read_clusters(file)
-            clusters_filtered = filterclusters(clusters, lengthof)
+            clusters_filtered = filterclusters(clusters, lengthof, min_bin_size)
             # filter by clusters larger than 200kbs
             for (bin_name, contigs) in clusters_filtered.items():
 
@@ -173,13 +175,13 @@ def load_binnings(
 
 
 def filterclusters(
-    clusters: Mapping[str, set], lengthof: Mapping[str, int]
+    clusters: Mapping[str, set], lengthof: Mapping[str, int], min_bin_size: int
 ) -> Mapping[str, set]:
     filtered_bins = dict()
     for medoid, contigs in clusters.items():
         binsize = sum(lengthof[contig] for contig in contigs)
 
-        if binsize >= 200000:
+        if binsize >= min_bin_size:
             filtered_bins[medoid] = contigs
 
     return filtered_bins
@@ -292,6 +294,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bins_extension", type=str, default=".fna", help="Extension of the bins  "
     )
+    parser.add_argument("--min_bin_size", type=int, help="Min bin length to be considered for dereplication ")
 
     opt = parser.parse_args()
     args = vars(parser.parse_args())
@@ -308,4 +311,5 @@ if __name__ == "__main__":
         min_comp=opt.comp,
         max_cont=opt.cont,
         bins_extension=opt.bins_extension,
+        min_bin_size=opt.min_bin_size
     )
