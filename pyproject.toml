@@ -9,7 +9,7 @@ dependencies = [
 # Currently pycoverm does not have binaries for Python > 3.11.
 # The dependency resolver, will not error on Python 3.11, but attempt
 # to build pycoverm from source, but will not get the deps required for that.
-requires-python = "<3.12.*,>=3.9.0"
+requires-python = "<3.12,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [metadata]
@@ -28,3 +28,6 @@ readme = {file = "README.md"}
 [build-system]
 requires = ["setuptools ~= 63.0", "Cython ~= 0.29"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+ignore = ["E501"]

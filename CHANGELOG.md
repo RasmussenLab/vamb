@@ -1,6 +1,13 @@
 # Changelog
 
-## v4.0.2-DEV
+## v4.1.0
+* Fix typo in output AAE_Z cluster names. They are now called e.g. "aae_z_1"
+  instead of "aae_z1"
+* Clean up the directory structure of Avamb workflow.
+* Fix the CheckM2 dependencies to allow CheckM2 to be installed
+* Allow the Avamb workflow to be run on Slurm clusters
+* Fix issue #161: Mismatched refhash when spaces in FASTA headers
+* Allow setting the RNG seed from command line
 
 ## v4.0.1
 * Fix Random.choice for Tensor on Python 3.11. See issue #148

@@ -338,35 +338,27 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
 
-    path_run = (
-        opt.r
-    ) 
+    path_run = opt.r
 
-    path_clusters = (
-        opt.c
-    ) 
+    path_clusters = opt.c
     with open(path_clusters) as file:
         cluster_contigs = vamb.vambtools.read_clusters(file)
 
     with open(opt.cs_d) as f:
         cluster_scores = json.load(f)
 
-    path_clusters_not_r = (
-        opt.cnr
-    ) 
+    path_clusters_not_r = opt.cnr
 
     with open(path_clusters_not_r) as file:
         cluster_not_r_contigs = vamb.vambtools.read_clusters(file)
 
-    path_bins_ripped_checkm_quality_report = (
-        opt.sbr
-    ) 
+    path_bins_ripped_checkm_quality_report = opt.sbr
 
     ripped_bins_scores_ar = np.loadtxt(
         path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
     )
 
-    drep_folder = opt.d  
+    drep_folder = opt.d
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)
