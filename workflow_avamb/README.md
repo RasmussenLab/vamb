@@ -39,11 +39,7 @@ However, despite avamb and CheckM2 being in different environments, snakemake wi
 
 ## Set up configuration with your data
 
-<<<<<<< HEAD
 To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.tsv`). Example files are included and described here for an example dataset of four samples: 
-=======
-To run the snakemake workflow you need to set up three files: the configuration file (`config.json`), a file with paths to your contig-files (`contigs.txt`) and a file with paths to your reads (`samples2data.txt`). Example files are included and described here for an example dataset of four samples:
->>>>>>> 89881a77c4d46d3e5f7986afe993f418f29ecea7
 
 `contigs.txt` contains paths to each of the per-sample assemblies:
 ```
