@@ -1,9 +1,6 @@
-from Bio import SeqIO
 import os
 import numpy as np
-from collections import OrderedDict
 import argparse
-from time import time
 import vamb
 import shutil
 from ordered_set import OrderedSet
@@ -23,19 +20,21 @@ def main(
     min_comp,
     max_cont,
 ):
-
     # {cluster:sample} dictionary for the manually drep clusters
     cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
     for sample in set(cluster_sample.values()):
-        try:
-            os.makedirs(os.path.join(path_run, drep_folder, sample))
-        except:
-            pass
+        os.makedirs(os.path.join(path_run, drep_folder, sample), exist_ok=True)
 
     # Given all the clusters that have no connection (no intersection) with any other cluster
     # mv them to the final bins folder that contains the final set of NC bins if they are NC
     nc_clusters_unchanged = mv_nc_not_r_nc_bins(
-        cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
+        cluster_not_r_contigs,
+        cluster_sample,
+        cluster_scores,
+        drep_folder,
+        bin_path,
+        min_comp,
+        max_cont,
     )
 
     # Given the checkM2 scores for all ripped bins, create a dictionary
@@ -54,7 +53,7 @@ def main(
         path_run,
         path_bins_ripped,
         min_comp,
-        max_cont
+        max_cont,
     )
 
     # for the bins that have been ripped because of meaningless edges and after the ripping present
@@ -90,7 +89,6 @@ def get_cluster_sample(cluster_contigs, bin_separator):
 
     for cluster, contigs in cluster_contigs.items():
         contig_i = next(iter(contigs))
-        # sample=contig_i.split('C')[0]
         sample = contig_i.split(bin_separator)[0]
 
         cluster_sample[cluster] = sample
@@ -98,15 +96,19 @@ def get_cluster_sample(cluster_contigs, bin_separator):
 
 
 def mv_nc_not_r_nc_bins(
-    cluster_not_r_contigs, cluster_sample, cluster_scores, drep_folder, bin_path, min_comp, max_cont
+    cluster_not_r_contigs,
+    cluster_sample,
+    cluster_scores,
+    drep_folder,
+    bin_path,
+    min_comp,
+    max_cont,
 ):
-
     """mv not ripped NC bins from bins folder to drep folder"""
     nc_clusters_unchanged = set()
     for cluster in cluster_not_r_contigs.keys():
         comp, cont = cluster_scores[cluster]
         if comp >= min_comp and cont <= max_cont:
-
             # src_bin=os.path.join(path_bins,cluster_sample[cluster],cluster+'.fna')
             src_bin = bin_path[cluster + ".fna"]
             trg_bin = os.path.join(
@@ -116,12 +118,7 @@ def mv_nc_not_r_nc_bins(
                 "Bin %s has no intersection with any other bin so it is directly moved from %s to %s"
                 % (cluster, src_bin, trg_bin)
             )
-#            os.symlink(
-#                src_bin, trg_bin
-#            )  # this should be changed to mv once we assure it works properly
-            shutil.move(
-                src_bin, trg_bin
-            )  
+            shutil.move(src_bin, trg_bin)
 
             nc_clusters_unchanged.add(cluster)
     return nc_clusters_unchanged
@@ -140,7 +137,7 @@ def mv_single_ripped_nc_bins(
     path_run,
     cluster_sample,
     min_comp,
-    max_cont
+    max_cont,
 ):
     """Mv nc bins that were ripped only because they had meaningless edges"""
     nc_clusters_ripped_single = set()
@@ -154,13 +151,11 @@ def mv_single_ripped_nc_bins(
 
         comp, cont = float(comp), float(cont)
         comp_, cont_ = cluster_score[cluster]
-        
+
         assert comp == comp_
         assert cont == cont_
-        
+
         if comp >= min_comp and cont <= max_cont:
-            # cluster = bin_name.replace('.fna','')
-            # src_bin=os.path.join(path_bins,cluster_sample[cluster],bin_name+'.fna')
             src_bin = bin_path[cluster + ".fna"]
 
             if os.path.isfile(src_bin):
@@ -171,9 +166,7 @@ def mv_single_ripped_nc_bins(
                     "Bin %s was ripped because of meaningless edges or pairing and afterwards no intersection was shared with any other bin so it is moved from %s to %s"
                     % (cluster, src_bin, trg_bin)
                 )
-                #os.symlink(src_bin, trg_bin)
                 shutil.move(src_bin, trg_bin)
-
 
                 nc_clusters_ripped_single.add(cluster)
     return nc_clusters_ripped_single
@@ -186,7 +179,6 @@ def get_cluster_r_scores(ripped_bins_scores_ar):
     cluster_ripped_scores_dict = dict()
 
     for row in ripped_bins_scores_ar:
-        # print(row)
         bin_A_bin_B_name, comp, cont = row[:3]
         if "--" in bin_A_bin_B_name:
             bin_A_name, bin_B_name = bin_A_bin_B_name.split("--")
@@ -212,14 +204,12 @@ def choose_best_ripped_bin_and_mv_if_nc(
     path_run,
     path_bins_ripped,
     min_comp,
-    max_cont
+    max_cont,
 ):
-
     nc_clusters_unchanged, nc_clusters_ripped = set(), set()
     clusters_already_processed = set()
     """So given 2 ripped bins that miss the interseciton, we have to choose who keeps the contigs"""
     for cluster_A_r, cluster_B_r in cluster_r_pairs:
-
         if (
             cluster_A_r in clusters_already_processed
             or cluster_B_r in clusters_already_processed
@@ -256,8 +246,6 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
                 shutil.move(src_bin, trg_bin)
-                #shutil.copy(src_bin, trg_bin)
-                #os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_A_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_A_name, src_bin))
             # and bin B not
@@ -269,15 +257,12 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
                 shutil.move(src_bin, trg_bin)
-                #shutil.copy(src_bin, trg_bin)
-                #os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_B_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_B_name, src_bin)
                 )
 
         if keeper == 1:
-            # print('%s keeps the intersecting contigs whereas %s does not '%(bin_B_name,bin_A_name))
             print(
                 "%s keeps the intersecting contigs whereas %s does not "
                 % (cluster_B_r, cluster_A_r)
@@ -291,8 +276,6 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_B_r], bin_B_name
                 )
                 shutil.move(src_bin, trg_bin)
-                #shutil.copy(src_bin, trg_bin)
-                #os.symlink(src_bin, trg_bin)
                 nc_clusters_unchanged.add(cluster_B_r)
                 print("%s keeps the contigs so src_path is %s " % (bin_B_name, src_bin))
             # and bin A not
@@ -304,8 +287,6 @@ def choose_best_ripped_bin_and_mv_if_nc(
                     path_run, drep_folder, cluster_sample[cluster_A_r], bin_A_name
                 )
                 shutil.move(src_bin, trg_bin)
-                #shutil.copy(src_bin, trg_bin)
-                #os.symlink(src_bin, trg_bin)
                 nc_clusters_ripped.add(cluster_A_r)
                 print(
                     "%s looses the contigs so src_path is %s " % (bin_A_name, src_bin)
@@ -359,7 +340,11 @@ if __name__ == "__main__":
 
     path_run = (
         opt.r
+<<<<<<< HEAD
     ) 
+=======
+    )  # '/Users/mbv396/aamb/vamb_aamb_on_cami2/oral/manual_drep/vamb_aamb_cpu_jgi_oral_310122_run_2_manual_drep_disjoint2_copy/'
+>>>>>>> 89881a77c4d46d3e5f7986afe993f418f29ecea7
 
     path_clusters = (
         opt.c
@@ -385,7 +370,11 @@ if __name__ == "__main__":
         path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
     )
 
+<<<<<<< HEAD
     drep_folder = opt.d  
+=======
+    drep_folder = opt.d  # 'drep_trial'
+>>>>>>> 89881a77c4d46d3e5f7986afe993f418f29ecea7
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)
@@ -404,6 +393,6 @@ if __name__ == "__main__":
         bin_path,
         path_bins_ripped,
         bin_separator,
-        opt.comp*100,
-        opt.cont*100,
+        opt.comp * 100,
+        opt.cont * 100,
     )

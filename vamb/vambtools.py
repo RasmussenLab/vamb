@@ -434,7 +434,7 @@ def write_bins(
         fastaio: bytes iterator containing FASTA file with all sequences
         maxbins: None or else raise an error if trying to make more bins than this [250]
         minsize: Minimum number of nucleotides in cluster to be output [0]
-        separator: string that separates the contig/cluster name from the sample ; i.e. sample_id_separator_contig_name/cluster_name 
+        separator: string that separates the contig/cluster name from the sample ; i.e. sample_id_separator_contig_name/cluster_name
     Output: None
     """
 
@@ -470,8 +470,6 @@ def write_bins(
         _os.mkdir(directory)
     except FileExistsError:
         pass
-    except:
-        raise
 
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
@@ -493,16 +491,14 @@ def write_bins(
 
         # Split bin files into sample dirs
         if binsample is not None:
-            bin_dir = _os.path.join(directory,binsample)
+            bin_dir = _os.path.join(directory, binsample)
             try:
                 _os.mkdir(bin_dir)
             except FileExistsError:
                 pass
-            except:
-                raise
         else:
             bin_dir = directory
-    
+
         # Print bin to file
         filename = _os.path.join(bin_dir, binname + ".fna")
 
@@ -566,10 +562,9 @@ def concatenate_fasta(
     """
     
     identifiers: set[str] = set()
-    for (inpathno, inpath) in enumerate(inpaths):
+    for inpathno, inpath in enumerate(inpaths):
         try:
             with Reader(inpath) as infile:
-
                 # If we rename, seq identifiers only have to be unique for each sample
                 if rename:
                     identifiers.clear()

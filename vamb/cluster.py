@@ -285,7 +285,7 @@ class ClusterGenerator:
             # if not, clustered points have been removed, so we can just take next seed
             if self.cuda:
                 self.seed = (self.seed + 1) % len(self.matrix)
-                while self.kept_mask[self.seed] == False:
+                while not self.kept_mask[self.seed]:
                     self.seed = (self.seed + 1) % len(self.matrix)
             else:
                 self.seed = (self.seed + 1) % len(self.matrix)
@@ -452,7 +452,8 @@ def _smaller_indices(
     tensor: _Tensor, kept_mask: _Tensor, threshold: float, cuda: bool
 ) -> _Tensor:
     """Get all indices where the tensor is smaller than the threshold.
-    Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190"""
+    Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190
+    """
 
     # If it's on GPU, we remove the already clustered points at this step.
     if cuda:

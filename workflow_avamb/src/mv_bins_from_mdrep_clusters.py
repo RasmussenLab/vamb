@@ -17,7 +17,6 @@ def main(
     min_comp: float = 0.9,
     max_cont: float = 0.05,
 ):
-
     cluster_sample = get_cluster_sample(cluster_contigs, bin_separator)
     nc_cluster_scores = get_nc_cluster_scores(
         cluster_scores, cluster_sample, min_comp, max_cont
@@ -69,7 +68,6 @@ def create_nc_sample_folders(
 ):
     nc_samples: set[str] = set()
     for cluster in cluster_scores.keys():
-
         sample = cluster_sample[cluster]
         nc_samples.add(sample)
 
@@ -86,14 +84,11 @@ def write_nc_bins_from_mdrep_clusters(
     path_nc_bins_folder: str,
     path_bins_folder: str,
 ):
-
     for cluster in cluster_scores.keys():
         sample = cluster_sample[cluster]
         src_bin = os.path.join(path_bins_folder, sample, cluster + ".fna")
         trg_bin = os.path.join(path_nc_bins_folder, sample, cluster + ".fna")
         shutil.move(src_bin, trg_bin)
-        #shutil.copy(src_bin, trg_bin)
-        #os.symlink(src_bin, trg_bin)
 
 
 def write_quality_report(

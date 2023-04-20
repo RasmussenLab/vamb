@@ -12,7 +12,6 @@ from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence
-from collections.abc import Iterator
 from pathlib import Path
 import shutil
 
@@ -58,8 +57,9 @@ class Abundance:
             raise ValueError(
                 f"At least one BAM file reference name hash to {refhash.hex()}, "
                 f"expected {target_refhash.hex()}. "
-                "Make sure all BAM and FASTA headers are identical "
-                "and in the same order."
+                "Make sure all BAM and FASTA identifiers are identical "
+                "and in the same order. "
+                "Note that the identifier is the header before any whitespace."
             )
 
     def save(self, io: Union[Path, IO[bytes]]):
@@ -90,7 +90,7 @@ class Abundance:
     @classmethod
     def from_files(
         cls: type[A],
-        paths: list[str],
+        paths: list[Path],
         cache_directory: Optional[Path],
         comp_metadata: CompositionMetaData,
         verify_refhash: bool,
@@ -117,7 +117,7 @@ class Abundance:
             if not _os.path.isfile(path):
                 raise FileNotFoundError(path)
 
-            if not pycoverm.is_bam_sorted(path):
+            if not pycoverm.is_bam_sorted(str(path)):
                 raise ValueError(f"Path {path} is not sorted by reference.")
 
         if nthreads < 1:
@@ -138,7 +138,7 @@ class Abundance:
                 comp_metadata.refhash if verify_refhash else None,
                 comp_metadata.mask,
             )
-            return cls(matrix, paths, minid, refhash)
+            return cls(matrix, [str(p) for p in paths], minid, refhash)
         # Else, we load it in chunks, then assemble afterwards
         else:
             if cache_directory is None:
@@ -157,7 +157,7 @@ class Abundance:
     @classmethod
     def chunkwise_loading(
         cls: type[A],
-        paths: list[str],
+        paths: list[Path],
         cache_directory: Path,
         nthreads: int,
         minid: float,
@@ -176,7 +176,7 @@ class Abundance:
 
         # Load from BAM and store them chunkwise
         refhash = None
-        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+        for filename, (chunkstart, chunkstop) in zip(filenames, chunks):
             (matrix, refhash) = cls.run_pycoverm(
                 paths[chunkstart:chunkstop],
                 minid,
@@ -187,23 +187,23 @@ class Abundance:
 
         # Initialize matrix, the load them chunkwise. Delete the temp files when done
         matrix = _np.empty((mask.sum(), len(paths)), dtype=_np.float32)
-        for (filename, (chunkstart, chunkstop)) in zip(filenames, chunks):
+        for filename, (chunkstart, chunkstop) in zip(filenames, chunks):
             matrix[:, chunkstart:chunkstop] = vambtools.read_npz(filename)
 
         shutil.rmtree(cache_directory)
 
         assert refhash is not None
-        return cls(matrix, paths, minid, refhash)
+        return cls(matrix, [str(p) for p in paths], minid, refhash)
 
     @staticmethod
     def run_pycoverm(
-        paths: list[str],
+        paths: list[Path],
         minid: float,
         target_refhash: Optional[bytes],
         mask: _np.ndarray,
     ) -> tuple[_np.ndarray, bytes]:
         (headers, coverage) = pycoverm.get_coverages_from_bam(
-            paths,
+            [str(p) for p in paths],
             threads=len(paths),
             min_identity=minid,
             # Note: pycoverm's trim_upper=0.1 is same as CoverM trim-upper 90.

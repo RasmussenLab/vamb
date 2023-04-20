@@ -1,4 +1,3 @@
-from sys import stdout
 import unittest
 import numpy as np
 import torch

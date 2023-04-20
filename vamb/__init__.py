@@ -19,7 +19,7 @@ General workflow:
 7) Split bins using vamb.vambtools
 """
 
-__version__ = (4, 0, 2, 'DEV')
+__version__ = (4, 0, 2, "DEV")
 
 from . import vambtools
 from . import parsebam
@@ -28,3 +28,13 @@ from . import cluster
 from . import benchmark
 from . import encode
 from . import aamb_encode
+
+__all__ = [
+    "vambtools",
+    "parsebam",
+    "parsecontigs",
+    "cluster",
+    "benchmark",
+    "encode",
+    "aamb_encode",
+]

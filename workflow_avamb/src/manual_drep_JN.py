@@ -124,7 +124,7 @@ def load_binnings(
     Return bin length and bins, each represented as a set of ContigId
     """
     id_len_of_contig_name: dict[str, tuple[ContigId, int]] = dict()
-    for (index, (name, length)) in enumerate(zip(contig_names, lengths)):
+    for index, (name, length) in enumerate(zip(contig_names, lengths)):
         id_len_of_contig_name[name] = (ContigId(index), length)
 
     # Load binnings
@@ -138,8 +138,7 @@ def load_binnings(
             clusters = vamb.vambtools.read_clusters(file)
             clusters_filtered = filterclusters(clusters, lengthof, min_bin_size)
             # filter by clusters larger than 200kbs
-            for (bin_name, contigs) in clusters_filtered.items():
-
+            for bin_name, contigs in clusters_filtered.items():
                 bin_name += ".fna"
                 # None is a valid value, so we use -1 as sentinel for missing
                 bin = bin_by_name.get(bin_name, -1)
@@ -207,7 +206,7 @@ def dereplicate(
 def get_binsof(union_bins: Iterable[Iterable[ContigId]]) -> dict[ContigId, list[BinId]]:
     "Makes a dict from contig -> list of bins the contig is present in, if in multiple bins"
     binsof: dict[ContigId, Union[BinId, list[BinId]]] = dict()
-    for (bin_int, contigs) in enumerate(union_bins):
+    for bin_int, contigs in enumerate(union_bins):
         bin = BinId(bin_int)
         for contig in contigs:
             existing = binsof.get(contig)
@@ -224,13 +223,14 @@ def get_binsof(union_bins: Iterable[Iterable[ContigId]]) -> dict[ContigId, list[
 def bin_score(completeness: float, contamination: float) -> float:
     return completeness - 5 * contamination
 
+
 def get_overlapping_bin_pairs(
     binsof: Mapping[ContigId, list[BinId]], qualities: Sequence[tuple[float, float]]
 ) -> Sequence[tuple[BinId, BinId]]:
     "Get a list of pairs of bins that share at least one contig"
     pairs: set[tuple[BinId, BinId]] = set()
     for overlapping_bins in binsof.values():
-        for (a, b) in itertools.combinations(overlapping_bins, r=2):
+        for a, b in itertools.combinations(overlapping_bins, r=2):
             # Order them so we don't have (a, b) and (b, a) as distinct pairs
             if a > b:
                 (a, b) = (b, a)
@@ -240,7 +240,7 @@ def get_overlapping_bin_pairs(
     # If they tie, then use lexographic order (a, b) we added them
     # in above
     result: list[tuple[BinId, BinId]] = []
-    for (a, b) in pairs:
+    for a, b in pairs:
         score_a = bin_score(*qualities[a])
         score_b = bin_score(*qualities[b])
         if score_a > score_b:
@@ -260,7 +260,7 @@ def compute_to_remove(
 ) -> set[BinId]:
     "Create a list of bins to remove because they overlap with another bin"
     result: set[BinId] = set()
-    for (bin_a, bin_b) in overlapping_pairs:
+    for bin_a, bin_b in overlapping_pairs:
         if bin_a in result or bin_b in result:
             continue
 

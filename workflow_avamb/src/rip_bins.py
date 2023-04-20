@@ -19,7 +19,6 @@ def main(
     path_ripped: str,
     path_clusters_not_ripped: str,
 ) -> dict[str, str]:
-
     cluster_contigs_original = cluster_contigs.copy()
 
     contig_length = get_contig_length(contig_names, contig_lengths)
@@ -47,9 +46,12 @@ def main(
         graph_clusters, cluster_contigs, bin_path, path_ripped
     )
 
-
-    clusters_changed_but_not_intersecting_contigs_total = clusters_changed_but_not_intersecting_contigs.copy()
-    clusters_changed_but_not_intersecting_contigs_total.update(clusters_changed_but_not_intersecting_contigs_2)
+    clusters_changed_but_not_intersecting_contigs_total = (
+        clusters_changed_but_not_intersecting_contigs.copy()
+    )
+    clusters_changed_but_not_intersecting_contigs_total.update(
+        clusters_changed_but_not_intersecting_contigs_2
+    )
 
     (
         bin_path,
@@ -88,7 +90,7 @@ def get_cluster_length(
     cluster_contigs: dict[str, set[str]], contig_length: dict[str, int]
 ) -> OrderedDict[str, int]:
     cluster_length: OrderedDict[str, int] = OrderedDict()
-    for (cluster_name, contigs) in cluster_contigs.items():
+    for cluster_name, contigs in cluster_contigs.items():
         cluster_length[cluster_name] = 0
         for contig in contigs:
             cluster_length[cluster_name] += contig_length[contig]
@@ -101,7 +103,8 @@ def get_graph_clusters(
     cluster_length: OrderedDict[str, int],
 ):
     """Generate a graph where each cluster is a node and each edge connecting 2 nodes is
-    created if clusters share some contigs, edges are weighted by the intersection length"""
+    created if clusters share some contigs, edges are weighted by the intersection length
+    """
     graph_clusters = nx.Graph()
     for i, cluster_i in enumerate(cluster_contigs.keys()):
         for j, cluster_j in enumerate(cluster_contigs.keys()):
@@ -240,7 +243,8 @@ def make_all_components_pair(
 ):
     """Iterate over all graph components that contain more than 2 nodes/clusters and break them down to
     2 nodes/clusters components according the following criteria:
-        - Remove the weaker edge by removing the intersecting contigs from the larger cluster"""
+        - Remove the weaker edge by removing the intersecting contigs from the larger cluster
+    """
 
     components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
@@ -257,7 +261,7 @@ def make_all_components_pair(
                             cl_i, cl_j
                         )["weight"]
                         # if the weight as key in the dict and is mapping to different clusters (nodes)
-                        # then add a insignificant value to the weight so we can add the weight with 
+                        # then add a insignificant value to the weight so we can add the weight with
                         # different clusters (nodes)
                         if (
                             cl_i_cl_j_edge_weight in weight_edges.keys()
@@ -265,21 +269,22 @@ def make_all_components_pair(
                         ):
                             cl_i_cl_j_edge_weight += 1 * 10**-30
                         weight_edges[cl_i_cl_j_edge_weight] = {cl_i, cl_j}
-                        
-
-
-            #dsc_sorted_weights: list[float] = [min(weight_edges.keys())]
 
             dsc_sorted_weights: list[float] = sorted(list(weight_edges.keys()))
-            
+
             i = 0
             component_len = len(component)
-             
-            print(dsc_sorted_weights,len(dsc_sorted_weights), len(component),weight_edges.keys())
+
+            print(
+                dsc_sorted_weights,
+                len(dsc_sorted_weights),
+                len(component),
+                weight_edges.keys(),
+            )
             while component_len > 2:
                 weight_i = dsc_sorted_weights[i]
                 cl_i, cl_j = weight_edges[weight_i]
-                print(weight_i,cl_i, cl_j)
+                print(weight_i, cl_i, cl_j)
                 cluster_updated = move_intersection_to_smaller_cluster(
                     graph_clusters,
                     cl_i,
@@ -300,7 +305,6 @@ def make_all_components_pair(
                 )
 
                 i += 1
-            
 
     components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
@@ -446,10 +450,10 @@ if __name__ == "__main__":
 
     clusters_path = (
         opt.ci
-    )  #  os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_clusters.tsv')
+    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_clusters.tsv')
     clusters_not_ripped_path = (
         opt.co
-    )  #   os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_not_ripped_clusters.tsv')
+    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_85_10_not_ripped_clusters.tsv')
 
     with open(clusters_path) as file:
         cluster_contigs = vamb.vambtools.read_clusters(file)

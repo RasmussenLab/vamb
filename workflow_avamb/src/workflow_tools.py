@@ -1,9 +1,6 @@
 import numpy as np
 import os
-import json
-from typing import cast, Optional
-import vamb
-import shutil
+from typing import cast
 
 
 def get_cluster_score_bin_path(
@@ -40,7 +37,7 @@ def get_cluster_score_bin_path(
 
 def update_cluster_score_bin_path(
     path_checkm_ripped: str, cluster_score: dict[str, tuple[float, float]]
-) -> dict[str, tuple[float,float]] :
+) -> dict[str, tuple[float, float]]:
     c_com_con = np.loadtxt(
         path_checkm_ripped,
         delimiter="\t",
