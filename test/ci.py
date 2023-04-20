@@ -26,7 +26,7 @@ def changelog_version(path):
     with open(path) as file:
         next(file)  # header
         textline = next(filter(None, map(str.strip, file)))
-    regex = re.compile(r"## v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z]+)?)")
+    regex = re.compile(r"## v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z]+)?)?")
     m = regex.search(textline)
     if m is None:
         raise ValueError("Could not find version in first non-header line of CHANGELOG")

@@ -294,7 +294,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bins_extension", type=str, default=".fna", help="Extension of the bins  "
     )
-    parser.add_argument("--min_bin_size", type=int, help="Min bin length to be considered for dereplication ")
+    parser.add_argument(
+        "--min_bin_size",
+        type=int,
+        help="Min bin length to be considered for dereplication ",
+    )
 
     opt = parser.parse_args()
     args = vars(parser.parse_args())
@@ -311,5 +315,5 @@ if __name__ == "__main__":
         min_comp=opt.comp,
         max_cont=opt.cont,
         bins_extension=opt.bins_extension,
-        min_bin_size=opt.min_bin_size
+        min_bin_size=opt.min_bin_size,
     )
