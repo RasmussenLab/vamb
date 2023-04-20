@@ -340,11 +340,7 @@ if __name__ == "__main__":
 
     path_run = (
         opt.r
-<<<<<<< HEAD
     ) 
-=======
-    )  # '/Users/mbv396/aamb/vamb_aamb_on_cami2/oral/manual_drep/vamb_aamb_cpu_jgi_oral_310122_run_2_manual_drep_disjoint2_copy/'
->>>>>>> 89881a77c4d46d3e5f7986afe993f418f29ecea7
 
     path_clusters = (
         opt.c
@@ -370,11 +366,7 @@ if __name__ == "__main__":
         path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
     )
 
-<<<<<<< HEAD
     drep_folder = opt.d  
-=======
-    drep_folder = opt.d  # 'drep_trial'
->>>>>>> 89881a77c4d46d3e5f7986afe993f418f29ecea7
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)
