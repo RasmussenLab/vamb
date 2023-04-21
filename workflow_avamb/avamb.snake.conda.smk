@@ -664,7 +664,7 @@ rule aggregate_nc_bins_avamb:
 
     shell:
         """
-	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
+	    python {params.path} -r {OUTDIR} --c {input.drep_clusters} \
         --cnr {input.drep_clusters_not_ripped} --sbr {OUTDIR}/tmp/ripped_bins/checkm2_out/quality_report.tsv \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
         --br {OUTDIR}/tmp/ripped_bins -d Final_bins --bin_separator C \
