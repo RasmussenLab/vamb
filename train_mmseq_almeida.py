@@ -43,12 +43,13 @@ vae = vamb.semisupervised_encode.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set
 with open(f'indices_mmseq_genus_{DATASET}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs)
-dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], classes_order)
-dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], classes_order)
-
+dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs, lengths, batchsize=256)
+dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order, batchsize=256)
+dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order, batchsize=256)
 shapes = (rpkms.shape[1], 103, 1, len(set(classes_order)))
-dataloader = vamb.semisupervised_encode.make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader_labels, shapes)
+print('shapes', shapes)
+dataloader = vamb.semisupervised_encode.make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader_labels, shapes, batchsize=256)
+
 with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
     vae.trainmodel(

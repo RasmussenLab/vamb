@@ -23,6 +23,37 @@ if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
 
+class OneHotDataset(_TensorDataset):
+    def __init__(self, *tensors):
+        self.tensors = tensors
+        self.num_categories = len(set(tensors[0]))
+        
+    def __len__(self):
+        return self.tensors[0].size(0)
+    
+    def __getitem__(self, index):
+        return tuple(tensor[index] for tensor in self.tensors)
+    
+    def collate_fn(self, batch):
+        return F.one_hot(_torch.as_tensor(batch), num_classes=self.num_categories).float()
+
+
+class OneHotDatasetJoint(_TensorDataset):
+    def __init__(self, *tensors):
+        self.tensors = tensors
+        self.num_categories = len(set(tensors[3]))
+        
+    def __len__(self):
+        return self.tensors[0].size(0)
+    
+    def __getitem__(self, index):
+        return tuple(tensor[index] for tensor in self.tensors)
+    
+    def collate_fn(self, batch):
+        a, b, c, d = batch
+        return a, b, c, F.one_hot(_torch.as_tensor(d), num_classes=self.num_categories).float()
+
+
 def kld_gauss(p_mu, p_std, q_mu, q_std):
     p = _torch.distributions.normal.Normal(p_mu, p_std)
     q = _torch.distributions.normal.Normal(q_mu, q_std)
@@ -40,8 +71,7 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
 def make_dataloader_concat(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
     labels_int = _np.unique(labels, return_inverse=True)[1]
-    one_hot_labels = F.one_hot(_torch.as_tensor(labels_int)).float()
-    dataset = _TensorDataset(depthstensor, tnftensor, weightstensor, one_hot_labels)
+    dataset = OneHotDatasetJoint(depthstensor, tnftensor, weightstensor, labels_int)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda)
 
@@ -51,10 +81,7 @@ def make_dataloader_concat(rpkm, tnf, lengths, labels, batchsize=256, destroy=Fa
 def make_dataloader_labels(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
     labels_int = _np.unique(labels, return_inverse=True)[1]
-    one_hot_labels = F.one_hot(_torch.as_tensor(labels_int)).float()
-    if one_hot_labels.shape[1] < 105:
-        one_hot_labels = F.pad(one_hot_labels, (1, 105 - one_hot_labels.shape[1]), "constant", 0) # HACK, for when nlabels < 103
-    dataset = _TensorDataset(one_hot_labels)
+    dataset = OneHotDataset(labels_int)
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda)
 
@@ -412,7 +439,7 @@ class VAEConcat(_encode.VAE):
                                       num_workers=1,
                                       pin_memory=data_loader.pin_memory)
 
-        depths_array, tnf_array, labels_array = data_loader.dataset.tensors
+        depths_array, _, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -422,7 +449,7 @@ class VAEConcat(_encode.VAE):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, labels in new_data_loader:
+            for depths, tnf, weights, labels in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
@@ -430,7 +457,7 @@ class VAEConcat(_encode.VAE):
                     labels = labels.cuda()
 
                 # Evaluate
-                out_depths, out_tnf, out_labels, mu, logsigma = self(depths, tnf, labels)
+                _, _, _, mu, _ = self(depths, tnf, labels)
 
                 if self.usecuda:
                     mu = mu.cpu()
@@ -636,13 +663,13 @@ class VAEVAE(object):
         Input: Path or binary opened filehandle
         Output: None
         """
-        state = {'nsamples': self.nsamples,
-                 'nlabels': self.nlabels,
-                 'alpha': self.alpha,
-                 'beta': self.beta,
-                 'dropout': self.dropout,
-                 'nhiddens': self.nhiddens,
-                 'nlatent': self.nlatent,
+        state = {'nsamples': self.VAEVamb.nsamples,
+                 'nlabels': self.VAELabels.nlabels,
+                 'alpha': self.VAEVamb.alpha,
+                 'beta': self.VAEVamb.beta,
+                 'dropout': self.VAEVamb.dropout,
+                 'nhiddens': self.VAEVamb.nhiddens,
+                 'nlatent': self.VAEVamb.nlatent,
                  'state_VAEVamb': self.VAEVamb.state_dict(),
                  'state_VAELabels': self.VAELabels.state_dict(),
                  'state_VAEJoint': self.VAEJoint.state_dict(),
