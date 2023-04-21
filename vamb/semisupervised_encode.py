@@ -7,6 +7,7 @@ import numpy as _np
 import torch as _torch
 import torch.nn.functional as F
 _torch.manual_seed(0)
+from functools import partial
 
 from math import log as _log
 
@@ -23,35 +24,16 @@ if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
 
-class OneHotDataset(_TensorDataset):
-    def __init__(self, *tensors):
-        self.tensors = tensors
-        self.num_categories = len(set(tensors[0]))
-        
-    def __len__(self):
-        return self.tensors[0].size(0)
-    
-    def __getitem__(self, index):
-        return tuple(tensor[index] for tensor in self.tensors)
-    
-    def collate_fn(self, batch):
-        return F.one_hot(_torch.as_tensor(batch), num_classes=self.num_categories).float()
+def collate_fn_labels(num_categories, batch):
+    return F.one_hot(_torch.as_tensor(batch), num_classes=max(num_categories, 105)).squeeze(1).float()
 
 
-class OneHotDatasetJoint(_TensorDataset):
-    def __init__(self, *tensors):
-        self.tensors = tensors
-        self.num_categories = len(set(tensors[3]))
-        
-    def __len__(self):
-        return self.tensors[0].size(0)
-    
-    def __getitem__(self, index):
-        return tuple(tensor[index] for tensor in self.tensors)
-    
-    def collate_fn(self, batch):
-        a, b, c, d = batch
-        return a, b, c, F.one_hot(_torch.as_tensor(d), num_classes=self.num_categories).float()
+def collate_fn_concat(num_categories, batch):
+        a = _torch.stack([i[0] for i in batch])
+        b = _torch.stack([i[1] for i in batch])
+        c = _torch.stack([i[2] for i in batch])
+        d = [i[3] for i in batch]
+        return a, b, c, F.one_hot(_torch.as_tensor(d), num_classes=max(num_categories, 105)).squeeze(1).float()
 
 
 def kld_gauss(p_mu, p_std, q_mu, q_std):
@@ -71,19 +53,18 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
 def make_dataloader_concat(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
     labels_int = _np.unique(labels, return_inverse=True)[1]
-    dataset = OneHotDatasetJoint(depthstensor, tnftensor, weightstensor, labels_int)
+    dataset = _TensorDataset(depthstensor, tnftensor, weightstensor, _torch.from_numpy(labels_int))
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
-                             shuffle=True, num_workers=n_workers, pin_memory=cuda)
-
+                             shuffle=True, num_workers=n_workers, pin_memory=cuda, collate_fn=partial(collate_fn_concat, len(set(labels_int))))
     return dataloader, mask
 
 
 def make_dataloader_labels(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
     labels_int = _np.unique(labels, return_inverse=True)[1]
-    dataset = OneHotDataset(labels_int)
+    dataset = _TensorDataset(_torch.from_numpy(labels_int))
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
-                             shuffle=True, num_workers=n_workers, pin_memory=cuda)
+                             shuffle=True, num_workers=n_workers, pin_memory=cuda, collate_fn=partial(collate_fn_labels, len(set(labels_int))))
 
     return dataloader, mask
 
@@ -130,7 +111,7 @@ def make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader
         d_u_all = _torch.cat([d_u_all, d_u])
         t_u_all = _torch.cat([t_u_all, t_u])
         w_u_all = _torch.cat([w_u_all, w_u])
-        l_u_all = _torch.cat([l_u_all, l_u[0]])
+        l_u_all = _torch.cat([l_u_all, l_u])
 
     dataset_all = _TensorDataset(d_all[1:, :], t_all[1:, :], w_all[1:, :], l_all[1:, :], d_u_all[1:, :], t_u_all[1:, :], w_u_all[1:, :], l_u_all[1:, :])
     dataloader_all = _DataLoader(dataset=dataset_all, batch_size=batchsize, drop_last=True,
