@@ -66,12 +66,12 @@ LATENT_PATH = f'latent_trained_semisupervised_mmseq_genus_vamb_{DATASET}.npy'
 print('Saving latent space: Vamb')
 np.save(LATENT_PATH, latent)
 
-latent = vae.VAELabels.encode(dataloader_labels)
-LATENT_PATH = f'latent_trained_semisupervised_mmseq_genus_labels_{DATASET}.npy'
-print('Saving latent space: Labels')
-np.save(LATENT_PATH, latent)
-
 latent = vae.VAEJoint.encode(dataloader_joint)
 LATENT_PATH = f'latent_trained_semisupervised_mmseq_genus_both_{DATASET}.npy'
 print('Saving latent space: Both')
+np.save(LATENT_PATH, latent)
+
+latent = vae.VAELabels.encode(dataloader_labels)
+LATENT_PATH = f'latent_trained_semisupervised_mmseq_genus_labels_{DATASET}.npy'
+print('Saving latent space: Labels')
 np.save(LATENT_PATH, latent)

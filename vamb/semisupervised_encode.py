@@ -105,7 +105,7 @@ def make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader
         dataloader_joint.dataset.tensors[3][indices_sup], 
     )
     dataloader_all = _DataLoader(dataset=dataset_all, batch_size=batchsize, drop_last=True,
-                        shuffle=True, num_workers=dataloader_joint.num_workers, pin_memory=cuda, collate_fn=partial(collate_fn_semisupervised, n_labels))
+                        shuffle=False, num_workers=dataloader_joint.num_workers, pin_memory=cuda, collate_fn=partial(collate_fn_semisupervised, n_labels))
     return dataloader_all
 
 
@@ -555,8 +555,8 @@ class VAEVAE(object):
             for k, v in tensors_dict.items():
                 metrics_dict[k] += v.data.item()
 
-        metrics_dict['correct_labels_joint'] /= 256
-        metrics_dict['correct_labels_labels'] /= 256
+        metrics_dict['correct_labels_joint'] /= data_loader.batch_size
+        metrics_dict['correct_labels_labels'] /= data_loader.batch_size
         if logfile is not None:
             print(', '.join([k + f' {v/len(data_loader):.6f}' for k, v in metrics_dict.items()]), file=logfile)
             logfile.flush()
@@ -710,9 +710,9 @@ def make_PoE_Vamb(expert1, expert2):
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
             logsigma = sigma.log()
 
-            latent = expert1.reparameterize(mu, logsigma)
+            latent = expert2.reparameterize(mu, logsigma)
 
-            depths_out, tnf_out = self._decode(latent) # decoder weights are in THIS class
+            depths_out, tnf_out = expert2._decode(latent) # decoder weights are THIS class
             return depths_out, tnf_out, mu, logsigma
         
         forward = partialmethod(forward_poe_vamb, expert1=expert1, expert2=expert2)
@@ -731,9 +731,9 @@ def make_PoE_Labels(expert1, expert2):
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
             logsigma = sigma.log()
 
-            latent = expert1.reparameterize(mu, logsigma)
+            latent = expert2.reparameterize(mu, logsigma)
 
-            labels_out = self._decode(latent) # decoder weights are in THIS class
+            labels_out = expert2._decode(latent)
             return labels_out, mu, logsigma
         
         forward = partialmethod(forward_poe_labels, expert1=expert1, expert2=expert2)
@@ -754,13 +754,13 @@ def make_PoE_Joint(expert1, expert2):
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
             logsigma = sigma.log()
 
-            latent = expert1.reparameterize(mu, logsigma)
+            latent = expert2.reparameterize(mu, logsigma)
 
             depths_out, tnf_out = expert1._decode(latent)
             labels_out = expert2._decode(latent)
 
             return depths_out, tnf_out, labels_out, mu, logsigma
-        
+
         forward = partialmethod(forward_poe_joint, expert1=expert1, expert2=expert2)
 
     return PoE_Joint
@@ -782,7 +782,7 @@ class SVAE(VAEVAE):
                  beta=beta, dropout=dropout, cuda=cuda)
         self.VAELabels = make_PoE_Labels(self._VAELabels, self._VAELabels_joint)(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, 0, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
 
     def save(self, filehandle):
@@ -854,3 +854,75 @@ class SVAE(VAEVAE):
             vae.VAELabels.eval()
 
         return vae
+    
+    def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
+                   batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
+        """Train the autoencoder from depths array and tnf array.
+        Inputs:
+            dataloader: DataLoader made by make_dataloader
+            nepochs: Train for this many epochs before encoding [500]
+            lrate: Starting learning rate for the optimizer [0.001]
+            batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
+            logfile: Print status updates to this file if not None [None]
+            modelfile: Save models to this file if not None [None]
+        Output: None
+        """
+
+        if lrate < 0:
+            raise ValueError('Learning rate must be positive, not {}'.format(lrate))
+
+        if nepochs < 1:
+            raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
+
+        if batchsteps is None:
+            batchsteps_set = set()
+        else:
+            # First collect to list in order to allow all element types, then check that
+            # they are integers
+            batchsteps = list(batchsteps)
+            if not all(isinstance(i, int) for i in batchsteps):
+                raise ValueError('All elements of batchsteps must be integers')
+            if max(batchsteps, default=0) >= nepochs:
+                raise ValueError('Max batchsteps must not equal or exceed nepochs')
+            last_batchsize = dataloader.batch_size * 2**len(batchsteps)
+            if len(dataloader.dataset) < last_batchsize:
+                raise ValueError('Last batch size exceeds dataset length')
+            batchsteps_set = set(batchsteps)
+
+        # Get number of features
+        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
+        optimizer = _Adam(
+            list(self._VAEVamb.parameters()) + \
+            list(self._VAEVamb_joint.parameters()) + \
+            list(self._VAELabels.parameters()) + \
+            list(self._VAELabels_joint.parameters()), lr=lrate)
+
+        if logfile is not None:
+            print('\tNetwork properties:', file=logfile)
+            print('\tCUDA:', self.VAEVamb.usecuda, file=logfile)
+            print('\tAlpha:', self.VAEVamb.alpha, file=logfile)
+            print('\tBeta:', self.VAEVamb.beta, file=logfile)
+            print('\tDropout:', self.VAEVamb.dropout, file=logfile)
+            print('\tN hidden:', ', '.join(map(str, self.VAEVamb.nhiddens)), file=logfile)
+            print('\tN latent:', self.VAEVamb.nlatent, file=logfile)
+            print('\n\tTraining properties:', file=logfile)
+            print('\tN epochs:', nepochs, file=logfile)
+            print('\tStarting batch size:', dataloader.batch_size, file=logfile)
+            batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
+            print('\tBatchsteps:', batchsteps_string, file=logfile)
+            print('\tLearning rate:', lrate, file=logfile)
+            print('\tN sequences:', ncontigs, file=logfile)
+            print('\tN samples:', nsamples, file=logfile, end='\n\n')
+
+        # Train
+        for epoch in range(nepochs):
+            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps_set, logfile)
+
+        # Save weights - Lord forgive me, for I have sinned when catching all exceptions
+        if modelfile is not None:
+            try:
+                self.save(modelfile)
+            except:
+                pass
+
+        return None
