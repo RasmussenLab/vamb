@@ -176,7 +176,8 @@ class VAELabels(_encode.VAE):
                                       shuffle=True,
                                       drop_last=True,
                                       num_workers=data_loader.num_workers,
-                                      pin_memory=data_loader.pin_memory)
+                                      pin_memory=data_loader.pin_memory,
+                                      collate_fn=data_loader.collate_fn)
 
         for labels_in in data_loader:
             labels_in = labels_in[0]
@@ -350,7 +351,8 @@ class VAEConcat(_encode.VAE):
                                       shuffle=True,
                                       drop_last=True,
                                       num_workers=data_loader.num_workers,
-                                      pin_memory=data_loader.pin_memory)
+                                      pin_memory=data_loader.pin_memory,
+                                      collate_fn=data_loader.collate_fn)
 
         for depths_in, tnf_in, weights, labels_in in data_loader:
             depths_in.requires_grad = True
@@ -503,8 +505,10 @@ class VAEVAE(object):
                                       shuffle=True,
                                       drop_last=True,
                                       num_workers=data_loader.num_workers,
-                                      pin_memory=data_loader.pin_memory)
-
+                                      pin_memory=data_loader.pin_memory,
+                                      collate_fn=data_loader.collate_fn,
+                                      )
+            
         for depths_in_sup, tnf_in_sup, weights_in_sup, labels_in_sup, depths_in_unsup, tnf_in_unsup, weights_in_unsup, labels_in_unsup in data_loader:
             depths_in_sup.requires_grad = True
             tnf_in_sup.requires_grad = True
@@ -538,14 +542,17 @@ class VAEVAE(object):
             tensors_dict['loss_labels'], tensors_dict['ce_labels_labels'], tensors_dict['kld_labels'], tensors_dict['correct_labels_labels'] = \
                 self.VAELabels.calc_loss(labels_in_unsup, labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup)
             
-            tensors_dict['loss_joint'], tensors_dict['ce_joint'], tensors_dict['sse_joint'], tensors_dict['ce_labels_joint'], \
-                tensors_dict['kld_vamb_joint'], tensors_dict['kld_labels_joint'], tensors_dict['correct_labels_joint'] = self.calc_loss_joint(
-                    depths_in_sup, depths_out_sup, tnf_in_sup, tnf_out_sup, labels_in_sup, labels_out_sup, 
+            losses_joint = self.calc_loss_joint(
+                    depths_in_sup, depths_out_sup, tnf_in_sup, 
+                    tnf_out_sup, labels_in_sup, labels_out_sup,
                     mu_sup, logsigma_sup, 
                     mu_vamb_unsup, logsigma_vamb_unsup,
                     mu_labels_unsup, logsigma_labels_unsup,
                     weights_in_sup,
                 )
+            
+            tensors_dict['loss_joint'], tensors_dict['ce_joint'], tensors_dict['sse_joint'], tensors_dict['ce_labels_joint'], \
+                tensors_dict['kld_vamb_joint'], tensors_dict['kld_labels_joint'], tensors_dict['correct_labels_joint'] = losses_joint
 
             tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels']
 
@@ -708,14 +715,18 @@ def make_PoE_Vamb(expert1, expert2):
             mu2, logsigma2 = expert2._encode(tensor)
 
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = sigma.log()
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
 
             latent = expert2.reparameterize(mu, logsigma)
 
             depths_out, tnf_out = expert2._decode(latent) # decoder weights are THIS class
             return depths_out, tnf_out, mu, logsigma
         
+        def _decode_poe(self, tensor, expert2=None):
+            return expert2._decode(tensor)
+
         forward = partialmethod(forward_poe_vamb, expert1=expert1, expert2=expert2)
+        _decode = partialmethod(_decode_poe, expert2=expert2)
     return PoE_Vamb
 
 
@@ -729,14 +740,18 @@ def make_PoE_Labels(expert1, expert2):
             mu2, logsigma2 = expert2._encode(labels)
 
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = sigma.log()
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
 
             latent = expert2.reparameterize(mu, logsigma)
 
             labels_out = expert2._decode(latent)
             return labels_out, mu, logsigma
         
+        def _decode_poe(self, tensor, expert2=None):
+            return expert2._decode(tensor)
+
         forward = partialmethod(forward_poe_labels, expert1=expert1, expert2=expert2)
+        _decode = partialmethod(_decode_poe, expert2=expert2)
 
     return PoE_Labels
 
@@ -752,7 +767,7 @@ def make_PoE_Joint(expert1, expert2):
             mu2, logsigma2 = expert2._encode(labels)
 
             mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = sigma.log()
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
 
             latent = expert2.reparameterize(mu, logsigma)
 
@@ -782,7 +797,7 @@ class SVAE(VAEVAE):
                  beta=beta, dropout=dropout, cuda=cuda)
         self.VAELabels = make_PoE_Labels(self._VAELabels, self._VAELabels_joint)(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, 0, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
 
     def save(self, filehandle):

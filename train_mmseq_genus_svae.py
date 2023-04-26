@@ -69,6 +69,7 @@ with open(MODEL_PATH, 'wb') as modelfile:
         nepochs=N_EPOCHS,
         modelfile=modelfile,
         logfile=sys.stdout,
+        batchsteps=set(),
     )
     print('training')
 
