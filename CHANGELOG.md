@@ -1,5 +1,8 @@
 # Changelog
 
+## v4.1.1
+* Create tmp directory in parsebam if needed for pycoverm (issue # 167)
+
 ## v4.1.0
 * Fix typo in output AAE_Z cluster names. They are now called e.g. "aae_z_1"
   instead of "aae_z1"
