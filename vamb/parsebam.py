@@ -164,7 +164,7 @@ class Abundance:
         target_refhash: Optional[bytes],
         mask: _np.ndarray,
     ) -> A:
-        _os.mkdir(cache_directory)
+        _os.makedirs(cache_directory)
 
         chunks = [
             (i, min(len(paths), i + nthreads)) for i in range(0, len(paths), nthreads)
