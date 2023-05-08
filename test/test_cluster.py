@@ -35,9 +35,10 @@ class TestClusterer(unittest.TestCase):
     # This depends on the implementation of shuffling and permute being
     # the same, which I test here.
     def test_shuffling(self):
+        seed = 0
         cp = self.data.copy()
-        np.random.RandomState(0).shuffle(cp)
-        indices = np.random.RandomState(0).permutation(len(cp))
+        np.random.Generator(np.random.PCG64(seed)).shuffle((cp))
+        indices = np.random.Generator(np.random.PCG64(seed)).permutation(len(cp))
         cplike = self.data[indices]
         self.assertTrue(np.all(cplike == cp))
 

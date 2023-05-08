@@ -479,8 +479,7 @@ def _normalize(matrix: _Tensor, inplace: bool = False) -> _Tensor:
 
     # If any rows are kept all zeros, the distance function will return 0.5 to all points
     # inclusive itself, which can break the code in this module
-    matrix[matrix < 0] = 0
-    zeromask = matrix.max(dim=1).values == 0
+    zeromask = (matrix == 0).all(dim=1)
     matrix[zeromask] = 1 / matrix.shape[1]
     matrix /= matrix.norm(dim=1).reshape(-1, 1) * (2**0.5)
     return matrix
