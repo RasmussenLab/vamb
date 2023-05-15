@@ -35,7 +35,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  checkm2 database --download
  conda deactivate
 ```
-However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow.
+However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow. Installation should not take more than 30 minutes on a normal laptop, depending on your internet connexion and computer.
 
 ## Set up configuration with your data
 
