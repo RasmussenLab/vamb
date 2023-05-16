@@ -27,8 +27,14 @@ ABUNDANCE_PATH = f'{DEPTH_PATH}/depths.npz'
 N_EPOCHS = args['nepoch']
 MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
 
-exp_id = args['exp']
+# PATH_CONTIGS = f'/home/projects/cpr_10006/projects/vamb/analysis/almeida/data/almeida.fa.gz'
+# ABUNDANCE_PATH = f'/home/projects/cpr_10006/projects/vamb/analysis/almeida/data/almeida.jgi.depth.npz'
+
+
+# exp_id = args['exp']
+exp_id = '_species_filter'
 MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}{exp_id}.pt'
+# MODEL_PATH = f'model_semisupervised_mmseq_almeida.pt'
 
 with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
     composition = vamb.parsecontigs.Composition.from_file(contigfile)
@@ -42,6 +48,10 @@ dataloader, mask = vamb.encode.make_dataloader(
     composition.matrix,
     composition.metadata.lengths,
 )
+
+# latent_vamb = np.load(f'latent_trained_semisupervised_mmseq_genus_vamb_{DATASET}{exp_id}.npy')
+# latent_both = np.load(f'latent_trained_semisupervised_mmseq_genus_both_{DATASET}{exp_id}.npy')
+# latent_labels = np.load(f'latent_trained_semisupervised_mmseq_genus_labels_{DATASET}{exp_id}.npy')
 
 latent_vamb = np.load(f'latent_trained_lengths_mmseq_genus_vamb_{DATASET}{exp_id}.npy')
 latent_both = np.load(f'latent_trained_lengths_mmseq_genus_both_{DATASET}{exp_id}.npy')
@@ -57,7 +67,7 @@ latent_vamb_new[new_indices] = latent_both
 composition.metadata.filter_mask(mask)
 names = composition.metadata.identifiers
 
-with open(f'clusters_mmseq_genus_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+with open(f'clusters_mmseq_species_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
     iterator = vamb.cluster.ClusterGenerator(latent_vamb_new)
     iterator = vamb.vambtools.binsplit(
         (
@@ -68,7 +78,7 @@ with open(f'clusters_mmseq_genus_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
     )
     vamb.vambtools.write_clusters(binfile, iterator)
 
-with open(f'clusters_mmseq_genus_vamb_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+with open(f'clusters_mmseq_species_vamb_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
         iterator = vamb.cluster.ClusterGenerator(latent_vamb)
         iterator = vamb.vambtools.binsplit(
             (
@@ -79,7 +89,7 @@ with open(f'clusters_mmseq_genus_vamb_{DATASET}_v4{exp_id}.tsv', 'w') as binfile
         )
         vamb.vambtools.write_clusters(binfile, iterator)
 
-with open(f'clusters_mmseq_genus_labels_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+with open(f'clusters_mmseq_species_labels_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
         iterator = vamb.cluster.ClusterGenerator(latent_labels)
         iterator = vamb.vambtools.binsplit(
             (

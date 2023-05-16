@@ -50,9 +50,7 @@ def collate_fn_semisupervised(num_categories, batch):
 
 
 def kld_gauss(p_mu, p_logstd, q_mu, q_logstd):
-    p = _torch.distributions.normal.Normal(p_mu, p_logstd.exp())
-    q = _torch.distributions.normal.Normal(q_mu, q_logstd.exp())
-    loss = _torch.distributions.kl_divergence(p, q)
+    loss = q_logstd - p_logstd + (p_logstd.exp().pow(2) + (p_mu - q_mu).pow(2)) / (2 * q_logstd.exp().pow(2)) - 0.5
     return loss.mean()
 
 
@@ -447,11 +445,12 @@ class VAEConcat(_encode.VAE):
 class VAEVAE(object):
     def __init__(self, nsamples, nlabels, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
+        N_l = max(nlabels, 105)
         self.VAEVamb = _encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAELabels = VAELabels(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAELabels = VAELabels(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAEJoint = VAEConcat(nsamples, nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAEJoint = VAEConcat(nsamples, N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
 
     def calc_loss_joint(self, depths_in, depths_out, tnf_in, tnf_out, labels_in, labels_out, 
@@ -494,6 +493,7 @@ class VAEVAE(object):
             'loss_vamb', 'ce_vamb', 'sse_vamb', 'kld_vamb', 
             'loss_labels', 'ce_labels_labels', 'kld_labels', 'correct_labels_labels',
             'loss_joint', 'ce_joint', 'sse_joint', 'ce_labels_joint', 'kld_vamb_joint', 'kld_labels_joint', 'correct_labels_joint',
+            'correct_labels_vamb',
             'loss',
         ]
         metrics_dict = {k: 0 for k in metrics}
@@ -537,10 +537,18 @@ class VAEVAE(object):
             depths_out_unsup, tnf_out_unsup,  mu_vamb_unsup, logsigma_vamb_unsup = self.VAEVamb(depths_in_unsup, tnf_in_unsup)
             labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup = self.VAELabels(labels_in_unsup)
 
+            _, _,  mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(depths_in_sup, tnf_in_sup)
+            # _, mu_labels_sup_s, logsigma_labels_sup_s = self.VAELabels(labels_in_sup)
+
+            # depths_out_sup_op, tnf_out_sup_op = self.VAEVamb._decode(self.VAEVamb.reparameterize(mu_labels_sup_s, logsigma_labels_sup_s)) # use the one-modality decoders
+            labels_out_sup_op = self.VAELabels._decode(self.VAELabels.reparameterize(mu_vamb_sup_s, logsigma_vamb_sup_s)) # use the one-modality decoders
+
             tensors_dict['loss_vamb'], tensors_dict['ce_vamb'], tensors_dict['sse_vamb'], tensors_dict['kld_vamb'] = \
                 self.VAEVamb.calc_loss(depths_in_unsup, depths_out_unsup, tnf_in_unsup, tnf_out_unsup, mu_vamb_unsup, logsigma_vamb_unsup, weights_in_unsup)
             tensors_dict['loss_labels'], tensors_dict['ce_labels_labels'], tensors_dict['kld_labels'], tensors_dict['correct_labels_labels'] = \
                 self.VAELabels.calc_loss(labels_in_unsup, labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup)
+            
+            loss_vamb2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_op, mu_vamb_sup_s, logsigma_vamb_sup_s)
             
             losses_joint = self.calc_loss_joint(
                     depths_in_sup, depths_out_sup, tnf_in_sup, 
@@ -553,6 +561,8 @@ class VAEVAE(object):
             
             tensors_dict['loss_joint'], tensors_dict['ce_joint'], tensors_dict['sse_joint'], tensors_dict['ce_labels_joint'], \
                 tensors_dict['kld_vamb_joint'], tensors_dict['kld_labels_joint'], tensors_dict['correct_labels_joint'] = losses_joint
+            
+            tensors_dict['correct_labels_vamb'] = loss_vamb2label[3]
 
             tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels']
 
@@ -564,6 +574,7 @@ class VAEVAE(object):
 
         metrics_dict['correct_labels_joint'] /= data_loader.batch_size
         metrics_dict['correct_labels_labels'] /= data_loader.batch_size
+        metrics_dict['correct_labels_vamb'] /= data_loader.batch_size
         if logfile is not None:
             print(', '.join([k + f' {v/len(data_loader):.6f}' for k, v in metrics_dict.items()]), file=logfile)
             logfile.flush()
@@ -697,11 +708,28 @@ class VAEVAE(object):
         return vae
     
 
-def product_of_gaussians(p_mu, p_std, q_mu, q_std):
-    var1, var2 = p_std**2, q_std**2
-    mu = (p_mu*var2 + q_mu*var1) / (var1 + var2)
-    std = _torch.sqrt(var2*var1 / (var1 + var2))
-    return mu, std
+def product_of_gaussians(mu1, logstd1, mu2, logstd2):
+    """Compute parameters for the product of experts."""
+    loc = _torch.stack([mu1, mu2])
+    scale = _torch.stack([logstd1, logstd2])
+    variance = scale.exp() ** 2
+
+    # parameter for prior
+    prior_prec = 1  # prior_loc is not specified because it is equal to 0.
+
+    # compute the diagonal precision matrix.
+    prec = _torch.zeros_like(variance).type(scale.dtype)
+    prec[variance != 0] = 1. / variance[variance != 0]
+
+    # compute the square root of a diagonal covariance matrix for the product of distributions.
+    output_prec = _torch.sum(prec, dim=0) + prior_prec
+    output_variance = 1. / output_prec   # (n_batch, output_dim)
+
+    # compute the mean vectors for the product of normal distributions.
+    output_loc = _torch.sum(prec * loc, dim=0)   # (n_batch, output_dim)
+    output_loc = output_loc * output_variance
+
+    return output_loc, _torch.sqrt(output_variance)
 
 
 def make_PoE_Vamb(expert1, expert2):
@@ -714,8 +742,8 @@ def make_PoE_Vamb(expert1, expert2):
             mu1, logsigma1 = expert1._encode(tensor)
             mu2, logsigma2 = expert2._encode(tensor)
 
-            mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
+            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
 
             latent = expert2.reparameterize(mu, logsigma)
 
@@ -739,8 +767,8 @@ def make_PoE_Labels(expert1, expert2):
             mu1, logsigma1 = expert1._encode(labels)
             mu2, logsigma2 = expert2._encode(labels)
 
-            mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
+            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
 
             latent = expert2.reparameterize(mu, logsigma)
 
@@ -766,8 +794,8 @@ def make_PoE_Joint(expert1, expert2):
             mu1, logsigma1 = expert1._encode(tensor)
             mu2, logsigma2 = expert2._encode(labels)
 
-            mu, sigma = product_of_gaussians(mu1, logsigma1.exp(), mu2, logsigma2.exp())
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-7))
+            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
+            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
 
             latent = expert2.reparameterize(mu, logsigma)
 
@@ -784,20 +812,21 @@ def make_PoE_Joint(expert1, expert2):
 class SVAE(VAEVAE):
     def __init__(self, nsamples, nlabels, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
+        N_l = max(nlabels, 105)
         self._VAEVamb = _encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self._VAELabels = VAELabels(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self._VAELabels = VAELabels(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
         self._VAEVamb_joint = _encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self._VAELabels_joint = VAELabels(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self._VAELabels_joint = VAELabels(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
 
         self.VAEVamb = make_PoE_Vamb(self._VAEVamb, self._VAEVamb_joint)(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAELabels = make_PoE_Labels(self._VAELabels, self._VAELabels_joint)(nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAELabels = make_PoE_Labels(self._VAELabels, self._VAELabels_joint)(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
-        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, nlabels, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
+        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
 
     def save(self, filehandle):

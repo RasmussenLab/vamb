@@ -16,6 +16,8 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
+exp_id = '_family'
+
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
 DATASET = args['dataset']
@@ -35,20 +37,31 @@ tnfs, lengths = composition.matrix, composition.metadata.lengths
 contignames = composition.metadata.identifiers
 
 df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
-df_mmseq_genus = df_mmseq[(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
-df_mmseq_genus['genus'] = df_mmseq_genus[8].str.split(';').str[5]
+
+df_mmseq_family = df_mmseq[(df_mmseq[2] == 'family') |(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
+df_mmseq_family['family'] = df_mmseq_family[8].str.split(';').str[4]
+
+# df_mmseq_genus = df_mmseq[(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
+# df_mmseq_genus['genus'] = df_mmseq_genus[8].str.split(';').str[5]
+
+# df_mmseq_species = df_mmseq[df_mmseq[2] == 'species']
+# vc = df_mmseq_species[3].value_counts()
+# good_labels = set(vc[vc > 100].index)
+# df_mmseq_species = df_mmseq_species[df_mmseq_species[3].isin(good_labels)]
 
 ind_map = {c: i for i, c in enumerate(contignames)}
-indices_mmseq = [ind_map[c] for c in df_mmseq_genus[0]]
+indices_mmseq = [ind_map[c] for c in df_mmseq_family[0]]
 
-classes_order = list(df_mmseq_genus['genus'])
+# classes_order = list(df_mmseq_genus['genus'])
+# classes_order = list(df_mmseq_species[3])
+classes_order = list(df_mmseq_family['family'])
 
 vae = vamb.semisupervised_encode.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set(classes_order)), cuda=CUDA)
 
-with open(f'indices_mmseq_genus_{DATASET}.pickle', 'wb') as handle:
+with open(f'indices_mmseq_genus_{DATASET}{exp_id}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
 dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
 dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
 shapes = (rpkms.shape[1], 103, 1, len(set(classes_order)))
@@ -63,17 +76,59 @@ with open(MODEL_PATH, 'wb') as modelfile:
     )
     print('training')
 
-latent = vae.VAEVamb.encode(dataloader_vamb)
-LATENT_PATH = f'latent_trained_lengths_mmseq_genus_vamb_{DATASET}.npy'
+latent_vamb = vae.VAEVamb.encode(dataloader_vamb)
+LATENT_PATH = f'latent_trained_lengths_mmseq_genus_vamb_{DATASET}{exp_id}.npy'
 print('Saving latent space: Vamb')
-np.save(LATENT_PATH, latent)
+np.save(LATENT_PATH, latent_vamb)
 
-latent = vae.VAELabels.encode(dataloader_labels)
-LATENT_PATH = f'latent_trained_lengths_mmseq_genus_labels_{DATASET}.npy'
+latent_labels = vae.VAELabels.encode(dataloader_labels)
+LATENT_PATH = f'latent_trained_lengths_mmseq_genus_labels_{DATASET}{exp_id}.npy'
 print('Saving latent space: Labels')
-np.save(LATENT_PATH, latent)
+np.save(LATENT_PATH, latent_labels)
 
-latent = vae.VAEJoint.encode(dataloader_joint)
-LATENT_PATH = f'latent_trained_lengths_mmseq_genus_both_{DATASET}.npy'
+latent_both = vae.VAEJoint.encode(dataloader_joint)
+LATENT_PATH = f'latent_trained_lengths_mmseq_genus_both_{DATASET}{exp_id}.npy'
 print('Saving latent space: Both')
-np.save(LATENT_PATH, latent)
+np.save(LATENT_PATH, latent_both)
+
+inds = np.array(range(latent_vamb.shape[0]))
+new_indices = [np.argwhere(inds == i)[0][0] for i in indices_mmseq]
+print(latent_both.shape, len(new_indices), len(indices_mmseq))
+latent_vamb_new = latent_vamb.copy()
+latent_vamb_new[new_indices] = latent_both
+
+composition.metadata.filter_mask(mask_vamb)
+names = composition.metadata.identifiers
+
+with open(f'clusters_mmseq_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+    iterator = vamb.cluster.ClusterGenerator(latent_vamb_new)
+    iterator = vamb.vambtools.binsplit(
+        (
+            (names[cluster.medoid], {names[m] for m in cluster.members})
+            for cluster in iterator
+        ),
+        "C"
+    )
+    vamb.vambtools.write_clusters(binfile, iterator)
+
+with open(f'clusters_mmseq_vamb_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+        iterator = vamb.cluster.ClusterGenerator(latent_vamb)
+        iterator = vamb.vambtools.binsplit(
+            (
+                (names[cluster.medoid], {names[m] for m in cluster.members})
+                for cluster in iterator
+            ),
+            "C"
+        )
+        vamb.vambtools.write_clusters(binfile, iterator)
+
+with open(f'clusters_mmseq_labels_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
+        iterator = vamb.cluster.ClusterGenerator(latent_labels)
+        iterator = vamb.vambtools.binsplit(
+            (
+                (names[cluster.medoid], {names[m] for m in cluster.members})
+                for cluster in iterator
+            ),
+            "C"
+        )
+        vamb.vambtools.write_clusters(binfile, iterator)

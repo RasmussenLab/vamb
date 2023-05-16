@@ -29,6 +29,7 @@ from . import benchmark
 from . import encode
 from . import aamb_encode
 from . import semisupervised_encode
+from . import h_loss
 
 __all__ = [
     "vambtools",
@@ -39,4 +40,5 @@ __all__ = [
     "encode",
     "aamb_encode",
     "semisupervised_encode",
+    "h_loss",
 ]

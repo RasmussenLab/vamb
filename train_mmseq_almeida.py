@@ -34,6 +34,10 @@ df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
 df_mmseq_genus = df_mmseq[(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
 df_mmseq_genus['genus'] = df_mmseq_genus[8].str.split(';').str[5]
 
+vc = df_mmseq_genus['genus'].value_counts()
+good_labels = set(vc[vc > 1000].index)
+df_mmseq_genus = df_mmseq_genus[df_mmseq_genus[3].isin(good_labels)]
+
 ind_map = {c: i for i, c in enumerate(contignames)}
 indices_mmseq = [ind_map[c] for c in df_mmseq_genus[0]]
 
