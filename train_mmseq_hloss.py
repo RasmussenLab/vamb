@@ -39,22 +39,34 @@ contignames = composition.metadata.identifiers
 df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
 
 df_mmseq_family = df_mmseq[(df_mmseq[2] == 'family') |(df_mmseq[2] == 'genus') | (df_mmseq[2] == 'species')]
+classes_order = list(df_mmseq_family[8].str.split(';').str[-1])
 
 ind_map = {c: i for i, c in enumerate(contignames)}
 indices_mmseq = [ind_map[c] for c in df_mmseq_family[0]]
 
-classes_order = list(df_mmseq_family['family'])
+nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(df_mmseq[8].unique())
 
-vae = vamb.h_loss.VAEVAE(nsamples=rpkms.shape[1], nlabels=len(set(classes_order)), cuda=CUDA)
+targets = [ind_nodes[i] for i in classes_order]
+
+vae = vamb.h_loss.VAEVAEHLoss(
+     rpkms.shape[1], 
+     len(nodes), 
+     table_indices, 
+     table_true, 
+     table_walkdown, 
+     nodes, 
+     cuda=CUDA,
+     logfile=sys.stdout,
+)
 
 with open(f'indices_mmseq_genus_{DATASET}{exp_id}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
-dataloader_joint, mask = vamb.semisupervised_encode.make_dataloader_concat(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
-dataloader_labels, mask = vamb.semisupervised_encode.make_dataloader_labels(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], classes_order)
-shapes = (rpkms.shape[1], 103, 1, len(set(classes_order)))
-dataloader = vamb.semisupervised_encode.make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader_labels, shapes)
+dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent)
+dataloader_labels, mask = vamb.h_loss.make_dataloader_labels_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent)
+shapes = (rpkms.shape[1], 103, 1, len(nodes))
+dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(dataloader_joint, dataloader_vamb, dataloader_labels, len(nodes), table_parent, shapes)
 with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
     vae.trainmodel(
@@ -62,6 +74,7 @@ with open(MODEL_PATH, 'wb') as modelfile:
         nepochs=N_EPOCHS,
         modelfile=modelfile,
         logfile=sys.stdout,
+        batchsteps=set(),
     )
     print('training')
 
