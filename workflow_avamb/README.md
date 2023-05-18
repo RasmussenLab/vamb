@@ -109,6 +109,8 @@ snakemake --slurm   --cores 20 --jobs 10 --configfile /path/to/vamb/workflow_ava
 
 Note 1: If you want to re-run with different parameters of AVAMB you can change  `avamb_params` in the config-file, but remember to rename the  `outdir` configuration file entry, otherwise it will overwrite it.
 
+Workflow can be executed and avamb installation tested with our exampla input data, available in avamb zenodo's [upload] (https://zenodo.org/record/7941203).
+
 ## Outputs
 Avamb produces the following output files:
 - `Final_bins`: folder containing the final set of bins by running CheckM2 on VAMB and AAMB bins per sample and subsequently dereplicating the bins. This folder also contains a `quality_report.tsv` file with the completeness and contamination of the final set of near complete bins determined by CheckM2. Bins contamination and completeness thresholds can be modified by setting the `max_cont` and `min_comp` in the `config.json` file. 
