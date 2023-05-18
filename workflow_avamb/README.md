@@ -86,6 +86,8 @@ Then the configuration file (`config.json`). The first two lines points to the f
 ```
 ## Example run
 
+Workflow can be executed and avamb installation tested with our exampla input data, available in avamb zenodo's [upload](https://zenodo.org/record/7941203).
+
 When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. You can then run snakemake on a laptop or workstation as below - remember to activate the conda environment first before running snakemake.
 
 ```
@@ -108,8 +110,6 @@ snakemake --slurm   --cores 20 --jobs 10 --configfile /path/to/vamb/workflow_ava
 ```
 
 Note 1: If you want to re-run with different parameters of AVAMB you can change  `avamb_params` in the config-file, but remember to rename the  `outdir` configuration file entry, otherwise it will overwrite it.
-
-Workflow can be executed and avamb installation tested with our exampla input data, available in avamb zenodo's [upload] (https://zenodo.org/record/7941203).
 
 ## Outputs
 Avamb produces the following output files:
