@@ -26,24 +26,24 @@ MIN_BIN_SIZE = int(get_config("min_bin_size", "200000", r"[1-9]\d*$"))
 
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
-MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*GB$")
+MM_MEM = get_config("minimap_mem", "15gb", r"[1-9]\d*GB$")
 MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
-AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*GB$")
+AVAMB_MEM = get_config("avamb_mem", "32GB", r"[1-9]\d*GB$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
 
-CHECKM_MEM = get_config("checkm2_mem", "10gb", r"[1-9]\d*GB$")
+CHECKM_MEM = get_config("checkm2_mem", "15gb", r"[1-9]\d*GB$")
 CHECKM_PPN = get_config("checkm2_ppn", "10", r"[1-9]\d*$")
-CHECKM_MEM_r = get_config("checkm2_mem_r", "30gb", r"[1-9]\d*GB$")
+CHECKM_MEM_r = get_config("checkm2_mem_r", "30GB", r"[1-9]\d*GB$")
 CHECKM_PPN_r = get_config("checkm2_ppn_r", "30", r"[1-9]\d*$")
 
 
-AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000  ", r".*")
+AVAMB_PARAMS = get_config("avamb_params"," -o C --minfasta 200000 --model vae-aae ", r".*")
 AVAMB_PRELOAD = get_config("avamb_preload", "", r".*")
 
 MIN_COMP = get_config("min_comp", "0.9", r".*")
 MAX_CONT = get_config("max_cont", "0.05", r".*")
 
-OUTDIR= get_config("outdir", "outdir_avamb", r".*")
+OUTDIR= get_config("outdir", "avamb_outdir", r".*")
 
 try:
     os.makedirs(os.path.join(OUTDIR,"log"), exist_ok=True)
