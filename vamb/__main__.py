@@ -981,7 +981,7 @@ def main():
     otheros.add_argument(
         "--seed",
         metavar="",
-        type=Optional[int],
+        type=int,
         default=0,
         help="Random seed [random] (determinism not guaranteed)",
     )
