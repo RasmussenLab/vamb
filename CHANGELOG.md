@@ -1,5 +1,10 @@
 # Changelog
 
+## v4.1.2
+* Fix a bug in src/create_fasta.py
+* Bugfix: Make seeding the RNG work from command line
+* Bump compatible Cython version
+
 ## v4.1.1
 * Create tmp directory in parsebam if needed for pycoverm (issue # 167)
 
