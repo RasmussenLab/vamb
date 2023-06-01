@@ -8,6 +8,7 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
+from time import time
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -367,6 +368,7 @@ class VAE(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
+        start_time: float,
         logfile,
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
         self.train()
@@ -405,9 +407,11 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
+            elapsed = time() - start_time
             print(
-                "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
+                "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}\tSeconds: {:.2f}".format(
                     epoch + 1,
+                    elapsed,
                     epoch_loss / len(data_loader),
                     epoch_celoss / len(data_loader),
                     epoch_sseloss / len(data_loader),
@@ -599,7 +603,7 @@ class VAE(_nn.Module):
         # Train
         for epoch in range(nepochs):
             dataloader = self.trainepoch(
-                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+                dataloader, epoch, optimizer, sorted(batchsteps_set), time(), logfile
             )
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
