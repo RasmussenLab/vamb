@@ -174,7 +174,7 @@ class TestVAE(unittest.TestCase):
         vae = vamb.encode.VAE(self.rpkm.shape[1])
         rpkm_copy = self.rpkm.copy()
         tnfs_copy = self.tnfs.copy()
-        dl, mask = vamb.encode.make_dataloader(
+        dl, _ = vamb.encode.make_dataloader(
             rpkm_copy, tnfs_copy, self.lens, batchsize=16, destroy=True
         )
         di = torch.Tensor(rpkm_copy)
@@ -202,10 +202,20 @@ class TestVAE(unittest.TestCase):
         after_encoding = vae_2.encode(dl)
         self.assertTrue(np.all(np.abs(before_encoding - after_encoding) < 1e-6))
 
+    def test_warn_too_many_batch_steps(self):
+        vae = vamb.encode.VAE(self.rpkm.shape[1])
+        rpkm_copy = self.rpkm.copy()
+        tnfs_copy = self.tnfs.copy()
+        dl, _ = vamb.encode.make_dataloader(
+            rpkm_copy, tnfs_copy, self.lens, batchsize=16, destroy=True
+        )
+        with self.assertWarns(Warning):
+            vae.trainmodel(dl, nepochs=4, batchsteps=[1, 2, 3])
+
     def test_encoding(self):
         nlatent = 15
         vae = vamb.encode.VAE(self.rpkm.shape[1], nlatent=nlatent)
-        dl, mask = vamb.encode.make_dataloader(
+        dl, _ = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=32
         )
         encoding = vae.encode(dl)
