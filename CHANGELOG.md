@@ -1,5 +1,8 @@
 # Changelog
 
+## v4.1.3
+* Fix a bug that resulting in poor clustering results (#179)
+
 ## v4.1.2
 * Fix a bug in src/create_fasta.py
 * Bugfix: Make seeding the RNG work from command line
