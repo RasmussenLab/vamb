@@ -247,7 +247,6 @@ class VAE(_nn.Module):
 
         # Latent layers
         self.mu = _nn.Linear(self.nhiddens[-1], self.nlatent)
-        self.logsigma = _nn.Linear(self.nhiddens[-1], self.nlatent)
 
         # Add first decoding layer
         for nin, nout in zip([self.nlatent] + self.nhiddens[::-1], self.nhiddens[::-1]):
@@ -265,7 +264,7 @@ class VAE(_nn.Module):
         if cuda:
             self.cuda()
 
-    def _encode(self, tensor: Tensor) -> tuple[Tensor, Tensor]:
+    def _encode(self, tensor: Tensor) -> Tensor:
         tensors = list()
 
         # Hidden layers
@@ -276,21 +275,13 @@ class VAE(_nn.Module):
         # Latent layers
         mu = self.mu(tensor)
 
-        # Note: This softplus constrains logsigma to positive. As reconstruction loss pushes
-        # logsigma as low as possible, and KLD pushes it towards 0, the optimizer will
-        # always push this to 0, meaning that the logsigma layer will be pushed towards
-        # negative infinity. This creates a nasty numerical instability in VAMB. Luckily,
-        # the gradient also disappears as it decreases towards negative infinity, avoiding
-        # NaN poisoning in most cases. We tried to remove the softplus layer, but this
-        # necessitates a new round of hyperparameter optimization, and there is no way in
-        # hell I am going to do that at the moment of writing.
-        # Also remove needless factor 2 in definition of latent in reparameterize function.
-        logsigma = self.softplus(self.logsigma(tensor))
+        # Note: We ought to also compute logsigma here, but we had a bug in the original
+        # implementation of Vamb where logsigma was fixed to zero, so we just remove it.
 
-        return mu, logsigma
+        return mu
 
     # sample with gaussian noise
-    def reparameterize(self, mu: Tensor, logsigma: Tensor) -> Tensor:
+    def reparameterize(self, mu: Tensor) -> Tensor:
         epsilon = _torch.randn(mu.size(0), mu.size(1))
 
         if self.usecuda:
@@ -298,8 +289,7 @@ class VAE(_nn.Module):
 
         epsilon.requires_grad = True
 
-        # See comment above regarding softplus
-        latent = mu + epsilon * _torch.exp(logsigma / 2)
+        latent = mu + epsilon
 
         return latent
 
@@ -322,15 +312,13 @@ class VAE(_nn.Module):
 
         return depths_out, tnf_out
 
-    def forward(
-        self, depths: Tensor, tnf: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def forward(self, depths: Tensor, tnf: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         tensor = _torch.cat((depths, tnf), 1)
-        mu, logsigma = self._encode(tensor)
-        latent = self.reparameterize(mu, logsigma)
+        mu = self._encode(tensor)
+        latent = self.reparameterize(mu)
         depths_out, tnf_out = self._decode(latent)
 
-        return depths_out, tnf_out, mu, logsigma
+        return depths_out, tnf_out, mu
 
     def calc_loss(
         self,
@@ -339,7 +327,6 @@ class VAE(_nn.Module):
         tnf_in: Tensor,
         tnf_out: Tensor,
         mu: Tensor,
-        logsigma: Tensor,
         weights: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         # If multiple samples, use cross entropy, else use SSE for abundance
@@ -352,7 +339,7 @@ class VAE(_nn.Module):
             ce_weight = 1 - self.alpha
 
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
-        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1)
+        kld = 0.5 * (mu.pow(2)).sum(dim=1)
         sse_weight = self.alpha / self.ntnf
         kld_weight = 1 / (self.nlatent * self.beta)
         reconstruction_loss = ce * ce_weight + sse * sse_weight
@@ -390,10 +377,10 @@ class VAE(_nn.Module):
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, mu, logsigma = self(depths_in, tnf_in)
+            depths_out, tnf_out, mu = self(depths_in, tnf_in)
 
             loss, ce, sse, kld = self.calc_loss(
-                depths_in, depths_out, tnf_in, tnf_out, mu, logsigma, weights
+                depths_in, depths_out, tnf_in, tnf_out, mu, weights
             )
 
             loss.backward()
@@ -446,14 +433,14 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, weights in new_data_loader:
+            for depths, tnf, _ in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
 
                 # Evaluate
-                _, _, mu, _ = self(depths, tnf)
+                _, _, mu = self(depths, tnf)
 
                 if self.usecuda:
                     mu = mu.cpu()

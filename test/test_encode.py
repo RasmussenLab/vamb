@@ -180,8 +180,8 @@ class TestVAE(unittest.TestCase):
         di = torch.Tensor(rpkm_copy)
         ti = torch.Tensor(tnfs_copy)
         we = dl.dataset.tensors[2]
-        do, to, mu, lsigma = vae(di, ti)
-        start_loss = vae.calc_loss(di, do, ti, to, mu, lsigma, we)[0].data.item()
+        do, to, mu = vae(di, ti)
+        start_loss = vae.calc_loss(di, do, ti, to, mu, we)[0].data.item()
         iobuffer = io.StringIO()
 
         with tempfile.TemporaryFile() as file:
@@ -189,8 +189,8 @@ class TestVAE(unittest.TestCase):
             vae.trainmodel(
                 dl, nepochs=3, batchsteps=[1, 2], logfile=iobuffer, modelfile=file
             )
-            do, to, mu, lsigma = vae(di, ti)
-            end_loss = vae.calc_loss(di, do, ti, to, mu, lsigma, we)[0].data.item()
+            do, to, mu = vae(di, ti)
+            end_loss = vae.calc_loss(di, do, ti, to, mu, we)[0].data.item()
             self.assertLess(end_loss, start_loss)
 
             # Also test save/load
