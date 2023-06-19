@@ -9,7 +9,7 @@ source ~/.bashrc
 conda init bash
 conda activate /home/projects/cpr_10006/people/svekut/.conda/vamb
 
-nepoch=$2
+nepoch=200
 dataset=$1
 
-python3 train_mmseq_genus.py  --nepoch $nepoch --cuda  --dataset $dataset
+python3 train_mmseq_hloss_vamb2label.py  --nepoch $nepoch --cuda  --dataset $dataset

@@ -63,7 +63,7 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
 
 def make_dataloader_concat(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
-    labels_int = _np.unique(labels, return_inverse=True)[1]
+    labels_int = _np.unique(labels, return_inverse=True)[1][mask]
     dataset = _TensorDataset(depthstensor, tnftensor, weightstensor, _torch.from_numpy(labels_int))
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda, collate_fn=partial(collate_fn_concat, len(set(labels_int))))
@@ -72,7 +72,7 @@ def make_dataloader_concat(rpkm, tnf, lengths, labels, batchsize=256, destroy=Fa
 
 def make_dataloader_labels(rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False):
     _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda)
-    labels_int = _np.unique(labels, return_inverse=True)[1]
+    labels_int = _np.unique(labels, return_inverse=True)[1][mask]
     dataset = _TensorDataset(_torch.from_numpy(labels_int))
     dataloader = _DataLoader(dataset=dataset, batch_size=batchsize, drop_last=True,
                              shuffle=True, num_workers=n_workers, pin_memory=cuda, collate_fn=partial(collate_fn_labels, len(set(labels_int))))
@@ -126,7 +126,7 @@ class VAELabels(_encode.VAE):
     """
 
     def __init__(self, nlabels, nhiddens=None, nlatent=32, alpha=None,
-                 beta=200, dropout=0.2, cuda=False):
+                 beta=200, dropout=0.2, cuda=False, logfile=None):
         super(VAELabels, self).__init__(nlabels - 103, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
                  beta=beta, dropout=dropout, cuda=cuda)
         self.nlabels = nlabels
@@ -148,7 +148,7 @@ class VAELabels(_encode.VAE):
         labels_out = self._decode(latent)
         return labels_out, mu, logsigma
 
-    def calc_loss(self, labels_in, labels_out, mu, logsigma):
+    def calc_loss(self, labels_in, labels_out, mu, logsigma, logfile=None):
         _, labels_in_indices = labels_in.max(dim=1)
         ce_labels = _nn.CrossEntropyLoss()(labels_out, labels_in_indices)
         ce_labels_weight = 1. #TODO: figure out
@@ -254,6 +254,90 @@ class VAELabels(_encode.VAE):
 
         assert row == length
         return latent
+
+    def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
+                   batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
+        """Train the autoencoder from depths array and tnf array.
+
+        Inputs:
+            dataloader: DataLoader made by make_dataloader
+            nepochs: Train for this many epochs before encoding [500]
+            lrate: Starting learning rate for the optimizer [0.001]
+            batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
+            logfile: Print status updates to this file if not None [None]
+            modelfile: Save models to this file if not None [None]
+
+        Output: None
+        """
+
+        if lrate < 0:
+            raise ValueError(f"Learning rate must be positive, not {lrate}")
+
+        if nepochs < 1:
+            raise ValueError("Minimum 1 epoch, not {nepochs}")
+
+        if batchsteps is None:
+            batchsteps_set: set[int] = set()
+        else:
+            # First collect to list in order to allow all element types, then check that
+            # they are integers
+            batchsteps = list(batchsteps)
+            if not all(isinstance(i, int) for i in batchsteps):
+                raise ValueError("All elements of batchsteps must be integers")
+            if max(batchsteps, default=0) >= nepochs:
+                raise ValueError("Max batchsteps must not equal or exceed nepochs")
+            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
+            if len(dataloader.dataset) < last_batchsize:  # type: ignore
+                raise ValueError(
+                    f"Last batch size of {last_batchsize} exceeds dataset length "
+                    f"of {len(dataloader.dataset)}. "  # type: ignore
+                    "This means you have too few contigs left after filtering to train. "
+                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
+                    "after filtering. "
+                    "Please check the Vamb log file to see where the sequences were "
+                    "filtered away, and verify BAM files has sensible content."
+                )
+            batchsteps_set = set(batchsteps)
+
+        # Get number of features
+        # Following line is un-inferrable due to typing problems with DataLoader
+        nlabels = dataloader.dataset.tensors[0].shape  # type: ignore
+        optimizer = _Adam(self.parameters(), lr=lrate)
+
+        if logfile is not None:
+            print("\tNetwork properties:", file=logfile)
+            print("\tCUDA:", self.usecuda, file=logfile)
+            print("\tAlpha:", self.alpha, file=logfile)
+            print("\tBeta:", self.beta, file=logfile)
+            print("\tDropout:", self.dropout, file=logfile)
+            print("\tN hidden:", ", ".join(map(str, self.nhiddens)), file=logfile)
+            print("\tN latent:", self.nlatent, file=logfile)
+            print("\n\tTraining properties:", file=logfile)
+            print("\tN epochs:", nepochs, file=logfile)
+            print("\tStarting batch size:", dataloader.batch_size, file=logfile)
+            batchsteps_string = (
+                ", ".join(map(str, sorted(batchsteps_set)))
+                if batchsteps_set
+                else "None"
+            )
+            print("\tBatchsteps:", batchsteps_string, file=logfile)
+            print("\tLearning rate:", lrate, file=logfile)
+            print("\tN labels:", nlabels, file=logfile, end="\n\n")
+
+        # Train
+        for epoch in range(nepochs):
+            dataloader = self.trainepoch(
+                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+            )
+
+        # Save weights - Lord forgive me, for I have sinned when catching all exceptions
+        if modelfile is not None:
+            try:
+                self.save(modelfile)
+            except:
+                pass
+
+        return None
 
 
 class VAEConcat(_encode.VAE):
@@ -370,14 +454,14 @@ class VAEConcat(_encode.VAE):
             loss, ce, sse, ce_labels, kld, correct_labels = self.calc_loss(depths_in, depths_out, tnf_in,
                                                   tnf_out, labels_in, labels_out, mu, logsigma, weights)
 
-            loss.backward()
+            loss.mean().backward()
             optimizer.step()
 
-            epoch_loss += loss.data.item()
-            epoch_kldloss += kld.data.item()
-            epoch_sseloss += sse.data.item()
-            epoch_celoss += ce.data.item()
-            epoch_celabelsloss += ce_labels.data.item()
+            epoch_loss += loss.mean().data.item()
+            epoch_kldloss += kld.mean().data.item()
+            epoch_sseloss += sse.mean().data.item()
+            epoch_celoss += ce.mean().data.item()
+            epoch_celabelsloss += ce_labels.mean().data.item()
             epoch_correct_labels+= correct_labels.data.item()
 
         if logfile is not None:
@@ -388,7 +472,7 @@ class VAEConcat(_encode.VAE):
                   epoch_sseloss / len(data_loader),
                   epoch_celabelsloss / len(data_loader),
                   epoch_kldloss / len(data_loader),
-                  epoch_correct_labels / (len(data_loader)*256),
+                  epoch_correct_labels / len(data_loader),
                   data_loader.batch_size,
                   ), file=logfile)
 
@@ -493,7 +577,7 @@ class VAEVAE(object):
             'loss_vamb', 'ce_vamb', 'sse_vamb', 'kld_vamb', 
             'loss_labels', 'ce_labels_labels', 'kld_labels', 'correct_labels_labels',
             'loss_joint', 'ce_joint', 'sse_joint', 'ce_labels_joint', 'kld_vamb_joint', 'kld_labels_joint', 'correct_labels_joint',
-            'correct_labels_vamb',
+            # 'correct_labels_vamb',
             'loss',
         ]
         metrics_dict = {k: 0 for k in metrics}
@@ -535,34 +619,56 @@ class VAEVAE(object):
             labels_out_sup = self.VAELabels._decode(self.VAELabels.reparameterize(mu_sup, logsigma_sup)) # use the one-modality decoders
 
             depths_out_unsup, tnf_out_unsup,  mu_vamb_unsup, logsigma_vamb_unsup = self.VAEVamb(depths_in_unsup, tnf_in_unsup)
+            depths_out_sup_s, tnf_out_sup_s,  mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(depths_in_sup, tnf_in_sup)
+
             labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup = self.VAELabels(labels_in_unsup)
+            labels_out_sup_s, mu_labels_sup_s, logsigma_labels_sup_s = self.VAELabels(labels_in_sup)
 
-            _, _,  mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(depths_in_sup, tnf_in_sup)
-            # _, mu_labels_sup_s, logsigma_labels_sup_s = self.VAELabels(labels_in_sup)
-
-            # depths_out_sup_op, tnf_out_sup_op = self.VAEVamb._decode(self.VAEVamb.reparameterize(mu_labels_sup_s, logsigma_labels_sup_s)) # use the one-modality decoders
+            depths_out_sup_op, tnf_out_sup_op = self.VAEVamb._decode(self.VAEVamb.reparameterize(mu_labels_sup_s, logsigma_labels_sup_s)) # use the one-modality decoders
             labels_out_sup_op = self.VAELabels._decode(self.VAELabels.reparameterize(mu_vamb_sup_s, logsigma_vamb_sup_s)) # use the one-modality decoders
 
             tensors_dict['loss_vamb'], tensors_dict['ce_vamb'], tensors_dict['sse_vamb'], tensors_dict['kld_vamb'] = \
                 self.VAEVamb.calc_loss(depths_in_unsup, depths_out_unsup, tnf_in_unsup, tnf_out_unsup, mu_vamb_unsup, logsigma_vamb_unsup, weights_in_unsup)
+            
+            losses_sup_vamb = \
+                self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_s, tnf_in_sup, tnf_out_sup_s, mu_vamb_sup_s, logsigma_vamb_sup_s, weights_in_sup)
+
             tensors_dict['loss_labels'], tensors_dict['ce_labels_labels'], tensors_dict['kld_labels'], tensors_dict['correct_labels_labels'] = \
                 self.VAELabels.calc_loss(labels_in_unsup, labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup)
             
-            loss_vamb2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_op, mu_vamb_sup_s, logsigma_vamb_sup_s)
+            # losses_sup_labels = \
+            #     self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_s, mu_labels_sup_s, logsigma_labels_sup_s)
             
+            # loss_vamb2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_op, mu_vamb_sup_s, logsigma_vamb_sup_s)
+            # loss_label2vamb = \
+            #     self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_op, tnf_in_sup, tnf_out_sup_op, mu_labels_sup_s, logsigma_labels_sup_s, weights_in_sup)
+
+            #  loss_joint2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_joint, mu_sup, logsigma_sup)
+            
+            # losses_joint = self.calc_loss_joint(
+            #         depths_in_sup, depths_out_sup, tnf_in_sup, 
+            #         tnf_out_sup, labels_in_sup, labels_out_sup,
+            #         mu_sup, logsigma_sup, 
+            #         mu_vamb_unsup, logsigma_vamb_unsup,
+            #         mu_labels_unsup, logsigma_labels_unsup,
+            #         weights_in_sup,
+            #     )
+
             losses_joint = self.calc_loss_joint(
                     depths_in_sup, depths_out_sup, tnf_in_sup, 
                     tnf_out_sup, labels_in_sup, labels_out_sup,
                     mu_sup, logsigma_sup, 
-                    mu_vamb_unsup, logsigma_vamb_unsup,
-                    mu_labels_unsup, logsigma_labels_unsup,
+                    mu_vamb_sup_s, logsigma_vamb_sup_s,
+                    mu_labels_sup_s, logsigma_labels_sup_s,
                     weights_in_sup,
                 )
-            
+
             tensors_dict['loss_joint'], tensors_dict['ce_joint'], tensors_dict['sse_joint'], tensors_dict['ce_labels_joint'], \
                 tensors_dict['kld_vamb_joint'], tensors_dict['kld_labels_joint'], tensors_dict['correct_labels_joint'] = losses_joint
             
-            tensors_dict['correct_labels_vamb'] = loss_vamb2label[3]
+            # tensors_dict['correct_labels_vamb'] = loss_vamb2label[3]
+
+            # tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels'] + 100*(loss_vamb2label[1] + loss_label2vamb[1]) + losses_sup_labels[0] + losses_sup_vamb[0]
 
             tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels']
 
@@ -574,10 +680,11 @@ class VAEVAE(object):
 
         metrics_dict['correct_labels_joint'] /= data_loader.batch_size
         metrics_dict['correct_labels_labels'] /= data_loader.batch_size
-        metrics_dict['correct_labels_vamb'] /= data_loader.batch_size
+        # metrics_dict['correct_labels_vamb'] /= data_loader.batch_size
         if logfile is not None:
-            print(', '.join([k + f' {v/len(data_loader):.6f}' for k, v in metrics_dict.items()]), file=logfile)
+            print(', '.join([k + f' {v/len(data_loader):.6f}' for k, v in metrics_dict.items()]), file=logfile, flush=True)
             logfile.flush()
+            print('here', flush=True)
 
         return data_loader
 
@@ -706,7 +813,7 @@ class VAEVAE(object):
             vae.VAEJoint.eval()
 
         return vae
-    
+
 
 def product_of_gaussians(mu1, logstd1, mu2, logstd2):
     """Compute parameters for the product of experts."""

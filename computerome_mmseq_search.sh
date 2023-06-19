@@ -9,7 +9,5 @@ source ~/.bashrc
 conda init bash
 conda activate /home/projects/cpr_10006/people/svekut/.conda/vamb
 
-nepoch=$2
-dataset=$1
+/home/projects/cpr_10006/people/svekut/.conda/vamb/bin/mmseqs databases GTDB gtdb tmp
 
-python3 train_mmseq_genus.py  --nepoch $nepoch --cuda  --dataset $dataset
