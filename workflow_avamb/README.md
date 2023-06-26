@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub). Keep in mind that there are three different paths, (named directed acyclic graphs in snakemake), that can be executed by snakemake depending on the outputs generated during the workflow and complicating a bit the interpretation of the snakemake file. That's why we added some comments for each rule briefily explaining their purpose. Feel free to reach us if you encounter any problems.  
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install) and [snakemake](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
 
 ```
  # Install Avamb in avamb environment

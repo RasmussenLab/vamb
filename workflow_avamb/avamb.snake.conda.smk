@@ -415,7 +415,10 @@ rule run_checkm2_per_sample_all_bins:
     conda: 
         "checkm2" 
     shell:
-        "checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
+        """
+        checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
+        touch {output.out_log_file}
+        """
 
 # this rule will be executed when all CheckM2 runs per sample finish, so it can move to the next step 
 rule cat_checkm2_all:
