@@ -4,7 +4,6 @@ import argparse
 import pickle
 import numpy as np
 import pandas as pd
-import os
 from collections import defaultdict
 
 parser = argparse.ArgumentParser()
@@ -17,7 +16,7 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
-exp_id = '_hloss_mmseq_predict_replace'
+exp_id = '_hloss_mmseq_predict_aug_overlap'
 
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
@@ -31,6 +30,11 @@ N_EPOCHS = args['nepoch']
 MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
 GT_PATH = f'gt_tax_{DATASET}.csv'
 
+AUGMENTED_PATH = f'/home/projects/cpr_10006/projects/semi_vamb/data/augmented/{DATASET}'
+rpkms_aug = np.load(f'{AUGMENTED_PATH}/new_ab_overlap.npz', allow_pickle=True)['matrix']
+comp_aug = np.load(f'{AUGMENTED_PATH}/new_comp_overlap.npz', allow_pickle=True)
+tnfs_aug, lengths_aug = comp_aug['matrix'], comp_aug['lengths']
+
 with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
     composition = vamb.parsecontigs.Composition.from_file(contigfile)
 
@@ -38,14 +42,40 @@ rpkms = vamb.vambtools.read_npz(ABUNDANCE_PATH)
 tnfs, lengths = composition.matrix, composition.metadata.lengths
 contignames = composition.metadata.identifiers
 
-df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
-df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
-df_mmseq_genus = df_mmseq
-
+ori_contigs = np.array(list(set([c.split('_')[0] for c in comp_aug['identifiers'] if len(c.split('_')) > 1])))
 ind_map = {c: i for i, c in enumerate(contignames)}
-indices_mmseq = [ind_map[c] for c in df_mmseq_genus[0]]
+inds_ori = [ind_map[c] for c in ori_contigs]
 
-graph_column = df_mmseq_genus[8]
+rpkms_train = np.concatenate([rpkms_aug, rpkms[inds_ori]])
+tnfs_train = np.concatenate([tnfs_aug, tnfs[inds_ori]])
+lengths_train = np.concatenate([lengths_aug, lengths[inds_ori]])
+contignames_train = np.concatenate([comp_aug['identifiers'], ori_contigs])
+
+df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
+
+df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
+
+data = {
+    0: [],
+    2: [],
+    8: [],
+}
+mmseq_map = dict(zip(df_mmseq[0], df_mmseq[8]))
+mmseq_map_genus = dict(zip(df_mmseq[0], df_mmseq[2]))
+added = set()
+for c in contignames_train:
+    c_map = c.split('_')[0]
+    if c_map in mmseq_map:
+        data[0].append(c)
+        data[8].append(mmseq_map[c_map])
+        data[2].append(mmseq_map_genus[c_map])
+df_mmseq_aug = pd.DataFrame(data)
+df_mmseq_aug.to_csv(f'mmseq_aug_{DATASET}.csv', index=None)
+
+ind_map = {c: i for i, c in enumerate(contignames_train)}
+indices_mmseq = [ind_map[c] for c in df_mmseq_aug[0]]
+
+graph_column = df_mmseq_aug[8]
 nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
@@ -65,10 +95,9 @@ model = vamb.h_loss.VAMB2Label(
 with open(f'indices_mmseq_genus_{DATASET}{exp_id}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
-dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent)
+dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms_train[indices_mmseq], tnfs_train[indices_mmseq], lengths_train[indices_mmseq], targets, len(nodes), table_parent)
 
-shapes = (rpkms.shape[1], 103, 1, len(nodes))
+shapes = (rpkms_train.shape[1], 103, 1, len(nodes))
 with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
     model.trainmodel(
@@ -76,14 +105,16 @@ with open(MODEL_PATH, 'wb') as modelfile:
         nepochs=100,
         modelfile=modelfile,
         logfile=sys.stdout,
-        batchsteps=[25, 75],
+        batchsteps=[],
     )
     print('training')
 
+dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+
 latent_vamb = model.predict(dataloader_vamb)
 LATENT_PATH = f'latent_predict_vamb_{DATASET}{exp_id}.npy'
-print('Saving latent space: Vamb', latent_vamb.shape)
-np.save(LATENT_PATH, latent_vamb)
+# print('Saving latent space: Vamb', latent_vamb.shape)
+# np.save(LATENT_PATH, latent_vamb)
 
 print('Saving the tree', len(nodes))
 TREE_PATH = f'tree_predict_vamb_{DATASET}{exp_id}.npy'
@@ -96,43 +127,33 @@ df_gt = pd.read_csv(GT_PATH)
 predictions = []
 for i in range(len(df_gt)):
     predictions.append(';'.join(np.array(nodes)[latent_vamb[i] > 0.5][1:]))
-
 df_gt[f'predictions{exp_id}'] = predictions
-
-df_mmseq_sp = df_mmseq[(df_mmseq[2] == 'species')]
-mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
-counters = defaultdict(lambda: 0)
-preds = []
-for i, r in df_gt.iterrows():
-    pred_line = r[f'predictions{exp_id}'].split(';')
-    try:
-        mmseq_line = mmseq_map.get(r['contigs'], '').split(';')
-    except AttributeError:
-        preds.append(';'.join(pred_line))
-        continue
-    if mmseq_line[0] != '':
-        for i in range(len(mmseq_line)):
-            if i < len(pred_line):
-                pred_line[i] = mmseq_line[i]
-    preds.append(';'.join(pred_line))
-df_gt[f'predictions{exp_id}_replace'] = preds
-
 df_gt.to_csv(GT_PATH, index=None)
+
+print('Getting augmented predictions')
+dataloader_train, mask_vamb = vamb.encode.make_dataloader(rpkms_train, tnfs_train, lengths_train)
+
+latent_vamb = model.predict(dataloader_train)
+LATENT_PATH = f'latent_predict_vamb_aug_{DATASET}{exp_id}.npy'
+# print('Saving latent space: Vamb', latent_vamb.shape)
+# np.save(LATENT_PATH, latent_vamb)
+
+df_train = pd.DataFrame({'contigs': contignames_train})
+predictions = []
+for i in range(len(df_train)):
+    predictions.append(';'.join(np.array(nodes)[latent_vamb[i] > 0.5][1:]))
+df_train[f'predictions{exp_id}'] = predictions
+df_train.to_csv(f'train_{DATASET}.csv', index=None)
 
 print('Starting the VAE')
 
-# graph_column = df_gt[f'predictions{exp_id}']
-# for i in range(len(latent_vamb)):
-#     predictions.append(';'.join(np.array(nodes)[latent_vamb[i] > 0.5][1:]))
-
-# df_preds = pd.DataFrame({'contigs': contignames, f'predictions{exp_id}': predictions})
-# df_mmseq_genus = pd.merge(df_mmseq, df_preds, left_on=0, right_on='contigs')
-
-graph_column = df_gt[f'predictions{exp_id}_replace']
+graph_column = df_train[f'predictions{exp_id}']
 nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
 targets = [ind_nodes[i] for i in classes_order]
+dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms_train, tnfs_train, lengths_train, targets, len(nodes), table_parent)
+dataloader_labels, mask = vamb.h_loss.make_dataloader_labels_hloss(rpkms_train, tnfs_train, lengths_train, targets, len(nodes), table_parent)
 
 vae = vamb.h_loss.VAEVAEHLoss(
      rpkms.shape[1], 
@@ -146,12 +167,8 @@ vae = vamb.h_loss.VAEVAEHLoss(
      logfile=sys.stdout,
 )
 
-dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
-dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms, tnfs, lengths, targets, len(nodes), table_parent)
-dataloader_labels, mask = vamb.h_loss.make_dataloader_labels_hloss(rpkms, tnfs, lengths, targets, len(nodes), table_parent)
-
 shapes = (rpkms.shape[1], 103, 1, len(nodes))
-dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(dataloader_joint, dataloader_vamb, dataloader_labels, len(nodes), table_parent, shapes)
+dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(dataloader_joint, dataloader_train, dataloader_labels, len(nodes), table_parent, shapes)
 with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
     vae.trainmodel(
@@ -162,6 +179,14 @@ with open(MODEL_PATH, 'wb') as modelfile:
         batchsteps=[25, 75, 150],
     )
     print('training')
+
+graph_column = df_gt[f'predictions{exp_id}']
+classes_order = np.array(list(graph_column.str.split(';').str[-1]))
+targets = [ind_nodes[i] for i in classes_order]
+
+dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(rpkms, tnfs, lengths, targets, len(nodes), table_parent)
+dataloader_labels, mask = vamb.h_loss.make_dataloader_labels_hloss(rpkms, tnfs, lengths, targets, len(nodes), table_parent)
 
 latent_vamb = vae.VAEVamb.encode(dataloader_vamb)
 LATENT_PATH = f'latent_trained_lengths_mmseq_genus_vamb_{DATASET}{exp_id}.npy'

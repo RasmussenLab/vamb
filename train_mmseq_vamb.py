@@ -16,23 +16,21 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
+exp_id = '_longread'
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
-DATASET = args['dataset']
-DEPTH_PATH = f'/home/projects/cpr_10006/projects/vamb/data/datasets/cami2_{DATASET}'
-PATH_CONTIGS = f'{DEPTH_PATH}/contigs_2kbp.fna.gz'
-BAM_PATH = f'{DEPTH_PATH}/bam_sorted'
-ABUNDANCE_PATH = f'{DEPTH_PATH}/depths.npz'
-MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}.pt'
+DATASET = 'longread'
+DEPTH_PATH = f'/home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vambout'
+COMPOSITION_PATH = f'{DEPTH_PATH}/composition.npz'
+ABUNDANCE_PATH = f'{DEPTH_PATH}/abundance.npz'
+MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}{exp_id}.pt'
 N_EPOCHS = args['nepoch']
-MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
+MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy_2023.tsv'
 
-with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
-    composition = vamb.parsecontigs.Composition.from_file(contigfile)
-
-rpkms = vamb.vambtools.read_npz(ABUNDANCE_PATH)
-tnfs, lengths = composition.matrix, composition.metadata.lengths
-contignames = composition.metadata.identifiers
+rpkms = np.load(ABUNDANCE_PATH, mmap_mode='r')['matrix']
+composition = np.load(COMPOSITION_PATH, mmap_mode='r', allow_pickle=True)
+tnfs, lengths = composition['matrix'], composition['lengths']
+contignames = composition['identifiers']
 
 vae = vamb.encode.VAE(nsamples=rpkms.shape[1], cuda=CUDA)
 
@@ -49,14 +47,13 @@ with open(MODEL_PATH, 'wb') as modelfile:
     print('training')
 
 latent = vae.encode(dataloader_vamb)
-LATENT_PATH = f'latent_trained_lengths_vamb_{DATASET}.npy'
+LATENT_PATH = f'latent_trained_lengths_vamb_{DATASET}{exp_id}.npy'
 print('Saving latent space: Vamb')
 np.save(LATENT_PATH, latent)
 
-composition.metadata.filter_mask(mask)
-names = composition.metadata.identifiers
+names = contignames
 
-with open(f'clusters_vamb_{DATASET}_v4_june.tsv', 'w') as binfile:
+with open(f'clusters_vamb_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
     iterator = vamb.cluster.ClusterGenerator(latent)
     iterator = vamb.vambtools.binsplit(
         (

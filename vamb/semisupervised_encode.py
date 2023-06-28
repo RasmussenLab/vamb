@@ -630,8 +630,8 @@ class VAEVAE(object):
             tensors_dict['loss_vamb'], tensors_dict['ce_vamb'], tensors_dict['sse_vamb'], tensors_dict['kld_vamb'] = \
                 self.VAEVamb.calc_loss(depths_in_unsup, depths_out_unsup, tnf_in_unsup, tnf_out_unsup, mu_vamb_unsup, logsigma_vamb_unsup, weights_in_unsup)
             
-            losses_sup_vamb = \
-                self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_s, tnf_in_sup, tnf_out_sup_s, mu_vamb_sup_s, logsigma_vamb_sup_s, weights_in_sup)
+            # losses_sup_vamb = \
+            #     self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_s, tnf_in_sup, tnf_out_sup_s, mu_vamb_sup_s, logsigma_vamb_sup_s, weights_in_sup)
 
             tensors_dict['loss_labels'], tensors_dict['ce_labels_labels'], tensors_dict['kld_labels'], tensors_dict['correct_labels_labels'] = \
                 self.VAELabels.calc_loss(labels_in_unsup, labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup)

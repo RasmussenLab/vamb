@@ -17,7 +17,15 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
-exp_id = '_hloss_mmseq_predict_replace'
+exp_id = '_hloss_mmseq_predict_replace_walktrap_no_components'
+
+DATASET_MAP = {
+    'airways': 'Airways',
+    'gi': 'Gastrointestinal',
+    'oral': 'Oral',
+    'skin': 'Skin',
+    'urog': 'Urogenital',
+}
 
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
@@ -26,17 +34,35 @@ DEPTH_PATH = f'/home/projects/cpr_10006/projects/vamb/data/datasets/cami2_{DATAS
 PATH_CONTIGS = f'{DEPTH_PATH}/contigs_2kbp.fna.gz'
 BAM_PATH = f'{DEPTH_PATH}/bam_sorted'
 ABUNDANCE_PATH = f'{DEPTH_PATH}/depths.npz'
-MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}.pt'
+MODEL_PATH = f'model_semisupervised_mmseq_genus_{DATASET}{exp_id}.pt'
 N_EPOCHS = args['nepoch']
-MMSEQ_PATH = f'/home/projects/cpr_10006/people/svekut/mmseq2/{DATASET}_taxonomy.tsv'
-GT_PATH = f'gt_tax_{DATASET}.csv'
+MMSEQ_PATH = f'/home/projects/cpr_10006/people/paupie/vaevae/mmseq2_annotations/ptracker/{DATASET_MAP[DATASET]}_taxonomy.tsv'
+GT_PATH = f'gt_tax_{DATASET}{exp_id}.csv'
+COMPOSITION_PATH = f'/home/projects/cpr_10006/people/paupie/vaevae/abundances_compositions/{DATASET}/composition.npz'
+ABUNDANCE_PATH = f'/home/projects/cpr_10006/people/paupie/vaevae/abundances_compositions/{DATASET}/abundance.npz'
+WALKTRAP_PATH = f'/home/projects/cpr_10006/people/paupie/vaevae/graph/labels_walktrap/{DATASET_MAP[DATASET]}/walktrap.tsv'
 
-with vamb.vambtools.Reader(PATH_CONTIGS) as contigfile:
-    composition = vamb.parsecontigs.Composition.from_file(contigfile)
+rpkms = np.load(ABUNDANCE_PATH, mmap_mode='r')['matrix']
+composition = np.load(COMPOSITION_PATH, mmap_mode='r', allow_pickle=True)
+tnfs, lengths = composition['matrix'], composition['lengths']
+contignames = composition['identifiers']
 
-rpkms = vamb.vambtools.read_npz(ABUNDANCE_PATH)
-tnfs, lengths = composition.matrix, composition.metadata.lengths
-contignames = composition.metadata.identifiers
+df_walktrap = pd.read_csv(WALKTRAP_PATH, delimiter='\t', header=None)
+print('Len walktrap', len(df_walktrap))
+walktrap_map = {c: i+1 for i, c in enumerate(set(df_walktrap[0]))}
+df_walktrap[2] = df_walktrap[0].map(walktrap_map)
+labels_assembly_map = {k: v for k, v in zip(df_walktrap[1], df_walktrap[2])}
+labels_assembly = np.array([labels_assembly_map.get(c, 0) for c in contignames])
+n_walktraps = len(set(labels_assembly_map.values())) + 1
+
+def one_hot(a, num_classes):
+    return np.squeeze(np.eye(num_classes)[a.reshape(-1)])
+
+ar = one_hot(labels_assembly, num_classes=n_walktraps)
+# rpkms = np.concatenate([rpkms, ar], axis=1).astype(np.float32)
+
+print('N contigs', len(contignames))
+print('rpkms shape', rpkms.shape)
 
 df_mmseq = pd.read_csv(MMSEQ_PATH, delimiter='\t', header=None)
 df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
@@ -82,8 +108,8 @@ with open(MODEL_PATH, 'wb') as modelfile:
 
 latent_vamb = model.predict(dataloader_vamb)
 LATENT_PATH = f'latent_predict_vamb_{DATASET}{exp_id}.npy'
-print('Saving latent space: Vamb', latent_vamb.shape)
-np.save(LATENT_PATH, latent_vamb)
+# print('Saving latent space: Vamb', latent_vamb.shape)
+# np.save(LATENT_PATH, latent_vamb)
 
 print('Saving the tree', len(nodes))
 TREE_PATH = f'tree_predict_vamb_{DATASET}{exp_id}.npy'
@@ -92,11 +118,11 @@ PARENT_PATH = f'parents_predict_vamb_{DATASET}{exp_id}.npy'
 np.save(PARENT_PATH, np.array(table_parent))
 
 print('Getting the predictions')
-df_gt = pd.read_csv(GT_PATH)
+df_gt = pd.DataFrame({'contigs': contignames})
+nodes_ar = np.array(nodes)
 predictions = []
 for i in range(len(df_gt)):
-    predictions.append(';'.join(np.array(nodes)[latent_vamb[i] > 0.5][1:]))
-
+    predictions.append(';'.join(nodes_ar[latent_vamb[i] > 0.5][1:]))
 df_gt[f'predictions{exp_id}'] = predictions
 
 df_mmseq_sp = df_mmseq[(df_mmseq[2] == 'species')]
@@ -120,13 +146,6 @@ df_gt[f'predictions{exp_id}_replace'] = preds
 df_gt.to_csv(GT_PATH, index=None)
 
 print('Starting the VAE')
-
-# graph_column = df_gt[f'predictions{exp_id}']
-# for i in range(len(latent_vamb)):
-#     predictions.append(';'.join(np.array(nodes)[latent_vamb[i] > 0.5][1:]))
-
-# df_preds = pd.DataFrame({'contigs': contignames, f'predictions{exp_id}': predictions})
-# df_mmseq_genus = pd.merge(df_mmseq, df_preds, left_on=0, right_on='contigs')
 
 graph_column = df_gt[f'predictions{exp_id}_replace']
 nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
@@ -178,8 +197,7 @@ LATENT_PATH = f'latent_trained_lengths_mmseq_genus_both_{DATASET}{exp_id}.npy'
 print('Saving latent space: Both')
 np.save(LATENT_PATH, latent_both)
 
-composition.metadata.filter_mask(mask_vamb)
-names = composition.metadata.identifiers
+names = contignames
 
 with open(f'clusters_mmseq_{DATASET}_v4{exp_id}.tsv', 'w') as binfile:
     iterator = vamb.cluster.ClusterGenerator(latent_both)

@@ -12,4 +12,4 @@ conda activate /home/projects/cpr_10006/people/svekut/.conda/vamb
 
 nepoch=200
 
-python3 train_mmseq_hloss_vamb2label_almeida.py  --nepoch $nepoch --cuda  --dataset almeida
+python3 train_mmseq_hloss_vamb2label_longread.py  --nepoch $nepoch --cuda
