@@ -54,9 +54,6 @@ targets = [ind_nodes[i] for i in classes_order]
 model = vamb.h_loss.VAMB2Label(
      rpkms.shape[1], 
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
      cuda=CUDA,
@@ -137,9 +134,6 @@ targets = [ind_nodes[i] for i in classes_order]
 vae = vamb.h_loss.VAEVAEHLoss(
      rpkms.shape[1], 
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
      cuda=CUDA,

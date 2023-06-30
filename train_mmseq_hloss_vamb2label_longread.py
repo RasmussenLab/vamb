@@ -17,7 +17,7 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
-exp_id = '_longread'
+exp_id = '_longread_1000_64'
 
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
@@ -71,9 +71,6 @@ targets = [ind_nodes[i] for i in classes_order]
 model = vamb.h_loss.VAMB2Label(
      rpkms.shape[1], 
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
      cuda=CUDA,
@@ -147,11 +144,9 @@ targets = [ind_nodes[i] for i in classes_order]
 vae = vamb.h_loss.VAEVAEHLoss(
      rpkms.shape[1], 
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
+     nlatent=64,
      cuda=CUDA,
      logfile=sys.stdout,
 )
@@ -169,7 +164,8 @@ with open(MODEL_PATH, 'wb') as modelfile:
         nepochs=N_EPOCHS,
         modelfile=modelfile,
         logfile=sys.stdout,
-        batchsteps=[25, 75, 150],
+        batchsteps=[],
+        # batchsteps=[25, 75, 150],
     )
     print('training')
 

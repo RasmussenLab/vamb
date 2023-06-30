@@ -108,9 +108,9 @@ def make_dataloader_semisupervised(dataloader_joint, dataloader_vamb, dataloader
 
 
 class VAELabels(_encode.VAE):
-    """Variational autoencoder that encodes only the labels, subclass of VAE.
+    """Variational autoencoder that encodes only the onehot labels, subclass of VAE.
     Instantiate with:
-        nsamples: Number of samples in abundance matrix
+        nlabels: Number of labels
         nhiddens: List of n_neurons in the hidden layers [None=Auto]
         nlatent: Number of neurons in the latent layer [32]
         alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
@@ -341,9 +341,10 @@ class VAELabels(_encode.VAE):
 
 
 class VAEConcat(_encode.VAE):
-    """Variational autoencoder that uses labels as concatented input, subclass of VAE.
+    """Variational autoencoder that uses TNFs, abundances and labels as concatented input, subclass of VAE.
     Instantiate with:
         nsamples: Number of samples in abundance matrix
+        nlabels: Number of labels
         nhiddens: List of n_neurons in the hidden layers [None=Auto]
         nlatent: Number of neurons in the latent layer [32]
         alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
@@ -527,6 +528,26 @@ class VAEConcat(_encode.VAE):
 
 
 class VAEVAE(object):
+    """Bi-modal variational autoencoder that uses TNFs, abundances and one-hot labels.
+    It contains three individual encoders (VAMB, one-hot labels and concatenated VAMB+labels)
+    and two decoders (VAMB and labels).
+    Instantiate with:
+        nsamples: Number of samples in abundance matrix
+        nlabels: Number of labels
+        nhiddens: List of n_neurons in the hidden layers [None=Auto]
+        nlatent: Number of neurons in the latent layer [32]
+        alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
+        beta: Multiply KLD by the inverse of this value [200]
+        dropout: Probability of dropout on forward pass [0.2]
+        cuda: Use CUDA (GPU accelerated training) [False]
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+        Trains the model, returning None
+    vae.encode(self, data_loader):
+        Encodes the data in the data loader and returns the encoded matrix.
+    If alpha or dropout is None and there is only one sample, they are set to
+    0.99 and 0.0, respectively
+    """
+
     def __init__(self, nsamples, nlabels, nhiddens=None, nlatent=32, alpha=None,
                  beta=200, dropout=0.2, cuda=False):
         N_l = max(nlabels, 105)
@@ -577,7 +598,6 @@ class VAEVAE(object):
             'loss_vamb', 'ce_vamb', 'sse_vamb', 'kld_vamb', 
             'loss_labels', 'ce_labels_labels', 'kld_labels', 'correct_labels_labels',
             'loss_joint', 'ce_joint', 'sse_joint', 'ce_labels_joint', 'kld_vamb_joint', 'kld_labels_joint', 'correct_labels_joint',
-            # 'correct_labels_vamb',
             'loss',
         ]
         metrics_dict = {k: 0 for k in metrics}
@@ -619,40 +639,16 @@ class VAEVAE(object):
             labels_out_sup = self.VAELabels._decode(self.VAELabels.reparameterize(mu_sup, logsigma_sup)) # use the one-modality decoders
 
             depths_out_unsup, tnf_out_unsup,  mu_vamb_unsup, logsigma_vamb_unsup = self.VAEVamb(depths_in_unsup, tnf_in_unsup)
-            depths_out_sup_s, tnf_out_sup_s,  mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(depths_in_sup, tnf_in_sup)
+            _, _,  mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(depths_in_sup, tnf_in_sup)
 
             labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup = self.VAELabels(labels_in_unsup)
-            labels_out_sup_s, mu_labels_sup_s, logsigma_labels_sup_s = self.VAELabels(labels_in_sup)
-
-            depths_out_sup_op, tnf_out_sup_op = self.VAEVamb._decode(self.VAEVamb.reparameterize(mu_labels_sup_s, logsigma_labels_sup_s)) # use the one-modality decoders
-            labels_out_sup_op = self.VAELabels._decode(self.VAELabels.reparameterize(mu_vamb_sup_s, logsigma_vamb_sup_s)) # use the one-modality decoders
+            _, mu_labels_sup_s, logsigma_labels_sup_s = self.VAELabels(labels_in_sup)
 
             tensors_dict['loss_vamb'], tensors_dict['ce_vamb'], tensors_dict['sse_vamb'], tensors_dict['kld_vamb'] = \
                 self.VAEVamb.calc_loss(depths_in_unsup, depths_out_unsup, tnf_in_unsup, tnf_out_unsup, mu_vamb_unsup, logsigma_vamb_unsup, weights_in_unsup)
-            
-            # losses_sup_vamb = \
-            #     self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_s, tnf_in_sup, tnf_out_sup_s, mu_vamb_sup_s, logsigma_vamb_sup_s, weights_in_sup)
 
             tensors_dict['loss_labels'], tensors_dict['ce_labels_labels'], tensors_dict['kld_labels'], tensors_dict['correct_labels_labels'] = \
                 self.VAELabels.calc_loss(labels_in_unsup, labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup)
-            
-            # losses_sup_labels = \
-            #     self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_s, mu_labels_sup_s, logsigma_labels_sup_s)
-            
-            # loss_vamb2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_op, mu_vamb_sup_s, logsigma_vamb_sup_s)
-            # loss_label2vamb = \
-            #     self.VAEVamb.calc_loss(depths_in_sup, depths_out_sup_op, tnf_in_sup, tnf_out_sup_op, mu_labels_sup_s, logsigma_labels_sup_s, weights_in_sup)
-
-            #  loss_joint2label = self.VAELabels.calc_loss(labels_in_sup, labels_out_sup_joint, mu_sup, logsigma_sup)
-            
-            # losses_joint = self.calc_loss_joint(
-            #         depths_in_sup, depths_out_sup, tnf_in_sup, 
-            #         tnf_out_sup, labels_in_sup, labels_out_sup,
-            #         mu_sup, logsigma_sup, 
-            #         mu_vamb_unsup, logsigma_vamb_unsup,
-            #         mu_labels_unsup, logsigma_labels_unsup,
-            #         weights_in_sup,
-            #     )
 
             losses_joint = self.calc_loss_joint(
                     depths_in_sup, depths_out_sup, tnf_in_sup, 
@@ -665,10 +661,6 @@ class VAEVAE(object):
 
             tensors_dict['loss_joint'], tensors_dict['ce_joint'], tensors_dict['sse_joint'], tensors_dict['ce_labels_joint'], \
                 tensors_dict['kld_vamb_joint'], tensors_dict['kld_labels_joint'], tensors_dict['correct_labels_joint'] = losses_joint
-            
-            # tensors_dict['correct_labels_vamb'] = loss_vamb2label[3]
-
-            # tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels'] + 100*(loss_vamb2label[1] + loss_label2vamb[1]) + losses_sup_labels[0] + losses_sup_vamb[0]
 
             tensors_dict['loss'] = tensors_dict['loss_joint'] + tensors_dict['loss_vamb'] + tensors_dict['loss_labels']
 
@@ -680,7 +672,6 @@ class VAEVAE(object):
 
         metrics_dict['correct_labels_joint'] /= data_loader.batch_size
         metrics_dict['correct_labels_labels'] /= data_loader.batch_size
-        # metrics_dict['correct_labels_vamb'] /= data_loader.batch_size
         if logfile is not None:
             print(', '.join([k + f' {v/len(data_loader):.6f}' for k, v in metrics_dict.items()]), file=logfile, flush=True)
             logfile.flush()
@@ -690,7 +681,7 @@ class VAEVAE(object):
 
     def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
                    batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
-        """Train the autoencoder from depths array and tnf array.
+        """Train the autoencoder from depths array, tnf array and one-hot labels array.
         Inputs:
             dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [500]
@@ -813,267 +804,3 @@ class VAEVAE(object):
             vae.VAEJoint.eval()
 
         return vae
-
-
-def product_of_gaussians(mu1, logstd1, mu2, logstd2):
-    """Compute parameters for the product of experts."""
-    loc = _torch.stack([mu1, mu2])
-    scale = _torch.stack([logstd1, logstd2])
-    variance = scale.exp() ** 2
-
-    # parameter for prior
-    prior_prec = 1  # prior_loc is not specified because it is equal to 0.
-
-    # compute the diagonal precision matrix.
-    prec = _torch.zeros_like(variance).type(scale.dtype)
-    prec[variance != 0] = 1. / variance[variance != 0]
-
-    # compute the square root of a diagonal covariance matrix for the product of distributions.
-    output_prec = _torch.sum(prec, dim=0) + prior_prec
-    output_variance = 1. / output_prec   # (n_batch, output_dim)
-
-    # compute the mean vectors for the product of normal distributions.
-    output_loc = _torch.sum(prec * loc, dim=0)   # (n_batch, output_dim)
-    output_loc = output_loc * output_variance
-
-    return output_loc, _torch.sqrt(output_variance)
-
-
-def make_PoE_Vamb(expert1, expert2):
-    class PoE_Vamb(_encode.VAE):
-        def forward_poe_vamb(self, depths, tnf, expert1=None, expert2=None):
-            """
-            A partial method to patch on a VAE to make it PoE_VAE
-            """
-            tensor = _torch.cat((depths, tnf), 1)
-            mu1, logsigma1 = expert1._encode(tensor)
-            mu2, logsigma2 = expert2._encode(tensor)
-
-            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
-
-            latent = expert2.reparameterize(mu, logsigma)
-
-            depths_out, tnf_out = expert2._decode(latent) # decoder weights are THIS class
-            return depths_out, tnf_out, mu, logsigma
-        
-        def _decode_poe(self, tensor, expert2=None):
-            return expert2._decode(tensor)
-
-        forward = partialmethod(forward_poe_vamb, expert1=expert1, expert2=expert2)
-        _decode = partialmethod(_decode_poe, expert2=expert2)
-    return PoE_Vamb
-
-
-def make_PoE_Labels(expert1, expert2):
-    class PoE_Labels(VAELabels):
-        def forward_poe_labels(self, labels, expert1=None, expert2=None):
-            """
-            A partial method to patch on a VAE to make it PoE_VAE
-            """
-            mu1, logsigma1 = expert1._encode(labels)
-            mu2, logsigma2 = expert2._encode(labels)
-
-            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
-
-            latent = expert2.reparameterize(mu, logsigma)
-
-            labels_out = expert2._decode(latent)
-            return labels_out, mu, logsigma
-        
-        def _decode_poe(self, tensor, expert2=None):
-            return expert2._decode(tensor)
-
-        forward = partialmethod(forward_poe_labels, expert1=expert1, expert2=expert2)
-        _decode = partialmethod(_decode_poe, expert2=expert2)
-
-    return PoE_Labels
-
-
-def make_PoE_Joint(expert1, expert2):
-    class PoE_Joint(VAEConcat):
-        def forward_poe_joint(self, depths, tnf, labels, expert1=None, expert2=None):
-            """
-            A partial method to patch on a VAE to make it PoE_VAE
-            """
-            tensor = _torch.cat((depths, tnf), 1)
-            mu1, logsigma1 = expert1._encode(tensor)
-            mu2, logsigma2 = expert2._encode(labels)
-
-            mu, sigma = product_of_gaussians(mu1, logsigma1, mu2, logsigma2)
-            logsigma = _torch.log(_torch.clamp(sigma, min=1e-6))
-
-            latent = expert2.reparameterize(mu, logsigma)
-
-            depths_out, tnf_out = expert1._decode(latent)
-            labels_out = expert2._decode(latent)
-
-            return depths_out, tnf_out, labels_out, mu, logsigma
-
-        forward = partialmethod(forward_poe_joint, expert1=expert1, expert2=expert2)
-
-    return PoE_Joint
-
-
-class SVAE(VAEVAE):
-    def __init__(self, nsamples, nlabels, nhiddens=None, nlatent=32, alpha=None,
-                 beta=200, dropout=0.2, cuda=False):
-        N_l = max(nlabels, 105)
-        self._VAEVamb = _encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-        self._VAELabels = VAELabels(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-        self._VAEVamb_joint = _encode.VAE(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-        self._VAELabels_joint = VAELabels(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-
-        self.VAEVamb = make_PoE_Vamb(self._VAEVamb, self._VAEVamb_joint)(nsamples, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-        self.VAELabels = make_PoE_Labels(self._VAELabels, self._VAELabels_joint)(N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-        self.VAEJoint = make_PoE_Joint(self._VAEVamb_joint, self._VAELabels_joint)(nsamples, N_l, nhiddens=nhiddens, nlatent=nlatent, alpha=alpha,
-                 beta=beta, dropout=dropout, cuda=cuda)
-
-    def save(self, filehandle):
-        """Saves the VAE to a path or binary opened file. Load with VAE.load
-        Input: Path or binary opened filehandle
-        Output: None
-        """
-        state = {'nsamples': self.VAEVamb.nsamples,
-                 'nlabels': self.VAELabels.nlabels,
-                 'alpha': self.VAEVamb.alpha,
-                 'beta': self.VAEVamb.beta,
-                 'dropout': self.VAEVamb.dropout,
-                 'nhiddens': self.VAEVamb.nhiddens,
-                 'nlatent': self.VAEVamb.nlatent,
-                 'state_VAEVamb': self._VAEVamb.state_dict(),
-                 'state_VAELabels': self._VAELabels.state_dict(),
-                 'state_VAEVamb_joint': self._VAEVamb_joint.state_dict(),
-                 'state_VAELabels_joint': self._VAELabels_joint.state_dict(),
-                 'state_VAEVamb_decoder': self.VAEVamb.state_dict(),
-                 'state_VAELabels_decoder': self.VAELabels.state_dict(),
-                }
-
-        _torch.save(state, filehandle)
-
-    @classmethod
-    def load(cls, path, cuda=False, evaluate=True):
-        """Instantiates a VAE from a model file.
-        Inputs:
-            path: Path to model file as created by functions VAE.save or
-                  VAE.trainmodel.
-            cuda: If network should work on GPU [False]
-            evaluate: Return network in evaluation mode [True]
-        Output: VAE with weights and parameters matching the saved network.
-        """
-
-        # Forcably load to CPU even if model was saves as GPU model
-        dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
-
-        nsamples = dictionary['nsamples']
-        nlabels = dictionary['nlabels']
-        alpha = dictionary['alpha']
-        beta = dictionary['beta']
-        dropout = dictionary['dropout']
-        nhiddens = dictionary['nhiddens']
-        nlatent = dictionary['nlatent']
-
-        vae = cls(nsamples, nlabels, nhiddens, nlatent, alpha, beta, dropout, cuda)
-        vae._VAEVamb.load_state_dict(dictionary['state_VAEVamb'])
-        vae._VAELabels.load_state_dict(dictionary['state_VAELabels'])
-        vae._VAEVamb_joint.load_state_dict(dictionary['state_VAEVamb_joint'])
-        vae._VAELabels_joint.load_state_dict(dictionary['state_VAELabels_joint'])
-        vae.VAEVamb.load_state_dict(dictionary['state_VAEVamb_decoder'])
-        vae.VAELabels.load_state_dict(dictionary['state_VAELabels_decoder'])
-
-        if cuda:
-            vae.VAEVamb.cuda()
-            vae.VAELabels.cuda()
-            vae._VAEVamb_joint.cuda()
-            vae._VAELabels_joint.cuda()
-            vae.VAEVamb.cuda()
-            vae.VAELabels.cuda()
-
-        if evaluate:
-            vae.VAEVamb.eval()
-            vae.VAELabels.eval()
-            vae._VAEVamb_joint.eval()
-            vae._VAELabels_joint.eval()
-            vae.VAEVamb.eval()
-            vae.VAELabels.eval()
-
-        return vae
-    
-    def trainmodel(self, dataloader, nepochs=500, lrate=1e-3,
-                   batchsteps=[25, 75, 150, 300], logfile=None, modelfile=None):
-        """Train the autoencoder from depths array and tnf array.
-        Inputs:
-            dataloader: DataLoader made by make_dataloader
-            nepochs: Train for this many epochs before encoding [500]
-            lrate: Starting learning rate for the optimizer [0.001]
-            batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
-            logfile: Print status updates to this file if not None [None]
-            modelfile: Save models to this file if not None [None]
-        Output: None
-        """
-
-        if lrate < 0:
-            raise ValueError('Learning rate must be positive, not {}'.format(lrate))
-
-        if nepochs < 1:
-            raise ValueError('Minimum 1 epoch, not {}'.format(nepochs))
-
-        if batchsteps is None:
-            batchsteps_set = set()
-        else:
-            # First collect to list in order to allow all element types, then check that
-            # they are integers
-            batchsteps = list(batchsteps)
-            if not all(isinstance(i, int) for i in batchsteps):
-                raise ValueError('All elements of batchsteps must be integers')
-            if max(batchsteps, default=0) >= nepochs:
-                raise ValueError('Max batchsteps must not equal or exceed nepochs')
-            last_batchsize = dataloader.batch_size * 2**len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:
-                raise ValueError('Last batch size exceeds dataset length')
-            batchsteps_set = set(batchsteps)
-
-        # Get number of features
-        ncontigs, nsamples = dataloader.dataset.tensors[0].shape
-        optimizer = _Adam(
-            list(self._VAEVamb.parameters()) + \
-            list(self._VAEVamb_joint.parameters()) + \
-            list(self._VAELabels.parameters()) + \
-            list(self._VAELabels_joint.parameters()), lr=lrate)
-
-        if logfile is not None:
-            print('\tNetwork properties:', file=logfile)
-            print('\tCUDA:', self.VAEVamb.usecuda, file=logfile)
-            print('\tAlpha:', self.VAEVamb.alpha, file=logfile)
-            print('\tBeta:', self.VAEVamb.beta, file=logfile)
-            print('\tDropout:', self.VAEVamb.dropout, file=logfile)
-            print('\tN hidden:', ', '.join(map(str, self.VAEVamb.nhiddens)), file=logfile)
-            print('\tN latent:', self.VAEVamb.nlatent, file=logfile)
-            print('\n\tTraining properties:', file=logfile)
-            print('\tN epochs:', nepochs, file=logfile)
-            print('\tStarting batch size:', dataloader.batch_size, file=logfile)
-            batchsteps_string = ', '.join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
-            print('\tBatchsteps:', batchsteps_string, file=logfile)
-            print('\tLearning rate:', lrate, file=logfile)
-            print('\tN sequences:', ncontigs, file=logfile)
-            print('\tN samples:', nsamples, file=logfile, end='\n\n')
-
-        # Train
-        for epoch in range(nepochs):
-            dataloader = self.trainepoch(dataloader, epoch, optimizer, batchsteps_set, logfile)
-
-        # Save weights - Lord forgive me, for I have sinned when catching all exceptions
-        if modelfile is not None:
-            try:
-                self.save(modelfile)
-            except:
-                pass
-
-        return None

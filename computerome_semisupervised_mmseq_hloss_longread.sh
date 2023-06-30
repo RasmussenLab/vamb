@@ -10,6 +10,6 @@ source ~/.bashrc
 conda init bash
 conda activate /home/projects/cpr_10006/people/svekut/.conda/vamb
 
-nepoch=200
+nepoch=1000
 
 python3 train_mmseq_hloss_vamb2label_longread.py  --nepoch $nepoch --cuda
