@@ -16,7 +16,7 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
-exp_id = '_almeida_hloss_pred2'
+exp_id = '_almeida_hloss_pred_short'
 
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
@@ -45,8 +45,19 @@ print('Species', len(df_mmseq[(df_mmseq[2] == 'species')]))
 ind_map = {c: i for i, c in enumerate(contignames)}
 indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
 
-graph_column = df_mmseq[8]
+species_dict = df_mmseq[df_mmseq[2] == 'species'][3].value_counts()
+non_abundant_species = set()
+for k, v in species_dict.items():
+    if v < 1000:
+        non_abundant_species.add(k)
+df_mmseq['tax'] = df_mmseq[8]
+df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 'tax'] = \
+    df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8].str.split(';').str[:1].map(lambda x: ';'.join(x))
+
+graph_column = df_mmseq['tax']
 nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+
+print('N nodes', len(nodes))
 
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
 targets = [ind_nodes[i] for i in classes_order]
@@ -64,7 +75,7 @@ model = vamb.h_loss.VAMB2Label(
 
 with open(f'indices_mmseq_genus_{DATASET}{exp_id}.pickle', 'wb') as handle:
     pickle.dump(indices_mmseq, handle, protocol=pickle.HIGHEST_PROTOCOL)
-batchsize = 500
+batchsize = 128
 dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths, batchsize=batchsize)
 dataloader_joint, mask = vamb.h_loss.make_dataloader_concat_hloss(
      rpkms[indices_mmseq], 
@@ -164,8 +175,8 @@ with open(MODEL_PATH, 'wb') as modelfile:
         nepochs=N_EPOCHS,
         modelfile=modelfile,
         logfile=sys.stdout,
-        batchsteps=[25, 75, 150],
-        # batchsteps=[],
+        # batchsteps=[25, 75, 150],
+        batchsteps=[],
     )
     print('training')
 
