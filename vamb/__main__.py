@@ -14,7 +14,9 @@ from math import isfinite
 from typing import Optional, IO
 from pathlib import Path
 from collections.abc import Sequence
+from collections import defaultdict
 from torch.utils.data import DataLoader
+import pandas as pd
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -193,6 +195,18 @@ class AAEOptions:
         self.nlatent_y = nlatent_y
         self.sl = sl
         self.slr = slr
+
+
+class TaxonomyOptions:
+    __slots__ = ["taxonomy_path"]
+
+    def __init__(
+        self,
+        taxonomy_path: Path,
+    ):
+        assert isinstance(taxonomy_path, Path)
+
+        self.taxonomy_path = taxonomy_path
 
 
 class EncoderOptions:
@@ -943,6 +957,118 @@ def run(
     log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
 
 
+def run_taxonomy_predictor(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    vae_training_options: VAETrainingOptions,
+    taxonomy_options: TaxonomyOptions,
+    logfile: IO[str],
+):
+    log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
+    log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
+    begintime = time.time()
+
+    # Get TNFs, save as npz
+    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
+
+    # Parse BAMs, save as npz
+    abundance = calc_rpkm(
+        abundance_options,
+        vamb_options.out_dir,
+        composition.metadata,
+        vamb_options.n_threads,
+        logfile,
+    )
+
+    time_generating_input = round(time.time() - begintime, 2)
+    log(
+        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
+        logfile,
+        1,
+    )
+
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    contignames = composition.metadata.identifiers
+    rpkms = abundance.matrix
+
+    df_mmseq = pd.read_csv(taxonomy_options.taxonomy_path, delimiter='\t', header=None)
+    df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
+
+    ind_map = {c: i for i, c in enumerate(contignames)}
+    indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
+
+    graph_column = df_mmseq[8]
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+
+    classes_order = np.array(list(graph_column.str.split(';').str[-1]))
+    targets = [ind_nodes[i] for i in classes_order]
+
+    model = vamb.h_loss.VAMB2Label(
+        rpkms.shape[1], 
+        len(nodes), 
+        nodes, 
+        table_parent,
+        cuda=vamb_options.cuda,
+    )
+
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths, batchsize=vae_training_options.batchsize)
+    dataloader_joint, mask_joint = vamb.h_loss.make_dataloader_concat_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent, batchsize=vae_training_options.batchsize)
+
+    print("", file=logfile)
+    log("Created dataloader and mask", logfile, 0)
+    n_discarded = len(mask_vamb) - mask_vamb.sum()
+    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
+    log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
+
+    composition.metadata.filter_mask(mask_vamb)
+    names = composition.metadata.identifiers
+
+    predictortime = time.time()
+    log(f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}", logfile, 0)
+    MODEL_PATH = vamb_options.out_dir.joinpath("predictor_model.pt")
+    with open(MODEL_PATH, 'wb') as modelfile:
+        model.trainmodel(
+            dataloader_joint,
+            nepochs=vae_training_options.nepochs,
+            modelfile=modelfile,
+            logfile=logfile,
+            batchsteps=vae_training_options.batchsteps,
+        )
+    log(f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds.", logfile, 0)
+    predicted_vector = model.predict(dataloader_vamb)
+
+    log(f"Writing the taxonomy predictions", logfile, 0)
+    df_gt = pd.DataFrame({'contigs': names})
+    nodes_ar = np.array(nodes)
+    predictions = []
+    for i in range(len(df_gt)):
+        predictions.append(';'.join(nodes_ar[predicted_vector[i] > 0.5][1:]))
+    df_gt[f'predictions'] = predictions
+
+    df_mmseq_sp = df_mmseq[(df_mmseq[2] == 'species')]
+    mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
+    preds = []
+    for i, r in df_gt.iterrows():
+        pred_line = r[f'predictions'].split(';')
+        try:
+            mmseq_line = mmseq_map.get(r['contigs'], '').split(';')
+        except AttributeError:
+            preds.append(';'.join(pred_line))
+            continue
+        if mmseq_line[0] != '':
+            for i in range(len(mmseq_line)):
+                if i < len(pred_line):
+                    pred_line[i] = mmseq_line[i]
+        preds.append(';'.join(pred_line))
+    df_gt[f'predictions'] = preds
+
+    PREDICTED_PATH = vamb_options.out_dir.joinpath("results_predictor.csv")
+    df_gt.to_csv(PREDICTED_PATH, index=None)
+
+    log(f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+
+
 def main():
     doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
 
@@ -1072,9 +1198,9 @@ def main():
         dest="model",
         metavar="",
         type=str,
-        choices=["vae", "aae", "vae-aae"],
+        choices=["vae", "aae", "vae-aae", "taxonomy_predictor"],
         default="vae",
-        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae-aae), [vae]",
+        help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor [vae]",
     )
 
     # VAE arguments
@@ -1279,6 +1405,17 @@ def main():
         help="binsplit separator [None = no split]",
     )
 
+    # Taxonomy arguments
+    taxonomys = parser.add_argument_group(
+        title="Taxonomy (results of mmseqs search)"
+    )
+    taxonomys.add_argument(
+        "--taxonomy", 
+        metavar="", 
+        type=Path, 
+        help="path to taxonomy tsv file, output of mmseq search",
+    )
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit()
@@ -1305,8 +1442,7 @@ def main():
         vae_training_options = VAETrainingOptions(
             nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
         )
-    else:
-        assert args.model == "aae"
+    elif args.model == "aae":
         vae_options = None
         vae_training_options = None
 
@@ -1322,6 +1458,15 @@ def main():
                 raise ValueError(
                     f'VAE model not used, but VAE-specific arg "{name}" used'
                 )
+    else:
+        assert args.model == "taxonomy_predictor"
+        vae_options = None
+        vae_training_options = VAETrainingOptions(
+            nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
+        )
+        taxonomy_options = TaxonomyOptions(
+            taxonomy_path=args.taxonomy,
+        )
 
     if args.model in ("aae", "vae-aae"):
         aae_options = AAEOptions(
@@ -1339,7 +1484,7 @@ def main():
             temp=args.temp,
         )
     else:
-        assert args.model == "vae"
+        assert args.model in ("taxonomy_predictor", "vae")
         aae_options = None
         aae_training_options = None
 
@@ -1359,23 +1504,24 @@ def main():
                     f'AAE model not used, but AAE-specific arg "{name}" used'
                 )
 
-    encoder_options = EncoderOptions(
-        vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
-    )
-    training_options = TrainingOptions(
-        encoder_options=encoder_options,
-        vae_options=vae_training_options,
-        aae_options=aae_training_options,
-        lrate=args.lrate,
-    )
+    if args.model != "taxonomy_predictor":
+        encoder_options = EncoderOptions(
+            vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
+        )
+        training_options = TrainingOptions(
+            encoder_options=encoder_options,
+            vae_options=vae_training_options,
+            aae_options=aae_training_options,
+            lrate=args.lrate,
+        )
 
-    cluster_options = ClusterOptions(
-        args.window_size,
-        args.min_successes,
-        args.min_cluster_size,
-        args.max_clusters,
-        args.binsplit_separator,
-    )
+        cluster_options = ClusterOptions(
+            args.window_size,
+            args.min_successes,
+            args.min_cluster_size,
+            args.max_clusters,
+            args.binsplit_separator,
+        )
 
     vamb_options = VambOptions(
         args.outdir,
@@ -1391,15 +1537,25 @@ def main():
     try_make_dir(vamb_options.out_dir)
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
-        run(
-            vamb_options=vamb_options,
-            comp_options=comp_options,
-            abundance_options=abundance_options,
-            encoder_options=encoder_options,
-            training_options=training_options,
-            cluster_options=cluster_options,
-            logfile=logfile,
-        )
+        if args.model == "taxonomy_predictor":
+            run_taxonomy_predictor(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                taxonomy_options=taxonomy_options,
+                vae_training_options=vae_training_options,
+                logfile=logfile,
+            )
+        else:
+            run(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                encoder_options=encoder_options,
+                training_options=training_options,
+                cluster_options=cluster_options,
+                logfile=logfile,
+            )
 
 
 if __name__ == "__main__":

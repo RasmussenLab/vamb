@@ -62,7 +62,7 @@ ind_map = {c: i for i, c in enumerate(contignames)}
 indices_mmseq = [ind_map[c] for c in df_mmseq_genus[0]]
 
 graph_column = df_mmseq_genus['gt_tree']
-nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 # indices_mmseq = [ind_map[c] for c in df_gt['contigs']]
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
@@ -71,9 +71,6 @@ targets = [ind_nodes[i] for i in classes_order]
 vae = vamb.h_loss.VAEVAEHLoss(
      rpkms.shape[1], 
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
      cuda=CUDA,

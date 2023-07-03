@@ -64,9 +64,6 @@ targets = [ind_nodes[i] for i in classes_order]
 
 vae = vamb.h_loss.VAELabelsHLoss(
      len(nodes), 
-     table_indices, 
-     table_true, 
-     table_walkdown, 
      nodes, 
      table_parent,
      cuda=CUDA,

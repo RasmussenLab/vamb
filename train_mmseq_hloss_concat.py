@@ -39,7 +39,7 @@ contignames = composition.metadata.identifiers
 
 df_gt = pd.read_csv(GT_PATH)
 graph_column = df_gt[f'predictions{exp_id}']
-nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
 targets = [ind_nodes[i] for i in classes_order]

@@ -16,7 +16,7 @@ parser.add_argument("--supervision", type=float, default=1.)
 args = vars(parser.parse_args())
 print(args)
 
-exp_id = '_longread'
+exp_id = '_longread_1000_64'
 SUP = args['supervision']
 CUDA = bool(args['cuda'])
 DATASET = 'longread'
@@ -32,24 +32,24 @@ composition = np.load(COMPOSITION_PATH, mmap_mode='r', allow_pickle=True)
 tnfs, lengths = composition['matrix'], composition['lengths']
 contignames = composition['identifiers']
 
-vae = vamb.encode.VAE(nsamples=rpkms.shape[1], cuda=CUDA)
+vae = vamb.encode.VAE(nsamples=rpkms.shape[1], nlatent=64, cuda=CUDA)
 
 dataloader_vamb, mask = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
-# with open(MODEL_PATH, 'wb') as modelfile:
-#     print('training')
-#     vae.trainmodel(
-#         dataloader_vamb,
-#         nepochs=N_EPOCHS,
-#         modelfile=modelfile,
-#         logfile=sys.stdout,
-#         batchsteps=[25, 75, 150],
-#     )
-#     print('training')
+with open(MODEL_PATH, 'wb') as modelfile:
+    print('training')
+    vae.trainmodel(
+        dataloader_vamb,
+        nepochs=N_EPOCHS,
+        modelfile=modelfile,
+        logfile=sys.stdout,
+        batchsteps=[25, 75, 150],
+    )
+    print('training')
 
-# latent = vae.encode(dataloader_vamb)
+latent = vae.encode(dataloader_vamb)
 LATENT_PATH = f'latent_trained_lengths_vamb_{DATASET}{exp_id}.npy'
 print('Saving latent space: Vamb')
-# np.save(LATENT_PATH, latent)
+np.save(LATENT_PATH, latent)
 
 latent = np.load(LATENT_PATH)
 names = contignames[mask]

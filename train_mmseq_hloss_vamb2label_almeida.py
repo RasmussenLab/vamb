@@ -55,7 +55,7 @@ df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 'tax'] = \
     df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8].str.split(';').str[:1].map(lambda x: ';'.join(x))
 
 graph_column = df_mmseq['tax']
-nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 print('N nodes', len(nodes))
 
@@ -142,7 +142,7 @@ df_gt.to_csv(GT_PATH, index=None)
 print('Starting the VAE')
 
 graph_column = df_gt[f'predictions{exp_id}_replace']
-nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
 classes_order = np.array(list(graph_column.str.split(';').str[-1]))
 targets = [ind_nodes[i] for i in classes_order]

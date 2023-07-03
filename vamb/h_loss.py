@@ -51,9 +51,6 @@ def get_level(x):
 
 
 def make_graph(taxs):
-    table_indices = []
-    table_true = []
-    table_walkdown = []
     table_parent = []
     G = nx.DiGraph()
     G_op = nx.Graph()
@@ -65,57 +62,22 @@ def make_graph(taxs):
     for i, row in enumerate(taxs):
         try:
             r = row.split(';')
-        except AttributeError:
-            print(row)
+        except AttributeError: # ignore non-strings in the input
+            continue
         if len(r) == 1:
             continue
         for j in range(1, len(r)):
             G.add_edge(r[j-1], r[j])
             G_op.add_edge(r[j-1], r[j])
-        if (i+1) % 1000 == 0:
-            print('Processed', i)
     edges = nx.bfs_edges(G, root)
     nodes = [root] + [v for u, v in edges]
     ind_nodes = {v: i for i, v in enumerate(nodes)}
-    for i, n in enumerate(nodes):
-        res = {}
-        res_true = {}
-        table_walkdown.append([ind_nodes[s] for s in G.successors(n)])
+    for n in nodes:
         if n == root:
-            table_indices.append(res)
-            table_true.append(res_true)
             table_parent.append(-1)
-            continue
-        path = nx.shortest_path(G_op, n, root)
-        table_parent.append(ind_nodes[list(G.predecessors(n))[0]])
-        for p in path[:-1]:
-            parent = list(G.predecessors(p))[0]
-            siblings = list(G.successors(parent))
-            res[get_level(p)] = [ind_nodes[s] for s in siblings]
-            res_true[get_level(p)] = [j for j, v in enumerate(res[get_level(p)]) if v == ind_nodes[p]][0]
-        table_indices.append(res)
-        table_true.append(res_true)
-    return nodes, ind_nodes, table_indices, table_true, table_walkdown, table_parent
-
-
-def walk_down(logit, table_walkdown):
-    res = []
-    i = 0
-    while table_walkdown[i]:
-        max_ind_rel = logit[table_walkdown[i]].argmax().item()
-        max_ind_abs = table_walkdown[i][max_ind_rel]
-        res.append(max_ind_abs)
-        i = max_ind_abs
-    return res
-
-
-def walk_up(target, table_parent):
-    i = target
-    res = [i]
-    while table_parent[i] and table_parent[i] != -1:
-        i = table_parent[i]
-        res.append(i)
-    return res
+        else:
+            table_parent.append(ind_nodes[list(G.predecessors(n))[0]])
+    return nodes, ind_nodes, table_parent
 
 
 def collate_fn_labels_hloss(num_categories, table_parent, labels): # target in form of indices
@@ -165,7 +127,6 @@ def permute_indices(n_current, n_total):
 
 
 def make_dataloader_semisupervised_hloss(dataloader_joint, dataloader_vamb, dataloader_labels, N, table_parent, shapes, batchsize=256, destroy=False, cuda=False):
-    n_labels = shapes[-1]
     n_total = len(dataloader_vamb.dataset)
     indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total)
     indices_unsup_labels = permute_indices(len(dataloader_labels.dataset), n_total)
