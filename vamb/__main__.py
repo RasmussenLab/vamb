@@ -219,6 +219,23 @@ class TaxonomyOptions:
         self.no_predictor = no_predictor
 
 
+class ReclusteringOptions:
+    __slots__ = ["latent_path", "clusters_path", "binsplit_separator"]
+
+    def __init__(
+        self,
+        latent_path: Path,
+        clusters_path: Path,
+        binsplit_separator: Optional[str],
+    ):
+        assert isinstance(latent_path, Path)
+        assert isinstance(clusters_path, Path)
+
+        self.latent_path = latent_path
+        self.clusters_path = clusters_path
+        self.binsplit_separator = binsplit_separator
+
+
 class EncoderOptions:
     __slots__ = ["vae_options", "aae_options", "alpha"]
 
@@ -1172,6 +1189,8 @@ def run_vaevae(
         )
 
     latent_both = vae.VAEJoint.encode(dataloader_joint)
+    LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.pt")
+    np.save(LATENT_PATH, latent_both)
 
     composition.metadata.filter_mask(mask_vamb)
 
@@ -1207,6 +1226,62 @@ def run_vaevae(
 
     writing_bins_time = round(time.time() - fin_cluster_latent, 2)
     log(f"VAEVAE bins written in {writing_bins_time} seconds.", logfile, 1)
+
+
+def run_reclustering(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    reclustering_options: ReclusteringOptions,
+    logfile: IO[str],
+):
+    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
+    abundance = calc_rpkm(
+        abundance_options,
+        vamb_options.out_dir,
+        composition.metadata,
+        vamb_options.n_threads,
+        logfile,
+    )
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    rpkms = abundance.matrix
+    _, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+    composition.metadata.filter_mask(mask_vamb)
+
+    reclustered = vamb.reclustering.recluster_bins(
+        logfile,
+        reclustering_options.clusters_path, 
+        reclustering_options.latent_path, 
+        str(comp_options.path), 
+        composition.metadata.identifiers,
+        minfasta=0,
+        binned_length=1000,
+        num_process=40,
+        random_seed=123,
+    )
+
+    df_new = pd.DataFrame({0: reclustered, 1: composition.metadata.identifiers}, columns=[0, 1])
+    clusterspath = vamb_options.out_dir.joinpath("clusters_reclustered.tsv")
+    df_new.to_csv(clusterspath, sep='\t', header=None, index=None)
+
+    fin_cluster_latent = time.time()
+
+    if vamb_options.min_fasta_output_size is not None:
+        path = comp_options.path
+        assert isinstance(path, FASTAPath)
+        write_fasta(
+            vamb_options.out_dir,
+            clusterspath,
+            path,
+            composition.metadata.identifiers,
+            composition.metadata.lengths,
+            vamb_options.min_fasta_output_size,
+            logfile,
+            separator=reclustering_options.binsplit_separator,
+        )
+
+    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
+    log(f"Reclustered bins written in {writing_bins_time} seconds.", logfile, 1)
 
 
 def main():
@@ -1338,9 +1413,9 @@ def main():
         dest="model",
         metavar="",
         type=str,
-        choices=["vae", "aae", "vae-aae", "taxonomy_predictor", "vaevae"],
+        choices=["vae", "aae", "vae-aae", "taxonomy_predictor", "vaevae", "reclustering"],
         default="vae",
-        help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae [vae]",
+        help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae; reclustering [vae]",
     )
 
     # VAE arguments
@@ -1602,6 +1677,31 @@ def main():
         help="do not complete mmseqs search with taxonomy predictions",
     )
 
+    # Reclustering arguments
+    reclusters = parser.add_argument_group(
+        title="k-means reclustering arguments"
+    )
+    reclusters.add_argument(
+        "--latent_path", 
+        metavar="", 
+        type=Path, 
+        help="path to a latent space",
+    )
+    reclusters.add_argument(
+        "--clusters_path", 
+        metavar="", 
+        type=Path, 
+        help="path to a cluster file corresponding to the latent space",
+    )
+    reclusters.add_argument(
+        "-ro",
+        dest="binsplit_separator_recluster",
+        metavar="",
+        type=str,
+        default='C',
+        help="binsplit separator for reclustering [C]",
+    )
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit()
@@ -1644,8 +1744,7 @@ def main():
                 raise ValueError(
                     f'VAE model not used, but VAE-specific arg "{name}" used'
                 )
-    else:
-        assert args.model in ("taxonomy_predictor", "vaevae")
+    elif args.model in ("taxonomy_predictor", "vaevae"):
         vae_options = None
         vae_training_options = VAETrainingOptions(
             nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
@@ -1657,6 +1756,13 @@ def main():
         )
         predictor_training_options = VAETrainingOptions(
             nepochs=args.pred_nepochs, batchsize=args.pred_batchsize, batchsteps=args.pred_batchsteps
+        )
+    else:
+        assert args.model == "reclustering"
+        reclustering_options = ReclusteringOptions(
+            latent_path=args.latent_path,
+            clusters_path=args.clusters_path,
+            binsplit_separator=args.binsplit_separator_recluster
         )
 
     if args.model in ("aae", "vae-aae"):
@@ -1675,7 +1781,7 @@ def main():
             temp=args.temp,
         )
     else:
-        assert args.model in ("taxonomy_predictor", "vae", "vaevae")
+        assert args.model in ("taxonomy_predictor", "vae", "vaevae", "reclustering")
         aae_options = None
         aae_training_options = None
 
@@ -1746,6 +1852,14 @@ def main():
                 vae_training_options=vae_training_options,
                 predictor_training_options=predictor_training_options,
                 cluster_options=cluster_options,
+                logfile=logfile,
+            )
+        elif args.model == "reclustering":
+            run_reclustering(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                reclustering_options=reclustering_options,
                 logfile=logfile,
             )
         else:

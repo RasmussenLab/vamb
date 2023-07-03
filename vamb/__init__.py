@@ -33,6 +33,7 @@ from . import h_loss
 from . import hier
 from . import hlosses_fast
 from . import infer
+from . import reclustering
 
 __all__ = [
     "vambtools",
@@ -47,4 +48,5 @@ __all__ = [
     "hier",
     "hlosses_fast",
     "infer",
+    "reclustering",
 ]
