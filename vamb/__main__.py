@@ -14,7 +14,6 @@ from math import isfinite
 from typing import Optional, IO, Tuple
 from pathlib import Path
 from collections.abc import Sequence
-from collections import defaultdict
 from torch.utils.data import DataLoader
 import pandas as pd
 
@@ -1010,9 +1009,11 @@ def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
     contignames: list[str],
 ) -> Tuple[list[int], list[str]]:
-    df_mmseq = pd.read_csv(taxonomy_path, delimiter='\t', header=None)
-    assert len(df_mmseq.columns) >= 9, f'Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file'
-    df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
+    assert (
+        len(df_mmseq.columns) >= 9
+    ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
+    df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
     ind_map = {c: i for i, c in enumerate(contignames)}
     indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
     graph_column = df_mmseq[8]
@@ -1040,32 +1041,32 @@ def predict_taxonomy(
 
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
-    classes_order = np.array(list(graph_column.str.split(';').str[-1]))
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = [ind_nodes[i] for i in classes_order]
 
     model = vamb.h_loss.VAMB2Label(
-        rpkms.shape[1], 
-        len(nodes), 
-        nodes, 
+        rpkms.shape[1],
+        len(nodes),
+        nodes,
         table_parent,
         cuda=cuda,
     )
 
     dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
-        rpkms, 
-        tnfs, 
-        lengths, 
+        rpkms,
+        tnfs,
+        lengths,
         batchsize=predictor_training_options.batchsize,
-        )
+    )
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
-        rpkms[indices_mmseq], 
-        tnfs[indices_mmseq], 
-        lengths[indices_mmseq], 
-        targets, 
-        len(nodes), 
-        table_parent, 
+        rpkms[indices_mmseq],
+        tnfs[indices_mmseq],
+        lengths[indices_mmseq],
+        targets,
+        len(nodes),
+        table_parent,
         batchsize=predictor_training_options.batchsize,
-        )
+    )
 
     print("", file=logfile)
     log("Created dataloader and mask", logfile, 0)
@@ -1077,9 +1078,13 @@ def predict_taxonomy(
     names = composition.metadata.identifiers
 
     predictortime = time.time()
-    log(f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}", logfile, 0)
+    log(
+        f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}",
+        logfile,
+        0,
+    )
     model_path = out_dir.joinpath("predictor_model.pt")
-    with open(model_path, 'wb') as modelfile:
+    with open(model_path, "wb") as modelfile:
         model.trainmodel(
             dataloader_joint,
             nepochs=predictor_training_options.nepochs,
@@ -1087,26 +1092,36 @@ def predict_taxonomy(
             logfile=logfile,
             batchsteps=predictor_training_options.batchsteps,
         )
-    log(f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds.", logfile, 0)
+    log(
+        f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds.",
+        logfile,
+        0,
+    )
     predicted_vector = model.predict(dataloader_vamb)
 
-    log(f"Writing the taxonomy predictions", logfile, 0)
-    df_gt = pd.DataFrame({'contigs': names})
+    log("Writing the taxonomy predictions", logfile, 0)
+    df_gt = pd.DataFrame({"contigs": names})
     nodes_ar = np.array(nodes)
 
-    df_mmseq = pd.read_csv(taxonomy_path, delimiter='\t', header=None)
-    df_mmseq_sp = df_mmseq[(df_mmseq[2] == 'species')]
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
+    df_mmseq_sp = df_mmseq[(df_mmseq[2] == "species")]
     mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
 
     predictions = []
     for i in range(len(df_gt)):
-        pred_line = ';'.join(nodes_ar[predicted_vector[i] > 0.5][1:])
-        predictions.append(mmseq_map.get(names[i], pred_line)) # Use mmseq species annotation if possible, predictions for the rest
-    df_gt[f'predictions'] = predictions
+        pred_line = ";".join(nodes_ar[predicted_vector[i] > 0.5][1:])
+        predictions.append(
+            mmseq_map.get(names[i], pred_line)
+        )  # Use mmseq species annotation if possible, predictions for the rest
+    df_gt["predictions"] = predictions
 
     predicted_path = out_dir.joinpath("results_taxonomy_predictor.csv")
     df_gt.to_csv(predicted_path, index=None)
-    log(f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+    log(
+        f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.",
+        logfile,
+        0,
+    )
 
 
 def run_taxonomy_predictor(
@@ -1154,17 +1169,19 @@ def run_vaevae(
     rpkms = abundance.matrix
 
     dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
-        rpkms, 
-        tnfs, 
+        rpkms,
+        tnfs,
         lengths,
     )
     composition.metadata.filter_mask(mask_vamb)
 
     if taxonomy_options.taxonomy_predictions_path is not None:
         df_gt = pd.read_csv(taxonomy_options.taxonomy_predictions_path)
-        graph_column = df_gt[f'predictions']
+        graph_column = df_gt["predictions"]
         indices_mmseq = range(len(df_gt))
-    elif taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
+    elif (
+        taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor
+    ):
         predict_taxonomy(
             composition=composition,
             abundance=abundance,
@@ -1176,7 +1193,7 @@ def run_vaevae(
         )
         predicted_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
         df_gt = pd.read_csv(predicted_path)
-        graph_column = df_gt[f'predictions']
+        graph_column = df_gt["predictions"]
         indices_mmseq = range(len(df_gt))
     elif taxonomy_options.no_predictor is not None:
         indices_mmseq, graph_column = parse_mmseqs_taxonomy(
@@ -1184,50 +1201,50 @@ def run_vaevae(
             contignames=composition.metadata.identifiers,
         )
     else:
-        raise argparse.ArgumentTypeError('One of the taxonomy arguments is missing')
+        raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
-    classes_order = np.array(list(graph_column.str.split(';').str[-1]))
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = [ind_nodes[i] for i in classes_order]
 
     vae = vamb.h_loss.VAEVAEHLoss(
-        rpkms.shape[1], 
-        len(nodes), 
-        nodes, 
+        rpkms.shape[1],
+        len(nodes),
+        nodes,
         table_parent,
         cuda=vamb_options.cuda,
         logfile=logfile,
     )
 
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
-        rpkms[indices_mmseq], 
-        tnfs[indices_mmseq], 
-        lengths[indices_mmseq], 
-        targets, 
-        len(nodes), 
+        rpkms[indices_mmseq],
+        tnfs[indices_mmseq],
+        lengths[indices_mmseq],
+        targets,
+        len(nodes),
         table_parent,
     )
     dataloader_labels, _ = vamb.h_loss.make_dataloader_labels_hloss(
-        rpkms[indices_mmseq], 
-        tnfs[indices_mmseq], 
-        lengths[indices_mmseq], 
-        targets, 
-        len(nodes), 
+        rpkms[indices_mmseq],
+        tnfs[indices_mmseq],
+        lengths[indices_mmseq],
+        targets,
+        len(nodes),
         table_parent,
     )
 
     shapes = (rpkms.shape[1], 103, 1, len(nodes))
     dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
-        dataloader_joint, 
-        dataloader_vamb, 
-        dataloader_labels, 
-        len(nodes), 
-        table_parent, 
+        dataloader_joint,
+        dataloader_vamb,
+        dataloader_labels,
+        len(nodes),
+        table_parent,
         shapes,
     )
     MODEL_PATH = vamb_options.out_dir.joinpath("vaevae_model.pt")
-    with open(MODEL_PATH, 'wb') as modelfile:
+    with open(MODEL_PATH, "wb") as modelfile:
         vae.trainmodel(
             dataloader,
             nepochs=vae_training_options.nepochs,
@@ -1296,9 +1313,9 @@ def run_reclustering(
 
     reclustered = vamb.reclustering.recluster_bins(
         logfile,
-        reclustering_options.clusters_path, 
-        reclustering_options.latent_path, 
-        str(comp_options.path), 
+        reclustering_options.clusters_path,
+        reclustering_options.latent_path,
+        str(comp_options.path),
         composition.metadata.identifiers,
         minfasta=0,
         binned_length=1000,
@@ -1306,9 +1323,11 @@ def run_reclustering(
         random_seed=123,
     )
 
-    df_new = pd.DataFrame({0: reclustered, 1: composition.metadata.identifiers}, columns=[0, 1])
+    df_new = pd.DataFrame(
+        {0: reclustered, 1: composition.metadata.identifiers}, columns=[0, 1]
+    )
     clusterspath = vamb_options.out_dir.joinpath("clusters_reclustered.tsv")
-    df_new.to_csv(clusterspath, sep='\t', header=None, index=None)
+    df_new.to_csv(clusterspath, sep="\t", header=None, index=None)
 
     fin_cluster_latent = time.time()
 
@@ -1459,7 +1478,14 @@ def main():
         dest="model",
         metavar="",
         type=str,
-        choices=["vae", "aae", "vae-aae", "taxonomy_predictor", "vaevae", "reclustering"],
+        choices=[
+            "vae",
+            "aae",
+            "vae-aae",
+            "taxonomy_predictor",
+            "vaevae",
+            "reclustering",
+        ],
         default="vae",
         help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae; reclustering [vae]",
     )
@@ -1544,10 +1570,17 @@ def main():
     )
 
     # Train predictor arguments
-    pred_trainos = parser.add_argument_group(title="Training options for the taxonomy predictor", description=None)
+    pred_trainos = parser.add_argument_group(
+        title="Training options for the taxonomy predictor", description=None
+    )
 
     pred_trainos.add_argument(
-        "-pe", dest="pred_nepochs", metavar="", type=int, default=100, help="taxonomy predictor epochs [100]"
+        "-pe",
+        dest="pred_nepochs",
+        metavar="",
+        type=int,
+        default=100,
+        help="taxonomy predictor epochs [100]",
     )
     pred_trainos.add_argument(
         "-pt",
@@ -1700,43 +1733,39 @@ def main():
     )
 
     # Taxonomy arguments
-    taxonomys = parser.add_argument_group(
-        title="Taxonomy (results of mmseqs search)"
-    )
+    taxonomys = parser.add_argument_group(title="Taxonomy (results of mmseqs search)")
     taxonomys.add_argument(
-        "--taxonomy", 
-        metavar="", 
-        type=Path, 
+        "--taxonomy",
+        metavar="",
+        type=Path,
         help="path to taxonomy tsv file, output of mmseq search. File structure: no headers, contignames in the 1st column, annotation level in 3rd column, full taxonomy in the 9th column",
     )
     taxonomys.add_argument(
-        "--taxonomy_predictions", 
-        metavar="", 
-        type=Path, 
+        "--taxonomy_predictions",
+        metavar="",
+        type=Path,
         help="path to results_taxonomy_predictor.csv file, output of taxonomy_predictor model",
     )
     taxonomys.add_argument(
-        "--no_predictor", 
-        metavar="", 
-        type=bool, 
+        "--no_predictor",
+        metavar="",
+        type=bool,
         default=False,
         help="do not complete mmseqs search with taxonomy predictions",
     )
 
     # Reclustering arguments
-    reclusters = parser.add_argument_group(
-        title="k-means reclustering arguments"
-    )
+    reclusters = parser.add_argument_group(title="k-means reclustering arguments")
     reclusters.add_argument(
-        "--latent_path", 
-        metavar="", 
-        type=Path, 
+        "--latent_path",
+        metavar="",
+        type=Path,
         help="path to a latent space",
     )
     reclusters.add_argument(
-        "--clusters_path", 
-        metavar="", 
-        type=Path, 
+        "--clusters_path",
+        metavar="",
+        type=Path,
         help="path to a cluster file corresponding to the latent space",
     )
     reclusters.add_argument(
@@ -1744,7 +1773,7 @@ def main():
         dest="binsplit_separator_recluster",
         metavar="",
         type=str,
-        default='C',
+        default="C",
         help="binsplit separator for reclustering [C]",
     )
 
@@ -1801,14 +1830,16 @@ def main():
             no_predictor=args.no_predictor,
         )
         predictor_training_options = VAETrainingOptions(
-            nepochs=args.pred_nepochs, batchsize=args.pred_batchsize, batchsteps=args.pred_batchsteps
+            nepochs=args.pred_nepochs,
+            batchsize=args.pred_batchsize,
+            batchsteps=args.pred_batchsteps,
         )
     else:
         assert args.model == "reclustering"
         reclustering_options = ReclusteringOptions(
             latent_path=args.latent_path,
             clusters_path=args.clusters_path,
-            binsplit_separator=args.binsplit_separator_recluster
+            binsplit_separator=args.binsplit_separator_recluster,
         )
 
     if args.model in ("aae", "vae-aae"):

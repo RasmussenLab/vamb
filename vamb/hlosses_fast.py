@@ -1,9 +1,8 @@
 import vamb.hier as hier
 from functools import partial
-from multiprocessing import reduction
-from typing import Callable, List, Optional, Sequence, Tuple
-
+from typing import Callable, Optional
 import numpy as np
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -17,13 +16,14 @@ class Sum(nn.Module):
     """Implements sum_xxx as an object. Avoids re-computation."""
 
     def __init__(
-            self,
-            tree: hier.Hierarchy,
-            transpose: bool,
-            subset: Optional[np.ndarray] = None,
-            # leaf_only: bool = False,
-            exclude_root: bool = False,
-            strict: bool = False):
+        self,
+        tree: hier.Hierarchy,
+        transpose: bool,
+        subset: Optional[np.ndarray] = None,
+        # leaf_only: bool = False,
+        exclude_root: bool = False,
+        strict: bool = False,
+    ):
         super().__init__()
         # The value matrix[i, j] is true if i is an ancestor of j.
         # Take transpose for sum over descendants.
@@ -47,8 +47,10 @@ class Sum(nn.Module):
         assert dim in (-1, values.ndim - 1)
         return torch.tensordot(values, self.matrix, dims=1)
 
+
 SumAncestors = partial(Sum, transpose=False)
 SumDescendants = partial(Sum, transpose=True)
+
 
 class HierSoftmaxCrossEntropy(nn.Module):
     """Implements cross-entropy for YOLO-style conditional softmax. Avoids re-computation.
@@ -57,11 +59,12 @@ class HierSoftmaxCrossEntropy(nn.Module):
     """
 
     def __init__(
-            self,
-            tree: hier.Hierarchy,
-            with_leaf_targets: bool = False,
-            label_smoothing: float = 0.0,
-            node_weight: Optional[torch.Tensor] = None):
+        self,
+        tree: hier.Hierarchy,
+        with_leaf_targets: bool = False,
+        label_smoothing: float = 0.0,
+        node_weight: Optional[torch.Tensor] = None,
+    ):
         super().__init__()
         self.label_smoothing = label_smoothing
         if with_leaf_targets:
@@ -84,7 +87,9 @@ class HierSoftmaxCrossEntropy(nn.Module):
         self.node_weight = _apply_to_maybe(fn, self.node_weight)
         return self
 
-    def forward(self, scores: torch.Tensor, labels: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    def forward(
+        self, scores: torch.Tensor, labels: torch.Tensor, dim: int = -1
+    ) -> torch.Tensor:
         assert labels.ndim in [scores.ndim, scores.ndim - 1]
         assert dim in (-1, scores.ndim - 1)
         # Convert labels to one-hot if they are not.
@@ -103,9 +108,8 @@ class HierSoftmaxCrossEntropy(nn.Module):
 
 
 def hier_cond_log_softmax(
-        tree: hier.Hierarchy,
-        scores: torch.Tensor,
-        dim: int = -1) -> torch.Tensor:
+    tree: hier.Hierarchy, scores: torch.Tensor, dim: int = -1
+) -> torch.Tensor:
     """Returns log-likelihood of each node given its parent."""
     # Split scores into softmax for each internal node over its children.
     # Convert from [s[0], s[1], ..., s[n-1]]
@@ -136,7 +140,8 @@ def hier_cond_log_softmax(
     # Pad with -inf for log_softmax.
     # flat[..., flat_index] = scores
     flat = torch.full(flat_shape, -torch.inf, device=device).index_copy(
-        -1, flat_index, scores)
+        -1, flat_index, scores
+    )
     split_shape = [*input_shape[:-1], num_internal, max_num_children]
     child_scores = flat.reshape(split_shape)
     child_log_p = F.log_softmax(child_scores, dim=-1)
@@ -144,14 +149,14 @@ def hier_cond_log_softmax(
     output_shape = [*input_shape[:-1], num_nodes]
     # log_cond_p[..., child_index] = child_log_p[..., flat_index]
     log_cond_p = torch.zeros(output_shape, device=device).index_copy(
-        -1, child_index, child_log_p.index_select(-1, flat_index))
+        -1, child_index, child_log_p.index_select(-1, flat_index)
+    )
     return log_cond_p
 
 
 def hier_log_softmax(
-        tree: hier.Hierarchy,
-        scores: torch.Tensor,
-        dim: int = -1) -> torch.Tensor:
+    tree: hier.Hierarchy, scores: torch.Tensor, dim: int = -1
+) -> torch.Tensor:
     """Returns log-likelihood for conditional softmax."""
     # Finally, take sum over ancestor conditionals to obtain likelihoods.
     assert dim in (-1, scores.ndim - 1)
@@ -174,7 +179,9 @@ class HierCondLogSoftmax(nn.Module):
         cond_num_children = list(map(len, cond_children))
         max_num_children = max(cond_num_children)
         # TODO: Use _split_and_pad?
-        row_index = np.concatenate([np.full(n, i) for i, n in enumerate(cond_num_children)])
+        row_index = np.concatenate(
+            [np.full(n, i) for i, n in enumerate(cond_num_children)]
+        )
         col_index = np.concatenate([np.arange(n) for n in cond_num_children])
         flat_index = torch.from_numpy(row_index * max_num_children + col_index)
         child_index = torch.from_numpy(np.concatenate(cond_children))
@@ -199,7 +206,8 @@ class HierCondLogSoftmax(nn.Module):
         # Pad with -inf for log_softmax.
         # flat[..., flat_index] = scores
         flat = torch.full(flat_shape, -torch.inf, device=device).index_copy(
-            -1, self.flat_index, scores)
+            -1, self.flat_index, scores
+        )
         split_shape = [*input_shape[:-1], self.num_internal, self.max_num_children]
         child_scores = flat.reshape(split_shape)
         child_log_p = F.log_softmax(child_scores, dim=-1)
@@ -207,7 +215,8 @@ class HierCondLogSoftmax(nn.Module):
         output_shape = [*input_shape[:-1], self.num_nodes]
         # log_cond_p[..., child_index] = child_log_p[..., flat_index]
         log_cond_p = torch.zeros(output_shape, device=device).index_copy(
-            -1, self.child_index, child_log_p.index_select(-1, self.flat_index))
+            -1, self.child_index, child_log_p.index_select(-1, self.flat_index)
+        )
         return log_cond_p
 
 

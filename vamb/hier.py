@@ -1,7 +1,7 @@
 import collections
 import csv
 import itertools
-from typing import Callable, Collection, Dict, Hashable, List, Optional, Sequence, TextIO, Tuple
+from typing import Callable, Dict, Hashable, List, Optional, Sequence, TextIO, Tuple
 
 import networkx as nx
 import numpy as np
@@ -24,7 +24,9 @@ class Hierarchy:
 
     def parents(self, root_loop: bool = False) -> np.ndarray:
         if root_loop:
-            return np.where(self._parents >= 0, self._parents, np.arange(len(self._parents)))
+            return np.where(
+                self._parents >= 0, self._parents, np.arange(len(self._parents))
+            )
         else:
             return np.array(self._parents)
 
@@ -45,11 +47,11 @@ class Hierarchy:
         return self.num_children() == 0
 
     def leaf_subset(self) -> np.ndarray:
-        index, = self.leaf_mask().nonzero()
+        (index,) = self.leaf_mask().nonzero()
         return index
 
     def internal_subset(self) -> np.ndarray:
-        index, = np.logical_not(self.leaf_mask()).nonzero()
+        (index,) = np.logical_not(self.leaf_mask()).nonzero()
         return index
 
     def num_leaf_nodes(self) -> int:
@@ -130,7 +132,7 @@ class Hierarchy:
             is_descendant[0, 0] = 1
         for i, j in self.edges():
             # Node i is parent of node j.
-            assert i < j, 'require edges in topological order'
+            assert i < j, "require edges in topological order"
             is_descendant[j, :] = is_descendant[i, :]
             if strict:
                 is_descendant[j, i] = 1
@@ -140,10 +142,10 @@ class Hierarchy:
         return is_ancestor
 
     def paths(
-            self,
-            exclude_root: bool = False,
-            exclude_self: bool = False,
-            ) -> List[np.ndarray]:
+        self,
+        exclude_root: bool = False,
+        exclude_self: bool = False,
+    ) -> List[np.ndarray]:
         # TODO: Could avoid potential high memory usage here using parents.
         is_descendant = self.ancestor_mask(strict=exclude_self).T
         if exclude_root:
@@ -152,17 +154,19 @@ class Hierarchy:
             paths = [np.flatnonzero(mask) for mask in is_descendant]
         return paths
 
-    def paths_padded(self, pad_value=-1, method: str = 'constant', **kwargs) -> np.ndarray:
+    def paths_padded(
+        self, pad_value=-1, method: str = "constant", **kwargs
+    ) -> np.ndarray:
         n = self.num_nodes()
         paths = self.paths(**kwargs)
         path_lens = list(map(len, paths))
         max_len = max(path_lens)
-        if method == 'constant':
+        if method == "constant":
             padded = np.full((n, max_len), pad_value, dtype=int)
-        elif method == 'self':
+        elif method == "self":
             padded = np.tile(np.arange(n)[:, None], max_len)
         else:
-            raise ValueError('unknown pad method', method)
+            raise ValueError("unknown pad method", method)
         row_index = np.concatenate([np.full(n, i) for i, n in enumerate(path_lens)])
         col_index = np.concatenate([np.arange(n) for n in path_lens])
         padded[row_index, col_index] = np.concatenate(paths)
@@ -181,8 +185,8 @@ class Hierarchy:
 
 
 def make_hierarchy_from_edges(
-        pairs : Sequence[Tuple[str, str]],
-        ) -> Tuple[Hierarchy, List[str]]:
+    pairs: Sequence[Tuple[str, str]],
+) -> Tuple[Hierarchy, List[str]]:
     """Creates a hierarchy from a list of name pairs.
 
     The order of the edges determines the order of the nodes.
@@ -201,7 +205,7 @@ def make_hierarchy_from_edges(
     name_to_index[root] = 0
     for r, (u, v) in enumerate(pairs):
         if v in name_to_index:
-            raise ValueError('has multiple parents', v)
+            raise ValueError("has multiple parents", v)
         i = name_to_index[u]
         j = r + 1
         parents[j] = i
@@ -210,7 +214,7 @@ def make_hierarchy_from_edges(
     return Hierarchy(parents), names
 
 
-def load_edges(f: TextIO, delimiter=',') -> List[Tuple[str, str]]:
+def load_edges(f: TextIO, delimiter=",") -> List[Tuple[str, str]]:
     """Load from file containing (parent, node) pairs."""
     reader = csv.reader(f)
     pairs = []
@@ -218,7 +222,7 @@ def load_edges(f: TextIO, delimiter=',') -> List[Tuple[str, str]]:
         if not row:
             continue
         if len(row) != 2:
-            raise ValueError('invalid row', row)
+            raise ValueError("invalid row", row)
         pairs.append(tuple(row))
     return pairs
 
@@ -232,13 +236,15 @@ def rooted_subtree(tree: Hierarchy, nodes: np.ndarray) -> Hierarchy:
     reindex[nodes] = np.arange(len(nodes))
     parents = tree.parents()
     subtree_parents = np.where(parents[nodes] >= 0, reindex[parents[nodes]], -1)
-    assert np.all(subtree_parents[1:] >= 0), 'parent not in subset'
+    assert np.all(subtree_parents[1:] >= 0), "parent not in subset"
     # Ensure that parent appears before child.
     assert np.all(subtree_parents < np.arange(len(nodes)))
     return Hierarchy(subtree_parents)
 
 
-def rooted_subtree_spanning(tree: Hierarchy, nodes: np.ndarray) -> Tuple[Hierarchy, np.ndarray]:
+def rooted_subtree_spanning(
+    tree: Hierarchy, nodes: np.ndarray
+) -> Tuple[Hierarchy, np.ndarray]:
     nodes = ancestors_union(tree, nodes)
     subtree = rooted_subtree(tree, nodes)
     return subtree, nodes
@@ -257,9 +263,7 @@ def find_subset_index(base: List[Hashable], subset: List[Hashable]) -> np.ndarra
     return np.asarray([name_to_index[x] for x in subset], dtype=int)
 
 
-def find_projection(
-        tree: Hierarchy,
-        node_subset: np.ndarray) -> np.ndarray:
+def find_projection(tree: Hierarchy, node_subset: np.ndarray) -> np.ndarray:
     """Finds projection to nearest ancestor in subtree."""
     # TODO: Only works for rooted sub-trees?
     # Use paths rather than ancestor_mask to avoid large memory usage.
@@ -278,7 +282,7 @@ def find_projection(
 
 def _last_nonzero(x, axis):
     x = np.asarray(x, bool)
-    assert np.all(np.any(x, axis=axis)), 'at least one must be nonzero'
+    assert np.all(np.any(x, axis=axis)), "at least one must be nonzero"
     # Find last element that is true.
     # (First element that is true in reversed array.)
     n = x.shape[axis]
@@ -297,10 +301,12 @@ def uniform_cond(tree: Hierarchy) -> np.ndarray:
     """Returns a uniform distribution over child nodes at each conditional."""
     # TODO: Ensure exact.
     node_to_num_children = {k: len(v) for k, v in tree.children().items()}
-    num_children = np.asarray([node_to_num_children.get(x, 0) for x in range(tree.num_nodes())])
+    num_children = np.asarray(
+        [node_to_num_children.get(x, 0) for x in range(tree.num_nodes())]
+    )
     parent_index = tree.parents()
     # Root node has likelihood 1 and no parent.
-    log_cond_p = np.concatenate([[0.], -np.log(num_children[parent_index[1:]])])
+    log_cond_p = np.concatenate([[0.0], -np.log(num_children[parent_index[1:]])])
     is_ancestor = tree.ancestor_mask(strict=False)
     log_p = np.dot(is_ancestor.T, log_cond_p)
     return np.exp(log_p)
@@ -315,8 +321,8 @@ def lca_depth(tree: Hierarchy, inds_a: np.ndarray, inds_b: np.ndarray) -> np.nda
     paths_a = paths[inds_a]
     paths_b = paths[inds_b]
     return np.count_nonzero(
-        ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)),
-        axis=-1)
+        ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)), axis=-1
+    )
 
 
 def find_lca(tree: Hierarchy, inds_a: np.ndarray, inds_b: np.ndarray) -> np.ndarray:
@@ -331,13 +337,12 @@ def find_lca(tree: Hierarchy, inds_a: np.ndarray, inds_b: np.ndarray) -> np.ndar
     paths_a = paths[inds_a]
     paths_b = paths[inds_b]
     num_common = np.count_nonzero(
-        ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)),
-        axis=-1)
+        ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)), axis=-1
+    )
     return paths[inds_a, num_common - 1]
 
 
 class FindLCA:
-
     def __init__(self, tree: Hierarchy):
         self.paths = tree.paths_padded(exclude_root=False)
 
@@ -346,8 +351,8 @@ class FindLCA:
         paths_a = paths[inds_a]
         paths_b = paths[inds_b]
         num_common = np.count_nonzero(
-            ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)),
-            axis=-1)
+            ((paths_a == paths_b) & (paths_a >= 0) & (paths_b >= 0)), axis=-1
+        )
         return paths[inds_a, num_common - 1]
 
 
@@ -366,7 +371,9 @@ def truncate_given_lca(gt: np.ndarray, pr: np.ndarray, lca: np.ndarray) -> np.nd
     return np.where(gt == lca, gt, pr)
 
 
-def format_tree(tree: Hierarchy, node_names: Optional[List[str]] = None, include_size: bool = False) -> str:
+def format_tree(
+    tree: Hierarchy, node_names: Optional[List[str]] = None, include_size: bool = False
+) -> str:
     if node_names is None:
         node_names = [str(i) for i in range(tree.num_nodes())]
 
@@ -384,17 +391,18 @@ def format_tree(tree: Hierarchy, node_names: Optional[List[str]] = None, include
     def subtree(node, node_prefix, desc_prefix):
         name = node_names[node]
         size = node_sizes[node]
-        text = f'{name} ({size})' if include_size and size > 1 else name
-        yield node_prefix + text + '\n'
+        text = f"{name} ({size})" if include_size and size > 1 else name
+        yield node_prefix + text + "\n"
         children = node_to_children.get(node, ())
         for i, child in enumerate(children):
-            is_last = (i == len(children) - 1)
+            is_last = i == len(children) - 1
             yield from subtree(
                 child,
-                node_prefix=desc_prefix + ('└── ' if is_last else '├── '),
-                desc_prefix=desc_prefix + ('    ' if is_last else '│   '))
+                node_prefix=desc_prefix + ("└── " if is_last else "├── "),
+                desc_prefix=desc_prefix + ("    " if is_last else "│   "),
+            )
 
-    return ''.join(subtree(0, '', ''))
+    return "".join(subtree(0, "", ""))
 
 
 def level_nodes(tree: Hierarchy, extend: bool = False) -> List[np.ndarray]:
@@ -403,14 +411,17 @@ def level_nodes(tree: Hierarchy, extend: bool = False) -> List[np.ndarray]:
     max_depth = np.max(node_depth)
     level_depth = np.arange(1, max_depth + 1)
     if not extend:
-        level_masks = (level_depth[:, None] == node_depth)
+        level_masks = level_depth[:, None] == node_depth
     else:
-        level_masks = ((level_depth[:, None] == node_depth) |
-                       ((level_depth[:, None] > node_depth) & is_leaf))
+        level_masks = (level_depth[:, None] == node_depth) | (
+            (level_depth[:, None] > node_depth) & is_leaf
+        )
     return [np.flatnonzero(mask) for mask in level_masks]
 
 
-def level_successors(tree: Hierarchy) -> Tuple[List[np.ndarray], List[List[np.ndarray]]]:
+def level_successors(
+    tree: Hierarchy,
+) -> Tuple[List[np.ndarray], List[List[np.ndarray]]]:
     """Returns the list of parents and their children at each depth."""
     node_depth = tree.depths()
     max_depth = np.max(node_depth)
@@ -430,10 +441,11 @@ def level_successors(tree: Hierarchy) -> Tuple[List[np.ndarray], List[List[np.nd
     return level_parents, level_children
 
 
-def level_successors_padded(tree: Hierarchy,
-                            method: str = 'constant',
-                            constant_value: int = -1,
-                            ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+def level_successors_padded(
+    tree: Hierarchy,
+    method: str = "constant",
+    constant_value: int = -1,
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """Returns the list of parents and their children at each depth."""
     level_parents, level_children = level_successors(tree)
     level_children = [
@@ -450,7 +462,9 @@ def siblings(tree: Hierarchy) -> List[np.ndarray]:
     return [_except(u, node_children[node_parent[u]]) for u in range(tree.num_nodes())]
 
 
-def siblings_padded(tree: Hierarchy, method: str = 'constant', constant_value: int = -1) -> np.ndarray:
+def siblings_padded(
+    tree: Hierarchy, method: str = "constant", constant_value: int = -1
+) -> np.ndarray:
     ragged = siblings(tree)
     return _pad_2d(ragged, dtype=int, method=method, constant_value=constant_value)
 
@@ -459,22 +473,30 @@ def _except(v, x: np.ndarray) -> np.ndarray:
     return x[x != v]
 
 
-def _pad_2d(x: List[np.ndarray], dtype: np.dtype, method: str = 'constant', constant_value=None) -> np.ndarray:
+def _pad_2d(
+    x: List[np.ndarray], dtype: np.dtype, method: str = "constant", constant_value=None
+) -> np.ndarray:
     num_rows = len(x)
     row_lens = list(map(len, x))
     num_cols = max(map(len, x))
-    if method == 'constant':
+    if method == "constant":
         assert constant_value is not None
         padded = np.full((num_rows, num_cols), constant_value, dtype=dtype)
-    elif method == 'first':
-        padded = np.tile(np.asarray([row[0] for row in x], dtype=dtype)[:, None], num_cols)
-    elif method == 'last':
-        padded = np.tile(np.asarray([row[-1] for row in x], dtype=dtype)[:, None], num_cols)
-    elif method == 'index':
+    elif method == "first":
+        padded = np.tile(
+            np.asarray([row[0] for row in x], dtype=dtype)[:, None], num_cols
+        )
+    elif method == "last":
+        padded = np.tile(
+            np.asarray([row[-1] for row in x], dtype=dtype)[:, None], num_cols
+        )
+    elif method == "index":
         padded = np.tile(np.arange(num_rows, dtype=dtype)[:, None], num_cols)
     else:
-        raise ValueError('unknown pad method', method)
-    row_index = np.concatenate([np.full(row_len, i) for i, row_len in enumerate(row_lens)])
+        raise ValueError("unknown pad method", method)
+    row_index = np.concatenate(
+        [np.full(row_len, i) for i, row_len in enumerate(row_lens)]
+    )
     col_index = np.concatenate([np.arange(row_len) for row_len in row_lens])
     padded[row_index, col_index] = np.concatenate(x)
     return padded
