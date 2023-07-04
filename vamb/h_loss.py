@@ -33,23 +33,6 @@ if _torch.__version__ < '0.4':
     raise ImportError('PyTorch version must be 0.4 or newer')
 
 
-def get_level(x):
-    if x.startswith('d_'):
-        return 1
-    if x.startswith('p_'):
-        return 2
-    if x.startswith('c_'):
-        return 3
-    if x.startswith('o_'):
-        return 4
-    if x.startswith('f_'):
-        return 5
-    if x.startswith('g_'):
-        return 6
-    if x.startswith('s_'):
-        return 7
-
-
 def make_graph(taxs):
     table_parent = []
     G = nx.DiGraph()

@@ -11,7 +11,7 @@ import torch
 import datetime
 import time
 from math import isfinite
-from typing import Optional, IO
+from typing import Optional, IO, Tuple
 from pathlib import Path
 from collections.abc import Sequence
 from collections import defaultdict
@@ -211,7 +211,12 @@ class TaxonomyOptions:
 
         if taxonomy_path is None and taxonomy_predictions_path is None and no_predictor:
             raise argparse.ArgumentTypeError(
-                "You must specify either taxonomy_path or taxonomy_predictions_path or run without --no_predictor flag"
+                "You must specify either --taxonomy_path or --taxonomy_predictions_path or run without --no_predictor flag"
+            )
+
+        if taxonomy_path is None and not no_predictor:
+            raise argparse.ArgumentTypeError(
+                "The taxonomy predictor needs --taxonomy_path for training"
             )
 
         self.taxonomy_path = taxonomy_path
@@ -769,20 +774,12 @@ def write_fasta(
     log(f"Wrote FASTA in {elapsed} seconds.", logfile, 1)
 
 
-def run(
+def load_composition_and_abundance(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    encoder_options: EncoderOptions,
-    training_options: TrainingOptions,
-    cluster_options: ClusterOptions,
     logfile: IO[str],
-):
-    vae_options = encoder_options.vae_options
-    aae_options = encoder_options.aae_options
-    vae_training_options = training_options.vae_options
-    aae_training_options = training_options.aae_options
-
+) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
     log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
@@ -803,6 +800,31 @@ def run(
         f"\nTNF and coabundances generated in {time_generating_input} seconds.",
         logfile,
         1,
+    )
+    return (composition, abundance)
+
+
+def run(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    encoder_options: EncoderOptions,
+    training_options: TrainingOptions,
+    cluster_options: ClusterOptions,
+    logfile: IO[str],
+):
+    vae_options = encoder_options.vae_options
+    aae_options = encoder_options.aae_options
+    vae_training_options = training_options.vae_options
+    aae_training_options = training_options.aae_options
+
+    begintime = time.time()
+
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
     )
 
     data_loader, mask = vamb.encode.make_dataloader(
@@ -984,48 +1006,38 @@ def run(
     log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
 
 
-def run_taxonomy_predictor(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
+def parse_mmseqs_taxonomy(
+    taxonomy_path: Path,
+    contignames: list[str],
+) -> Tuple[list[int], list[str]]:
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter='\t', header=None)
+    assert len(df_mmseq.columns) >= 9, f'Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file'
+    df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
+    ind_map = {c: i for i, c in enumerate(contignames)}
+    indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
+    graph_column = df_mmseq[8]
+    return (indices_mmseq, graph_column)
+
+
+def predict_taxonomy(
+    composition: vamb.parsecontigs.Composition,
+    abundance: vamb.parsebam.Abundance,
+    taxonomy_path: Path,
+    out_dir: Path,
     predictor_training_options: VAETrainingOptions,
-    taxonomy_options: TaxonomyOptions,
+    cuda: bool,
     logfile: IO[str],
 ):
-    log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
-    log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
     begintime = time.time()
-
-    # Get TNFs, save as npz
-    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
-
-    # Parse BAMs, save as npz
-    abundance = calc_rpkm(
-        abundance_options,
-        vamb_options.out_dir,
-        composition.metadata,
-        vamb_options.n_threads,
-        logfile,
-    )
-
-    time_generating_input = round(time.time() - begintime, 2)
-    log(
-        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
-        logfile,
-        1,
-    )
-
     tnfs, lengths = composition.matrix, composition.metadata.lengths
     contignames = composition.metadata.identifiers
     rpkms = abundance.matrix
 
-    df_mmseq = pd.read_csv(taxonomy_options.taxonomy_path, delimiter='\t', header=None)
-    df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
+    indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+        taxonomy_path=taxonomy_path,
+        contignames=contignames,
+    )
 
-    ind_map = {c: i for i, c in enumerate(contignames)}
-    indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
-
-    graph_column = df_mmseq[8]
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
     classes_order = np.array(list(graph_column.str.split(';').str[-1]))
@@ -1036,11 +1048,24 @@ def run_taxonomy_predictor(
         len(nodes), 
         nodes, 
         table_parent,
-        cuda=vamb_options.cuda,
+        cuda=cuda,
     )
 
-    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths, batchsize=predictor_training_options.batchsize)
-    dataloader_joint, mask_joint = vamb.h_loss.make_dataloader_concat_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent, batchsize=predictor_training_options.batchsize)
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
+        rpkms, 
+        tnfs, 
+        lengths, 
+        batchsize=predictor_training_options.batchsize,
+        )
+    dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
+        rpkms[indices_mmseq], 
+        tnfs[indices_mmseq], 
+        lengths[indices_mmseq], 
+        targets, 
+        len(nodes), 
+        table_parent, 
+        batchsize=predictor_training_options.batchsize,
+        )
 
     print("", file=logfile)
     log("Created dataloader and mask", logfile, 0)
@@ -1053,8 +1078,8 @@ def run_taxonomy_predictor(
 
     predictortime = time.time()
     log(f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}", logfile, 0)
-    MODEL_PATH = vamb_options.out_dir.joinpath("predictor_model.pt")
-    with open(MODEL_PATH, 'wb') as modelfile:
+    model_path = out_dir.joinpath("predictor_model.pt")
+    with open(model_path, 'wb') as modelfile:
         model.trainmodel(
             dataloader_joint,
             nepochs=predictor_training_options.nepochs,
@@ -1068,32 +1093,45 @@ def run_taxonomy_predictor(
     log(f"Writing the taxonomy predictions", logfile, 0)
     df_gt = pd.DataFrame({'contigs': names})
     nodes_ar = np.array(nodes)
-    predictions = []
-    for i in range(len(df_gt)):
-        predictions.append(';'.join(nodes_ar[predicted_vector[i] > 0.5][1:]))
-    df_gt[f'predictions'] = predictions
 
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter='\t', header=None)
     df_mmseq_sp = df_mmseq[(df_mmseq[2] == 'species')]
     mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
-    preds = []
-    for i, r in df_gt.iterrows():
-        pred_line = r[f'predictions'].split(';')
-        try:
-            mmseq_line = mmseq_map.get(r['contigs'], '').split(';')
-        except AttributeError:
-            preds.append(';'.join(pred_line))
-            continue
-        if mmseq_line[0] != '':
-            for i in range(len(mmseq_line)):
-                if i < len(pred_line):
-                    pred_line[i] = mmseq_line[i]
-        preds.append(';'.join(pred_line))
-    df_gt[f'predictions'] = preds
 
-    PREDICTED_PATH = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
-    df_gt.to_csv(PREDICTED_PATH, index=None)
+    predictions = []
+    for i in range(len(df_gt)):
+        pred_line = ';'.join(nodes_ar[predicted_vector[i] > 0.5][1:])
+        predictions.append(mmseq_map.get(names[i], pred_line)) # Use mmseq species annotation if possible, predictions for the rest
+    df_gt[f'predictions'] = predictions
 
+    predicted_path = out_dir.joinpath("results_taxonomy_predictor.csv")
+    df_gt.to_csv(predicted_path, index=None)
     log(f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+
+
+def run_taxonomy_predictor(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    predictor_training_options: VAETrainingOptions,
+    taxonomy_options: TaxonomyOptions,
+    logfile: IO[str],
+):
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
+    )
+    predict_taxonomy(
+        composition=composition,
+        abundance=abundance,
+        taxonomy_path=taxonomy_options.taxonomy_path,
+        out_dir=vamb_options.out_dir,
+        predictor_training_options=predictor_training_options,
+        cuda=vamb_options.cuda,
+        logfile=logfile,
+    )
 
 
 def run_vaevae(
@@ -1106,55 +1144,45 @@ def run_vaevae(
     cluster_options: ClusterOptions,
     logfile: IO[str],
 ):
-    log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
-    log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
-    begintime = time.time()
-
-    # Get TNFs, save as npz
-    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
-
-    # Parse BAMs, save as npz
-    abundance = calc_rpkm(
-        abundance_options,
-        vamb_options.out_dir,
-        composition.metadata,
-        vamb_options.n_threads,
-        logfile,
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
     )
-
-    time_generating_input = round(time.time() - begintime, 2)
-    log(
-        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
-        logfile,
-        1,
-    )
-
     tnfs, lengths = composition.matrix, composition.metadata.lengths
     rpkms = abundance.matrix
 
-    if taxonomy_options.taxonomy_predictions_path:
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
+        rpkms, 
+        tnfs, 
+        lengths,
+    )
+    composition.metadata.filter_mask(mask_vamb)
+
+    if taxonomy_options.taxonomy_predictions_path is not None:
         df_gt = pd.read_csv(taxonomy_options.taxonomy_predictions_path)
         graph_column = df_gt[f'predictions']
         indices_mmseq = range(len(df_gt))
-    elif taxonomy_options.taxonomy_path and not taxonomy_options.no_predictor:
-        run_taxonomy_predictor(
-            vamb_options=vamb_options,
-            comp_options=comp_options,
-            abundance_options=abundance_options,
-            taxonomy_options=taxonomy_options,
+    elif taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
+        predict_taxonomy(
+            composition=composition,
+            abundance=abundance,
+            taxonomy_path=taxonomy_options.taxonomy_path,
+            out_dir=vamb_options.out_dir,
             predictor_training_options=predictor_training_options,
+            cuda=vamb_options.cuda,
             logfile=logfile,
         )
-        PREDICTED_PATH = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
-        df_gt = pd.read_csv(PREDICTED_PATH)
+        predicted_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
+        df_gt = pd.read_csv(predicted_path)
         graph_column = df_gt[f'predictions']
         indices_mmseq = range(len(df_gt))
-    elif taxonomy_options.no_predictor:
-        df_mmseq = pd.read_csv(taxonomy_options.taxonomy_path, delimiter='\t', header=None)
-        df_mmseq = df_mmseq[~(df_mmseq[2] == 'no rank')]
-        graph_column = df_mmseq[8]
-        ind_map = {c: i for i, c in enumerate(composition.metadata.identifiers)}
-        indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
+    elif taxonomy_options.no_predictor is not None:
+        indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+            taxonomy_path=taxonomy_options.taxonomy_path,
+            contignames=composition.metadata.identifiers,
+        )
     else:
         raise argparse.ArgumentTypeError('One of the taxonomy arguments is missing')
 
@@ -1172,12 +1200,32 @@ def run_vaevae(
         logfile=logfile,
     )
 
-    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
-    dataloader_joint, mask_joint = vamb.h_loss.make_dataloader_concat_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent)
-    dataloader_labels, mask_labels = vamb.h_loss.make_dataloader_labels_hloss(rpkms[indices_mmseq], tnfs[indices_mmseq], lengths[indices_mmseq], targets, len(nodes), table_parent)
+    dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
+        rpkms[indices_mmseq], 
+        tnfs[indices_mmseq], 
+        lengths[indices_mmseq], 
+        targets, 
+        len(nodes), 
+        table_parent,
+    )
+    dataloader_labels, _ = vamb.h_loss.make_dataloader_labels_hloss(
+        rpkms[indices_mmseq], 
+        tnfs[indices_mmseq], 
+        lengths[indices_mmseq], 
+        targets, 
+        len(nodes), 
+        table_parent,
+    )
 
     shapes = (rpkms.shape[1], 103, 1, len(nodes))
-    dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(dataloader_joint, dataloader_vamb, dataloader_labels, len(nodes), table_parent, shapes)
+    dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
+        dataloader_joint, 
+        dataloader_vamb, 
+        dataloader_labels, 
+        len(nodes), 
+        table_parent, 
+        shapes,
+    )
     MODEL_PATH = vamb_options.out_dir.joinpath("vaevae_model.pt")
     with open(MODEL_PATH, 'wb') as modelfile:
         vae.trainmodel(
@@ -1189,10 +1237,8 @@ def run_vaevae(
         )
 
     latent_both = vae.VAEJoint.encode(dataloader_joint)
-    LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.pt")
+    LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
     np.save(LATENT_PATH, latent_both)
-
-    composition.metadata.filter_mask(mask_vamb)
 
     # Cluster, save tsv file
     clusterspath = vamb_options.out_dir.joinpath("vaevae_clusters.tsv")
@@ -1661,7 +1707,7 @@ def main():
         "--taxonomy", 
         metavar="", 
         type=Path, 
-        help="path to taxonomy tsv file, output of mmseq search",
+        help="path to taxonomy tsv file, output of mmseq search. File structure: no headers, contignames in the 1st column, annotation level in 3rd column, full taxonomy in the 9th column",
     )
     taxonomys.add_argument(
         "--taxonomy_predictions", 
