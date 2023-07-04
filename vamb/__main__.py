@@ -1008,15 +1008,31 @@ def run(
 def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
     contignames: list[str],
+    logfile: IO[str],
 ) -> Tuple[list[int], list[str]]:
     df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
     assert (
         len(df_mmseq.columns) >= 9
     ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
     df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
+    log(f"{len(df_mmseq)} lines in taxonomy file", logfile, 1)
+    log(f"{len(contignames)} contigs", logfile, 1)
     ind_map = {c: i for i, c in enumerate(contignames)}
     indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
     graph_column = df_mmseq[8]
+    species_column = df_mmseq[df_mmseq[2] == 'species'][3]
+    species_dict = species_column.value_counts()
+    unique_species = sorted(list(species_column.unique()), key=lambda x: species_dict[x], reverse=True)
+    log(f'Found {len(unique_species)} unique species in mmseqs taxonomy file', logfile, 1)
+    N_SPECIES = 500 # TODO: maybe make it a parameter
+    if len(unique_species) > N_SPECIES:
+        log(f"Pruning the taxonomy tree, only keeping {N_SPECIES} most abundant species", logfile, 1)
+        log(f"Removing the species with less than {species_dict[unique_species[N_SPECIES]]} contigs", logfile, 1)
+        non_abundant_species = set(unique_species[N_SPECIES:])
+        df_mmseq['tax'] = df_mmseq[8]
+        df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 'tax'] = \
+            df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8].str.split(';').str[:1].map(lambda x: ';'.join(x))
+        graph_column = df_mmseq['tax']
     return (indices_mmseq, graph_column)
 
 
@@ -1037,9 +1053,11 @@ def predict_taxonomy(
     indices_mmseq, graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
         contignames=contignames,
+        logfile=logfile,
     )
 
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    log(f"{len(nodes)} nodes in the graph", logfile, 1)
 
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = [ind_nodes[i] for i in classes_order]
@@ -1168,13 +1186,6 @@ def run_vaevae(
     tnfs, lengths = composition.matrix, composition.metadata.lengths
     rpkms = abundance.matrix
 
-    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
-        rpkms,
-        tnfs,
-        lengths,
-    )
-    composition.metadata.filter_mask(mask_vamb)
-
     if taxonomy_options.taxonomy_predictions_path is not None:
         df_gt = pd.read_csv(taxonomy_options.taxonomy_predictions_path)
         graph_column = df_gt["predictions"]
@@ -1199,6 +1210,7 @@ def run_vaevae(
         indices_mmseq, graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
             contignames=composition.metadata.identifiers,
+            logfile=logfile,
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
@@ -1217,6 +1229,11 @@ def run_vaevae(
         logfile=logfile,
     )
 
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
+        rpkms,
+        tnfs,
+        lengths,
+    )
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
         rpkms[indices_mmseq],
         tnfs[indices_mmseq],
@@ -1256,6 +1273,8 @@ def run_vaevae(
     latent_both = vae.VAEJoint.encode(dataloader_joint)
     LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
     np.save(LATENT_PATH, latent_both)
+
+    composition.metadata.filter_mask(mask_vamb)
 
     # Cluster, save tsv file
     clusterspath = vamb_options.out_dir.joinpath("vaevae_clusters.tsv")
