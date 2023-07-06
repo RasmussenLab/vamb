@@ -974,7 +974,6 @@ class VAEVAE(object):
                 flush=True,
             )
             logfile.flush()
-            print("here", flush=True)
 
         return data_loader
 

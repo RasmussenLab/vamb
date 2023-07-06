@@ -108,7 +108,7 @@ def make_dataloader_labels_hloss(
     _, _, _, batchsize, n_workers, cuda, mask = _semisupervised_encode._make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
-    dataset = _TensorDataset(_torch.Tensor(labels).long()[mask])
+    dataset = _TensorDataset(_torch.Tensor(labels).long())
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
@@ -129,6 +129,7 @@ def make_dataloader_concat_hloss(
     labels,
     N,
     table_parent,
+    no_filter=True,
     batchsize=256,
     destroy=False,
     cuda=False,
@@ -144,8 +145,9 @@ def make_dataloader_concat_hloss(
     ) = _semisupervised_encode._make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
+    labelstensor = _torch.Tensor(labels).long()[mask]
     dataset = _TensorDataset(
-        depthstensor, tnftensor, weightstensor, _torch.Tensor(labels).long()[mask]
+        depthstensor, tnftensor, weightstensor, labelstensor
     )
     dataloader = _DataLoader(
         dataset=dataset,

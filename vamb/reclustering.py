@@ -288,19 +288,29 @@ def recluster_bins(
     clusters_path,
     latents_path,
     contigs_path,
-    contignames,
+    contignames_all,
     minfasta,
     binned_length,
     num_process,
     random_seed,
 ):
     contig_dict = {h: seq for h, seq in fasta_iter(contigs_path)}
-    embedding_new = np.load(latents_path)
+    embedding = np.load(latents_path)
     df_clusters = pd.read_csv(clusters_path, delimiter="\t", header=None)
     clusters_labels_map = {
         k: int(v.split("_")[1]) for k, v in zip(df_clusters[1], df_clusters[0])
     }
+    contignames = list(clusters_labels_map.keys())
+    log(f"Latent shape {embedding.shape}", logfile, 1)
+    log(f"N contignames for the latent space {len(contignames_all)}", logfile, 1)
+    log(f"N contigs in fasta files {len(contig_dict)}", logfile, 1)
+    log(f"N contigs in the cluster file {len(clusters_labels_map)}", logfile, 1)
+    ind_map = {c: i for i, c in enumerate(contignames_all)}
+    indices = [ind_map[c] for c in contignames]
+
+    embedding_new = embedding[indices]
     contig_labels = np.array([clusters_labels_map[c] for c in contignames])
+
     assert len(contig_labels) == embedding_new.shape[0]
 
     total_size = defaultdict(int)

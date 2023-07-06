@@ -18,7 +18,7 @@ vamb \
     --model reclustering \
     --latent_path /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevaeout/vaevae_latent.npy \
     --clusters_path /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevaeout/vaevae_clusters.tsv  \
-    --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
-    --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \
+    --fasta /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/contigs_2kbp.fna \
+    --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vambout/abundance.npz \
     --outdir /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevaeout_reclustering \
     --minfasta 200000

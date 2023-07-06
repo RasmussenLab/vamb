@@ -1,14 +1,16 @@
 #!/usr/bin/bash
 
+# --taxonomy /home/projects/cpr_10006/people/paupie/vaevae/mmseq2_annotations/long_read_sludge/lr_sludge_taxonomy.tsv \
+
 vamb \
     --model vaevae \
     --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vaevaeout \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \
-    --taxonomy /home/projects/cpr_10006/people/paupie/vaevae/mmseq2_annotations/long_read_sludge/lr_sludge_taxonomy.tsv \
+    --taxonomy_predictions /home/projects/cpr_10006/people/svekut/vamb/results_taxonomy_predictor.csv \
     -l 64 \
-    -e 1000 \
-    -q 25 75 150 500 \
+    -e 500 \
+    -q 150 \
     -pe 100 \
     -pq 25 75 \
     --cuda \
