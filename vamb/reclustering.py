@@ -86,6 +86,30 @@ normalize_marker_trans__dict = {
 }
 
 
+def replace_bin_names(data, clusters_labels_map):
+    """
+    The 'orf' column is formatted as 'bin.contig_id'
+    but there is no need to search again if only the bins are different but the contigs are the same.
+    This function replaces bin names in the 'orf' column
+    with the new bin names from another cluster file given the same contigs.
+    
+    TODO: refactor the whole file so there is no need for that
+    
+    Input:
+    - data: pd.DataFrame
+    - clusters_labels_map: dict, {contig: bin}
+    
+    Returns a copy of the dataframe with the updated 'orf' column
+    """
+    data = data.copy()
+    data["contig_number"] = data["orf"].str.split(pat=".", n=0, expand=True)[1]
+    data["contig_only"] = data["contig_number"].map(lambda x: x.split("_")[0])
+    data["old_bin"] = data["orf"].str.split(pat=".", n=0, expand=True)[0]
+    data["new_bin"] = data["contig_only"].map(lambda x: f'bin{clusters_labels_map[x]}')
+    data["orf"] = data[["new_bin", "contig_number"]].agg('.'.join, axis=1)
+    return data
+
+
 def get_marker(
     hmmout,
     fasta_path=None,
@@ -93,6 +117,7 @@ def get_marker(
     multi_mode=False,
     orf_finder=None,
     contig_to_marker=False,
+    clusters_dict=None,
 ):
     """Parse HMM output file and return markers"""
     data = pd.read_table(
@@ -103,6 +128,8 @@ def get_marker(
         usecols=(0, 3, 5, 15, 16),
         names=["orf", "gene", "qlen", "qstart", "qend"],
     )
+    if clusters_dict is not None:
+        data = replace_bin_names(data, clusters_dict)
     if not len(data):
         return []
     data["gene"] = data["gene"].map(lambda m: normalize_marker_trans__dict.get(m, m))
@@ -119,7 +146,7 @@ def get_marker(
     data["contig"] = data["orf"].map(contig_name)
     if min_contig_len is not None:
         contig_len = {h: len(seq) for h, seq in fasta_iter(fasta_path)}
-        data = data[data["contig"].map(lambda c: contig_len[c] >= min_contig_len)]
+        data = data[data["contig"].map(lambda c: contig_len[c.split('.')[1]] >= min_contig_len)]
     data = data.drop_duplicates(["gene", "contig"])
 
     if contig_to_marker:
@@ -140,7 +167,7 @@ def get_marker(
             # the original version broke ties by picking the shortest query, so we
             # replicate that here:
             candidates = vs.index[vs == median]
-            qlen.loc[candidates].idxmin()
+            c = qlen.loc[candidates].idxmin()  # TODO: linter deletes this variable and breaks things, refactor to not use SQL
             r = list(sel.query("gene == @c")["contig"])
             r.sort()
             return r
@@ -226,8 +253,10 @@ def cal_num_bins(
     fasta_path,
     binned_length,
     num_process,
+    output,
+    markers_path=None,
+    clusters_dict=None,
     multi_mode=False,
-    output=None,
     orf_finder="prodigal",
 ):
     """Estimate number of bins from a FASTA file
@@ -238,49 +267,48 @@ def cal_num_bins(
     num_process: int (number of CPUs to use)
     multi_mode: bool, optional (if True, treat input as resulting from concatenating multiple files)
     """
-    with tempfile.TemporaryDirectory() as tdir:
-        if output is not None:
-            if os.path.exists(os.path.join(output, "markers.hmmout")):
-                return get_marker(
-                    os.path.join(output, "markers.hmmout"),
-                    fasta_path,
-                    binned_length,
-                    multi_mode,
-                    orf_finder=orf_finder,
-                )
-            else:
-                os.makedirs(output, exist_ok=True)
-                target_dir = output
-        else:
-            target_dir = tdir
-
-        contig_output = run_prodigal(fasta_path, num_process, tdir)
-
-        hmm_output = os.path.join(target_dir, "markers.hmmout")
-        try:
-            with open(os.path.join(tdir, "markers.hmmout.out"), "w") as hmm_out_log:
-                subprocess.check_call(
-                    [
-                        "hmmsearch",
-                        "--domtblout",
-                        hmm_output,
-                        "--cut_tc",
-                        "--cpu",
-                        str(num_process),
-                        os.path.split(__file__)[0] + "/marker.hmm",
-                        contig_output,
-                    ],
-                    stdout=hmm_out_log,
-                )
-        except:
-            if os.path.exists(hmm_output):
-                os.remove(hmm_output)
-            sys.stderr.write("Error: Running hmmsearch fail\n")
-            sys.exit(1)
-
+    if markers_path is None:
+        markers_path = os.path.join(output, "markers.hmmout")
+    if os.path.exists(markers_path):
         return get_marker(
-            hmm_output, fasta_path, binned_length, multi_mode, orf_finder=orf_finder
+            markers_path,
+            fasta_path,
+            binned_length,
+            multi_mode,
+            orf_finder=orf_finder,
+            clusters_dict=clusters_dict,
         )
+    else:
+        os.makedirs(output, exist_ok=True)
+        target_dir = output
+
+    contig_output = run_prodigal(fasta_path, num_process, output)
+
+    hmm_output = os.path.join(target_dir, "markers.hmmout")
+    try:
+        with open(os.path.join(output, "markers.hmmout.out"), "w") as hmm_out_log:
+            subprocess.check_call(
+                [
+                    "hmmsearch",
+                    "--domtblout",
+                    hmm_output,
+                    "--cut_tc",
+                    "--cpu",
+                    str(num_process),
+                    os.path.split(__file__)[0] + '/marker.hmm',
+                    contig_output,
+                ],
+                stdout=hmm_out_log,
+            )
+    except:
+        if os.path.exists(hmm_output):
+            os.remove(hmm_output)
+        sys.stderr.write("Error: Running hmmsearch fail\n")
+        sys.exit(1)
+
+    return get_marker(
+        hmm_output, fasta_path, binned_length, multi_mode, orf_finder=orf_finder
+    )
 
 
 def recluster_bins(
@@ -292,7 +320,9 @@ def recluster_bins(
     minfasta,
     binned_length,
     num_process,
+    out_dir,
     random_seed,
+    hmmout_path=None,
 ):
     contig_dict = {h: seq for h, seq in fasta_iter(contigs_path)}
     embedding = np.load(latents_path)
@@ -316,29 +346,42 @@ def recluster_bins(
     total_size = defaultdict(int)
     for i, c in enumerate(contig_labels):
         total_size[c] += len(contig_dict[contignames[i]])
-    with tempfile.TemporaryDirectory() as tdir:
-        cfasta = os.path.join(tdir, "concatenated.fna")
-        with open(cfasta, "wt") as concat_out:
-            for ix, h in enumerate(contignames):
-                bin_ix = contig_labels[ix]
-                if total_size[bin_ix] < minfasta:
-                    continue
-                concat_out.write(f">bin{bin_ix:06}.{h}\n")
-                concat_out.write(contig_dict[contignames[ix]] + "\n")
 
-        log("Starting searching for markers", logfile, 1)
+    cfasta = os.path.join(out_dir, "concatenated.fna")
+    with open(cfasta, "wt") as concat_out:
+        for ix, h in enumerate(contignames):
+            bin_ix = contig_labels[ix]
+            if total_size[bin_ix] < minfasta:
+                continue
+            concat_out.write(f">bin{bin_ix:06}.{h}\n")
+            concat_out.write(contig_dict[contignames[ix]] + "\n")
 
+    log("Starting searching for markers", logfile, 1)
+
+    if hmmout_path is not None:
+        log(f"hmmout file is provided at {hmmout_path}", logfile, 2)
         seeds = cal_num_bins(
             cfasta,
             binned_length,
             num_process,
+            output=out_dir,
+            markers_path=hmmout_path,
+            clusters_dict=clusters_labels_map,
             multi_mode=True,
         )
-        # we cannot bypass the orf_finder here, because of the renaming of the contigs
-        if seeds == []:
-            log("No bins found in the concatenated fasta file.", logfile, 1)
-            return contig_labels
-        log("Finished searching for markers", logfile, 1)
+    else:
+        seeds = cal_num_bins(
+            cfasta,
+            binned_length,
+            num_process,
+            output=out_dir,
+            multi_mode=True,
+        )
+    # we cannot bypass the orf_finder here, because of the renaming of the contigs
+    if seeds == []:
+        log("No bins found in the concatenated fasta file.", logfile, 1)
+        return contig_labels
+    log("Finished searching for markers", logfile, 1)
 
     name2ix = {name: ix for ix, name in enumerate(contignames)}
     contig_labels_reclustered = np.empty_like(contig_labels)

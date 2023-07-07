@@ -235,12 +235,13 @@ class TaxonomyOptions:
 
 
 class ReclusteringOptions:
-    __slots__ = ["latent_path", "clusters_path", "binsplit_separator"]
+    __slots__ = ["latent_path", "clusters_path", "hmmout_path", "binsplit_separator"]
 
     def __init__(
         self,
         latent_path: Path,
         clusters_path: Path,
+        hmmout_path: Path,
         binsplit_separator: Optional[str],
     ):
         assert isinstance(latent_path, Path)
@@ -249,6 +250,7 @@ class ReclusteringOptions:
         self.latent_path = latent_path
         self.clusters_path = clusters_path
         self.binsplit_separator = binsplit_separator
+        self.hmmout_path = hmmout_path
 
 
 class EncoderOptions:
@@ -1123,8 +1125,7 @@ def predict_taxonomy(
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
 
-    composition.metadata.filter_mask(mask_vamb)
-    names = composition.metadata.identifiers
+    names = composition.metadata.identifiers[mask_vamb] # not mutating operation because the composition can be reused
 
     predictortime = time.time()
     log(
@@ -1218,13 +1219,7 @@ def run_vaevae(
     tnfs, lengths = composition.matrix, composition.metadata.lengths
     rpkms = abundance.matrix
 
-    if taxonomy_options.taxonomy_predictions_path is not None:
-        log("mmseqs taxonomy predictions are provided", logfile, 0)
-        df_gt = pd.read_csv(taxonomy_options.taxonomy_predictions_path)
-        graph_column = df_gt["predictions"]
-        ind_map = {c: i for i, c in enumerate(composition.metadata.identifiers)}
-        indices_mmseq = [ind_map[c] for c in df_gt['contigs']]
-    elif (
+    if (
         taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor
     ):
         log("Predicting missing values from mmseqs taxonomy", logfile, 0)
@@ -1238,12 +1233,20 @@ def run_vaevae(
             cuda=vamb_options.cuda,
             logfile=logfile,
         )
-        predicted_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
-        df_gt = pd.read_csv(predicted_path)
+        predictions_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
+    elif taxonomy_options.taxonomy_predictions_path is not None:
+        log("mmseqs taxonomy predictions are provided", logfile, 0)
+        predictions_path = taxonomy_options.taxonomy_predictions_path
+    else:
+        log("Not predicting the taxonomy", logfile, 0)
+        predictions_path = None
+
+    if predictions_path is not None:
+        df_gt = pd.read_csv(predictions_path)
         graph_column = df_gt["predictions"]
         ind_map = {c: i for i, c in enumerate(composition.metadata.identifiers)}
         indices_mmseq = [ind_map[c] for c in df_gt['contigs']]
-    elif taxonomy_options.no_predictor is not None:
+    elif taxonomy_options.no_predictor:
         log("Using mmseqs taxonomy for semisupervised learning", logfile, 0)
         indices_mmseq, graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
@@ -1405,10 +1408,12 @@ def run_reclustering(
         reclustering_options.latent_path,
         str(comp_options.path),
         composition.metadata.identifiers,
+        out_dir=vamb_options.out_dir,
         minfasta=0,
         binned_length=1000,
         num_process=40,
         random_seed=123,
+        hmmout_path=reclustering_options.hmmout_path,
     )
 
     df_new = pd.DataFrame(
@@ -1864,6 +1869,13 @@ def main():
         help="path to a cluster file corresponding to the latent space",
     )
     reclusters.add_argument(
+        "--hmmout_path",
+        metavar="",
+        type=Path,
+        default=None,
+        help="path to markers.hmmout path generated for the same set of contigs",
+    )
+    reclusters.add_argument(
         "-ro",
         dest="binsplit_separator_recluster",
         metavar="",
@@ -1936,6 +1948,7 @@ def main():
             latent_path=args.latent_path,
             clusters_path=args.clusters_path,
             binsplit_separator=args.binsplit_separator_recluster,
+            hmmout_path=args.hmmout_path,
         )
 
     if args.model in ("aae", "vae-aae"):
