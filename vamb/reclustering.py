@@ -145,7 +145,7 @@ def get_marker(
     data = data.query("(qend - qstart) / qlen > 0.4").copy()
     data["contig"] = data["orf"].map(contig_name)
     if min_contig_len is not None:
-        contig_len = {h: len(seq) for h, seq in fasta_iter(fasta_path)}
+        contig_len = {h.split('.')[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
         data = data[data["contig"].map(lambda c: contig_len[c.split('.')[1]] >= min_contig_len)]
     data = data.drop_duplicates(["gene", "contig"])
 
@@ -382,6 +382,7 @@ def recluster_bins(
         log("No bins found in the concatenated fasta file.", logfile, 1)
         return contig_labels
     log("Finished searching for markers", logfile, 1)
+    log(f"Found {len(seeds)} seeds", logfile, 1)
 
     name2ix = {name: ix for ix, name in enumerate(contignames)}
     contig_labels_reclustered = np.empty_like(contig_labels)
@@ -404,7 +405,7 @@ def recluster_bins(
                 ]
             )
             seeds_embedding = embedding_new[seed_index]
-            log("Starting K-means reclutering", logfile, 1)
+            log(f"Starting K-means reclutering for bin {bin_ix}", logfile, 2)
             kmeans = KMeans(
                 n_clusters=num_bin,
                 init=seeds_embedding,
@@ -412,7 +413,7 @@ def recluster_bins(
                 random_state=random_seed,
             )
             kmeans.fit(re_bin_features, sample_weight=length_weight)
-            log("Finished K-means reclutering", logfile, 1)
+            log("Finished K-means reclutering", logfile, 2)
             for i, label in enumerate(kmeans.labels_):
                 contig_labels_reclustered[contig_indices[i]] = next_label + label
             next_label += num_bin
