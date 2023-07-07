@@ -22,5 +22,6 @@ vamb \
     --clusters_path /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vaevaeout/vaevae_clusters.tsv  \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \
-    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vaevaeout_reclustering \
+    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vaevaeout_reclustering2 \
+    --hmmout_path /home/projects/cpr_10006/projects/semi_vamb/data/marker_genes/markers_sludge.hmmout \
     --minfasta 200000

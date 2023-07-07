@@ -105,7 +105,7 @@ def replace_bin_names(data, clusters_labels_map):
     data["contig_number"] = data["orf"].str.split(pat=".", n=0, expand=True)[1]
     data["contig_only"] = data["contig_number"].map(lambda x: x.split("_")[0])
     data["old_bin"] = data["orf"].str.split(pat=".", n=0, expand=True)[0]
-    data["new_bin"] = data["contig_only"].map(lambda x: f'bin{clusters_labels_map[x]}')
+    data["new_bin"] = data["contig_only"].map(lambda x: f'bin{clusters_labels_map[x]:06}')
     data["orf"] = data[["new_bin", "contig_number"]].agg('.'.join, axis=1)
     return data
 

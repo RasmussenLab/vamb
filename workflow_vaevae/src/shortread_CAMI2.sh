@@ -21,5 +21,6 @@ vamb \
     --clusters_path /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out/vaevae_clusters.tsv  \
     --fasta /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/contigs_2kbp.fna.gz \
     --rpkm /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/abundance.npz \
-    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_reclustering \
+    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_reclustering2 \
+    --hmmout_path /home/projects/cpr_10006/projects/semi_vamb/data/marker_genes/markers_cami_${dataset}.hmmout \
     --minfasta 200000
