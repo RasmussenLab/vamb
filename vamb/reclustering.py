@@ -316,7 +316,7 @@ def recluster_bins(
     clusters_path,
     latents_path,
     contigs_path,
-    contignames_all,
+    contignames,
     minfasta,
     binned_length,
     num_process,
@@ -330,15 +330,12 @@ def recluster_bins(
     clusters_labels_map = {
         k: int(v.split("_")[1]) for k, v in zip(df_clusters[1], df_clusters[0])
     }
-    contignames = list(clusters_labels_map.keys())
     log(f"Latent shape {embedding.shape}", logfile, 1)
-    log(f"N contignames for the latent space {len(contignames_all)}", logfile, 1)
+    log(f"N contignames for the latent space {len(contignames)}", logfile, 1)
     log(f"N contigs in fasta files {len(contig_dict)}", logfile, 1)
     log(f"N contigs in the cluster file {len(clusters_labels_map)}", logfile, 1)
-    ind_map = {c: i for i, c in enumerate(contignames_all)}
-    indices = [ind_map[c] for c in contignames]
 
-    embedding_new = embedding[indices]
+    embedding_new = embedding
     contig_labels = np.array([clusters_labels_map[c] for c in contignames])
 
     assert len(contig_labels) == embedding_new.shape[0]
@@ -421,4 +418,5 @@ def recluster_bins(
             contig_labels_reclustered[contig_labels == bin_ix] = next_label
             next_label += 1
     assert contig_labels_reclustered.min() >= 0
+    os.remove(cfasta)
     return contig_labels_reclustered
