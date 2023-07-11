@@ -1,5 +1,4 @@
 # taxVamb snakemake workflow
-
 This is a snakemake workflow that performs all the necessary steps to run TaxVamb, as input it takes quality control filtered paired end reads and individual sample _de novo_ assemblies, process them through best practice pipeline (multi-split), obtains taxonomic annotations with MMseqs2, runs vaevae, and runs CheckM2 to assess the quality of the bins.
 
 In short it will:
@@ -23,7 +22,7 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  # Install taxVamb and mmseqs2 in taxVamb environment
  git clone https://github.com/sgalkina/vamb.git --branch mmseq-vae
  mamba create -n taxVamb python=3.9.16
- mamba env update -n taxVamb --file vamb/workflow_vaevae/envs/taxVamb.yaml
+ mamba env update -n taxVamb --file vamb/workflow_taxVamb/envs/taxVamb.yaml
  conda activate taxVamb
  cd vamb && pip install -e . && cd ..
  # mmseqs relies on the gtdb_tk database, so if not present already, it has to be downloaded. 
@@ -88,8 +87,6 @@ Then the configuration file (`config.json`). The first two lines points to the f
 
 ```
 ## Example run
-
-Workflow can be executed and taxVamb installation tested with our exampla input data, available in taxVamb zenodo's [upload](https://zenodo.org/record/7941203).
 
 When running the workflow use snakemake, give it the maximum number of cores you want to use and the path to the configfile as well as the snakemake file. You can then run snakemake on a laptop or workstation as below - remember to activate the conda environment first before running snakemake.
 
@@ -156,7 +153,7 @@ Using a GPU can speed up taxVamb considerably - especially when you are binning 
    "checkm2_mem": "15GB",
    "checkm2_ppn": "15",
    "mmseq_mem": "260GB",
-   "mmseq_ppn": "30",
+   "mmseq_ppn": "30:gpus=1",
    "vaevae_params": "  -l 64 -e 500 -q 25 75 150 -pe 100 -pq 25 75   --model vaevae  -o  C  ",
    "vaevae_preload": "",
    "outdir": "taxVamb_outdir",
