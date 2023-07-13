@@ -12,5 +12,7 @@ dependencies:
 - scikit-learn=1.2.2
 - pandas=2.0.0
 - mmseqs2
+- prodigal
+- hmmer
 - pip:
   - ordered-set==4.1.0
