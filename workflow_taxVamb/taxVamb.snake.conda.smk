@@ -367,8 +367,8 @@ rule run_vaevae:
         taxonomytsv = os.path.join(OUTDIR,"tmp/mmseq/taxonomy.tsv"),
         mmsq_log = os.path.join(OUTDIR,"tmp/mmseq_finished.log")
     output:
-        clusters = os.path.join(OUTDIR,"vaevae/vae_clusters.tsv"),
-        latents = os.path.join(OUTDIR,"vaevae/latent.npz"),
+        clusters = os.path.join(OUTDIR,"vaevae/vaevae_clusters.tsv"),
+        latents = os.path.join(OUTDIR,"vaevae/vaevae_latent.npy"),
         vaevae_log = os.path.join(OUTDIR,"tmp/vaevae_finished.log")
     params:
         walltime="86400",
@@ -410,15 +410,16 @@ rule run_vaevae:
 
 rule reclustering:
     input:
-        latents = os.path.join(OUTDIR,"vaevae/latent.npz"),
-        clusters = os.path.join(OUTDIR,"vaevae/vae_clusters.tsv"),
+        clusters = os.path.join(OUTDIR,"vaevae/vaevae_clusters.tsv"),
+        latents = os.path.join(OUTDIR,"vaevae/vaevae_latent.npy"),
         contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"),
         abundance = os.path.join(OUTDIR,"abundance.npz"),
         vaevae_log = os.path.join(OUTDIR,"tmp/vaevae_finished.log")
         
+        
     output:
         #reclustered_bins = directory(os.path.join(OUTDIR,"vaevae/bins_reclustered")),
-        hmm_markers = os.path.join(OUTDIR,"tmp/markers.hmmout"),
+        #hmm_markers = os.path.join(OUTDIR,"tmp/markers.hmmout"),
         recluster_log = os.path.join(OUTDIR,"tmp/reclustering_finished.log")
 
     resources:
@@ -442,11 +443,10 @@ rule reclustering:
             --fasta {input.contigs} \
             --rpkm {input.abundance} \
             --outdir {OUTDIR}/vaevae/bins_reclustered \
-            --hmmout_path {output.hmm_markers} \
             --minfasta {MIN_BIN_SIZE}    
         touch {output.recluster_log}        
         """
-
+        # --hmmout_path {output.hmm_markers} \
 # Evaluate in which samples bins were reconstructed
 checkpoint samples_with_bins:
     input:        
@@ -609,7 +609,8 @@ rule sym_NC_bins:
 # Rename and move some files and folders 
 rule workflow_finished:
     input:
-        log_fin = os.path.join(OUTDIR,'tmp','final_taxvamb_clusters_written.log')
+        #log_fin = os.path.join(OUTDIR,'tmp','final_taxvamb_clusters_written.log')
+        ncs_syml=os.path.join(OUTDIR,'tmp','sym_final_bins_finished.log')
     output:
         os.path.join(OUTDIR,"log/workflow_finished_taxvamb.log")
     params:
