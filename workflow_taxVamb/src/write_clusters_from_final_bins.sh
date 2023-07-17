@@ -10,12 +10,7 @@ while getopts "d:o:" opt; do
   esac
 done
 echo 'creating z y v clusters from the final set of bins'
-for s in $(ls $drep_dir)
-do
-s="$drep_dir"/"$s"/
-if [ -d "$s" ]
-then
-cd $s
+cd $drep_dir
 for bin in $(ls . 2> /dev/null)
 
 do  
@@ -23,15 +18,12 @@ if [[ $bin == **".fna" ]]
 then
 
 cluster_name=$(echo $bin | sed 's=.fna==g' | sed 's=.fa==g')
+echo $cluster_name
+#for contig in $(grep '>' $bin | sed 's=>==g') 
+#do
+#echo -e   "$cluster_name""\t""$contig"  >> $clusters_file
+#done
 
-for contig in $(grep '>' $bin | sed 's=>==g') 
-do
-echo -e   "$cluster_name""\t""$contig"  >> $clusters_file
-done
-
-
-fi
-done
 
 fi
-done 
+done

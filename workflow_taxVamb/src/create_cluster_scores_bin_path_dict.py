@@ -32,9 +32,9 @@ def get_cluster_score_bin_path(
             bin_name = cluster + ".fna"
             if bin_name in bins:
                 cluster_score[cluster] = (com, con)
-                bin_path[cluster + ".fna"] = os.path.join(
+                bin_path[cluster + ".fna"] = os.path.abspath(os.path.join(
                     path_bins, sample, cluster + ".fna"
-                )
+                ))
     return cluster_score, bin_path
 
 

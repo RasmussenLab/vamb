@@ -39,6 +39,7 @@ for cluster,comp_cont in cs_d.items():
     comp,cont = comp_cont
     bin_ = cluster+bin_format
     if (comp >= min_comp and cont <= max_cont ):
-        os.symlink(os.path.join(os.getcwd(),bp_d[bin_]),os.path.join(opt.o,bin_))
+        #print(bp_d[bin_])
+        os.symlink(bp_d[bin_],os.path.join(opt.o,bin_))
 
  
