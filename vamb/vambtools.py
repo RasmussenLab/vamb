@@ -309,7 +309,8 @@ def byte_iterfasta(
         )
         raise TypeError(errormsg) from None
 
-    header = probeline[1:]
+    # 13 is the byte value of \r, meaning we remove either \r\n or \n
+    header = probeline[1 : -(1 + (probeline[-2] == 13))]
     buffer: list[bytes] = list()
 
     # Iterate over lines
@@ -320,7 +321,7 @@ def byte_iterfasta(
         elif line.startswith(b">"):
             yield FastaEntry(header, bytearray().join(buffer))
             buffer.clear()
-            header = line[1:]
+            header = line[1 : -(1 + (line[-2] == 13))]
 
         else:
             buffer.append(line)
