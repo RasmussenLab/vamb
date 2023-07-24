@@ -30,7 +30,10 @@ class TestParseBam(unittest.TestCase):
     def test_refhash(self):
         m = self.comp_metadata
         cp = CompositionMetaData(m.identifiers, m.lengths, m.mask, m.minlength)
-        cp.refhash = b"a" * 32  # write bad refhash
+        # Change the refnames slighty
+        cp.identifiers = cp.identifiers.copy()
+        cp.identifiers[3] = cp.identifiers[3] + "w"
+        cp.refhash = vamb.vambtools.hash_refnames(cp.identifiers)
         with self.assertRaises(ValueError):
             vamb.parsebam.Abundance.from_files(
                 testtools.BAM_FILES, None, cp, True, 0.97, 4
