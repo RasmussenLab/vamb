@@ -1486,7 +1486,7 @@ def main():
         "--seed",
         metavar="",
         type=int,
-        default=int.from_bytes(os.urandom(8)),
+        default=int.from_bytes(os.urandom(8), "little"),
         help="Random seed [random] (determinism not guaranteed)",
     )
 
