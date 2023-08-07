@@ -700,7 +700,7 @@ rule write_clusters_from_nc_folders:
         "avamb"
    
     shell:
-        "sh {params.path} -d {OUTDIR}/Final_bins -o {output} ;"
+        "sh {params.path} -d {OUTDIR}/Final_bins -o {OUTDIR} ;"
         "touch {log.log_fin} "
         
 # Rename and move some files and folders 

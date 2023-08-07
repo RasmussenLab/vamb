@@ -4,11 +4,12 @@
 while getopts "d:o:" opt; do
   case $opt in
     d) drep_dir=$OPTARG    ;;
-    o) clusters_file=$OPTARG    ;;
+    o) outdir=$OPTARG    ;;
     *) echo 'error' >&2
        exit 1
   esac
 done
+clusters_file=${outdir}/avamb/avamb_manual_drep_disjoint_clusters.tsv
 echo 'creating z y v clusters from the final set of bins'
 for s in $(ls $drep_dir)
 do
