@@ -1309,6 +1309,7 @@ def run_vaevae(
         len(nodes),
         table_parent,
         shapes,
+        vamb_options.seed,
         cuda=vamb_options.cuda,
     )
     model_path = vamb_options.out_dir.joinpath("vaevae_model.pt")
@@ -1412,7 +1413,7 @@ def run_reclustering(
         minfasta=0,
         binned_length=1000,
         num_process=40,
-        random_seed=123,
+        random_seed=vamb_options.seed,
         hmmout_path=reclustering_options.hmmout_path,
     )
 
@@ -1485,7 +1486,7 @@ def main():
         "--seed",
         metavar="",
         type=int,
-        default=0,
+        default=int.from_bytes(os.urandom(8)),
         help="Random seed [random] (determinism not guaranteed)",
     )
 

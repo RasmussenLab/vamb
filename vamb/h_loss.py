@@ -161,12 +161,16 @@ def make_dataloader_concat_hloss(
     return dataloader, mask
 
 
-def permute_indices(n_current, n_total):
+def permute_indices(n_current: int, n_total: int, seed:int):
+    rng = _np.random.default_rng(seed)
     x = _np.arange(n_current)
     to_add = int(n_total / n_current)
-    return _np.concatenate(
-        [_np.random.permutation(x)] + [_np.random.permutation(x) for _ in range(to_add)]
-    )[:n_total]
+    to_concatenate = []
+    for _ in range(to_add):
+        a = rng.permutation(x)
+        b = rng.permutation(x)
+        to_concatenate.append(a + b)
+    return _np.concatenate(to_concatenate)[:n_total]
 
 
 def make_dataloader_semisupervised_hloss(
@@ -176,14 +180,15 @@ def make_dataloader_semisupervised_hloss(
     N,
     table_parent,
     shapes,
+    seed: int,
     batchsize=256,
     destroy=False,
     cuda=False,
 ):
     n_total = len(dataloader_vamb.dataset)
-    indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total)
-    indices_unsup_labels = permute_indices(len(dataloader_labels.dataset), n_total)
-    indices_sup = permute_indices(len(dataloader_joint.dataset), n_total)
+    indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total, seed)
+    indices_unsup_labels = permute_indices(len(dataloader_labels.dataset), n_total, seed)
+    indices_sup = permute_indices(len(dataloader_joint.dataset), n_total, seed)
     dataset_all = _TensorDataset(
         dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
         dataloader_vamb.dataset.tensors[1][indices_unsup_vamb],
