@@ -1928,7 +1928,7 @@ def main():
         "--algorithm",
         metavar="",
         type=str,
-        default="",
+        default="kmeans",
         help="which reclustering algorithm to use ('kmeans', 'dbscan'). DBSCAN requires a taxonomy predictions file [kmeans]",
     )
 
