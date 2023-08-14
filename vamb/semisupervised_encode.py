@@ -142,11 +142,10 @@ def permute_indices(n_current: int, n_total: int, seed:int):
     rng = _np.random.default_rng(seed)
     x = _np.arange(n_current)
     to_add = int(n_total / n_current)
-    to_concatenate = []
+    to_concatenate = [rng.permutation(x)]
     for _ in range(to_add):
-        a = rng.permutation(x)
         b = rng.permutation(x)
-        to_concatenate.append(a + b)
+        to_concatenate.append(b)
     return _np.concatenate(to_concatenate)[:n_total]
 
 

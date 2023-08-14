@@ -284,10 +284,14 @@ class VAE(_nn.Module):
 
     # sample with gaussian noise
 <<<<<<< HEAD
+<<<<<<< HEAD
     def reparameterize(self, mu: Tensor) -> Tensor:
 =======
     def reparameterize(self, rng, mu: Tensor, logsigma: Tensor) -> Tensor:
 >>>>>>> c2543e2 (Seed more sources of randomness)
+=======
+    def reparameterize(self, mu: Tensor, logsigma: Tensor) -> Tensor:
+>>>>>>> e4676f0 (feat: dbscan)
         epsilon = _torch.randn(mu.size(0), mu.size(1))
 
         if self.usecuda:
