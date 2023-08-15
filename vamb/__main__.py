@@ -306,6 +306,18 @@ class VAETrainingOptions:
         self.batchsteps = batchsteps
 
 
+class PredictorTrainingOptions(VAETrainingOptions):
+    def __init__(self, nepochs: int, batchsize: int, batchsteps: list[int], softmax_threshold: float):
+        if (softmax_threshold > 1) or (softmax_threshold < 0):
+            raise argparse.ArgumentTypeError(f"Softmax threshold should be between 0 and 1, currently {softmax_threshold}")
+        self.softmax_threshold = softmax_threshold
+        super(PredictorTrainingOptions, self).__init__(
+            nepochs,
+            batchsize,
+            batchsteps,
+        )
+
+
 class AAETrainingOptions:
     def __init__(
         self,
@@ -1077,7 +1089,7 @@ def predict_taxonomy(
     taxonomy_path: Path,
     n_species: int,
     out_dir: Path,
-    predictor_training_options: VAETrainingOptions,
+    predictor_training_options: PredictorTrainingOptions,
     cuda: bool,
     logfile: IO[str],
 ):
@@ -1163,10 +1175,11 @@ def predict_taxonomy(
     df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
     df_mmseq_sp = df_mmseq[(df_mmseq[2] == "species")]
     mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
+    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
 
     predictions = []
     for i in range(len(df_gt)):
-        pred_line = ";".join(nodes_ar[predicted_vector[i] > 0.5][1:])
+        pred_line = ";".join(nodes_ar[predicted_vector[i] > predictor_training_options.softmax_threshold][1:])
         predictions.append(
             mmseq_map.get(names[i], pred_line)
         )  # Use mmseq species annotation if possible, predictions for the rest
@@ -1741,6 +1754,14 @@ def main():
         default=1e-3,
         help="learning rate for the taxonomy predictor [0.001]",
     )
+    pred_trainos.add_argument(
+        "-pthr",
+        dest="pred_softmax_threshold",
+        metavar="",
+        type=float,
+        default=0.5,
+        help="conditional probability threshold for accepting the taxonomic prediction [0.5]",
+    )
 
     # AAE arguments
     aaeos = parser.add_argument_group(title="AAE options", description=None)
@@ -1990,10 +2011,11 @@ def main():
             no_predictor=args.no_predictor,
             n_species=args.n_species,
         )
-        predictor_training_options = VAETrainingOptions(
+        predictor_training_options = PredictorTrainingOptions(
             nepochs=args.pred_nepochs,
             batchsize=args.pred_batchsize,
             batchsteps=args.pred_batchsteps,
+            softmax_threshold=args.pred_softmax_threshold,
         )
     else:
         assert args.model == "reclustering"
