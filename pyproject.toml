@@ -11,6 +11,8 @@ dependencies = [
     "pandas == 2.2.0",
     "dadaptation == 3.2",
     "loguru == 0.7.2",
+    "pyhmmer == 0.10.12",
+    "pyrodigal == 3.4.1",
 ]
 # Currently pycoverm does not have binaries for Python > 3.12.
 # The dependency resolver, will not error on Python 3.13, but attempt
