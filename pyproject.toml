@@ -4,7 +4,9 @@ dynamic = ["version"]
 dependencies = [
     "numpy == 1.24.2",
     "torch == 1.13.1",
-    "pycoverm == 0.6.0"
+    "pycoverm == 0.6.0",
+    "pyhmmer == 0.10.2",
+    "pyrodigal == 2.3.0"
 ]
 # Currently pycoverm does not have binaries for Python > 3.11.
 # The dependency resolver, will not error on Python 3.11, but attempt
