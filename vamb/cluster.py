@@ -14,6 +14,7 @@ from collections import deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
+from vamb.parsemarkers import Markers
 from typing import Optional
 from collections.abc import Sequence, Iterable
 
@@ -141,6 +142,7 @@ class ClusterGenerator:
         "cuda",
         "rng",
         "matrix",
+        "markers",
         "indices",
         "seed",
         "nclusters",
@@ -164,7 +166,7 @@ class ClusterGenerator:
 """
 
     def _check_params(
-        self, matrix: _np.ndarray, maxsteps: int, windowsize: int, minsuccesses: int
+        self, matrix: _np.ndarray, markers: Markers, maxsteps: int, windowsize: int, minsuccesses: int
     ) -> None:
         """Checks matrix, and maxsteps."""
 
@@ -184,6 +186,9 @@ class ClusterGenerator:
 
         if len(matrix) < 1:
             raise ValueError("Matrix must have at least 1 observation.")
+        
+        if len(markers.markers) != len(matrix):
+            raise ValueError("N sequences in markers and matrix do not match")
 
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
@@ -200,6 +205,7 @@ class ClusterGenerator:
     def __init__(
         self,
         matrix: _np.ndarray,
+        markers: Markers,
         maxsteps: int = 25,
         windowsize: int = 200,
         minsuccesses: int = 20,
@@ -208,7 +214,7 @@ class ClusterGenerator:
         cuda: bool = False,
         seed: int = 0,
     ):
-        self._check_params(matrix, maxsteps, windowsize, minsuccesses)
+        self._check_params(matrix, markers, maxsteps, windowsize, minsuccesses)
         if not destroy:
             matrix = matrix.copy()
 
