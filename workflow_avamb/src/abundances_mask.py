@@ -1,6 +1,6 @@
 import numpy as np
 import argparse
-from vamb.vambtools import hash_refnames
+from vamb.vambtools import RefHasher
 from pathlib import Path
 
 
@@ -24,7 +24,7 @@ def abundances_mask(headers: Path, mask_refhash: Path, min_contig_size: int):
     np.savez_compressed(
         mask_refhash,
         mask=np.array(mask, dtype=bool),
-        refhash=hash_refnames(identifiers),
+        refhash=RefHasher.hash_refnames(identifiers),
     )
 
 

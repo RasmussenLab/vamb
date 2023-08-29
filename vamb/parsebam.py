@@ -12,7 +12,6 @@ from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence, Iterable
-from itertools import zip_longest
 from pathlib import Path
 import shutil
 
@@ -52,39 +51,6 @@ class Abundance:
     def nsamples(self) -> int:
         return len(self.samplenames)
 
-    @staticmethod
-    def verify_refhash(
-        refhash: bytes,
-        target_refhash: bytes,
-        identifiers: Optional[tuple[Iterable[str], Iterable[str]]],
-    ) -> None:
-        if refhash != target_refhash:
-            if identifiers is not None:
-                for i, (fasta_id, bam_id) in enumerate(zip_longest(*identifiers)):
-                    if fasta_id is None:
-                        raise ValueError(
-                            f"FASTA has only {i} identifier(s), which is fewer than BAM file"
-                        )
-                    elif bam_id is None:
-                        raise ValueError(
-                            f"BAM has only {i} identifier(s), which is fewer than FASTA file"
-                        )
-                    elif fasta_id != bam_id:
-                        raise ValueError(
-                            f"Identifier number {i+1} does not match for FASTA and BAM files:"
-                            f'FASTA identifier: "{fasta_id}"'
-                            f'BAM   identifier: "{bam_id}"'
-                        )
-                assert False
-            else:
-                raise ValueError(
-                    f"At least one BAM file reference name hash to {refhash.hex()}, "
-                    f"expected {target_refhash.hex()}. "
-                    "Make sure all BAM and FASTA identifiers are identical "
-                    "and in the same order. "
-                    "Note that the identifier is the header before any whitespace."
-                )
-
     def save(self, io: Union[Path, IO[bytes]]):
         _np.savez_compressed(
             io,
@@ -106,7 +72,9 @@ class Abundance:
             arrs["refhash"].item(),
         )
         if refhash is not None:
-            cls.verify_refhash(abundance.refhash, refhash, None)
+            vambtools.RefHasher.verify_refhash(
+                abundance.refhash, refhash, "Loaded", None, None
+            )
 
         return abundance
 
@@ -250,14 +218,16 @@ class Abundance:
 
         headers = [h for (h, m) in zip(headers, mask) if m]
         vambtools.numpy_inplace_maskarray(coverage, mask)
-        refhash = vambtools.hash_refnames(headers)
+        refhash = vambtools.RefHasher.hash_refnames(headers)
 
         if target_identifiers is None:
             identifier_pairs = None
         else:
-            identifier_pairs = (target_identifiers, headers)
+            identifier_pairs = (headers, target_identifiers)
 
         if target_refhash is not None:
-            Abundance.verify_refhash(refhash, target_refhash, identifier_pairs)
+            vambtools.RefHasher.verify_refhash(
+                refhash, target_refhash, "Composition", "BAM", identifier_pairs
+            )
 
         return (coverage, refhash)

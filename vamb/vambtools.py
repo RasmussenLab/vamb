@@ -9,6 +9,7 @@ import numpy as _np
 import re as _re
 from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
+from itertools import zip_longest
 from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
@@ -329,6 +330,71 @@ def byte_iterfasta(
     yield FastaEntry(header, bytearray().join(buffer))
 
 
+class RefHasher:
+    __slots__ = ["hasher"]
+
+    def __init__(self):
+        self.hasher = _md5()
+
+    def add_refname(self, ref: str) -> None:
+        self.hasher.update(ref.encode().rstrip())
+
+    def add_refnames(self, refs: Iterable[str]):
+        for ref in refs:
+            self.add_refname(ref)
+        return self
+
+    @classmethod
+    def hash_refnames(cls, refs: Iterable[str]) -> bytes:
+        return cls().add_refnames(refs).digest()
+
+    def digest(self) -> bytes:
+        return self.hasher.digest()
+
+    @staticmethod
+    def verify_refhash(
+        refhash: bytes,
+        target_refhash: bytes,
+        observed_name: Optional[str],
+        target_name: Optional[str],
+        identifiers: Optional[tuple[Iterable[str], Iterable[str]]],
+    ) -> None:
+        if refhash == target_refhash:
+            return None
+
+        obs_name = "Observed" if observed_name is None else observed_name
+        tgt_name = "Target" if target_name is None else target_name
+        if identifiers is not None:
+            (observed_ids, target_ids) = identifiers
+            for i, (observed_id, target_id) in enumerate(
+                zip_longest(observed_ids, target_ids)
+            ):
+                if observed_id is None:
+                    raise ValueError(
+                        f"{obs_name} identifiers has only {i} identifier(s), which is fewer than {tgt_name}"
+                    )
+                elif target_id is None:
+                    raise ValueError(
+                        f"{tgt_name} identifiers has only {i} identifier(s), which is ffewer than {obs_name}"
+                    )
+                elif observed_id != target_id:
+                    raise ValueError(
+                        f"Identifier number {i+1} does not match between {obs_name} and {tgt_name}:"
+                        f'{obs_name}: "{observed_id}"'
+                        f'{tgt_name}: "{target_id}"'
+                    )
+            assert False
+        else:
+            raise ValueError(
+                f"Mismatch between reference hash of {obs_name} and {tgt_name}."
+                f"Observed {obs_name} hash: {refhash.hex()}."
+                f"Expected {tgt_name} hash: {target_refhash.hex()}"
+                "Make sure all identifiers are identical "
+                "and in the same order. "
+                "Note that the identifier is the header before any whitespace."
+            )
+
+
 def write_clusters(
     filehandle: IO[str],
     clusters: Iterable[tuple[str, set[str]]],
@@ -587,15 +653,6 @@ def concatenate_fasta(
         except Exception as e:
             print(f"Exception occured when parsing file {inpath}", file=sys.stderr)
             raise e from None
-
-
-def hash_refnames(refnames: Iterable[str]) -> bytes:
-    "Hashes an iterable of strings of reference names using MD5."
-    hasher = _md5()
-    for refname in refnames:
-        hasher.update(refname.encode().rstrip())
-
-    return hasher.digest()
 
 
 def _split_bin(
