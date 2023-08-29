@@ -55,7 +55,7 @@ class CompositionMetaData:
         self.lengths = lengths
         self.mask = mask
         self.minlength = minlength
-        self.refhash = _vambtools.hash_refnames(identifiers)
+        self.refhash = _vambtools.RefHasher.hash_refnames(identifiers)
 
     @property
     def nseqs(self) -> int:
@@ -73,7 +73,7 @@ class CompositionMetaData:
 
         self.identifiers = self.identifiers[mask]
         self.lengths = self.lengths[mask]
-        self.refhash = _vambtools.hash_refnames(self.identifiers)
+        self.refhash = _vambtools.RefHasher.hash_refnames(self.identifiers)
 
     def filter_min_length(self, length: int):
         "Set or reset minlength of this object"

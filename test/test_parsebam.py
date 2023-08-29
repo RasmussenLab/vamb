@@ -33,7 +33,7 @@ class TestParseBam(unittest.TestCase):
         # Change the refnames slighty
         cp.identifiers = cp.identifiers.copy()
         cp.identifiers[3] = cp.identifiers[3] + "w"
-        cp.refhash = vamb.vambtools.hash_refnames(cp.identifiers)
+        cp.refhash = vamb.vambtools.RefHasher.hash_refnames(cp.identifiers)
         with self.assertRaises(ValueError):
             vamb.parsebam.Abundance.from_files(
                 testtools.BAM_FILES, None, cp, True, 0.97, 4

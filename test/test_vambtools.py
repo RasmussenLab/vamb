@@ -340,24 +340,33 @@ class TestInplaceMaskArray(unittest.TestCase):
 class TestHashRefNames(unittest.TestCase):
     def test_refhash(self):
         names = ["foo", "9", "eleven", "a"]
-        b1 = vamb.vambtools.hash_refnames(names)
+        b1 = vamb.vambtools.RefHasher.hash_refnames(names)
+
+        # Test that hashing them all at once is the same as hashing them one at a time
+        hasher = vamb.vambtools.RefHasher()
+        hasher.add_refname(names[0])
+        hasher.add_refname(names[1])
+        for j in names[2:]:
+            hasher.add_refname(j)
+        b7 = hasher.digest()
+
         names[1] = names[1] + "x"
-        b2 = vamb.vambtools.hash_refnames(names)
+        b2 = vamb.vambtools.RefHasher.hash_refnames(names)
         names[1] = names[1][:-1] + " \t"  # it strips whitespace off right end
-        b3 = vamb.vambtools.hash_refnames(names)
+        b3 = vamb.vambtools.RefHasher.hash_refnames(names)
         names = names[::-1]
-        b4 = vamb.vambtools.hash_refnames(names)
+        b4 = vamb.vambtools.RefHasher.hash_refnames(names)
+
         names = (i + "   " for i in names[::-1])
-        b5 = vamb.vambtools.hash_refnames(names)
-        b6 = vamb.vambtools.hash_refnames(names)  # now empty generator
-        b7 = vamb.vambtools.hash_refnames([])
+        b5 = vamb.vambtools.RefHasher.hash_refnames(names)
+        b6 = vamb.vambtools.RefHasher.hash_refnames(names)  # now empty generator
 
         self.assertNotEqual(b1, b2)
         self.assertEqual(b1, b3)
         self.assertNotEqual(b1, b4)
         self.assertEqual(b1, b5)
         self.assertNotEqual(b1, b6)
-        self.assertEqual(b6, b7)
+        self.assertEqual(b1, b7)
 
 
 class TestBinSplit(unittest.TestCase):

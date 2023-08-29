@@ -1,7 +1,6 @@
 import re
 import os
 import sys
-from vamb.vambtools import concatenate_fasta, hash_refnames
 import numpy as np
 SNAKEDIR = os.path.dirname(workflow.snakefile)
 
