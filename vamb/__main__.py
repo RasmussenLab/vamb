@@ -16,6 +16,7 @@ from typing import Optional, IO, Tuple
 from pathlib import Path
 from collections.abc import Sequence
 from collections import defaultdict
+from functools import reduce
 from torch.utils.data import DataLoader
 import pandas as pd
 
@@ -1145,6 +1146,7 @@ def predict_taxonomy(
     log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
 
     names = composition.metadata.identifiers[mask_vamb] # not mutating operation because the composition can be reused
+    lengths_masked = lengths[mask_vamb]
 
     predictortime = time.time()
     log(
@@ -1152,6 +1154,8 @@ def predict_taxonomy(
         logfile,
         0,
     )
+    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
+
     model_path = out_dir.joinpath("predictor_model.pt")
     with open(model_path, "wb") as modelfile:
         model.trainmodel(
@@ -1169,7 +1173,7 @@ def predict_taxonomy(
     predicted_vector = model.predict(dataloader_vamb)
 
     log("Writing the taxonomy predictions", logfile, 0)
-    df_gt = pd.DataFrame({"contigs": names})
+    df_gt = pd.DataFrame({"contigs": names, "lengths": lengths_masked})
     nodes_ar = np.array(nodes)
 
     df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
@@ -1178,15 +1182,19 @@ def predict_taxonomy(
     log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
 
     predictions = []
+    probs = []
     for i in range(len(df_gt)):
-        pred_line = ";".join(nodes_ar[predicted_vector[i] > predictor_training_options.softmax_threshold][1:])
-        predictions.append(
-            mmseq_map.get(names[i], pred_line)
-        )  # Use mmseq species annotation if possible, predictions for the rest
+        threshold_mask = predicted_vector[i] > predictor_training_options.softmax_threshold
+        pred_line = ";".join(nodes_ar[threshold_mask][1:])
+        predictions.append(pred_line)
+        absolute_probs = predicted_vector[i][threshold_mask]
+        absolute_prob = ';'.join(map(str, absolute_probs))
+        probs.append(absolute_prob)
     df_gt["predictions"] = predictions
-
+    df_gt["abs_probabilities"] = probs
     predicted_path = out_dir.joinpath("results_taxonomy_predictor.csv")
     df_gt.to_csv(predicted_path, index=None)
+
     log(
         f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.",
         logfile,
@@ -1198,7 +1206,7 @@ def run_taxonomy_predictor(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    predictor_training_options: VAETrainingOptions,
+    predictor_training_options: PredictorTrainingOptions,
     taxonomy_options: TaxonomyOptions,
     logfile: IO[str],
 ):
@@ -1225,7 +1233,7 @@ def run_vaevae(
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
     vae_training_options: VAETrainingOptions,
-    predictor_training_options: VAETrainingOptions,
+    predictor_training_options: PredictorTrainingOptions,
     taxonomy_options: TaxonomyOptions,
     cluster_options: ClusterOptions,
     encoder_options: EncoderOptions,

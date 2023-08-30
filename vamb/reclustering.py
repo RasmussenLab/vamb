@@ -370,6 +370,8 @@ def recluster_bins(
 ):
     contig_dict = {h: seq for h, seq in fasta_iter(contigs_path)}
     embedding = np.load(latents_path)
+    if 'arr_0' in embedding:
+        embedding = embedding['arr_0']
     df_clusters = pd.read_csv(clusters_path, delimiter="\t", header=None)
     if (algorithm == 'dbscan') and predictions_path:
         df_gt = pd.read_csv(predictions_path)
