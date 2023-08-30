@@ -144,7 +144,8 @@ class ClusterGenerator:
         "matrix",
         "markers",
         "indices",
-        "seed",
+        "order",
+        "order_index",
         "nclusters",
         "peak_valley_ratio",
         "attempts",
@@ -166,7 +167,13 @@ class ClusterGenerator:
 """
 
     def _check_params(
-        self, matrix: _np.ndarray, markers: Markers, maxsteps: int, windowsize: int, minsuccesses: int
+        self,
+        matrix: _np.ndarray,
+        markers: Markers,
+        lengths: _np.ndarray,
+        maxsteps: int,
+        windowsize: int,
+        minsuccesses: int,
     ) -> None:
         """Checks matrix, and maxsteps."""
 
@@ -186,9 +193,12 @@ class ClusterGenerator:
 
         if len(matrix) < 1:
             raise ValueError("Matrix must have at least 1 observation.")
-        
+
         if len(markers.markers) != len(matrix):
             raise ValueError("N sequences in markers and matrix do not match")
+
+        if len(lengths) != len(matrix):
+            raise ValueError("N sequences in lengths and matrix do not match")
 
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
@@ -206,25 +216,20 @@ class ClusterGenerator:
         self,
         matrix: _np.ndarray,
         markers: Markers,
+        lengths: _np.ndarray,
         maxsteps: int = 25,
         windowsize: int = 200,
         minsuccesses: int = 20,
         destroy: bool = False,
         normalized: bool = False,
         cuda: bool = False,
-        seed: int = 0,
+        rng_seed: int = 0,
     ):
-        self._check_params(matrix, markers, maxsteps, windowsize, minsuccesses)
+        self._check_params(matrix, markers, lengths, maxsteps, windowsize, minsuccesses)
         if not destroy:
             matrix = matrix.copy()
 
-        # Shuffle matrix in unison to prevent seed sampling bias. Indices keeps
-        # track of which points are which.
-        _np.random.Generator(_np.random.PCG64(seed)).shuffle(matrix)
-        indices = _np.random.Generator(_np.random.PCG64(seed)).permutation(len(matrix))
-        indices = _torch.from_numpy(indices)
         torch_matrix = _torch.from_numpy(matrix)
-
         if not normalized:
             _normalize(torch_matrix, inplace=True)
 
@@ -235,19 +240,27 @@ class ClusterGenerator:
         self.maxsteps: int = maxsteps
         self.minsuccesses: int = minsuccesses
         self.cuda: bool = cuda
-        self.rng: _random.Random = _random.Random(seed)
+        self.rng: _random.Random = _random.Random(rng_seed)
 
         self.matrix = torch_matrix
         # This refers to the indices of the original matrix. As we remove points, these
         # indices do not correspond to merely range(len(matrix)) anymore.
-        self.indices = indices
-        self.seed = -1
+        self.indices = _torch.arange(len(matrix))
+        self.order = _np.argsort(
+            _np.array(
+                [
+                    1_000_000 * (0 if m is None or len(m) < 3 else len(m)) + L
+                    for (m, L) in zip(markers.markers, lengths)
+                ]
+            )
+        )[::-1]
+        self.order_index = -1
         self.nclusters = 0
         self.peak_valley_ratio = 0.1
         self.attempts: _deque[bool] = _deque(maxlen=windowsize)
         self.successes = 0
 
-        histogram, kept_mask = self._init_histogram_kept_mask(len(indices))
+        histogram, kept_mask = self._init_histogram_kept_mask(len(self.indices))
         self.histogram = histogram
         self.kept_mask = kept_mask
 
@@ -281,26 +294,57 @@ class ClusterGenerator:
 
         return cluster
 
+    def get_next_seed(self) -> int:
+        "Get the next seed index for a new medoid search"
+        n_original_contigs = len(self.order)
+        i = self.order_index
+        while True:
+            # Get the order: That's the original index of the contig.
+            i = (i + 1) % n_original_contigs
+
+            # If we reach the final index, we "compact" self.order, removing any discarded -1 values.
+            # Since the clustering algorithm may loop over self.order many times, we can potentially
+            # save time.
+            if i + 1 == n_original_contigs:
+                wrap = self.order[i] == -1
+                self.order = self.order[self.order > -1]
+                n_original_contigs = len(self.order)
+                assert n_original_contigs > 0
+                i = 0 if wrap else n_original_contigs - 1
+
+            order = self.order[i]
+            if order == -1:
+                continue
+
+            # Find the new index of this old index
+            new_index = _torch.searchsorted(self.indices, order).item()
+            # It's possible the seed contig `order` is part of a previously emitted cluster,
+            # in which case it's not to be found in self.indices. In that case, mark the order
+            # as -1, and go to the next one
+            if (
+                new_index >= len(self.indices)
+                or self.indices[new_index].item() != order
+            ):
+                self.order[i] = -1
+                continue
+
+            self.order_index = i
+            return new_index
+
     def _findcluster(self) -> tuple[Cluster, int, _Tensor]:
         """Finds a cluster to output."""
         threshold, success, medoid = None, None, -1
 
         # Keep looping until we find a cluster
         distances = None
+        seed = 0
         while threshold is None:
-            # If on GPU, we need to take next seed which has not already been clusted out.
-            # if not, clustered points have been removed, so we can just take next seed
-            if self.cuda:
-                self.seed = (self.seed + 1) % len(self.matrix)
-                while not self.kept_mask[self.seed]:
-                    self.seed = (self.seed + 1) % len(self.matrix)
-            else:
-                self.seed = (self.seed + 1) % len(self.matrix)
+            seed = self.get_next_seed()
 
             medoid, distances = _wander_medoid(
                 self.matrix,
                 self.kept_mask,
-                self.seed,
+                seed,
                 self.maxsteps,
                 self.rng,
                 self.cuda,
@@ -357,7 +401,7 @@ class ClusterGenerator:
 
         cluster = Cluster(
             int(self.indices[medoid].item()),  # type: ignore
-            self.seed,
+            seed,
             self.indices[points].numpy(),
             self.peak_valley_ratio,
             threshold,
