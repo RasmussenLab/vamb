@@ -128,6 +128,25 @@ class Cluster:
                 self.attempts,
             )
 
+    def completeness_contamination(self, markers: Markers) -> tuple[float, float]:
+        n_markers = markers.n_markers
+        counts = _np.zeros(n_markers, dtype=_np.int32)
+        for member in self.members:
+            marker_list = markers.markers[member]
+            if marker_list is None:
+                continue
+            for marker in marker_list:
+                counts[marker] += 1
+
+        n_unique = (counts > 0).sum()
+        completeness = n_unique / n_markers
+        contamination = (counts.sum() - n_unique) / n_markers
+        return (completeness, contamination)
+
+    def score(self, markers: Markers) -> float:
+        (completeness, contamination) = self.completeness_contamination(markers)
+        return completeness - 5 * contamination
+
     def __str__(self) -> str:
         radius = f"{self.radius:.3f}"
         if self.isdefault:
@@ -317,6 +336,7 @@ class ClusterGenerator:
             )
         )[::-1]
         self.order_index = -1
+        self.markers = markers
         self.nclusters = 0
         self.peak_valley_ratio = 0.1
         self.attempts: _deque[bool] = _deque(maxlen=windowsize)
@@ -399,6 +419,25 @@ class ClusterGenerator:
             self.order_index = i
             return new_index
 
+    def update_successes(self, success: bool):
+        # Keep accurately track of successes if we exceed maxlen
+        if len(self.attempts) == self.attempts.maxlen:
+            self.successes -= self.attempts.popleft()
+
+        # Add the current success to count
+        self.successes += success
+        self.attempts.append(success)
+
+        # If less than minsuccesses of the last maxlen attempts were successful,
+        # we relax the clustering criteria and reset counting successes.
+        if (
+            len(self.attempts) == self.attempts.maxlen
+            and self.successes < self.minsuccesses
+        ):
+            self.peak_valley_ratio += 0.1
+            self.attempts.clear()
+            self.successes = 0
+
     def _findcluster(self) -> tuple[Cluster, int, _Tensor]:
         """Finds a cluster to output."""
         threshold, success, medoid = None, None, -1
@@ -440,23 +479,7 @@ class ClusterGenerator:
 
             # If success is not None, either threshold detection failed or succeded.
             if success is not None:
-                # Keep accurately track of successes if we exceed maxlen
-                if len(self.attempts) == self.attempts.maxlen:
-                    self.successes -= self.attempts.popleft()
-
-                # Add the current success to count
-                self.successes += success
-                self.attempts.append(success)
-
-                # If less than minsuccesses of the last maxlen attempts were successful,
-                # we relax the clustering criteria and reset counting successes.
-                if (
-                    len(self.attempts) == self.attempts.maxlen
-                    and self.successes < self.minsuccesses
-                ):
-                    self.peak_valley_ratio += 0.1
-                    self.attempts.clear()
-                    self.successes = 0
+                self.update_successes(success)
 
         # These are the points of the final cluster AFTER establishing the threshold used
         assert isinstance(distances, _Tensor)
