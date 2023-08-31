@@ -10,12 +10,12 @@ functions write_clusters and read_clusters.
 import random as _random
 import numpy as _np
 import torch as _torch
-from collections import deque as _deque
+from collections import defaultdict, deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
 from vamb.parsemarkers import Markers
-from typing import Optional
+from typing import Optional, TypeVar
 from collections.abc import Sequence, Iterable
 
 _DEFAULT_RADIUS = 0.06
@@ -24,6 +24,8 @@ _MEDOID_RADIUS = 0.05
 
 _DELTA_X = 0.005
 _XMAX = 0.3
+
+Cl = TypeVar("Cl", bound="Cluster")
 
 # This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
@@ -109,6 +111,23 @@ class Cluster:
             f"\t{self.successes}\t{self.attempts}\t"
         ) + ",".join([str(i) for i in self.members])
 
+    # TODO: If we drop Python 3.9 and 3.10 compat, use the Self type instead
+    def split_by_sample(self: Cl, sample_identifiers: _np.ndarray) -> Iterable[Cl]:
+        by_sample: defaultdict[int, list[int]] = defaultdict(list)
+        for member in self.members:
+            by_sample[sample_identifiers[member]].append(member)
+        for members in by_sample.values():
+            yield type(self)(
+                self.medoid,
+                self.seed,
+                _np.array(members),
+                self.pvr,
+                self.radius,
+                self.isdefault,
+                self.successes,
+                self.attempts,
+            )
+
     def __str__(self) -> str:
         radius = f"{self.radius:.3f}"
         if self.isdefault:
@@ -147,6 +166,7 @@ class ClusterGenerator:
         "order",
         "order_index",
         "nclusters",
+        "sample_identifiers",
         "peak_valley_ratio",
         "attempts",
         "successes",
@@ -171,6 +191,7 @@ class ClusterGenerator:
         matrix: _np.ndarray,
         markers: Markers,
         lengths: _np.ndarray,
+        identifiers_and_separator: Optional[tuple[list[str], str]],
         maxsteps: int,
         windowsize: int,
         minsuccesses: int,
@@ -200,6 +221,10 @@ class ClusterGenerator:
         if len(lengths) != len(matrix):
             raise ValueError("N sequences in lengths and matrix do not match")
 
+        if identifiers_and_separator is not None:
+            if len(identifiers_and_separator[0]) != len(matrix):
+                raise ValueError("N sequences in identifiers and matrix do not match")
+
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
 
@@ -212,11 +237,40 @@ class ClusterGenerator:
 
         return histogram, kept_mask
 
+    @staticmethod
+    def compute_sample_identifiers(
+        identifiers: list[str], separator: str
+    ) -> _np.ndarray:
+        result = _np.zeros(len(identifiers), dtype=_np.uint16)
+        index_of_samplename: dict[str, int] = dict()
+        for i, identifier in enumerate(identifiers):
+            (sample, _, rest) = identifier.partition(separator)
+            if len(rest) == 0:
+                raise ValueError(
+                    f'Identifier "{identifier}" does not contain separator "{separator}"'
+                )
+            index = index_of_samplename.get(sample)
+            if index is None:
+                index = len(index_of_samplename)
+                index_of_samplename[sample] = index
+
+            # Guard against overflow. Surely the users don't have more than 65k samples... right?
+            # Also guard against the user accidentally passing in the wrong separator.
+            if index > 65535:
+                raise ValueError(
+                    "Vamb cannot handle more than 65535 distinct samples. "
+                    "Perhaps you passed wrong separator for your sequence identifiers?"
+                )
+
+            result[i] = index
+        return result
+
     def __init__(
         self,
         matrix: _np.ndarray,
         markers: Markers,
         lengths: _np.ndarray,
+        identifiers_and_separator: Optional[tuple[list[str], str]],
         maxsteps: int = 25,
         windowsize: int = 200,
         minsuccesses: int = 20,
@@ -225,7 +279,15 @@ class ClusterGenerator:
         cuda: bool = False,
         rng_seed: int = 0,
     ):
-        self._check_params(matrix, markers, lengths, maxsteps, windowsize, minsuccesses)
+        self._check_params(
+            matrix,
+            markers,
+            lengths,
+            identifiers_and_separator,
+            maxsteps,
+            windowsize,
+            minsuccesses,
+        )
         if not destroy:
             matrix = matrix.copy()
 
@@ -259,6 +321,12 @@ class ClusterGenerator:
         self.peak_valley_ratio = 0.1
         self.attempts: _deque[bool] = _deque(maxlen=windowsize)
         self.successes = 0
+
+        if identifiers_and_separator is not None:
+            (identifiers, separator) = identifiers_and_separator
+            self.sample_identifiers = self.compute_sample_identifiers(
+                identifiers, separator
+            )
 
         histogram, kept_mask = self._init_histogram_kept_mask(len(self.indices))
         self.histogram = histogram
