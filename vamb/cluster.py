@@ -15,7 +15,7 @@ from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
 from vamb.parsemarkers import Markers
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, Union
 from collections.abc import Sequence, Iterable
 
 _DEFAULT_RADIUS = 0.06
@@ -26,6 +26,22 @@ _DELTA_X = 0.005
 _XMAX = 0.3
 
 Cl = TypeVar("Cl", bound="Cluster")
+
+
+class Loner:
+    __slots__ = []
+    pass
+
+
+class NoThreshold:
+    __slots__ = []
+    pass
+
+
+class Default:
+    __slots__ = []
+    pass
+
 
 # This is the PDF of normal with µ=0, s=0.01 from -0.075 to 0.075 with intervals
 # of DELTA_X, for a total of 31 values. We multiply by _DELTA_X so the density
@@ -365,7 +381,7 @@ class ClusterGenerator:
         elif len(self.matrix) == 0:
             raise StopIteration
 
-        cluster, _, points = self._findcluster()
+        cluster, _, points = self.find_cluster()
         self.nclusters += 1
 
         for point in points:
@@ -438,156 +454,194 @@ class ClusterGenerator:
             self.attempts.clear()
             self.successes = 0
 
-    def _findcluster(self) -> tuple[Cluster, int, _Tensor]:
-        """Finds a cluster to output."""
-        threshold, success, medoid = None, None, -1
+    def wander_medoid(self, seed) -> tuple[int, _Tensor]:
+        """Keeps sampling new points within the cluster until it has sampled
+        max_attempts without getting a new set of cluster with lower average
+        distance"""
 
-        # Keep looping until we find a cluster
-        distances = None
-        seed = 0
-        while threshold is None:
-            seed = self.get_next_seed()
+        futile_attempts = 0
+        medoid = seed
+        tried = {medoid}  # keep track of already-tried medoids
+        cluster, distances, average_distance = _sample_medoid(
+            self.matrix, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
+        )
 
-            medoid, distances = _wander_medoid(
-                self.matrix,
-                self.kept_mask,
-                seed,
-                self.maxsteps,
-                self.rng,
-                self.cuda,
+        while len(cluster) - len(tried) > 0 and futile_attempts < self.maxsteps:
+            sampled_medoid = int(cluster[self.rng.randrange(len(cluster))].item())
+
+            # Prevent sampling same medoid multiple times.
+            while sampled_medoid in tried:
+                sampled_medoid = int(cluster[self.rng.randrange(len(cluster))].item())
+
+            tried.add(sampled_medoid)
+
+            sampling = _sample_medoid(
+                self.matrix, self.kept_mask, sampled_medoid, _MEDOID_RADIUS, self.cuda
             )
+            sample_cluster, sample_distances, sample_avg = sampling
 
-            # We need to make a histogram of only the unclustered distances - when run on GPU
-            # these have not been removed and we must use the kept_mask
-            if self.cuda:
-                _torch.histc(
-                    distances[self.kept_mask],
-                    len(self.histogram),
-                    0,
-                    _XMAX,
-                    out=self.histogram,
-                )
+            # If the mean distance of inner points of the sample is lower,
+            # we move the medoid and reset the futile_attempts count
+            if sample_avg < average_distance:
+                medoid = sampled_medoid
+                cluster = sample_cluster
+                average_distance = sample_avg
+                futile_attempts = 0
+                tried = {medoid}
+                distances = sample_distances
+
             else:
-                _torch.histc(
-                    distances, len(self.histogram), 0, _XMAX, out=self.histogram
-                )
-            self.histogram[0] -= 1  # Remove distance to self
+                futile_attempts += 1
 
-            threshold, success = _find_threshold(
-                self.histogram, self.peak_valley_ratio, self.cuda
+        return medoid, distances
+
+    def find_threshold(
+        self, distances: _Tensor
+    ) -> Union[Loner, NoThreshold, Default, float]:
+        # We need to make a histogram of only the unclustered distances - when run on GPU
+        # these have not been removed and we must use the kept_mask
+        if self.cuda:
+            _torch.histc(
+                distances[self.kept_mask],
+                len(self.histogram),
+                0,
+                _XMAX,
+                out=self.histogram,
             )
+        else:
+            _torch.histc(distances, len(self.histogram), 0, _XMAX, out=self.histogram)
+        self.histogram[0] -= 1  # Remove distance to self
 
-            # If success is not None, either threshold detection failed or succeded.
-            if success is not None:
-                self.update_successes(success)
+        # If the point is a loner, immediately return a threshold in where only
+        # that point is contained.
+        if self.histogram[:10].sum().item() == 0:
+            return Loner()
 
-        # These are the points of the final cluster AFTER establishing the threshold used
-        assert isinstance(distances, _Tensor)
-        points = _smaller_indices(distances, self.kept_mask, threshold, self.cuda)
-        isdefault = (
-            success is None
-            and threshold == _DEFAULT_RADIUS
-            and self.peak_valley_ratio > 0.55
-        )
-
-        cluster = Cluster(
-            int(self.indices[medoid].item()),  # type: ignore
-            seed,
-            self.indices[points].numpy(),
-            self.peak_valley_ratio,
-            threshold,
-            isdefault,
-            self.successes,
-            len(self.attempts),
-        )
-        return cluster, medoid, points
-
-
-def _calc_densities(
-    histogram: _Tensor, cuda: bool, pdf: _Tensor = _NORMALPDF
-) -> _Tensor:
-    """Given an array of histogram, smoothes the histogram."""
-    pdf_len = len(pdf)
-
-    if cuda:
-        histogram = histogram.cpu()
-
-    densities = _torch.zeros(len(histogram) + pdf_len - 1)
-    for i in range(len(densities) - pdf_len + 1):
-        densities[i : i + pdf_len] += pdf * histogram[i]
-
-    densities = densities[15:-15]
-
-    return densities
-
-
-def _find_threshold(
-    histogram: _Tensor, peak_valley_ratio: float, cuda: bool
-) -> tuple[Optional[float], Optional[bool]]:
-    """Find a threshold distance, where where is a dip in point density
-    that separates an initial peak in densities from the larger bulk around 0.5.
-    Returns (threshold, success), where succes is False if no threshold could
-    be found, True if a good threshold could be found, and None if the point is
-    alone, or the threshold has been used.
-    """
-    peak_density = 0
-    peak_over = False
-    minimum_x = None
-    density_at_minimum = None
-    threshold = None
-    success = False
-    delta_x = _XMAX / len(histogram)
-
-    # If the point is a loner, immediately return a threshold in where only
-    # that point is contained.
-    if histogram[:10].sum().item() == 0:
-        return 0.025, None
-
-    densities = _calc_densities(histogram, cuda)
-
-    # Else we analyze the point densities to find the valley
-    x = 0
-    density_at_minimum = 0.0
-    for density in densities:
-        # Define the first "peak" in point density. That's simply the max until
-        # the peak is defined as being over.
-        if not peak_over and density > peak_density:
-            # Do not accept first peak to be after x = 0.1
-            if x > 0.1:
-                break
-            peak_density = density
-
-        # Peak is over when density drops below 60% of peak density
-        if not peak_over and density < 0.6 * peak_density:
-            peak_over = True
-            density_at_minimum = density
-
-        # If another peak is detected, we stop
-        if peak_over and density > 1.5 * density_at_minimum:
-            break
-
-        # Now find the minimum after the peak
-        if peak_over and density < density_at_minimum:
-            minimum_x, density_at_minimum = x, density
-
-            # If this minimum is below ratio * peak, it's accepted as threshold
-            if density < peak_valley_ratio * peak_density:
-                threshold = minimum_x
-                success = True
-
-        x += delta_x
-
-    # Don't allow a threshold too high - this is relaxed with p_v_ratio
-    if threshold is not None and threshold > 0.2 + peak_valley_ratio:
+        peak_density = 0
+        peak_over = False
+        minimum_x = None
+        density_at_minimum = None
         threshold = None
-        success = False
+        delta_x = _XMAX / len(self.histogram)
+        pdf_len = len(_NORMALPDF)
 
-    # If ratio has been set to 0.6, we do not accept returning no threshold.
-    if threshold is None and peak_valley_ratio > 0.55:
-        threshold = _DEFAULT_RADIUS
-        success = None
+        if self.cuda:
+            histogram = self.histogram.cpu()
+        else:
+            histogram = self.histogram
 
-    return threshold, success
+        densities = _torch.zeros(len(histogram) + pdf_len - 1)
+        for i in range(len(densities) - pdf_len + 1):
+            densities[i : i + pdf_len] += _NORMALPDF * histogram[i]
+
+        densities = densities[15:-15]
+
+        # Analyze the point densities to find the valley
+        x = 0
+        density_at_minimum = 0.0
+        for density in densities:
+            # Define the first "peak" in point density. That's simply the max until
+            # the peak is defined as being over.
+            if not peak_over and density > peak_density:
+                # Do not accept first peak to be after x = 0.1
+                if x > 0.1:
+                    if self.peak_valley_ratio > 0.55:
+                        return Default()
+                    else:
+                        return NoThreshold()
+                peak_density = density
+
+            # Peak is over when density drops below 60% of peak density
+            if not peak_over and density < 0.6 * peak_density:
+                peak_over = True
+                density_at_minimum = density
+
+            # If another peak is detected, we stop
+            if peak_over and density > 1.5 * density_at_minimum:
+                break
+
+            # Now find the minimum after the peak
+            if peak_over and density < density_at_minimum:
+                minimum_x, density_at_minimum = x, density
+
+                # If this minimum is below ratio * peak, it's accepted as threshold
+                if density < self.peak_valley_ratio * peak_density:
+                    threshold = minimum_x
+
+            x += delta_x
+
+        # If we have not detected a threshold, we can't return one. However, when the peak_valley_ratio
+        # is too high, we need to return something to not get caught in an infinite loop. So, we return
+        # to use a default value.
+        if threshold is None:
+            if self.peak_valley_ratio > 0.55:
+                return Default()
+            else:
+                return NoThreshold()
+        # Else, we check whether the threshold is too high. If not, we return it.
+        else:
+            if threshold > 0.2 + self.peak_valley_ratio:
+                return NoThreshold()
+            else:
+                return threshold
+
+    def find_cluster(self) -> tuple[Cluster, int, _Tensor]:
+        while True:
+            seed = self.get_next_seed()
+            medoid, distances = self.wander_medoid(seed)
+            threshold = self.find_threshold(distances)
+            if isinstance(threshold, Loner):
+                cluster = Cluster(
+                    int(self.indices[medoid].item()),  # type: ignore
+                    seed,
+                    self.indices[medoid].numpy(),
+                    self.peak_valley_ratio,
+                    _DEFAULT_RADIUS,
+                    False,
+                    self.successes,
+                    len(self.attempts),
+                )
+                points = _torch.IntTensor([medoid])
+                return (cluster, medoid, points)
+
+            elif isinstance(threshold, Default):
+                points = _smaller_indices(
+                    distances, self.kept_mask, _DEFAULT_RADIUS, self.cuda
+                )
+                cluster = Cluster(
+                    int(self.indices[medoid].item()),  # type: ignore
+                    seed,
+                    self.indices[points].numpy(),
+                    self.peak_valley_ratio,
+                    _DEFAULT_RADIUS,
+                    True,
+                    self.successes,
+                    len(self.attempts),
+                )
+                return (cluster, medoid, points)
+
+            elif isinstance(threshold, NoThreshold):
+                self.update_successes(False)
+
+            elif isinstance(threshold, float):
+                # TODO: Do the marker check
+                self.update_successes(True)
+                points = _smaller_indices(
+                    distances, self.kept_mask, threshold, self.cuda
+                )
+                cluster = Cluster(
+                    int(self.indices[medoid].item()),  # type: ignore
+                    seed,
+                    self.indices[points].numpy(),
+                    self.peak_valley_ratio,
+                    threshold,
+                    False,
+                    self.successes,
+                    len(self.attempts),
+                )
+                return cluster, medoid, points
+            else:  # No more types
+                assert False
 
 
 def _smaller_indices(
@@ -651,54 +705,6 @@ def _sample_medoid(
         average_distance = distances[cluster].sum().item() / (len(cluster) - 1)
 
     return cluster, distances, average_distance
-
-
-def _wander_medoid(
-    matrix: _Tensor,
-    kept_mask: _Tensor,
-    medoid: int,
-    max_attempts: int,
-    rng: _random.Random,
-    cuda: bool,
-) -> tuple[int, _Tensor]:
-    """Keeps sampling new points within the cluster until it has sampled
-    max_attempts without getting a new set of cluster with lower average
-    distance"""
-
-    futile_attempts = 0
-    tried = {medoid}  # keep track of already-tried medoids
-    cluster, distances, average_distance = _sample_medoid(
-        matrix, kept_mask, medoid, _MEDOID_RADIUS, cuda
-    )
-
-    while len(cluster) - len(tried) > 0 and futile_attempts < max_attempts:
-        sampled_medoid = int(cluster[rng.randrange(len(cluster))].item())
-
-        # Prevent sampling same medoid multiple times.
-        while sampled_medoid in tried:
-            sampled_medoid = int(cluster[rng.randrange(len(cluster))].item())
-
-        tried.add(sampled_medoid)
-
-        sampling = _sample_medoid(
-            matrix, kept_mask, sampled_medoid, _MEDOID_RADIUS, cuda
-        )
-        sample_cluster, sample_distances, sample_avg = sampling
-
-        # If the mean distance of inner points of the sample is lower,
-        # we move the medoid and reset the futile_attempts count
-        if sample_avg < average_distance:
-            medoid = sampled_medoid
-            cluster = sample_cluster
-            average_distance = sample_avg
-            futile_attempts = 0
-            tried = {medoid}
-            distances = sample_distances
-
-        else:
-            futile_attempts += 1
-
-    return medoid, distances
 
 
 def pairs(
