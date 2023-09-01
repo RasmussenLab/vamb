@@ -163,6 +163,18 @@ class Cluster:
         (completeness, contamination) = self.completeness_contamination(markers)
         return completeness - 5 * contamination
 
+    def passes_marker_check(
+        self, sample_identifiers: _np.ndarray, markers: Markers
+    ) -> bool:
+        any_complete = False
+        for cluster in list(self.split_by_sample(sample_identifiers)):
+            (completeness, contamination) = cluster.completeness_contamination(markers)
+            if contamination > 0.1:
+                return False
+            if completeness > 0.8:
+                any_complete = True
+        return any_complete
+
     def __str__(self) -> str:
         radius = f"{self.radius:.3f}"
         if self.isdefault:
@@ -672,8 +684,6 @@ class ClusterGenerator:
                 self.update_successes(False)
 
             elif isinstance(threshold, float):
-                # TODO: Do the marker check
-                self.update_successes(True)
                 points = _smaller_indices(
                     distances, self.kept_mask, threshold, self.cuda
                 )
@@ -687,7 +697,15 @@ class ClusterGenerator:
                     self.successes,
                     len(self.attempts),
                 )
-                return cluster, medoid, points
+                can_fail = self.peak_valley_ratio < 0.55
+                if can_fail and not cluster.passes_marker_check(
+                    self.sample_identifiers, self.markers
+                ):
+                    self.update_successes(False)
+                else:
+                    if can_fail:
+                        self.update_successes(True)
+                    return (cluster, medoid, points)
             else:  # No more types
                 assert False
 
