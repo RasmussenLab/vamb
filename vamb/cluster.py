@@ -217,6 +217,8 @@ class ClusterGenerator:
         "matrix",
         # Marker object, list of markers genes to score clusters by
         "markers",
+        # Lengths of input contigs
+        "lengths",
         # This are the original indices of the rows of the matrix. Initially this is just 1..len(matrix),
         # but if not on GPU, we delete used rows of the matrix (and indices) to speed up subsequent computations.
         # Then, we can obtain the original row index by looking up in this array
@@ -240,6 +242,7 @@ class ClusterGenerator:
         # A buffer in which a histrogram of distances from the current medoid is stored.
         # Is overwritten on each iteration, we just keep it here to avoid allocations.
         "histogram",
+        "histogram_edges",
         # This bool array is False if the contig at the given index has been emitted in a previous iteration.
         # When matrix is on CPU, rows in this array (and the data matrix) is continuously deleted, and we use
         # this array to keep track of which rows to delete each iteration.
@@ -392,6 +395,7 @@ class ClusterGenerator:
         )[::-1]
         self.order_index = 0
         self.markers = markers
+        self.lengths = _torch.Tensor(lengths)
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1
@@ -406,6 +410,7 @@ class ClusterGenerator:
 
         histogram, kept_mask = self._init_histogram_kept_mask(len(self.indices))
         self.histogram = histogram
+        self.histogram_edges = _torch.linspace(0.0, _XMAX, round(_XMAX / _DELTA_X) + 1)
         self.kept_mask = kept_mask
 
     # It's an iterator itself
@@ -440,6 +445,7 @@ class ClusterGenerator:
             _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
 
         self.indices = self.indices[self.kept_mask]
+        self.lengths = self.lengths[self.kept_mask]
         self.kept_mask.resize_(len(self.matrix))
         self.kept_mask[:] = 1
 
@@ -563,29 +569,32 @@ class ClusterGenerator:
     def find_threshold(
         self, distances: _Tensor
     ) -> Union[Loner, NoThreshold, Default, float]:
+        # If the point is a loner, immediately return a threshold in where only
+        # that point is contained.
+        # TODO: Avoid this dual pass in this critical function for performance? How...?
+        if _torch.count_nonzero(distances < 0.05) == 1:
+            return Loner()
+
         # We need to make a histogram of only the unclustered distances - when run on GPU
         # these have not been removed and we must use the kept_mask
         if self.cuda:
-            _torch.histc(
-                distances[self.kept_mask],
-                len(self.histogram),
-                0,
-                _XMAX,
-                out=self.histogram,
-            )
+            picked_lengths = distances[self.kept_mask]
         else:
-            _torch.histc(distances, len(self.histogram), 0, _XMAX, out=self.histogram)
-        self.histogram[0] -= 1  # Remove distance to self
-
-        # If the point is a loner, immediately return a threshold in where only
-        # that point is contained.
-        if self.histogram[:10].sum().item() == 0:
-            return Loner()
+            picked_lengths = distances
+        _torch.histogram(
+            input=picked_lengths,
+            bins=len(self.histogram),
+            range=(0.0, _XMAX),
+            out=((self.histogram, self.histogram_edges)),
+            weight=self.lengths,
+        )
+        # TODO: Decide: Should we remove the self point? This might create an invalid initial peak.
+        # On the other hand, if it's large, the peak is valid...
 
         # When the peak_valley_ratio is too high, we need to return something to not get caught
         # in an infinite loop.
         must_return_points = self.peak_valley_ratio > 0.55
-        peak_density = 0
+        peak_density = 0.0
         peak_over = False
         minimum_x = 0.0
         threshold = None
