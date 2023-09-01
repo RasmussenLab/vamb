@@ -533,7 +533,7 @@ class ClusterGenerator:
         distance"""
 
         medoid = seed
-        cluster, distances, average_distance = _sample_medoid(
+        cluster, distances, local_density = _sample_medoid(
             self.matrix, self.lengths, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
         )
         candidates = self.rng.choices(
@@ -552,15 +552,15 @@ class ClusterGenerator:
                 _MEDOID_RADIUS,
                 self.cuda,
             )
-            sample_cluster, sample_distances, sample_avg = sampling
+            sample_cluster, sample_distances, sample_density = sampling
 
             # If the mean distance of inner points of the sample is lower,
             # we move the medoid and start over
-            if sample_avg < average_distance:
+            if sample_density > local_density:
                 medoid = sampled_medoid
                 cluster = sample_cluster
                 distances = sample_distances
-                average_distance = sample_avg
+                local_density = sample_density
                 candidates = self.rng.choices(
                     cluster.tolist(), k=min(len(cluster), self.maxsteps)
                 )
@@ -784,15 +784,8 @@ def _sample_medoid(
 
     distances = _calc_distances(matrix, medoid)
     cluster = _smaller_indices(distances, kept_mask, threshold, cuda)
-
-    if len(cluster) == 1:
-        average_distance = 0.0
-    else:
-        average_distance = (distances[cluster] * lengths[cluster]).sum().item() / len(
-            cluster
-        )
-
-    return cluster, distances, average_distance
+    local_density = (lengths[cluster] * (threshold - distances[cluster])).sum().item()
+    return cluster, distances, local_density
 
 
 def pairs(
