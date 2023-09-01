@@ -534,7 +534,7 @@ class ClusterGenerator:
 
         medoid = seed
         cluster, distances, average_distance = _sample_medoid(
-            self.matrix, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
+            self.matrix, self.lengths, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
         )
         candidates = self.rng.choices(
             cluster.tolist(), k=min(len(cluster), self.maxsteps)
@@ -545,7 +545,12 @@ class ClusterGenerator:
         while i < len(candidates):
             sampled_medoid = candidates[i]
             sampling = _sample_medoid(
-                self.matrix, self.kept_mask, sampled_medoid, _MEDOID_RADIUS, self.cuda
+                self.matrix,
+                self.lengths,
+                self.kept_mask,
+                sampled_medoid,
+                _MEDOID_RADIUS,
+                self.cuda,
             )
             sample_cluster, sample_distances, sample_avg = sampling
 
@@ -764,7 +769,12 @@ def _calc_distances(matrix: _Tensor, index: int) -> _Tensor:
 
 
 def _sample_medoid(
-    matrix: _Tensor, kept_mask: _Tensor, medoid: int, threshold: float, cuda: bool
+    matrix: _Tensor,
+    lengths: _Tensor,
+    kept_mask: _Tensor,
+    medoid: int,
+    threshold: float,
+    cuda: bool,
 ) -> tuple[_Tensor, _Tensor, float]:
     """Returns:
     - A vector of indices to points within threshold
@@ -778,7 +788,9 @@ def _sample_medoid(
     if len(cluster) == 1:
         average_distance = 0.0
     else:
-        average_distance = distances[cluster].sum().item() / (len(cluster) - 1)
+        average_distance = (distances[cluster] * lengths[cluster]).sum().item() / len(
+            cluster
+        )
 
     return cluster, distances, average_distance
 
