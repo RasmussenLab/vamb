@@ -414,13 +414,27 @@ class ClusterGenerator:
         # Remove all points that's been clustered away. Is slow it itself, but speeds up
         # distance calculation by having fewer points. Worth it on CPU, not on GPU
         if not self.cuda:
-            _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
-            # no need to inplace mask small array
-            self.indices = self.indices[self.kept_mask]
-            self.kept_mask.resize_(len(self.matrix))
-            self.kept_mask[:] = 1
+            self.pack()
 
         return cluster
+
+    def pack(self):
+        "Remove all used points from the matrix and indices, and reset kept_mask."
+        if self.cuda:
+            self.matrix = _vambtools.torch_inplace_maskarray(
+                self.matrix.cpu(), self.kept_mask
+            ).cuda()
+        else:
+            _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
+
+        self.indices = self.indices[self.kept_mask]
+        self.kept_mask.resize_(len(self.matrix))
+        self.kept_mask[:] = 1
+
+    def pack_order(self):
+        "Remove all used points from self.order"
+        self.order = self.order[self.order > -1]
+        assert len(self.order) > 0
 
     def get_next_seed(self) -> int:
         "Get the next seed index for a new medoid search"
@@ -434,9 +448,14 @@ class ClusterGenerator:
             # we potentially have many used up -1 values to skip, so we remove these
             # Since the clustering algorithm may loop over self.order many times, we can potentially
             # save time.
+            # When running on GPU, we also take this (rare-ish) chance to pack the on-GPU matrix.
+            # This speeds up future distance calculation by making the matrix smaller, but requires
+            # moving the matrix from and to GPU, so is slow.
+            # Doing it here, which we assume is relatively rarely may be a good compromise
             if i == 0 and self.n_emitted_clusters > 0:
-                self.order = self.order[self.order > -1]
-                assert len(self.order) > 0
+                if self.cuda:
+                    self.pack()
+                self.pack_order()
                 n_original_contigs = len(self.order)
 
             order = self.order[i]
@@ -623,7 +642,7 @@ class ClusterGenerator:
                 cluster = Cluster(
                     int(self.indices[medoid].item()),  # type: ignore
                     seed,
-                    self.indices[medoid].numpy(),
+                    _np.array([self.indices[medoid].item()]),
                     self.peak_valley_ratio,
                     _DEFAULT_RADIUS,
                     False,
