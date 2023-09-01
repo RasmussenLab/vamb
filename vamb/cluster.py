@@ -346,8 +346,8 @@ class ClusterGenerator:
         lengths: _np.ndarray,
         identifiers_and_separator: Optional[tuple[list[str], str]],
         maxsteps: int = 25,
-        windowsize: int = 200,
-        minsuccesses: int = 20,
+        windowsize: int = 300,
+        minsuccesses: int = 15,
         destroy: bool = False,
         normalized: bool = False,
         cuda: bool = False,
@@ -706,6 +706,7 @@ class ClusterGenerator:
                     if can_fail:
                         self.update_successes(True)
                     return (cluster, medoid, points)
+
             else:  # No more types
                 assert False
 
