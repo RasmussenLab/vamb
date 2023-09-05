@@ -583,11 +583,11 @@ class ClusterGenerator:
         # We need to make a histogram of only the unclustered distances - when run on GPU
         # these have not been removed and we must use the kept_mask
         if self.cuda:
-            picked_lengths = distances[self.kept_mask]
+            picked_distances = distances[self.kept_mask]
         else:
-            picked_lengths = distances
+            picked_distances = distances
         _torch.histogram(
-            input=picked_lengths,
+            input=picked_distances,
             bins=len(self.histogram),
             range=(0.0, _XMAX),
             out=((self.histogram, self.histogram_edges)),
