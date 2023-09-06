@@ -17,9 +17,11 @@ import vamb.vambtools as _vambtools
 from typing import TypeVar, Union, cast
 from collections.abc import Sequence, Iterable
 
-_DEFAULT_RADIUS = 0.06
+_DEFAULT_RADIUS = 0.12
+# _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
-_MEDOID_RADIUS = 0.05
+_MEDOID_RADIUS = 0.1
+# _MEDOID_RADIUS = 0.05
 
 _DELTA_X = 0.005
 _XMAX = 0.3

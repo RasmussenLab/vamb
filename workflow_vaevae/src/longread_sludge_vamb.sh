@@ -1,16 +1,16 @@
 #!/usr/bin/bash
 
 
-vamb \
-    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout64 \
-    --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
-    --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \
-    -l 64 \
-    -e 500 \
-    -q 150 \
-    -o C \
-    --cuda \
-    --minfasta 200000
+# vamb \
+#     --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout64 \
+#     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
+#     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \
+#     -l 64 \
+#     -e 500 \
+#     -q 150 \
+#     -o C \
+#     --cuda \
+#     --minfasta 200000
 
 vamb \
     --model reclustering \

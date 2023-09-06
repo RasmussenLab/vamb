@@ -1051,7 +1051,7 @@ def parse_mmseqs_taxonomy(
     ind_map = {c: i for i, c in enumerate(contignames)}
     indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
     graph_column = df_mmseq[8]
-    species_column = df_mmseq[df_mmseq[2] == "species"][3]
+    species_column = df_mmseq[df_mmseq[2].isin(["species", "subspecies"])][8].str.split(';').str[6]
     species_dict = species_column.value_counts()
     unique_species = sorted(
         list(species_column.unique()), key=lambda x: species_dict[x], reverse=True
@@ -1176,11 +1176,7 @@ def predict_taxonomy(
     df_gt = pd.DataFrame({"contigs": names, "lengths": lengths_masked})
     nodes_ar = np.array(nodes)
 
-    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
-    df_mmseq_sp = df_mmseq[(df_mmseq[2] == "species")]
-    mmseq_map = {k: v for k, v in zip(df_mmseq_sp[0], df_mmseq_sp[8])}
     log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
-
     predictions = []
     probs = []
     for i in range(len(df_gt)):
@@ -1292,7 +1288,12 @@ def run_vaevae(
 
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    classes_order = list(graph_column.str.split(";").str[-1])
+    missing_nodes_mmseqs = list(set(range(rpkms.shape[0])) - set(indices_mmseq))
+    if missing_nodes_mmseqs:
+        indices_mmseq.extend(missing_nodes_mmseqs)
+        classes_order.extend(["d_Bacteria"]*len(missing_nodes_mmseqs))
+    classes_order = np.array(classes_order)
     targets = [ind_nodes[i] for i in classes_order]
 
     vae = vamb.h_loss.VAEVAEHLoss(
@@ -1386,7 +1387,7 @@ def run_vaevae(
         cluster_options,
         clusterspath,
         latent_both,
-        composition.metadata.identifiers,
+        composition.metadata.identifiers[indices_mmseq],
         vamb_options,
         logfile,
         "vaevae_",
@@ -1910,11 +1911,7 @@ def main():
         help="path to results_taxonomy_predictor.csv file, output of taxonomy_predictor model",
     )
     taxonomys.add_argument(
-        "--no_predictor",
-        metavar="",
-        type=bool,
-        default=False,
-        help="do not complete mmseqs search with taxonomy predictions",
+        "--no_predictor", help="do not complete mmseqs search with taxonomy predictions [False]", action="store_true"
     )
     taxonomys.add_argument(
         "--n_species",

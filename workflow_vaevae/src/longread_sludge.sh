@@ -4,7 +4,6 @@
 
 
 vamb \
-    --model vaevae \
     --outdir /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vaevaeout_dadam \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/sludge/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/sludge/vambout/abundance.npz \

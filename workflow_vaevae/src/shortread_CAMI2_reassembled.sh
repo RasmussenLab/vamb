@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 dataset=$1
 run_id=$2
-    --taxonomy_predictions /home/projects/cpr_10006/people/svekut/cami2_${dataset}_reassembled_1/results_taxonomy_predictor.csv \
+    # --taxonomy_predictions /home/projects/cpr_10006/people/svekut/cami2_${dataset}_reassembled_1/results_taxonomy_predictor.csv \
 
 vamb \
     --model vaevae \
@@ -10,10 +10,11 @@ vamb \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/cami_errorfree/${dataset}/vambout/abundance.npz \
     --taxonomy /home/projects/cpr_10006/people/paupie/vaevae/mmseq2_annotations/ptracker/${dataset}_taxonomy.tsv \
     -l 32 \
-    -e 500 \
+    -e 200 \
     -q 25 75 150 \
     -pe 100 \
     -pq 25 75 \
+    -pthr ${run_id} \
     -o C \
     --cuda \
     --minfasta 200000

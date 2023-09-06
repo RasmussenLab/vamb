@@ -14,6 +14,7 @@ from typing import Optional, IO, Union
 
 import torch as _torch
 from torch import nn as _nn
+import torch.nn.functional as F
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
 from torch.optim import Adam as _Adam
@@ -267,7 +268,10 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         self.table_parent = table_parent
         self.tree = _hier.Hierarchy(table_parent)
         self.loss_fn = _hlosses_fast.HierSoftmaxCrossEntropy(self.tree)
+        # self.loss_fn = _hlosses_fast.RandomCutLoss(
+        #     self.tree, 0.1, permit_root_cut=False, with_leaf_targets=True)
         self.pred_helper = _hlosses_fast.HierLogSoftmax(self.tree)
+        # self.pred_helper = _hlosses_fast.SumAncestors(self.tree, exclude_root=True)
         if self.usecuda:
             self.loss_fn = self.loss_fn.cuda()
             self.pred_helper = self.pred_helper.cuda()
@@ -275,6 +279,11 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
             lambda log_softmax_fn, theta: log_softmax_fn(theta).exp(),
             self.pred_helper,
         )
+        # self.pred_fn = partial(
+        #     lambda sum_ancestor_fn, theta: _torch.exp(_hlosses_fast.multilabel_log_likelihood(
+        #         sum_ancestor_fn(theta), replace_root=True, temperature=10.0)),
+        #     self.pred_helper,
+        # )
         self.specificity = -self.tree.num_leaf_descendants()
         self.not_trivial = self.tree.num_children() != 1
         self.find_lca = _hier.FindLCA(self.tree)
@@ -289,6 +298,7 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
 
     def calc_loss(self, labels_in, labels_out, mu, logsigma):
         ce_labels = self.loss_fn(labels_out[:, 1:], labels_in)
+        # ce_labels = self.loss_fn(labels_out, labels_in)
 
         ce_labels_weight = 1.0  # TODO: figure out
         kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
@@ -712,7 +722,7 @@ class VAMB2Label(_nn.Module):
         self.alpha = alpha
         self.beta = beta
         self.nhiddens = nhiddens
-        self.nlabels = nlabels
+        # self.nlabels = nlabels
         self.dropout = dropout
 
         # Initialize lists for holding hidden layers
@@ -728,6 +738,10 @@ class VAMB2Label(_nn.Module):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
+        self.tree = _hier.Hierarchy(table_parent)
+        self.nlabels = nlabels
+        self.n_tree_nodes = nlabels
+        # self.nlabels = self.tree.leaf_mask().nonzero()[0].shape[0]
         # Reconstruction (output) layer
         self.outputlayer = _nn.Linear(self.nhiddens[0], self.nlabels)
         # Activation functions
@@ -737,12 +751,20 @@ class VAMB2Label(_nn.Module):
         if cuda:
             self.cuda()
 
-        self.nlabels = nlabels
         self.nodes = nodes
         self.table_parent = table_parent
-        self.tree = _hier.Hierarchy(table_parent)
+
         self.loss_fn = _hlosses_fast.HierSoftmaxCrossEntropy(self.tree)
+        # self.loss_fn = _hlosses_fast.RandomCutLoss(
+        #     self.tree, 0.1, permit_root_cut=False, with_leaf_targets=True)
+        # self.loss_fn = _hlosses_fast.MarginLoss(
+        #     self.tree, with_leaf_targets=False,
+        #     hardness='soft', margin='incorrect', tau=0.01)
+        # self.loss_fn = _hlosses_fast.FlatSoftmaxNLL(self.tree)
         self.pred_helper = _hlosses_fast.HierLogSoftmax(self.tree)
+        # self.pred_helper = _hlosses_fast.SumAncestors(self.tree, exclude_root=True)
+        # self.pred_helper = _hlosses_fast.SumDescendants(self.tree, strict=False)
+        # self.pred_helper = _hlosses_fast.SumLeafDescendants(self.tree, strict=False)
         if self.usecuda:
             self.loss_fn = self.loss_fn.cuda()
             self.pred_helper = self.pred_helper.cuda()
@@ -750,6 +772,19 @@ class VAMB2Label(_nn.Module):
             lambda log_softmax_fn, theta: log_softmax_fn(theta).exp(),
             self.pred_helper,
         )
+        # self.pred_fn = partial(
+        #     lambda sum_ancestor_fn, theta: _torch.exp(_hlosses_fast.multilabel_log_likelihood(
+        #         sum_ancestor_fn(theta), replace_root=True, temperature=10.0)),
+        #     self.pred_helper,
+        # )
+        # self.pred_fn = partial(
+        #     lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
+        #     self.pred_helper,
+        # )
+        # self.pred_fn = partial(
+        #     lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
+        #     self.pred_helper,
+        # )
         self.specificity = -self.tree.num_leaf_descendants()
         self.not_trivial = self.tree.num_children() != 1
         self.find_lca = _hier.FindLCA(self.tree)
@@ -781,11 +816,13 @@ class VAMB2Label(_nn.Module):
 
     def calc_loss(self, labels_in, labels_out):
         ce_labels = self.loss_fn(labels_out[:, 1:], labels_in)
+        # ce_labels = self.loss_fn(labels_out, labels_in)
 
         _, labels_in_indices = labels_in.max(dim=1)
         with _torch.no_grad():
             gt_node = self.eval_label_map.to_node[labels_in_indices.cpu()]
             prob = self.pred_fn(labels_out[:, 1:])
+            # prob = self.pred_fn(labels_out)
         prob = prob.cpu().numpy()
         pred = _infer.argmax_with_confidence(
             self.specificity, prob, 0.5, self.not_trivial
@@ -807,7 +844,7 @@ class VAMB2Label(_nn.Module):
         # We make a Numpy array instead of a Torch array because, if we create
         # a Torch array, then convert it to Numpy, Numpy will believe it doesn't
         # own the memory block, and array resizes will not be permitted.
-        latent = _np.empty((length, self.nlabels), dtype=_np.float32)
+        latent = _np.empty((length, self.n_tree_nodes), dtype=_np.float32)
 
         row = 0
         with _torch.no_grad():
@@ -822,6 +859,7 @@ class VAMB2Label(_nn.Module):
                 labels = self(depths, tnf, weights)
                 with _torch.no_grad():
                     prob = self.pred_fn(labels[:, 1:])
+                    # prob = self.pred_fn(labels)
 
                 if self.usecuda:
                     prob = prob.cpu()

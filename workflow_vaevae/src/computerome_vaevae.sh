@@ -9,4 +9,4 @@ source ~/.bashrc
 conda init bash
 conda activate /home/projects/cpr_10006/people/svekut/.conda/vamb
 
-./$1 $2 $3
+./$1 $2 $3 $4
