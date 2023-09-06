@@ -10,12 +10,11 @@ functions write_clusters and read_clusters.
 import random as _random
 import numpy as _np
 import torch as _torch
-from collections import defaultdict, deque as _deque
+from collections import deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
-from vamb.parsemarkers import Markers
-from typing import Optional, TypeVar, Union
+from typing import TypeVar, Union, cast
 from collections.abc import Sequence, Iterable
 
 _DEFAULT_RADIUS = 0.06
@@ -127,54 +126,6 @@ class Cluster:
             f"\t{self.successes}\t{self.attempts}\t"
         ) + ",".join([str(i) for i in self.members])
 
-    # TODO: If we drop Python 3.9 and 3.10 compat, use the Self type instead
-    def split_by_sample(self: Cl, sample_identifiers: _np.ndarray) -> Iterable[Cl]:
-        by_sample: defaultdict[int, list[int]] = defaultdict(list)
-        for member in self.members:
-            by_sample[sample_identifiers[member]].append(member)
-        for members in by_sample.values():
-            yield type(self)(
-                self.medoid,
-                self.seed,
-                _np.array(members),
-                self.pvr,
-                self.radius,
-                self.isdefault,
-                self.successes,
-                self.attempts,
-            )
-
-    def completeness_contamination(self, markers: Markers) -> tuple[float, float]:
-        n_markers = markers.n_markers
-        counts = _np.zeros(n_markers, dtype=_np.int32)
-        for member in self.members:
-            marker_list = markers.markers[member]
-            if marker_list is None:
-                continue
-            for marker in marker_list:
-                counts[marker] += 1
-
-        n_unique = (counts > 0).sum()
-        completeness = n_unique / n_markers
-        contamination = (counts.sum() - n_unique) / n_markers
-        return (completeness, contamination)
-
-    def score(self, markers: Markers) -> float:
-        (completeness, contamination) = self.completeness_contamination(markers)
-        return completeness - 5 * contamination
-
-    def passes_marker_check(
-        self, sample_identifiers: _np.ndarray, markers: Markers
-    ) -> bool:
-        any_complete = False
-        for cluster in list(self.split_by_sample(sample_identifiers)):
-            (completeness, contamination) = cluster.completeness_contamination(markers)
-            if contamination > 0.1:
-                return False
-            if completeness > 0.8:
-                any_complete = True
-        return any_complete
-
     def __str__(self) -> str:
         radius = f"{self.radius:.3f}"
         if self.isdefault:
@@ -215,8 +166,6 @@ class ClusterGenerator:
         "rng",
         # Actual data to be clustered
         "matrix",
-        # Marker object, list of markers genes to score clusters by
-        "markers",
         # Lengths of input contigs
         "lengths",
         # This are the original indices of the rows of the matrix. Initially this is just 1..len(matrix),
@@ -230,8 +179,6 @@ class ClusterGenerator:
         "order_index",
         "n_emitted_clusters",
         "n_remaining_points",
-        # Integer labels for samples for each original data point. Used for sample splitting
-        "sample_identifiers",
         # A float value which determines how strictly the clusterer rejects potential clusters.
         # The lower, the stricter. We increase this adaptively to avoid clustering for ever
         "peak_valley_ratio",
@@ -266,9 +213,7 @@ class ClusterGenerator:
     def _check_params(
         self,
         matrix: _np.ndarray,
-        markers: Markers,
         lengths: _np.ndarray,
-        identifiers_and_separator: Optional[tuple[list[str], str]],
         maxsteps: int,
         windowsize: int,
         minsuccesses: int,
@@ -292,15 +237,8 @@ class ClusterGenerator:
         if len(matrix) < 1:
             raise ValueError("Matrix must have at least 1 observation.")
 
-        if len(markers.markers) != len(matrix):
-            raise ValueError("N sequences in markers and matrix do not match")
-
         if len(lengths) != len(matrix):
             raise ValueError("N sequences in lengths and matrix do not match")
-
-        if identifiers_and_separator is not None:
-            if len(identifiers_and_separator[0]) != len(matrix):
-                raise ValueError("N sequences in identifiers and matrix do not match")
 
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
@@ -314,40 +252,10 @@ class ClusterGenerator:
 
         return histogram, kept_mask
 
-    @staticmethod
-    def compute_sample_identifiers(
-        identifiers: list[str], separator: str
-    ) -> _np.ndarray:
-        result = _np.zeros(len(identifiers), dtype=_np.uint16)
-        index_of_samplename: dict[str, int] = dict()
-        for i, identifier in enumerate(identifiers):
-            (sample, _, rest) = identifier.partition(separator)
-            if len(rest) == 0:
-                raise ValueError(
-                    f'Identifier "{identifier}" does not contain separator "{separator}"'
-                )
-            index = index_of_samplename.get(sample)
-            if index is None:
-                index = len(index_of_samplename)
-                index_of_samplename[sample] = index
-
-            # Guard against overflow. Surely the users don't have more than 65k samples... right?
-            # Also guard against the user accidentally passing in the wrong separator.
-            if index > 65535:
-                raise ValueError(
-                    "Vamb cannot handle more than 65535 distinct samples. "
-                    "Perhaps you passed wrong separator for your sequence identifiers?"
-                )
-
-            result[i] = index
-        return result
-
     def __init__(
         self,
         matrix: _np.ndarray,
-        markers: Markers,
         lengths: _np.ndarray,
-        identifiers_and_separator: Optional[tuple[list[str], str]],
         maxsteps: int = 25,
         windowsize: int = 300,
         minsuccesses: int = 15,
@@ -358,9 +266,7 @@ class ClusterGenerator:
     ):
         self._check_params(
             matrix,
-            markers,
             lengths,
-            identifiers_and_separator,
             maxsteps,
             windowsize,
             minsuccesses,
@@ -385,28 +291,14 @@ class ClusterGenerator:
         # This refers to the indices of the original matrix. As we remove points, these
         # indices do not correspond to merely range(len(matrix)) anymore.
         self.indices = _torch.arange(len(matrix))
-        self.order = _np.argsort(
-            _np.array(
-                [
-                    1_000_000 * (0 if m is None or len(m) < 3 else len(m)) + L
-                    for (m, L) in zip(markers.markers, lengths)
-                ]
-            )
-        )[::-1]
+        self.order = _np.argsort(lengths)[::-1]
         self.order_index = 0
-        self.markers = markers
         self.lengths = _torch.Tensor(lengths)
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1
         self.attempts: _deque[bool] = _deque(maxlen=windowsize)
         self.successes = 0
-
-        if identifiers_and_separator is not None:
-            (identifiers, separator) = identifiers_and_separator
-            self.sample_identifiers = self.compute_sample_identifiers(
-                identifiers, separator
-            )
 
         histogram, kept_mask = self._init_histogram_kept_mask(len(self.indices))
         self.histogram = histogram
@@ -482,7 +374,7 @@ class ClusterGenerator:
                 continue
 
             # Find the new index of this old index
-            new_index = _torch.searchsorted(self.indices, order).item()
+            new_index = cast(int, _torch.searchsorted(self.indices, order).item())
             # It's possible the seed contig `order` is part of a previously emitted cluster,
             # in which case it's not to be found in self.indices. In that case, mark the order
             # as -1, and go to the next one
@@ -711,15 +603,9 @@ class ClusterGenerator:
                     self.successes,
                     len(self.attempts),
                 )
-                can_fail = self.peak_valley_ratio < 0.55
-                if can_fail and not cluster.passes_marker_check(
-                    self.sample_identifiers, self.markers
-                ):
-                    self.update_successes(False)
-                else:
-                    if can_fail:
-                        self.update_successes(True)
-                    return (cluster, medoid, points)
+                if self.peak_valley_ratio < 0.55:
+                    self.update_successes(True)
+                return (cluster, medoid, points)
 
             else:  # No more types
                 assert False
