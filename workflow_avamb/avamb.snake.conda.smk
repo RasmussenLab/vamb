@@ -1,7 +1,6 @@
 import re
 import os
 import sys
-from vamb.vambtools import concatenate_fasta, hash_refnames
 import numpy as np
 SNAKEDIR = os.path.dirname(workflow.snakefile)
 
@@ -22,6 +21,8 @@ CONTIGS = get_config("contigs", "contigs.txt", r".*") # each line is a contigs p
 SAMPLE_DATA = get_config("sample_data", "samples2data.txt", r".*") # each line is composed by 3 elements: sample id, forward_reads_path , backward_reads_path
 INDEX_SIZE = get_config("index_size", "12G", r"[1-9]\d*[GM]$")
 MIN_CONTIG_SIZE = int(get_config("min_contig_size", "2000", r"[1-9]\d*$"))
+MIN_BIN_SIZE = int(get_config("min_bin_size", "200000", r"[1-9]\d*$"))
+
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
 MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*GB$")
@@ -358,7 +359,7 @@ rule run_avamb:
         rm -f {OUTDIR}/contigs.flt.mmi
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} -m {MIN_CONTIG_SIZE}  {params.cuda} {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --rpkm {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/Final_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins
@@ -413,7 +414,10 @@ rule run_checkm2_per_sample_all_bins:
     conda: 
         "checkm2" 
     shell:
-        "checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample} > {output.out_log_file}"
+        """
+        checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
+        touch {output.out_log_file}
+        """
 
 # this rule will be executed when all CheckM2 runs per sample finish, so it can move to the next step 
 rule cat_checkm2_all:
@@ -495,7 +499,7 @@ rule run_drep_manual_vamb_z_y:
         python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
         --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
         --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}\
-        --comp {MIN_COMP} --cont {MAX_CONT}
+        --comp {MIN_COMP} --cont {MAX_CONT}  --min_bin_size {MIN_BIN_SIZE} 
         """
 
 # Evaluate if after the dereplication step (previous rule), still there are contigs present in more than one bin.
@@ -662,10 +666,10 @@ rule aggregate_nc_bins_avamb:
 
     shell:
         """
-	    python {params.path} -r {OUTDIR}/avamb/ --c {input.drep_clusters} \
+	    python {params.path} -r {OUTDIR} --c {input.drep_clusters} \
         --cnr {input.drep_clusters_not_ripped} --sbr {OUTDIR}/tmp/ripped_bins/checkm2_out/quality_report.tsv \
         --cs_d {input.cluster_scores_dict_path_avamb} --bp_d {input.bin_path_dict_path_avamb} \
-        --br {OUTDIR}/tmp/ripped_bins -d {OUTDIR}/Final_bins --bin_separator C \
+        --br {OUTDIR}/tmp/ripped_bins -d Final_bins --bin_separator C \
         --comp {MIN_COMP}  --cont {MAX_CONT}  >  {output}
         rm -r {OUTDIR}/tmp/ripped_bins/checkm2_out/protein_files >>  {output}
         """
@@ -695,7 +699,7 @@ rule write_clusters_from_nc_folders:
         "avamb"
    
     shell:
-        "sh {params.path} -d {OUTDIR}/Final_bins -o {output} ;"
+        "sh {params.path} -d {OUTDIR}/Final_bins -o {OUTDIR} ;"
         "touch {log.log_fin} "
         
 # Rename and move some files and folders 

@@ -338,40 +338,32 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
 
-    path_run = (
-        opt.r
-    )  # '/Users/mbv396/aamb/vamb_aamb_on_cami2/oral/manual_drep/vamb_aamb_cpu_jgi_oral_310122_run_2_manual_drep_disjoint2_copy/'
+    path_run = opt.r
 
-    path_clusters = (
-        opt.c
-    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_clusters.tsv')
+    path_clusters = opt.c
     with open(path_clusters) as file:
         cluster_contigs = vamb.vambtools.read_clusters(file)
 
     with open(opt.cs_d) as f:
         cluster_scores = json.load(f)
 
-    path_clusters_not_r = (
-        opt.cnr
-    )  # os.path.join(path_run,'aae_l_y_vamb_manual_drep_not_ripped_clusters.tsv')
+    path_clusters_not_r = opt.cnr
 
     with open(path_clusters_not_r) as file:
         cluster_not_r_contigs = vamb.vambtools.read_clusters(file)
 
-    path_bins_ripped_checkm_quality_report = (
-        opt.sbr
-    )  # os.path.join(path_bins_ripped,'checkm2_out','quality_report.tsv')
+    path_bins_ripped_checkm_quality_report = opt.sbr
 
     ripped_bins_scores_ar = np.loadtxt(
         path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
     )
 
-    drep_folder = opt.d  # 'drep_trial'
+    drep_folder = opt.d
 
     with open(opt.bp_d) as f:
         bin_path = json.load(f)
 
-    path_bins_ripped = opt.br  # os.path.join(path_run,'ripped_bins')
+    path_bins_ripped = opt.br
 
     bin_separator = opt.bin_separator
 

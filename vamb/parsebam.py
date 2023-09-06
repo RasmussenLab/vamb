@@ -11,7 +11,7 @@ import numpy as _np
 from math import isfinite
 from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
-from typing import Optional, TypeVar, Union, IO, Sequence
+from typing import Optional, TypeVar, Union, IO, Sequence, Iterable
 from pathlib import Path
 import shutil
 
@@ -51,16 +51,6 @@ class Abundance:
     def nsamples(self) -> int:
         return len(self.samplenames)
 
-    @staticmethod
-    def verify_refhash(refhash: bytes, target_refhash: bytes) -> None:
-        if refhash != target_refhash:
-            raise ValueError(
-                f"At least one BAM file reference name hash to {refhash.hex()}, "
-                f"expected {target_refhash.hex()}. "
-                "Make sure all BAM and FASTA headers are identical "
-                "and in the same order."
-            )
-
     def save(self, io: Union[Path, IO[bytes]]):
         _np.savez_compressed(
             io,
@@ -82,7 +72,9 @@ class Abundance:
             arrs["refhash"].item(),
         )
         if refhash is not None:
-            cls.verify_refhash(abundance.refhash, refhash)
+            vambtools.RefHasher.verify_refhash(
+                abundance.refhash, refhash, "Loaded", None, None
+            )
 
         return abundance
 
@@ -135,6 +127,7 @@ class Abundance:
                 paths,
                 minid,
                 comp_metadata.refhash if verify_refhash else None,
+                comp_metadata.identifiers if verify_refhash else None,
                 comp_metadata.mask,
             )
             return cls(matrix, [str(p) for p in paths], minid, refhash)
@@ -150,6 +143,7 @@ class Abundance:
                 chunksize,
                 minid,
                 comp_metadata.refhash if verify_refhash else None,
+                comp_metadata.identifiers if verify_refhash else None,
                 comp_metadata.mask,
             )
 
@@ -161,9 +155,10 @@ class Abundance:
         nthreads: int,
         minid: float,
         target_refhash: Optional[bytes],
+        target_identifiers: Optional[Iterable[str]],
         mask: _np.ndarray,
     ) -> A:
-        _os.mkdir(cache_directory)
+        _os.makedirs(cache_directory)
 
         chunks = [
             (i, min(len(paths), i + nthreads)) for i in range(0, len(paths), nthreads)
@@ -180,6 +175,7 @@ class Abundance:
                 paths[chunkstart:chunkstop],
                 minid,
                 target_refhash,
+                target_identifiers,
                 mask,
             )
             vambtools.write_npz(filename, matrix)
@@ -199,6 +195,7 @@ class Abundance:
         paths: list[Path],
         minid: float,
         target_refhash: Optional[bytes],
+        target_identifiers: Optional[Iterable[str]],
         mask: _np.ndarray,
     ) -> tuple[_np.ndarray, bytes]:
         (headers, coverage) = pycoverm.get_coverages_from_bam(
@@ -221,9 +218,16 @@ class Abundance:
 
         headers = [h for (h, m) in zip(headers, mask) if m]
         vambtools.numpy_inplace_maskarray(coverage, mask)
-        refhash = vambtools.hash_refnames(headers)
+        refhash = vambtools.RefHasher.hash_refnames(headers)
+
+        if target_identifiers is None:
+            identifier_pairs = None
+        else:
+            identifier_pairs = (headers, target_identifiers)
 
         if target_refhash is not None:
-            Abundance.verify_refhash(refhash, target_refhash)
+            vambtools.RefHasher.verify_refhash(
+                refhash, target_refhash, "Composition", "BAM", identifier_pairs
+            )
 
         return (coverage, refhash)

@@ -108,3 +108,26 @@ class TestReadContigs(unittest.TestCase):
         self.assertTrue(np.all(md1.lengths == md2.lengths))
         self.assertTrue(np.all(md1.refhash == md2.refhash))
         self.assertTrue(np.all(md1.minlength == md2.minlength))
+
+    def test_windows_newlines(self):
+        rng = random.Random()
+        buf1 = io.BytesIO()
+        buf2 = io.BytesIO()
+        for i in range(10):
+            record = testtools.make_randseq(rng, 10, 20)
+            buf1.write(b">" + record.header.encode())
+            buf2.write(b">" + record.header.encode())
+            buf1.write(b"\r\n")
+            buf2.write(b"\n")
+            buf1.write(record.sequence)
+            buf2.write(record.sequence)
+            buf1.write(b"\r\n")
+            buf2.write(b"\n")
+
+        buf1.seek(0)
+        buf2.seek(0)
+        comp1 = Composition.from_file(buf1)
+        comp2 = Composition.from_file(buf2)
+
+        self.assertEqual(comp1.metadata.refhash, comp2.metadata.refhash)
+        self.assertTrue(np.all(comp1.matrix == comp2.matrix))

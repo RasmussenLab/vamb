@@ -340,24 +340,33 @@ class TestInplaceMaskArray(unittest.TestCase):
 class TestHashRefNames(unittest.TestCase):
     def test_refhash(self):
         names = ["foo", "9", "eleven", "a"]
-        b1 = vamb.vambtools.hash_refnames(names)
+        b1 = vamb.vambtools.RefHasher.hash_refnames(names)
+
+        # Test that hashing them all at once is the same as hashing them one at a time
+        hasher = vamb.vambtools.RefHasher()
+        hasher.add_refname(names[0])
+        hasher.add_refname(names[1])
+        for j in names[2:]:
+            hasher.add_refname(j)
+        b7 = hasher.digest()
+
         names[1] = names[1] + "x"
-        b2 = vamb.vambtools.hash_refnames(names)
+        b2 = vamb.vambtools.RefHasher.hash_refnames(names)
         names[1] = names[1][:-1] + " \t"  # it strips whitespace off right end
-        b3 = vamb.vambtools.hash_refnames(names)
+        b3 = vamb.vambtools.RefHasher.hash_refnames(names)
         names = names[::-1]
-        b4 = vamb.vambtools.hash_refnames(names)
+        b4 = vamb.vambtools.RefHasher.hash_refnames(names)
+
         names = (i + "   " for i in names[::-1])
-        b5 = vamb.vambtools.hash_refnames(names)
-        b6 = vamb.vambtools.hash_refnames(names)  # now empty generator
-        b7 = vamb.vambtools.hash_refnames([])
+        b5 = vamb.vambtools.RefHasher.hash_refnames(names)
+        b6 = vamb.vambtools.RefHasher.hash_refnames(names)  # now empty generator
 
         self.assertNotEqual(b1, b2)
         self.assertEqual(b1, b3)
         self.assertNotEqual(b1, b4)
         self.assertEqual(b1, b5)
         self.assertNotEqual(b1, b6)
-        self.assertEqual(b6, b7)
+        self.assertEqual(b1, b7)
 
 
 class TestBinSplit(unittest.TestCase):
@@ -395,7 +404,7 @@ class TestWriteClusters(unittest.TestCase):
 
     def conforms(self, str, clusters):
         lines = self.linesof(str)
-        self.assertEqual(len(lines), sum(len(v) for (k, v) in clusters))
+        self.assertEqual(len(lines), sum(len(v) for (_, v) in clusters))
         allcontigs = set()
         printed = set()
         printed_names = set()
@@ -456,15 +465,19 @@ class TestWriteBins(unittest.TestCase):
     file = io.BytesIO()
     N_BINS = 10
     minsize = 5 * 175  # mean of bin size
+    dirname = os.path.join(
+        tempfile.gettempdir(),
+        "".join(random.choices(string.ascii_letters + string.digits, k=10)),
+    )
 
     @classmethod
     def setUpClass(cls):
         bins: dict[str, set[str]] = dict()
         seqs: dict[str, vamb.vambtools.FastaEntry] = dict()
-        for i in range(cls.N_BINS):
+        for _ in range(cls.N_BINS):
             binname = "".join(random.choices(string.ascii_letters, k=12))
             bins[binname] = set()
-            for j in range(random.randrange(3, 7)):
+            for _ in range(random.randrange(3, 7)):
                 seq = testtools.make_randseq(random.Random(), 100, 250)
                 seqs[seq.identifier] = seq
                 bins[binname].add(seq.identifier)
@@ -477,17 +490,23 @@ class TestWriteBins(unittest.TestCase):
     def setUp(self):
         self.file.seek(0)
 
+    def tearDown(self):
+        try:
+            os.rmdir(self.dirname)
+        except FileNotFoundError:
+            pass
+
     def test_bad_params(self):
         # Too many bins for maxbins
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                "foo", self.bins, self.file, maxbins=self.N_BINS - 1
+                self.dirname, self.bins, self.file, maxbins=self.N_BINS - 1
             )
 
         # Negative minsize
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                "foo", self.bins, self.file, maxbins=self.N_BINS + 1, minsize=-1
+                self.dirname, self.bins, self.file, maxbins=self.N_BINS + 1, minsize=-1
             )
 
         # Parent does not exist
@@ -507,7 +526,9 @@ class TestWriteBins(unittest.TestCase):
         with self.assertRaises(IndexError):
             bins = {k: v.copy() for k, v in self.bins.items()}
             next(iter(bins.values())).add("a_new_bin_which_does_not_exist")
-            vamb.vambtools.write_bins("foo", bins, self.file, maxbins=self.N_BINS + 1)
+            vamb.vambtools.write_bins(
+                self.dirname, bins, self.file, maxbins=self.N_BINS + 1
+            )
 
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as dir:
