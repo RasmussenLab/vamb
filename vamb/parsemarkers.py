@@ -26,6 +26,20 @@ ContigName = NewType("ContigName", str)
 
 
 class Markers:
+    """
+    The set of marker genes predicted for a collection of contigs.
+    Instantiate using `Markers.from_files`, or load using `Markers.load`.
+    Like Abundance objects, Markers carry a refhash to check that the markers correspond
+    to the same sequences used to create the markers.
+    Access the markers with `markers.markers`, a `list[Optional[np.array]]`, with one
+    element for each contig. The element is `None` if there are no markers, else a list
+    of marker genes present in the contig.
+    The marker genes are stored as integers - the name of a marker `i` can be gotten using
+    `markers.marker_names[i]`.
+    In each contig, markers are deduplicated, so at most 1 of each marker is found
+    in each contig.
+    """
+
     __slots__ = ["markers", "marker_names", "refhash"]
 
     def __init__(
@@ -114,6 +128,19 @@ class Markers:
         fasta_entry_mask: Sequence[bool],
         target_refhash: Optional[bytes],
     ):
+        """
+        Create the Markers from input files:
+        `contigs`: Path to a FASTA file with all contigs, gzipped or not.
+        `hmm_path`: Path to a HMMER .hmm file with the markers. Note: Currently,
+          this file can contain at most 256 markers, though this restriction can
+          be lifted if necessary
+
+        The `fasta_entry_mask` is a boolean mask of which contigs in the FASTA
+        file to include. This affects the refhash which is only computed for
+        the contigs not filtered away.
+        If the target refhash is not None, and the computed reference hash does not
+        match, an exception is thrown. See vamb.vambtools.RefHasher.
+        """
         if n_processes < 1:
             raise ValueError(f"Must use at least 1 process, not {n_processes}")
         # Cap processes, because most OSs cap the number of open file handles,
