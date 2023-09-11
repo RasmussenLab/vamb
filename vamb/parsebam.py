@@ -194,9 +194,9 @@ class Abundance:
     def run_pycoverm(
         paths: list[Path],
         minid: float,
-        target_refhash: Optional[bytes],
-        target_identifiers: Optional[Iterable[str]],
         mask: _np.ndarray,
+        target_refhash: Optional[bytes] = None,
+        target_identifiers: Optional[Iterable[str]] = None,
     ) -> tuple[_np.ndarray, bytes]:
         (headers, coverage) = pycoverm.get_coverages_from_bam(
             [str(p) for p in paths],
