@@ -13,7 +13,11 @@ def write_abundances(
     mask = loadnpz["mask"]
     refhash = refhash.reshape(1)[0]
     (abundance, _) = vamb.parsebam.Abundance.run_pycoverm(
-        paths=[bampath], minid=min_identity, target_refhash=refhash, mask=mask
+        paths=[bampath],
+        minid=min_identity,
+        target_refhash=refhash,
+        target_identifiers=None,
+        mask=mask,
     )
     vamb.vambtools.write_npz(outfile, abundance.ravel())
 
