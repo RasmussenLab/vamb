@@ -65,6 +65,8 @@ class Abundance:
         cls: type[A], io: Union[str, Path, IO[bytes]], refhash: Optional[bytes]
     ) -> A:
         arrs = _np.load(io, allow_pickle=True)
+        if 'arr_0' in arrs.keys():
+            return arrs['arr_0'] # old format
         abundance = cls(
             vambtools.validate_input_array(arrs["matrix"]),
             arrs["samplenames"],

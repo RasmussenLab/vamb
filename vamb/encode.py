@@ -225,6 +225,8 @@ class VAE(_nn.Module):
             raise ValueError(f"dropout must be 0 <= dropout < 1, not {dropout}")
 
         _torch.manual_seed(seed)
+        self.rng = _torch.Generator()
+        self.rng.manual_seed(seed)
         super(VAE, self).__init__()
 
         # Initialize simple attributes

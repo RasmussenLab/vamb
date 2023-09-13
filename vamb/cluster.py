@@ -10,9 +10,11 @@ import vamb.vambtools as _vambtools
 from typing import TypeVar, Union, cast
 from collections.abc import Sequence, Iterable
 
-_DEFAULT_RADIUS = 0.06
+_DEFAULT_RADIUS = 0.12
+# _DEFAULT_RADIUS = 0.06
 # Distance within which to search for medoid point
-_MEDOID_RADIUS = 0.05
+_MEDOID_RADIUS = 0.1
+# _MEDOID_RADIUS = 0.05
 
 _DELTA_X = 0.005
 _XMAX = 0.3
@@ -281,7 +283,9 @@ class ClusterGenerator:
         self.indices = _torch.arange(len(matrix))
         self.order = _np.argsort(lengths)[::-1]
         self.order_index = 0
-        self.lengths = torch_lengths
+        self.lengths = _torch.Tensor(lengths)
+        if cuda:
+            self.lengths = self.lengths.cuda()
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1
