@@ -693,7 +693,6 @@ def cluster(
     cluster_options: ClusterOptions,
     clusterspath: Path,
     latent: np.ndarray,
-    lengths: np.ndarray,
     contignames: Sequence[str],  # of dtype object
     lengths: Sequence[int],  # of dtype object
     vamb_options: VambOptions,
@@ -932,7 +931,6 @@ def run(
             cluster_options,
             clusterspath,
             latent,
-            comp_metadata.lengths,
             comp_metadata.identifiers,
             comp_metadata.lengths,
             vamb_options,
@@ -972,7 +970,6 @@ def run(
             cluster_options,
             clusterspath,
             latent_z,
-            comp_metadata.lengths,
             comp_metadata.identifiers,
             comp_metadata.lengths,
             vamb_options,
