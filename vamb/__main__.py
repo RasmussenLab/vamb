@@ -607,6 +607,7 @@ def cluster(
     cluster_options: ClusterOptions,
     clusterspath: Path,
     latent: np.ndarray,
+    lengths: np.ndarray,
     contignames: Sequence[str],  # of dtype object
     vamb_options: VambOptions,
     logfile: IO[str],
@@ -636,12 +637,13 @@ def cluster(
 
     cluster_generator = vamb.cluster.ClusterGenerator(
         latent,
+        lengths,
         windowsize=cluster_options.window_size,
         minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
         cuda=vamb_options.cuda,
-        seed=vamb_options.seed,
+        rng_seed=vamb_options.seed,
     )
 
     renamed = (
@@ -832,6 +834,7 @@ def run(
             cluster_options,
             clusterspath,
             latent,
+            comp_metadata.lengths,
             comp_metadata.identifiers,
             vamb_options,
             logfile,
@@ -870,6 +873,7 @@ def run(
             cluster_options,
             clusterspath,
             latent_z,
+            comp_metadata.lengths,
             comp_metadata.identifiers,
             vamb_options,
             logfile,
@@ -1239,16 +1243,16 @@ def main():
         dest="window_size",
         metavar="",
         type=int,
-        default=200,
-        help="size of window to count successes [200]",
+        default=300,
+        help="size of window to count successes [300]",
     )
     clusto.add_argument(
         "-u",
         dest="min_successes",
         metavar="",
         type=int,
-        default=20,
-        help="minimum success in window [20]",
+        default=15,
+        help="minimum success in window [15]",
     )
     clusto.add_argument(
         "-i",
