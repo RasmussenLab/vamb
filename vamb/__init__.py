@@ -10,6 +10,12 @@ from . import parsecontigs
 from . import cluster
 from . import encode
 from . import aamb_encode
+from . import semisupervised_encode
+from . import h_loss
+from . import hier
+from . import hlosses_fast
+from . import infer
+from . import reclustering
 
 __all__ = [
     "vambtools",
@@ -18,4 +24,10 @@ __all__ = [
     "cluster",
     "encode",
     "aamb_encode",
+    "semisupervised_encode",
+    "h_loss",
+    "hier",
+    "hlosses_fast",
+    "infer",
+    "reclustering",
 ]

@@ -10,11 +10,15 @@ import argparse
 import torch
 import datetime
 import time
+import random
 from math import isfinite
-from typing import Optional, IO
+from typing import Optional, IO, Tuple
 from pathlib import Path
 from collections.abc import Sequence
+from collections import defaultdict
+from functools import reduce
 from torch.utils.data import DataLoader
+import pandas as pd
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -195,6 +199,65 @@ class AAEOptions:
         self.slr = slr
 
 
+class TaxonomyOptions:
+    __slots__ = [
+        "taxonomy_path",
+        "taxonomy_predictions_path",
+        "no_predictor",
+        "n_species",
+    ]
+
+    def __init__(
+        self,
+        taxonomy_path: Optional[Path],
+        taxonomy_predictions_path: Optional[Path],
+        no_predictor: bool,
+        n_species: int,
+    ):
+        assert isinstance(taxonomy_path, (Path, type(None)))
+        assert isinstance(taxonomy_predictions_path, (Path, type(None)))
+
+        if taxonomy_path is None and taxonomy_predictions_path is None and no_predictor:
+            raise argparse.ArgumentTypeError(
+                "You must specify either --taxonomy_path or --taxonomy_predictions_path or run without --no_predictor flag"
+            )
+
+        if (
+            taxonomy_path is None
+            and taxonomy_predictions_path is None
+            and not no_predictor
+        ):
+            raise argparse.ArgumentTypeError(
+                "The taxonomy predictor needs --taxonomy_path for training"
+            )
+
+        self.taxonomy_path = taxonomy_path
+        self.taxonomy_predictions_path = taxonomy_predictions_path
+        self.no_predictor = no_predictor
+        self.n_species = n_species
+
+
+class ReclusteringOptions:
+    __slots__ = ["latent_path", "clusters_path", "hmmout_path", "binsplit_separator", "algorithm"]
+
+    def __init__(
+        self,
+        latent_path: Path,
+        clusters_path: Path,
+        hmmout_path: Path,
+        binsplit_separator: Optional[str],
+        algorithm: Optional[str],
+    ):
+        assert isinstance(latent_path, Path)
+        assert isinstance(clusters_path, Path)
+
+        self.latent_path = latent_path
+        self.clusters_path = clusters_path
+        self.binsplit_separator = binsplit_separator
+        self.hmmout_path = hmmout_path
+        self.algorithm = algorithm
+
+
 class EncoderOptions:
     __slots__ = ["vae_options", "aae_options", "alpha"]
 
@@ -242,6 +305,29 @@ class VAETrainingOptions:
         if min(batchsteps, default=1) < 1:
             raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
         self.batchsteps = batchsteps
+
+
+class PredictorTrainingOptions(VAETrainingOptions):
+    def __init__(
+            self, 
+            nepochs: int, 
+            batchsize: int, 
+            batchsteps: list[int], 
+            softmax_threshold: float,
+            ploss: str,
+        ):
+        losses = ['flat_softmax', 'cond_softmax', 'soft_margin', 'random_cut']
+        if (softmax_threshold > 1) or (softmax_threshold < 0):
+            raise argparse.ArgumentTypeError(f"Softmax threshold should be between 0 and 1, currently {softmax_threshold}")
+        if ploss not in losses:
+            raise argparse.ArgumentTypeError(f"Predictor loss needs to be one of {losses}")
+        self.softmax_threshold = softmax_threshold
+        self.ploss = ploss
+        super(PredictorTrainingOptions, self).__init__(
+            nepochs,
+            batchsize,
+            batchsteps,
+        )
 
 
 class AAETrainingOptions:
@@ -472,7 +558,7 @@ def calc_rpkm(
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
-        if abundance.nseqs != comp_metadata.nseqs:
+        if hasattr(abundance, 'nseqs') and abundance.nseqs != comp_metadata.nseqs:
             assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
@@ -492,9 +578,9 @@ def calc_rpkm(
         )
         abundance.save(outdir.joinpath("abundance.npz"))
 
-    log(f"Min identity: {abundance.minid}\n", logfile, 1)
-    log("Order of columns is:", logfile, 1)
-    log("\n\t".join(abundance.samplenames), logfile, 1)
+        log(f"Min identity: {abundance.minid}\n", logfile, 1)
+        log("Order of columns is:", logfile, 1)
+        log("\n\t".join(abundance.samplenames), logfile, 1)
 
     elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
@@ -609,6 +695,7 @@ def cluster(
     latent: np.ndarray,
     lengths: np.ndarray,
     contignames: Sequence[str],  # of dtype object
+    lengths: Sequence[int],  # of dtype object
     vamb_options: VambOptions,
     logfile: IO[str],
     cluster_prefix: str,
@@ -642,7 +729,8 @@ def cluster(
         minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
-        cuda=vamb_options.cuda,
+        # cuda=vamb_options.cuda,
+        cuda=False, # disabled until clustering is fixed
         rng_seed=vamb_options.seed,
     )
 
@@ -728,20 +816,12 @@ def write_fasta(
     log(f"Wrote FASTA in {elapsed} seconds.", logfile, 1)
 
 
-def run(
+def load_composition_and_abundance(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    encoder_options: EncoderOptions,
-    training_options: TrainingOptions,
-    cluster_options: ClusterOptions,
     logfile: IO[str],
-):
-    vae_options = encoder_options.vae_options
-    aae_options = encoder_options.aae_options
-    vae_training_options = training_options.vae_options
-    aae_training_options = training_options.aae_options
-
+) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
     log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
     log("Random seed is " + str(vamb_options.seed), logfile, 1)
@@ -763,6 +843,31 @@ def run(
         f"\nTNF and coabundances generated in {time_generating_input} seconds.",
         logfile,
         1,
+    )
+    return (composition, abundance)
+
+
+def run(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    encoder_options: EncoderOptions,
+    training_options: TrainingOptions,
+    cluster_options: ClusterOptions,
+    logfile: IO[str],
+):
+    vae_options = encoder_options.vae_options
+    aae_options = encoder_options.aae_options
+    vae_training_options = training_options.vae_options
+    aae_training_options = training_options.aae_options
+
+    begintime = time.time()
+
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
     )
 
     data_loader = vamb.encode.make_dataloader(
@@ -829,6 +934,7 @@ def run(
             latent,
             comp_metadata.lengths,
             comp_metadata.identifiers,
+            comp_metadata.lengths,
             vamb_options,
             logfile,
             "vae_",
@@ -868,6 +974,7 @@ def run(
             latent_z,
             comp_metadata.lengths,
             comp_metadata.identifiers,
+            comp_metadata.lengths,
             vamb_options,
             logfile,
             "aae_z_",
@@ -934,6 +1041,509 @@ def run(
         log(f"AAE y bins written in {writing_bins_time_y} seconds.", logfile, 1)
 
     log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+
+
+def parse_mmseqs_taxonomy(
+    taxonomy_path: Path,
+    contignames: list[str],
+    n_species: int,
+    logfile: IO[str],
+) -> Tuple[list[int], list[str]]:
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
+    assert (
+        len(df_mmseq.columns) >= 9
+    ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
+    df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
+    log(f"{len(df_mmseq)} lines in taxonomy file", logfile, 1)
+    log(f"{len(contignames)} contigs", logfile, 1)
+    ind_map = {c: i for i, c in enumerate(contignames)}
+    df_mmseq = df_mmseq[df_mmseq[0].isin(contignames)]
+    indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
+    graph_column = df_mmseq[8]
+    species_column = df_mmseq[df_mmseq[2].isin(["species", "subspecies"])][8].str.split(';').str[6]
+    species_dict = species_column.value_counts()
+    unique_species = sorted(
+        list(species_column.unique()), key=lambda x: species_dict[x], reverse=True
+    )
+    log(
+        f"Found {len(unique_species)} unique species in mmseqs taxonomy file",
+        logfile,
+        1,
+    )
+    if len(unique_species) > n_species:
+        log(
+            f"Pruning the taxonomy tree, only keeping {n_species} most abundant species",
+            logfile,
+            1,
+        )
+        log(
+            f"Removing the species with less than {species_dict[unique_species[n_species]]} contigs",
+            logfile,
+            1,
+        )
+        non_abundant_species = set(unique_species[n_species:])
+        df_mmseq["tax"] = df_mmseq[8]
+        df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), "tax"] = (
+            df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8]
+            .str.split(";")
+            .str[:1]
+            .map(lambda x: ";".join(x))
+        )
+        graph_column = df_mmseq["tax"]
+    return (indices_mmseq, graph_column)
+
+
+def predict_taxonomy(
+    composition: vamb.parsecontigs.Composition,
+    abundance: vamb.parsebam.Abundance,
+    taxonomy_path: Path,
+    n_species: int,
+    out_dir: Path,
+    predictor_training_options: PredictorTrainingOptions,
+    cuda: bool,
+    logfile: IO[str],
+    mask=None,
+):
+    begintime = time.time()
+    if mask is not None:
+        tnfs, lengths = composition.matrix[mask], composition.metadata.lengths[mask]
+        contignames = composition.metadata.identifiers[mask]
+    else:
+        tnfs, lengths = composition.matrix, composition.metadata.lengths
+        contignames = composition.metadata.identifiers
+    if hasattr(abundance, 'matrix'):
+        rpkms = abundance.matrix
+    else:
+        rpkms = abundance
+    if mask is not None:
+        rpkms = rpkms[mask]
+
+    indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+        taxonomy_path=taxonomy_path,
+        contignames=contignames,
+        n_species=n_species,
+        logfile=logfile,
+    )
+
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    log(f"{len(nodes)} nodes in the graph", logfile, 1)
+
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
+
+    model = vamb.h_loss.VAMB2Label(
+        rpkms.shape[1],
+        len(nodes),
+        nodes,
+        table_parent,
+        hier_loss=predictor_training_options.ploss,
+        cuda=cuda,
+    )
+
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
+        rpkms,
+        tnfs,
+        lengths,
+        batchsize=predictor_training_options.batchsize,
+    )
+    dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
+        rpkms[indices_mmseq],
+        tnfs[indices_mmseq],
+        lengths[indices_mmseq],
+        targets,
+        len(nodes),
+        table_parent,
+        batchsize=predictor_training_options.batchsize,
+    )
+
+    print("", file=logfile)
+    log("Created dataloader and mask", logfile, 0)
+    n_discarded = len(mask_vamb) - mask_vamb.sum()
+    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
+    log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
+
+    names = composition.metadata.identifiers[mask_vamb] # not mutating operation because the composition can be reused
+    lengths_masked = lengths
+
+    predictortime = time.time()
+    log(
+        f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}",
+        logfile,
+        0,
+    )
+    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
+
+    model_path = out_dir.joinpath("predictor_model.pt")
+    with open(model_path, "wb") as modelfile:
+        model.trainmodel(
+            dataloader_joint,
+            nepochs=predictor_training_options.nepochs,
+            modelfile=modelfile,
+            logfile=logfile,
+            batchsteps=predictor_training_options.batchsteps,
+        )
+    log(
+        f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds.",
+        logfile,
+        0,
+    )
+    predicted_vector, predicted_labels = model.predict(dataloader_vamb)
+
+    log("Writing the taxonomy predictions", logfile, 0)
+    df_gt = pd.DataFrame({"contigs": names, "lengths": lengths_masked})
+    nodes_ar = np.array(nodes)
+
+    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
+    predictions = []
+    probs = []
+    labels = []
+    for i in range(len(df_gt)):
+        label = predicted_labels[i]
+        pred_labels = [label]
+        while table_parent[label] != -1:
+            pred_labels.append(table_parent[label])
+            label = table_parent[label]
+        pred_labels = ";".join([nodes_ar[l] for l in pred_labels][::-1])
+        threshold_mask = predicted_vector[i] > predictor_training_options.softmax_threshold
+        pred_line = ";".join(nodes_ar[threshold_mask][1:])
+        predictions.append(pred_line)
+        absolute_probs = predicted_vector[i][threshold_mask]
+        absolute_prob = ';'.join(map(str, absolute_probs))
+        probs.append(absolute_prob)
+        labels.append(pred_labels)
+    df_gt["predictions"] = predictions
+    df_gt["abs_probabilities"] = probs
+    df_gt["predictions_labels"] = labels
+    predicted_path = out_dir.joinpath("results_taxonomy_predictor.csv")
+    df_gt.to_csv(predicted_path, index=None)
+
+    log(
+        f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.",
+        logfile,
+        0,
+    )
+
+
+def run_taxonomy_predictor(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    predictor_training_options: PredictorTrainingOptions,
+    taxonomy_options: TaxonomyOptions,
+    logfile: IO[str],
+):
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
+    )
+    predict_taxonomy(
+        composition=composition,
+        abundance=abundance,
+        taxonomy_path=taxonomy_options.taxonomy_path,
+        n_species=taxonomy_options.n_species,
+        out_dir=vamb_options.out_dir,
+        predictor_training_options=predictor_training_options,
+        cuda=vamb_options.cuda,
+        logfile=logfile,
+    )
+
+
+def run_vaevae(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    vae_training_options: VAETrainingOptions,
+    predictor_training_options: PredictorTrainingOptions,
+    taxonomy_options: TaxonomyOptions,
+    cluster_options: ClusterOptions,
+    encoder_options: EncoderOptions,
+    logfile: IO[str],
+):
+    vae_options = encoder_options.vae_options
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
+    )
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    if hasattr(abundance, 'matrix'):
+        rpkms = abundance.matrix
+    else:
+        rpkms = abundance
+
+    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
+        rpkms,
+        tnfs,
+        lengths,
+        batchsize=vae_training_options.batchsize,
+        cuda=vamb_options.cuda,
+    )
+
+    if (
+        taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor
+    ):
+        log("Predicting missing values from mmseqs taxonomy", logfile, 0)
+        predict_taxonomy(
+            composition=composition,
+            abundance=abundance,
+            taxonomy_path=taxonomy_options.taxonomy_path,
+            n_species=taxonomy_options.n_species,
+            out_dir=vamb_options.out_dir,
+            predictor_training_options=predictor_training_options,
+            cuda=vamb_options.cuda,
+            logfile=logfile,
+            mask=mask_vamb,
+        )
+        predictions_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
+    elif taxonomy_options.taxonomy_predictions_path is not None:
+        log("mmseqs taxonomy predictions are provided", logfile, 0)
+        predictions_path = taxonomy_options.taxonomy_predictions_path
+    else:
+        log("Not predicting the taxonomy", logfile, 0)
+        predictions_path = None
+
+    if predictions_path is not None:
+        df_gt = pd.read_csv(predictions_path)
+        graph_column = df_gt["predictions"]
+        ind_map = {c: i for i, c in enumerate(composition.metadata.identifiers[mask_vamb])}
+        indices_mmseq = [ind_map[c] for c in df_gt['contigs']]
+    elif taxonomy_options.no_predictor:
+        log("Using mmseqs taxonomy for semisupervised learning", logfile, 0)
+        indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+            taxonomy_path=taxonomy_options.taxonomy_path,
+            contignames=composition.metadata.identifiers[mask_vamb],
+            n_species=taxonomy_options.n_species,
+            logfile=logfile,
+        )
+    else:
+        raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
+
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+
+    classes_order = list(graph_column.str.split(";").str[-1])
+    missing_nodes_mmseqs = list(set(range(rpkms[mask_vamb].shape[0])) - set(indices_mmseq))
+    if missing_nodes_mmseqs:
+        indices_mmseq.extend(missing_nodes_mmseqs)
+        classes_order.extend(["d_Bacteria"]*len(missing_nodes_mmseqs))
+    classes_order = np.array(classes_order)
+    targets = [ind_nodes[i] for i in classes_order]
+
+    vae = vamb.h_loss.VAEVAEHLoss(
+        rpkms.shape[1],
+        len(nodes),
+        nodes,
+        table_parent,
+        nhiddens=vae_options.nhiddens,
+        nlatent=vae_options.nlatent,
+        alpha=encoder_options.alpha,
+        beta=vae_options.beta,
+        dropout=vae_options.dropout,
+        cuda=vamb_options.cuda,
+        logfile=logfile,
+    )
+
+    log(
+        f"{len(indices_mmseq)} mmseq indices",
+        logfile,
+        0,
+    )
+    dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
+        rpkms[mask_vamb][indices_mmseq],
+        tnfs[mask_vamb][indices_mmseq],
+        lengths[mask_vamb][indices_mmseq],
+        targets,
+        len(nodes),
+        table_parent,
+        batchsize=vae_training_options.batchsize,
+        cuda=vamb_options.cuda,
+    )
+    dataloader_labels, _ = vamb.h_loss.make_dataloader_labels_hloss(
+        rpkms[mask_vamb][indices_mmseq],
+        tnfs[mask_vamb][indices_mmseq],
+        lengths[mask_vamb][indices_mmseq],
+        targets,
+        len(nodes),
+        table_parent,
+        batchsize=vae_training_options.batchsize,
+        cuda=vamb_options.cuda,
+    )
+
+    shapes = (rpkms.shape[1], 103, 1, len(nodes))
+    dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
+        dataloader_joint,
+        dataloader_vamb,
+        dataloader_labels,
+        len(nodes),
+        table_parent,
+        shapes,
+        vamb_options.seed,
+        batchsize=vae_training_options.batchsize,
+        cuda=vamb_options.cuda,
+    )
+    model_path = vamb_options.out_dir.joinpath("vaevae_model.pt")
+    with open(model_path, "wb") as modelfile:
+        vae.trainmodel(
+            dataloader,
+            nepochs=vae_training_options.nepochs,
+            modelfile=modelfile,
+            logfile=logfile,
+            batchsteps=vae_training_options.batchsteps,
+        )
+
+    latent_both = vae.VAEJoint.encode(dataloader_joint)
+    log(
+        f"{latent_both.shape} embedding shape",
+        logfile,
+        0,
+    )
+    
+    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
+
+    composition.metadata.filter_mask(mask_vamb)
+
+    log(
+        f"{len(composition.metadata.identifiers)} contig names after filtering",
+        logfile,
+        0,
+    )
+
+    LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
+    # LATENT_PATH = str(vamb_options.out_dir).replace('__fix', '') + "/vaevae_latent.npy"
+    # latent_both = np.load(LATENT_PATH)
+    # latent_both = np.concatenate([rpkms[mask_full], tnfs[mask_full]], axis=1)
+    # log(
+    #     f"{latent_both.shape} embedding shape",
+    #     logfile,
+    #     0,
+    # )
+    np.save(LATENT_PATH, latent_both)
+
+    # Cluster, save tsv file
+    clusterspath = vamb_options.out_dir.joinpath("vaevae_clusters.tsv")
+    cluster(
+        cluster_options,
+        clusterspath,
+        latent_both,
+        composition.metadata.identifiers[indices_mmseq],
+        composition.metadata.lengths[indices_mmseq],
+        vamb_options,
+        logfile,
+        "vaevae_",
+    )
+    log("VAEVAE latent clustered", logfile, 1)
+
+    del latent_both
+    fin_cluster_latent = time.time()
+
+    if vamb_options.min_fasta_output_size is not None:
+        path = comp_options.path
+        assert isinstance(path, FASTAPath)
+        write_fasta(
+            vamb_options.out_dir,
+            clusterspath,
+            path,
+            composition.metadata.identifiers[indices_mmseq],
+            composition.metadata.lengths[indices_mmseq],
+            vamb_options.min_fasta_output_size,
+            logfile,
+            separator=cluster_options.binsplit_separator,
+        )
+
+    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
+    log(f"VAEVAE bins written in {writing_bins_time} seconds.", logfile, 1)
+
+
+def run_reclustering(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    reclustering_options: ReclusteringOptions,
+    taxonomy_options: TaxonomyOptions,
+    logfile: IO[str],
+):
+    composition, abundance = load_composition_and_abundance(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
+    )
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    if hasattr(abundance, 'matrix'):
+        rpkms = abundance.matrix
+    else:
+        rpkms = abundance
+
+    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
+
+    _, mask_vamb = vamb.encode.make_dataloader(rpkms, tnfs, lengths)
+    composition.metadata.filter_mask(mask_vamb)
+
+    log(
+        f"{len(composition.metadata.identifiers)} contig names after filtering",
+        logfile,
+        0,
+    )
+    log("mmseqs taxonomy predictions are provided", logfile, 0)
+    predictions_path = taxonomy_options.taxonomy_predictions_path
+
+    reclustered = vamb.reclustering.recluster_bins(
+        logfile,
+        reclustering_options.clusters_path,
+        reclustering_options.latent_path,
+        str(comp_options.path),
+        composition.metadata.identifiers,
+        out_dir=vamb_options.out_dir,
+        minfasta=0,
+        binned_length=1000,
+        num_process=40,
+        random_seed=int(random.uniform(0, 2**32 - 1)),
+        hmmout_path=reclustering_options.hmmout_path,
+        algorithm=reclustering_options.algorithm,
+        predictions_path=predictions_path,
+    )
+
+    cluster_dict = defaultdict(set)
+    for k, v in zip(reclustered, composition.metadata.identifiers):
+        cluster_dict[k].add(v)
+    clusterspath = vamb_options.out_dir.joinpath("clusters_reclustered.tsv")
+    if reclustering_options.binsplit_separator is not None:
+        maybe_split = vamb.vambtools.binsplit(
+            cluster_dict.items(), reclustering_options.binsplit_separator
+        )
+    else:
+        maybe_split = cluster_dict.items()
+    with open(clusterspath, "w") as clustersfile:
+        clusternumber, ncontigs = vamb.vambtools.write_clusters(
+            clustersfile,
+            maybe_split,
+            rename=False,
+            cluster_prefix='recluster',
+        )
+
+    print("", file=logfile)
+    log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
+
+    fin_cluster_latent = time.time()
+
+    if vamb_options.min_fasta_output_size is not None:
+        path = comp_options.path
+        assert isinstance(path, FASTAPath)
+        write_fasta(
+            vamb_options.out_dir,
+            clusterspath,
+            path,
+            composition.metadata.identifiers,
+            composition.metadata.lengths,
+            vamb_options.min_fasta_output_size,
+            logfile,
+            separator=reclustering_options.binsplit_separator,
+        )
+
+    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
+    log(f"Reclustered bins written in {writing_bins_time} seconds.", logfile, 1)
 
 
 def main():
@@ -1065,9 +1675,16 @@ def main():
         dest="model",
         metavar="",
         type=str,
-        choices=["vae", "aae", "vae-aae"],
+        choices=[
+            "vae",
+            "aae",
+            "vae-aae",
+            "taxonomy_predictor",
+            "vaevae",
+            "reclustering",
+        ],
         default="vae",
-        help="Choose which model to run; only vae (vae), only aae (aae), the combination of vae and aae (vae-aae), [vae]",
+        help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae; reclustering [vae]",
     )
 
     # VAE arguments
@@ -1148,6 +1765,62 @@ def main():
         default=1e-3,
         help="learning rate [0.001]",
     )
+
+    # Train predictor arguments
+    pred_trainos = parser.add_argument_group(
+        title="Training options for the taxonomy predictor", description=None
+    )
+
+    pred_trainos.add_argument(
+        "-pe",
+        dest="pred_nepochs",
+        metavar="",
+        type=int,
+        default=100,
+        help="taxonomy predictor epochs [100]",
+    )
+    pred_trainos.add_argument(
+        "-pt",
+        dest="pred_batchsize",
+        metavar="",
+        type=int,
+        default=256,
+        help="starting batch size for the taxonomy predictor [256]",
+    )
+    pred_trainos.add_argument(
+        "-pq",
+        dest="pred_batchsteps",
+        metavar="",
+        type=int,
+        nargs="*",
+        default=[25, 75],
+        help="double batch size at epochs for the taxonomy predictor [25 75]",
+    )
+    pred_trainos.add_argument(
+        "-pr",
+        dest="pred_lrate",
+        metavar="",
+        type=float,
+        default=1e-3,
+        help="learning rate for the taxonomy predictor [0.001]",
+    )
+    pred_trainos.add_argument(
+        "-pthr",
+        dest="pred_softmax_threshold",
+        metavar="",
+        type=float,
+        default=0.5,
+        help="conditional probability threshold for accepting the taxonomic prediction [0.5]",
+    )
+    pred_trainos.add_argument(
+        "-ploss",
+        dest="ploss",
+        metavar="",
+        type=str,
+        default="cond_softmax",
+        help='Hierarchical loss (one of flat_softmax, cond_softmax, soft_margin, random_cut) ["cond_softmax"]',
+    )
+
     # AAE arguments
     aaeos = parser.add_argument_group(title="AAE options", description=None)
 
@@ -1272,6 +1945,68 @@ def main():
         help="binsplit separator [None = no split]",
     )
 
+    # Taxonomy arguments
+    taxonomys = parser.add_argument_group(title="Taxonomy (results of mmseqs search)")
+    taxonomys.add_argument(
+        "--taxonomy",
+        metavar="",
+        type=Path,
+        help="path to taxonomy tsv file, output of mmseq search. File structure: no headers, contignames in the 1st column, annotation level in 3rd column, full taxonomy in the 9th column",
+    )
+    taxonomys.add_argument(
+        "--taxonomy_predictions",
+        metavar="",
+        type=Path,
+        help="path to results_taxonomy_predictor.csv file, output of taxonomy_predictor model",
+    )
+    taxonomys.add_argument(
+        "--no_predictor", help="do not complete mmseqs search with taxonomy predictions [False]", action="store_true"
+    )
+    taxonomys.add_argument(
+        "--n_species",
+        metavar="",
+        type=int,
+        default=500,
+        help="max number of species with the most contigs to keep in the taxonomy tree created by mmseqs search. Helps reducing model's training time and memory consumption, but reduces the taxonomic variety available to the predictor [500]",
+    )
+
+    # Reclustering arguments
+    reclusters = parser.add_argument_group(title="k-means reclustering arguments")
+    reclusters.add_argument(
+        "--latent_path",
+        metavar="",
+        type=Path,
+        help="path to a latent space",
+    )
+    reclusters.add_argument(
+        "--clusters_path",
+        metavar="",
+        type=Path,
+        help="path to a cluster file corresponding to the latent space",
+    )
+    reclusters.add_argument(
+        "--hmmout_path",
+        metavar="",
+        type=Path,
+        default=None,
+        help="path to markers.hmmout path generated for the same set of contigs",
+    )
+    reclusters.add_argument(
+        "-ro",
+        dest="binsplit_separator_recluster",
+        metavar="",
+        type=str,
+        default="C",
+        help="binsplit separator for reclustering [C]",
+    )
+    reclusters.add_argument(
+        "--algorithm",
+        metavar="",
+        type=str,
+        default="kmeans",
+        help="which reclustering algorithm to use ('kmeans', 'dbscan'). DBSCAN requires a taxonomy predictions file [kmeans]",
+    )
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit()
@@ -1298,8 +2033,7 @@ def main():
         vae_training_options = VAETrainingOptions(
             nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
         )
-    else:
-        assert args.model == "aae"
+    elif args.model == "aae":
         vae_options = None
         vae_training_options = None
 
@@ -1315,6 +2049,49 @@ def main():
                 raise ValueError(
                     f'VAE model not used, but VAE-specific arg "{name}" used'
                 )
+    elif args.model in ("taxonomy_predictor", "vaevae"):
+        vae_options = VAEOptions(
+            nhiddens=args.nhiddens,
+            nlatent=args.nlatent,
+            beta=args.beta,
+            dropout=args.dropout,
+        )
+        vae_training_options = VAETrainingOptions(
+            nepochs=args.nepochs, batchsize=args.batchsize, batchsteps=args.batchsteps
+        )
+        taxonomy_options = TaxonomyOptions(
+            taxonomy_path=args.taxonomy,
+            taxonomy_predictions_path=args.taxonomy_predictions,
+            no_predictor=args.no_predictor,
+            n_species=args.n_species,
+        )
+        predictor_training_options = PredictorTrainingOptions(
+            nepochs=args.pred_nepochs,
+            batchsize=args.pred_batchsize,
+            batchsteps=args.pred_batchsteps,
+            softmax_threshold=args.pred_softmax_threshold,
+            ploss=args.ploss,
+        )
+    else:
+        assert args.model == "reclustering"
+        assert args.algorithm in ("kmeans", "dbscan")
+        reclustering_options = ReclusteringOptions(
+            latent_path=args.latent_path,
+            clusters_path=args.clusters_path,
+            binsplit_separator=args.binsplit_separator_recluster,
+            hmmout_path=args.hmmout_path,
+            algorithm=args.algorithm,
+        )
+        if args.algorithm == "dbscan":
+            preds = args.taxonomy_predictions
+        else:
+            preds = args.clusters_path
+        taxonomy_options = TaxonomyOptions(
+            taxonomy_path=args.taxonomy,
+            taxonomy_predictions_path=preds,
+            no_predictor=args.no_predictor,
+            n_species=args.n_species,
+        )
 
     if args.model in ("aae", "vae-aae"):
         aae_options = AAEOptions(
@@ -1332,7 +2109,7 @@ def main():
             temp=args.temp,
         )
     else:
-        assert args.model == "vae"
+        assert args.model in ("taxonomy_predictor", "vae", "vaevae", "reclustering")
         aae_options = None
         aae_training_options = None
 
@@ -1352,15 +2129,16 @@ def main():
                     f'AAE model not used, but AAE-specific arg "{name}" used'
                 )
 
-    encoder_options = EncoderOptions(
-        vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
-    )
-    training_options = TrainingOptions(
-        encoder_options=encoder_options,
-        vae_options=vae_training_options,
-        aae_options=aae_training_options,
-        lrate=args.lrate,
-    )
+    if args.model != "reclustering":
+        encoder_options = EncoderOptions(
+            vae_options=vae_options, aae_options=aae_options, alpha=args.alpha
+        )
+        training_options = TrainingOptions(
+            encoder_options=encoder_options,
+            vae_options=vae_training_options,
+            aae_options=aae_training_options,
+            lrate=args.lrate,
+        )
 
     cluster_options = ClusterOptions(
         args.window_size,
@@ -1384,15 +2162,46 @@ def main():
     try_make_dir(vamb_options.out_dir)
 
     with open(vamb_options.out_dir.joinpath("log.txt"), "w") as logfile:
-        run(
-            vamb_options=vamb_options,
-            comp_options=comp_options,
-            abundance_options=abundance_options,
-            encoder_options=encoder_options,
-            training_options=training_options,
-            cluster_options=cluster_options,
-            logfile=logfile,
-        )
+        if args.model == "taxonomy_predictor":
+            run_taxonomy_predictor(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                taxonomy_options=taxonomy_options,
+                predictor_training_options=predictor_training_options,
+                logfile=logfile,
+            )
+        elif args.model == "vaevae":
+            run_vaevae(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                taxonomy_options=taxonomy_options,
+                vae_training_options=vae_training_options,
+                predictor_training_options=predictor_training_options,
+                cluster_options=cluster_options,
+                encoder_options=encoder_options,
+                logfile=logfile,
+            )
+        elif args.model == "reclustering":
+            run_reclustering(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                reclustering_options=reclustering_options,
+                taxonomy_options=taxonomy_options,
+                logfile=logfile,
+            )
+        else:
+            run(
+                vamb_options=vamb_options,
+                comp_options=comp_options,
+                abundance_options=abundance_options,
+                encoder_options=encoder_options,
+                training_options=training_options,
+                cluster_options=cluster_options,
+                logfile=logfile,
+            )
 
 
 if __name__ == "__main__":
