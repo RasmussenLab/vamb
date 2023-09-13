@@ -478,11 +478,18 @@ class ClusterGenerator:
         # We need to make a histogram of only the unclustered distances - when run on GPU
         # these have not been removed and we must use the kept_mask
         if self.cuda:
-            picked_distances = distances[self.kept_mask].cpu()
-            picked_lengths = self.lengths[self.kept_mask].cpu()
+            below_xmax = (distances <= _XMAX) & self.kept_mask
+            picked_distances = distances[below_xmax].cpu()
+            picked_lengths = self.lengths[below_xmax].cpu()
         else:
-            picked_distances = distances
-            picked_lengths = self.lengths
+            below_xmax = (distances <= _XMAX)
+            picked_distances = distances[below_xmax]
+            picked_lengths = self.lengths[below_xmax]
+
+        # TODO: https://github.com/pytorch/pytorch/issues/69519
+        # Currently, this function does not run on GPU. This means we must
+        # copy over the lengths and distances to CPU each time, which is very slow.
+        # If the issue is resolved, there can be large speedups on GPU
         _torch.histogram(
             input=picked_distances,
             bins=len(self.histogram),
@@ -490,8 +497,6 @@ class ClusterGenerator:
             out=((self.histogram, self.histogram_edges)),
             weight=picked_lengths,
         )
-        # TODO: Decide: Should we remove the self point? This might create an invalid initial peak.
-        # On the other hand, if it's large, the peak is valid...
 
         # When the peak_valley_ratio is too high, we need to return something to not get caught
         # in an infinite loop.
