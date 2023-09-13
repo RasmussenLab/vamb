@@ -296,6 +296,8 @@ class ClusterGenerator:
         self.order = _np.argsort(lengths)[::-1]
         self.order_index = 0
         self.lengths = _torch.Tensor(lengths)
+        if cuda:
+            self.lengths = self.lengths.cuda()
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1

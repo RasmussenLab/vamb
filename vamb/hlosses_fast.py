@@ -317,7 +317,6 @@ class RandomCutLoss(nn.Module):
             with_leaf_targets: bool = True):
         super().__init__()
         is_ancestor = tree.ancestor_mask(strict=False)
-        print('is_ancestor', is_ancestor.shape)
         # label_to_targets[gt, pr] = 1 iff pr `is_ancestor` gt
         label_to_targets = is_ancestor.T
         if with_leaf_targets:

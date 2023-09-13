@@ -238,8 +238,11 @@ class VAELabels(_encode.VAE):
         return labels_out
 
     def forward(self, labels):
-        mu, logsigma = self._encode(labels)
-        latent = self.reparameterize(mu, logsigma)
+        mu = self._encode(labels)
+        logsigma = _torch.zeros(mu.size())
+        if self.usecuda:
+            logsigma = logsigma.cuda()
+        latent = self.reparameterize(mu)
         labels_out = self._decode(latent)
         return labels_out, mu, logsigma
 
@@ -516,8 +519,11 @@ class VAEConcat(_encode.VAE):
 
     def forward(self, depths, tnf, labels):
         tensor = _torch.cat((depths, tnf, labels), 1)
-        mu, logsigma = self._encode(tensor)
-        latent = self.reparameterize(mu, logsigma)
+        mu = self._encode(tensor)
+        logsigma = _torch.zeros(mu.size())
+        if self.usecuda:
+            logsigma = logsigma.cuda()
+        latent = self.reparameterize(mu)
         depths_out, tnf_out, labels_out = self._decode(latent)
 
         return depths_out, tnf_out, labels_out, mu, logsigma
@@ -881,22 +887,26 @@ class VAEVAE(object):
             )  # use the two-modality latent space
 
             depths_out_sup, tnf_out_sup = self.VAEVamb._decode(
-                self.VAEVamb.reparameterize(mu_sup, logsigma_sup)
+                self.VAEVamb.reparameterize(mu_sup)
             )  # use the one-modality decoders
             labels_out_sup = self.VAELabels._decode(
-                self.VAELabels.reparameterize(mu_sup, logsigma_sup)
+                self.VAELabels.reparameterize(mu_sup)
             )  # use the one-modality decoders
 
             (
                 depths_out_unsup,
                 tnf_out_unsup,
                 mu_vamb_unsup,
-                logsigma_vamb_unsup,
             ) = self.VAEVamb(depths_in_unsup, tnf_in_unsup)
-            _, _, mu_vamb_sup_s, logsigma_vamb_sup_s = self.VAEVamb(
+            logsigma_vamb_unsup = _torch.zeros(mu_vamb_unsup.size())
+            if self.usecuda:
+                logsigma_vamb_unsup = logsigma_vamb_unsup.cuda()
+            _, _, mu_vamb_sup_s = self.VAEVamb(
                 depths_in_sup, tnf_in_sup
             )
-
+            logsigma_vamb_sup_s = _torch.zeros(mu_vamb_sup_s.size())
+            if self.usecuda:
+                logsigma_vamb_sup_s = logsigma_vamb_sup_s.cuda()
             labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup = self.VAELabels(
                 labels_in_unsup
             )
@@ -913,7 +923,6 @@ class VAEVAE(object):
                 tnf_in_unsup,
                 tnf_out_unsup,
                 mu_vamb_unsup,
-                logsigma_vamb_unsup,
                 weights_in_unsup,
             )
 
