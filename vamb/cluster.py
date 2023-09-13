@@ -245,11 +245,9 @@ class ClusterGenerator:
 
         kept_mask = _torch.ones(N, dtype=_torch.bool)
         if self.cuda:
-            histogram = _torch.empty(_ceil(_XMAX / _DELTA_X), dtype=_torch.float).cuda()
             kept_mask = kept_mask.cuda()
-        else:
-            histogram = _torch.empty(_ceil(_XMAX / _DELTA_X))
 
+        histogram = _torch.empty(_ceil(_XMAX / _DELTA_X))
         return histogram, kept_mask
 
     def __init__(
@@ -279,8 +277,10 @@ class ClusterGenerator:
             _normalize(torch_matrix, inplace=True)
 
         # Move to GPU
+        torch_lengths = _torch.Tensor(lengths)
         if cuda:
             torch_matrix = torch_matrix.cuda()
+            torch_lengths = torch_lengths.cuda()
 
         self.maxsteps: int = maxsteps
         self.minsuccesses: int = minsuccesses
@@ -293,7 +293,7 @@ class ClusterGenerator:
         self.indices = _torch.arange(len(matrix))
         self.order = _np.argsort(lengths)[::-1]
         self.order_index = 0
-        self.lengths = _torch.Tensor(lengths)
+        self.lengths = torch_lengths
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1
@@ -330,13 +330,16 @@ class ClusterGenerator:
     def pack(self):
         "Remove all used points from the matrix and indices, and reset kept_mask."
         if self.cuda:
+            cpu_kept_mask = self.kept_mask.cpu()
             self.matrix = _vambtools.torch_inplace_maskarray(
-                self.matrix.cpu(), self.kept_mask
+                self.matrix.cpu(), cpu_kept_mask
             ).cuda()
+            self.indices = self.indices[cpu_kept_mask]
+
         else:
             _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
+            self.indices = self.indices[self.kept_mask]
 
-        self.indices = self.indices[self.kept_mask]
         self.lengths = self.lengths[self.kept_mask]
         self.kept_mask.resize_(len(self.matrix))
         self.kept_mask[:] = 1
@@ -475,15 +478,17 @@ class ClusterGenerator:
         # We need to make a histogram of only the unclustered distances - when run on GPU
         # these have not been removed and we must use the kept_mask
         if self.cuda:
-            picked_distances = distances[self.kept_mask]
+            picked_distances = distances[self.kept_mask].cpu()
+            picked_lengths = self.lengths[self.kept_mask].cpu()
         else:
             picked_distances = distances
+            picked_lengths = self.lengths
         _torch.histogram(
             input=picked_distances,
             bins=len(self.histogram),
             range=(0.0, _XMAX),
             out=((self.histogram, self.histogram_edges)),
-            weight=self.lengths,
+            weight=picked_lengths,
         )
         # TODO: Decide: Should we remove the self point? This might create an invalid initial peak.
         # On the other hand, if it's large, the peak is valid...
@@ -669,8 +674,17 @@ def _sample_medoid(
     """
 
     distances = _calc_distances(matrix, medoid)
-    cluster = _smaller_indices(distances, kept_mask, threshold, cuda)
-    local_density = (lengths[cluster] * (threshold - distances[cluster])).sum().item()
+
+    if cuda:
+        within_threshold = (distances <= threshold) & kept_mask
+        cluster = _torch.nonzero(within_threshold).flatten().cpu()
+    else:
+        within_threshold = distances.numpy() <= threshold
+        cluster = _torch.from_numpy(within_threshold.nonzero()[0])
+
+    closeness = threshold - distances[within_threshold]
+    local_density = (lengths[within_threshold] * closeness).sum().item()
+
     return cluster, distances, local_density
 
 
