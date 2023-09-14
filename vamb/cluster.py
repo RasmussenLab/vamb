@@ -614,18 +614,14 @@ class ClusterGenerator:
 def _smaller_indices(
     tensor: _Tensor, kept_mask: _Tensor, threshold: float, cuda: bool
 ) -> _Tensor:
-    """Get all indices where the tensor is smaller than the threshold.
-    Uses Numpy because Torch is slow - See https://github.com/pytorch/pytorch/pull/15190
-    """
+    """Get all indices where the tensor is smaller than the threshold."""
 
-    # If it's on GPU, we remove the already clustered points at this step.
+    # If it's on GPU, we remove the already clustered points at this step
+    # and move to CPU
     if cuda:
         return _torch.nonzero((tensor <= threshold) & kept_mask).flatten().cpu()
     else:
-        arr = tensor.numpy()
-        indices = (arr <= threshold).nonzero()[0]
-        torch_indices = _torch.from_numpy(indices)
-        return torch_indices
+        return _torch.nonzero(tensor <= threshold).flatten()
 
 
 def _normalize(matrix: _Tensor, inplace: bool = False) -> _Tensor:
