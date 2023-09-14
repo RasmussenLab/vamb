@@ -384,6 +384,7 @@ class ClusterGenerator:
             if (
                 new_index >= len(self.indices)
                 or self.indices[new_index].item() != order
+                or (self.cuda and not self.kept_mask[new_index].item())
             ):
                 self.order[i] = -1
                 continue
