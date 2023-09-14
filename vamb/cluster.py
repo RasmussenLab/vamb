@@ -482,7 +482,7 @@ class ClusterGenerator:
             picked_distances = distances[below_xmax].cpu()
             picked_lengths = self.lengths[below_xmax].cpu()
         else:
-            below_xmax = (distances <= _XMAX)
+            below_xmax = distances <= _XMAX
             picked_distances = distances[below_xmax]
             picked_lengths = self.lengths[below_xmax]
 
