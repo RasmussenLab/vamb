@@ -1042,7 +1042,7 @@ def run(
 
 def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
-    contignames: list[str],
+    contignames: list[str], # already masked
     n_species: int,
     logfile: IO[str],
 ) -> Tuple[list[int], list[str]]:
@@ -1053,10 +1053,25 @@ def parse_mmseqs_taxonomy(
     df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
     log(f"{len(df_mmseq)} lines in taxonomy file", logfile, 1)
     log(f"{len(contignames)} contigs", logfile, 1)
-    ind_map = {c: i for i, c in enumerate(contignames)}
     df_mmseq = df_mmseq[df_mmseq[0].isin(contignames)]
-    indices_mmseq = [ind_map[c] for c in df_mmseq[0]]
+
+    # TODO: rethink when we start working with other domains
+    missing_contigs = set(contignames) - set(df_mmseq[0])
+    for c in missing_contigs:
+        new_row = {i: np.nan for i in range(9)}
+        new_row[0] = c
+        new_row[2] = 'domain'
+        new_row[8] = 'd_Bacteria'
+        df_mmseq = pd.concat([df_mmseq, pd.DataFrame([new_row])], ignore_index=True)
+
+    df_mmseq.set_index(0, inplace=True)
+    df_mmseq = df_mmseq.loc[contignames]
+    df_mmseq.reset_index(inplace=True)
     graph_column = df_mmseq[8]
+
+    if list(df_mmseq[0]) != list(contignames):
+        raise AssertionError(f'The contig names of taxonomy entries are not the same as in the contigs metadata')
+
     species_column = df_mmseq[df_mmseq[2].isin(["species", "subspecies"])][8].str.split(';').str[6]
     species_dict = species_column.value_counts()
     unique_species = sorted(
@@ -1087,11 +1102,11 @@ def parse_mmseqs_taxonomy(
             .map(lambda x: ";".join(x))
         )
         graph_column = df_mmseq["tax"]
-    return (indices_mmseq, graph_column)
+    return graph_column
 
 
 def predict_taxonomy(
-    composition: vamb.parsecontigs.Composition,
+    composition: vamb.parsecontigs.Composition,  # metadata already masked
     abundance: vamb.parsebam.Abundance,
     taxonomy_path: Path,
     n_species: int,
@@ -1099,23 +1114,16 @@ def predict_taxonomy(
     predictor_training_options: PredictorTrainingOptions,
     cuda: bool,
     logfile: IO[str],
-    mask=None,
 ):
     begintime = time.time()
-    if mask is not None:
-        tnfs, lengths = composition.matrix[mask], composition.metadata.lengths[mask]
-        contignames = composition.metadata.identifiers[mask]
-    else:
-        tnfs, lengths = composition.matrix, composition.metadata.lengths
-        contignames = composition.metadata.identifiers
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    contignames = composition.metadata.identifiers
     if hasattr(abundance, 'matrix'):
         rpkms = abundance.matrix
     else:
         rpkms = abundance
-    if mask is not None:
-        rpkms = rpkms[mask]
 
-    indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+    graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
         contignames=contignames,
         n_species=n_species,
@@ -1144,9 +1152,9 @@ def predict_taxonomy(
         batchsize=predictor_training_options.batchsize,
     )
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
-        rpkms[indices_mmseq],
-        tnfs[indices_mmseq],
-        lengths[indices_mmseq],
+        rpkms,
+        tnfs,
+        lengths,
         targets,
         len(nodes),
         table_parent,
@@ -1159,7 +1167,7 @@ def predict_taxonomy(
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
 
-    names = composition.metadata.identifiers[mask_vamb] # not mutating operation because the composition can be reused
+    names = composition.metadata.identifiers  # already masked
     lengths_masked = lengths
 
     predictortime = time.time()
@@ -1279,6 +1287,16 @@ def run_vaevae(
         cuda=vamb_options.cuda,
     )
 
+    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
+
+    composition.metadata.filter_mask(mask_vamb)
+
+    log(
+        f"{len(composition.metadata.identifiers)} contig names after filtering",
+        logfile,
+        0,
+    )
+
     if (
         taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor
     ):
@@ -1292,7 +1310,6 @@ def run_vaevae(
             predictor_training_options=predictor_training_options,
             cuda=vamb_options.cuda,
             logfile=logfile,
-            mask=mask_vamb,
         )
         predictions_path = vamb_options.out_dir.joinpath("results_taxonomy_predictor.csv")
     elif taxonomy_options.taxonomy_predictions_path is not None:
@@ -1305,13 +1322,11 @@ def run_vaevae(
     if predictions_path is not None:
         df_gt = pd.read_csv(predictions_path)
         graph_column = df_gt["predictions"]
-        ind_map = {c: i for i, c in enumerate(composition.metadata.identifiers[mask_vamb])}
-        indices_mmseq = [ind_map[c] for c in df_gt['contigs']]
     elif taxonomy_options.no_predictor:
         log("Using mmseqs taxonomy for semisupervised learning", logfile, 0)
-        indices_mmseq, graph_column = parse_mmseqs_taxonomy(
+        graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
-            contignames=composition.metadata.identifiers[mask_vamb],
+            contignames=composition.metadata.identifiers,
             n_species=taxonomy_options.n_species,
             logfile=logfile,
         )
@@ -1320,13 +1335,8 @@ def run_vaevae(
 
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
 
-    classes_order = list(graph_column.str.split(";").str[-1])
-    missing_nodes_mmseqs = list(set(range(rpkms[mask_vamb].shape[0])) - set(indices_mmseq))
-    if missing_nodes_mmseqs:
-        indices_mmseq.extend(missing_nodes_mmseqs)
-        classes_order.extend(["d_Bacteria"]*len(missing_nodes_mmseqs))
-    classes_order = np.array(classes_order)
-    targets = [ind_nodes[i] for i in classes_order]
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
 
     vae = vamb.h_loss.VAEVAEHLoss(
         rpkms.shape[1],
@@ -1342,15 +1352,10 @@ def run_vaevae(
         logfile=logfile,
     )
 
-    log(
-        f"{len(indices_mmseq)} mmseq indices",
-        logfile,
-        0,
-    )
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
-        rpkms[mask_vamb][indices_mmseq],
-        tnfs[mask_vamb][indices_mmseq],
-        lengths[mask_vamb][indices_mmseq],
+        rpkms,
+        tnfs,
+        lengths,
         targets,
         len(nodes),
         table_parent,
@@ -1358,9 +1363,9 @@ def run_vaevae(
         cuda=vamb_options.cuda,
     )
     dataloader_labels, _ = vamb.h_loss.make_dataloader_labels_hloss(
-        rpkms[mask_vamb][indices_mmseq],
-        tnfs[mask_vamb][indices_mmseq],
-        lengths[mask_vamb][indices_mmseq],
+        rpkms,
+        tnfs,
+        lengths,
         targets,
         len(nodes),
         table_parent,
@@ -1396,19 +1401,9 @@ def run_vaevae(
         logfile,
         0,
     )
-    
-    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
-
-    composition.metadata.filter_mask(mask_vamb)
-
-    log(
-        f"{len(composition.metadata.identifiers)} contig names after filtering",
-        logfile,
-        0,
-    )
 
     LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
-    # LATENT_PATH = str(vamb_options.out_dir).replace('__fix', '') + "/vaevae_latent.npy"
+    # LATENT_PATH = str(vamb_options.out_dir).replace('__fix2', '') + "/vaevae_latent.npy"
     # latent_both = np.load(LATENT_PATH)
     # latent_both = np.concatenate([rpkms[mask_full], tnfs[mask_full]], axis=1)
     # log(
@@ -1424,8 +1419,8 @@ def run_vaevae(
         cluster_options,
         clusterspath,
         latent_both,
-        composition.metadata.identifiers[indices_mmseq],
-        composition.metadata.lengths[indices_mmseq],
+        composition.metadata.identifiers,
+        composition.metadata.lengths,
         vamb_options,
         logfile,
         "vaevae_",
@@ -1442,8 +1437,8 @@ def run_vaevae(
             vamb_options.out_dir,
             clusterspath,
             path,
-            composition.metadata.identifiers[indices_mmseq],
-            composition.metadata.lengths[indices_mmseq],
+            composition.metadata.identifiers,
+            composition.metadata.lengths,
             vamb_options.min_fasta_output_size,
             logfile,
             separator=cluster_options.binsplit_separator,

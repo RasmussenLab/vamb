@@ -147,7 +147,7 @@ def make_dataloader_concat_hloss(
     ) = _semisupervised_encode._make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
-    labelstensor = _torch.Tensor(labels).long()[mask]
+    labelstensor = _torch.Tensor(labels).long()
     dataset = _TensorDataset(
         depthstensor, tnftensor, weightstensor, labelstensor
     )
