@@ -242,7 +242,7 @@ def process_chunk(
     chunk: list[FastaEntry],
     hmms: list[pyhmmer.plan7.HMM],
     name_to_id: dict[MarkerName, MarkerID],
-    finder: pyrodigal.OrfFinder,
+    finder: pyrodigal.GeneFinder,
 ) -> list[tuple[ContigID, np.ndarray]]:
     # We temporarily store them as sets in order to deduplicate. While single contigs
     # may have duplicate markers, it makes no sense to count this as contamination,
@@ -288,7 +288,7 @@ def work_per_process(
     # allowing pyhmmer to scan multiple sequences at once for speed
     chunk: list[FastaEntry] = []
     result: list[tuple[ContigID, np.ndarray]] = []
-    finder = pyrodigal.OrfFinder(meta=True)
+    finder = pyrodigal.GeneFinder(meta=True)
     with open(contig_path, "rb") as file:
         for record in byte_iterfasta(file):
             chunk.append(record)
