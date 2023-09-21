@@ -253,14 +253,33 @@ def process_chunk(
     alphabet = pyhmmer.easel.Alphabet.amino()
     digitized: list[pyhmmer.easel.DigitalSequence] = []
 
-    # Compute codon frequencies for each contig, store as a numpy array alphabetically in codon_usage_per_contig
+    # generata codon table
     nucleotides = ['A', 'C', 'G', 'T']
     all_codons = sorted([''.join(codon) for codon in itertools.product(nucleotides, repeat=3)])
-    codon_usage_per_contig = dict()
+    codon_usage_per_contig = defaultdict(list)
+
+    codon_to_aa = {
+    "ATA": "I", "ATC": "I", "ATT": "I", "ATG": "M",
+    "ACA": "T", "ACC": "T", "ACG": "T", "ACT": "T",
+    "AAC": "N", "AAT": "N", "AAA": "K", "AAG": "K",
+    "AGC": "S", "AGT": "S", "AGA": "R", "AGG": "R",
+    "CTA": "L", "CTC": "L", "CTG": "L", "CTT": "L",
+    "CCA": "P", "CCC": "P", "CCG": "P", "CCT": "P",
+    "CAC": "H", "CAT": "H", "CAA": "Q", "CAG": "Q",
+    "CGA": "R", "CGC": "R", "CGG": "R", "CGT": "R",
+    "GTA": "V", "GTC": "V", "GTG": "V", "GTT": "V",
+    "GCA": "A", "GCC": "A", "GCG": "A", "GCT": "A",
+    "GAC": "D", "GAT": "D", "GAA": "E", "GAG": "E",
+    "GGA": "G", "GGC": "G", "GGG": "G", "GGT": "G",
+    "TCA": "S", "TCC": "S", "TCG": "S", "TCT": "S",
+    "TTC": "F", "TTT": "F", "TTA": "L", "TTG": "L",
+    "TAC": "Y", "TAT": "Y", "TAA": "*", "TAG": "*",
+    "TGC": "C", "TGT": "C", "TGA": "*", "TGG": "W",
+    }
+
     for record in chunk:
         codon_counts = np.zeros(len(all_codons), dtype=int)
         for gene in finder.find_genes(record.sequence):
-            total_codons = len(gene.sequence())// 3
             for i in range(0, len(gene.sequence()),3):
                 codon = gene.sequence()[i:i+3]
                 if codon in all_codons:
@@ -271,12 +290,23 @@ def process_chunk(
             ).digitize(alphabet)
             digitized.append(seq)
 
-        if np.sum(codon_counts) > 0:
-            codon_frequencies = codon_counts / np.sum(codon_counts)
-        else:
-            codon_frequencies = np.zeros(len(all_codons), dtype=float)
+        aa_to_codon_counts = defaultdict(lambda: defaultdict(int))
+        for codon_index, count in enumerate(codon_counts):
+            codon = all_codons[codon_index]
+            aa = codon_to_aa.get(codon)
+            if aa:
+                aa_to_codon_counts[aa][codon] = count
 
-        codon_usage_per_contig[ContigID(int(record.identifier))] = codon_frequencies
+        total_counts_per_aa = {aa: sum(counts.values()) for aa, counts in aa_to_codon_counts.items()}
+        codon_usage = np.zeros(len(all_codons), dtype=float)
+        for codon_index, codon in enumerate(all_codons):
+            aa = codon_to_aa.get(codon)
+            if aa:
+                total_counts = total_counts_per_aa.get(aa)
+                codon_usage[codon_index] = aa_to_codon_counts[aa][codon] / total_counts if total_counts else 0.0
+
+        codon_usage_per_contig[ContigID(int(record.identifier))] = codon_usage
+
 
     for hmm, top_hits in zip(hmms, pyhmmer.hmmsearch(hmms, digitized)):
         marker_name = MarkerName(hmm.name.decode())
