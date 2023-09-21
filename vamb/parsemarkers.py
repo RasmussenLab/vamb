@@ -6,6 +6,7 @@
 # To avoid inter-process communication overhead, we first split the input
 # FASTA files to N files, then we have each process work on the files independently.
 
+import codeop
 from vamb.vambtools import FastaEntry, Reader, RefHasher, byte_iterfasta
 import pyrodigal
 import pyhmmer
@@ -243,7 +244,7 @@ def process_chunk(
     hmms: list[pyhmmer.plan7.HMM],
     name_to_id: dict[MarkerName, MarkerID],
     finder: pyrodigal.GeneFinder,
-) -> list[tuple[ContigID, np.ndarray]]:
+) -> list[tuple[ContigID, np.ndarray, np.ndarray]]:
     # We temporarily store them as sets in order to deduplicate. While single contigs
     # may have duplicate markers, it makes no sense to count this as contamination,
     # because we are not about to second-guess the assembler's job of avoiding
@@ -251,12 +252,31 @@ def process_chunk(
     markers: defaultdict[ContigID, set[MarkerID]] = defaultdict(set)
     alphabet = pyhmmer.easel.Alphabet.amino()
     digitized: list[pyhmmer.easel.DigitalSequence] = []
+
+    # Compute codon frequencies for each contig, store as a numpy array alphabetically in codon_usage_per_contig
+    nucleotides = ['A', 'C', 'G', 'T']
+    all_codons = sorted([''.join(codon) for codon in itertools.product(nucleotides, repeat=3)])
+    codon_usage_per_contig = dict()
     for record in chunk:
+        codon_counts = np.zeros(len(all_codons), dtype=int)
         for gene in finder.find_genes(record.sequence):
+            total_codons = len(gene.sequence())// 3
+            for i in range(0, len(gene.sequence()),3):
+                codon = gene.sequence()[i:i+3]
+                if codon in all_codons:
+                    codon_counts[all_codons.index(codon)] += 1
+
             seq = pyhmmer.easel.TextSequence(
                 name=record.identifier.encode(), sequence=gene.translate()
             ).digitize(alphabet)
             digitized.append(seq)
+
+        if np.sum(codon_counts) > 0:
+            codon_frequencies = codon_counts / np.sum(codon_counts)
+        else:
+            codon_frequencies = np.zeros(len(all_codons), dtype=float)
+
+        codon_usage_per_contig[ContigID(int(record.identifier))] = codon_frequencies
 
     for hmm, top_hits in zip(hmms, pyhmmer.hmmsearch(hmms, digitized)):
         marker_name = MarkerName(hmm.name.decode())
@@ -270,7 +290,7 @@ def process_chunk(
                 markers[ContigID(int(hit.name.decode()))].add(marker_id)
 
     return [
-        (name, np.array(list(ids), dtype=np.uint8)) for (name, ids) in markers.items()
+        (name, np.array(list(ids), dtype=np.uint8), codon_usage_per_contig[name]) for (name, ids) in markers.items()
     ]
 
 
