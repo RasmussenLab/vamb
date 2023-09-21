@@ -429,17 +429,18 @@ class ClusterGenerator:
         distance"""
 
         medoid = seed
+        tried: set[int] = {medoid}
         cluster, distances, local_density = _sample_medoid(
             self.matrix, self.lengths, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
         )
-        candidates = self.rng.choices(
-            cluster.tolist(), k=min(len(cluster), self.maxsteps)
-        )
-        self.rng.shuffle(candidates)
+        candidates: list[int] = [i for i in cluster.tolist() if i not in tried]
+        candidates = self.rng.sample(candidates, k=min(len(candidates), self.maxsteps))
         i = 0
 
         while i < len(candidates):
             sampled_medoid = candidates[i]
+            tried.add(sampled_medoid)
+
             sampling = _sample_medoid(
                 self.matrix,
                 self.lengths,
@@ -454,13 +455,14 @@ class ClusterGenerator:
             # we move the medoid and start over
             if sample_density > local_density:
                 medoid = sampled_medoid
-                cluster = sample_cluster
                 distances = sample_distances
                 local_density = sample_density
-                candidates = self.rng.choices(
-                    cluster.tolist(), k=min(len(cluster), self.maxsteps)
+                candidates: list[int] = [
+                    i for i in sample_cluster.tolist() if i not in tried
+                ]
+                candidates = self.rng.sample(
+                    candidates, k=min(len(candidates), self.maxsteps)
                 )
-                self.rng.shuffle(candidates)
                 i = 0
             else:
                 i += 1
