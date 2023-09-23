@@ -8,6 +8,8 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
+from time import time
+import warnings
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -354,6 +356,7 @@ class VAE(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
+        start_time: float,
         logfile,
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
         self.train()
@@ -364,7 +367,7 @@ class VAE(_nn.Module):
         epoch_celoss = 0.0
 
         if epoch in batchsteps:
-            data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
+            data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)  # type: ignore
 
         for depths_in, tnf_in, weights in data_loader:
             depths_in.requires_grad = True
@@ -392,9 +395,11 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
 
         if logfile is not None:
+            elapsed = time() - start_time
             print(
-                "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
+                "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tSSE: {:.6f}\tKLD: {:.4f}\tBatchsize: {}\tSeconds: {:.2f}".format(
                     epoch + 1,
+                    elapsed,
                     epoch_loss / len(data_loader),
                     epoch_celoss / len(data_loader),
                     epoch_sseloss / len(data_loader),
@@ -534,28 +539,41 @@ class VAE(_nn.Module):
         if nepochs < 1:
             raise ValueError("Minimum 1 epoch, not {nepochs}")
 
-        if batchsteps is None:
-            batchsteps_set: set[int] = set()
+        if batchsteps is None or len(batchsteps) == 0:
+            sorted_batch_steps: list[int] = []
         else:
             # First collect to list in order to allow all element types, then check that
             # they are integers
-            batchsteps = list(batchsteps)
             if not all(isinstance(i, int) for i in batchsteps):
                 raise ValueError("All elements of batchsteps must be integers")
-            if max(batchsteps, default=0) >= nepochs:
-                raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:  # type: ignore
+            sorted_batch_steps = sorted(set(batchsteps))
+            if sorted_batch_steps[0] < 1:
                 raise ValueError(
-                    f"Last batch size of {last_batchsize} exceeds dataset length "
-                    f"of {len(dataloader.dataset)}. "  # type: ignore
+                    f"Minimum of batchsteps must be 1, not {sorted_batch_steps[0]}"
+                )
+            if sorted_batch_steps[-1] >= nepochs:
+                raise ValueError("Max batchsteps must not equal or exceed nepochs")
+
+            n_contigs = len(dataloader.dataset)  # type: ignore
+            starting_batch_size: int = dataloader.batch_size  # type: ignore
+            if n_contigs < starting_batch_size:
+                raise ValueError(
+                    f"Starting batch size of {starting_batch_size} exceeds dataset length "
+                    f"of {n_contigs}. "
                     "This means you have too few contigs left after filtering to train. "
                     "It is not adviced to run Vamb with fewer than 10,000 sequences "
                     "after filtering. "
                     "Please check the Vamb log file to see where the sequences were "
                     "filtered away, and verify BAM files has sensible content."
                 )
-            batchsteps_set = set(batchsteps)
+            maximum_batch_steps = (n_contigs // starting_batch_size).bit_length() - 1
+            if maximum_batch_steps < len(sorted_batch_steps):
+                warnings.warn(
+                    f"Requested {len(sorted_batch_steps)} batch steps, but with a starting "
+                    f"batch size of {starting_batch_size} and {n_contigs} contigs, "
+                    f"only the first {maximum_batch_steps} batch steps can be used."
+                )
+                sorted_batch_steps = sorted_batch_steps[:maximum_batch_steps]
 
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
@@ -574,8 +592,8 @@ class VAE(_nn.Module):
             print("\tN epochs:", nepochs, file=logfile)
             print("\tStarting batch size:", dataloader.batch_size, file=logfile)
             batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps_set)))
-                if batchsteps_set
+                ", ".join(map(str, sorted_batch_steps))
+                if len(sorted_batch_steps) > 0
                 else "None"
             )
             print("\tBatchsteps:", batchsteps_string, file=logfile)
@@ -586,7 +604,7 @@ class VAE(_nn.Module):
         # Train
         for epoch in range(nepochs):
             dataloader = self.trainepoch(
-                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+                dataloader, epoch, optimizer, sorted_batch_steps, time(), logfile
             )
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
