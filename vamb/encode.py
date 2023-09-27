@@ -52,6 +52,7 @@ def set_batchsize(
 def make_dataloader(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
+    cub: _np.ndarray,
     lengths: _np.ndarray,
     batchsize: int = 256,
     destroy: bool = False,
@@ -74,17 +75,17 @@ def make_dataloader(
         DataLoader: An object feeding data to the VAE
     """
 
-    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
-        raise ValueError("TNF and RPKM must be Numpy arrays")
+    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray) or not isinstance(cub, _np.ndarray):
+        raise ValueError("TNF, RPKM and CUB must be Numpy arrays")
 
     if batchsize < 1:
         raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
 
-    if len(rpkm) != len(tnf) or len(tnf) != len(lengths):
-        raise ValueError("Lengths of RPKM, TNF and lengths arrays must be the same")
+    if len(rpkm) != len(tnf) or len(tnf) != len(lengths) or len(cub) != len(lengths):
+        raise ValueError("Lengths of RPKM, TNF, CUB and lengths arrays must be the same")
 
-    if not (rpkm.dtype == tnf.dtype == _np.float32):
-        raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
+    if not (rpkm.dtype == tnf.dtype == cub.dtype ==  _np.float32):
+        raise ValueError("TNF, RPKM and CUB must be Numpy arrays of dtype float32")
 
     if len(lengths) < batchsize:
         raise ValueError(
@@ -98,6 +99,7 @@ def make_dataloader(
     if not destroy:
         rpkm = rpkm.copy()
         tnf = tnf.copy()
+        cub = cub.copy()
 
     # Normalize samples to have same depth
     sample_depths_sum = rpkm.sum(axis=0)
@@ -133,6 +135,9 @@ def make_dataloader(
     _vambtools.zscore(tnf, axis=0, inplace=True)
     total_abundance.shape = (len(total_abundance), 1)
 
+    # Normalize CUB
+    _vambtools.zscore(cub, axis=0, inplace=True)
+
     # Create weights
     lengths = (lengths).astype(_np.float32)
     weights = _np.log(lengths).astype(_np.float32) - 5.0
@@ -144,10 +149,11 @@ def make_dataloader(
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
     total_abundance_tensor = _torch.from_numpy(total_abundance)
+    cubtensor = _torch.from_numpy(cub)
     weightstensor = _torch.from_numpy(weights)
     n_workers = 4 if cuda else 1
     dataset = _TensorDataset(
-        depthstensor, tnftensor, total_abundance_tensor, weightstensor
+        depthstensor, tnftensor, total_abundance_tensor, cubtensor, weightstensor
     )
     dataloader = _DataLoader(
         dataset=dataset,
@@ -229,6 +235,7 @@ class VAE(_nn.Module):
         self.usecuda = cuda
         self.nsamples = nsamples
         self.ntnf = 103
+        self.ncub = 64
         self.alpha = alpha
         self.beta = beta
         self.nhiddens = nhiddens
@@ -244,7 +251,7 @@ class VAE(_nn.Module):
         # Add all other hidden layers
         for nin, nout in zip(
             # + 1 for the total abundance
-            [self.nsamples + self.ntnf + 1] + self.nhiddens,
+            [self.nsamples + self.ntnf + 1 + self.ncub] + self.nhiddens,
             self.nhiddens,
         ):
             self.encoderlayers.append(_nn.Linear(nin, nout))
@@ -259,7 +266,7 @@ class VAE(_nn.Module):
             self.decodernorms.append(_nn.BatchNorm1d(nout))
 
         # Reconstruction (output) layer. + 1 for the total abundance
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + self.ntnf + 1)
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nsamples + self.ntnf + 1 + self.ncub)
 
         # Activation functions
         self.relu = _nn.LeakyReLU()
@@ -298,7 +305,7 @@ class VAE(_nn.Module):
 
         return latent
 
-    def _decode(self, tensor: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def _decode(self, tensor: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         tensors = list()
 
         for decoderlayer, decodernorm in zip(self.decoderlayers, self.decodernorms):
@@ -307,24 +314,25 @@ class VAE(_nn.Module):
 
         reconstruction = self.outputlayer(tensor)
 
-        # Decompose reconstruction to depths and tnf signal
+        # Decompose reconstruction to depths and tnf and cub
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
         abundance_out = reconstruction.narrow(1, self.nsamples + self.ntnf, 1)
+        cub_out = reconstruction.narrow(1, self.nsamples + self.ntnf + 1, self.ncub)
 
         depths_out = _softmax(depths_out, dim=1)
 
-        return depths_out, tnf_out, abundance_out
+        return depths_out, tnf_out, abundance_out, cub_out
 
     def forward(
-        self, depths: Tensor, tnf: Tensor, abundance: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        tensor = _torch.cat((depths, tnf, abundance), 1)
+        self, depths: Tensor, tnf: Tensor, abundance: Tensor, cub: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        tensor = _torch.cat((depths, tnf, abundance, cub), 1)
         mu = self._encode(tensor)
         latent = self.reparameterize(mu)
-        depths_out, tnf_out, abundance_out = self._decode(latent)
+        depths_out, tnf_out, abundance_out , cub_out= self._decode(latent)
 
-        return depths_out, tnf_out, abundance_out, mu
+        return depths_out, tnf_out, abundance_out, cub_out, mu
 
     def calc_loss(
         self,
@@ -334,6 +342,8 @@ class VAE(_nn.Module):
         tnf_out: Tensor,
         abundance_in: Tensor,
         abundance_out: Tensor,
+        cub_in: Tensor,
+        cub_out: Tensor,
         mu: Tensor,
         weights: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -341,6 +351,9 @@ class VAE(_nn.Module):
         # Add 1e-9 to depths_out to avoid numerical instability.
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+
+        cubsse = (cub_out - cub_in).pow(2).sum(dim=1)
+
         kld = 0.5 * (mu.pow(2)).sum(dim=1)
 
         # Avoid having the denominator be zero
@@ -353,12 +366,15 @@ class VAE(_nn.Module):
 
         ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
         sse_weight = self.alpha / self.ntnf
+
+        cubsse_weight = self.alpha / self.ncub
         kld_weight = 1 / (self.nlatent * self.beta)
         weighed_ab = ab_sse * ab_sse_weight
         weighed_ce = ce * ce_weight
         weighed_sse = sse * sse_weight
+        weighed_cubsse = cubsse * cubsse_weight
         weighed_kld = kld * kld_weight
-        reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
+        reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_cubsse
         loss = (reconstruction_loss + weighed_kld) * weights
 
         return (
@@ -366,6 +382,7 @@ class VAE(_nn.Module):
             weighed_ab.mean(),
             weighed_ce.mean(),
             weighed_sse.mean(),
+            weighed_cubsse.mean(),
             weighed_kld.mean(),
         )
 
@@ -376,7 +393,7 @@ class VAE(_nn.Module):
         optimizer,
         batchsteps: list[int],
         logfile,
-    ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
+    ) -> _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor]]:
         self.train()
 
         epoch_loss = 0.0
@@ -388,29 +405,33 @@ class VAE(_nn.Module):
         if epoch in batchsteps:
             data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
 
-        for depths_in, tnf_in, abundance_in, weights in data_loader:
+        for depths_in, tnf_in, abundance_in, cub_in, weights in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
             abundance_in.requires_grad = True
+            cub_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                cub_in = cub_in.cuda()
                 weights = weights.cuda()
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, abundance_out, mu = self(
-                depths_in, tnf_in, abundance_in
+            depths_out, tnf_out, abundance_out, cub_out, mu = self(
+                depths_in, tnf_in, abundance_in, cub_in
             )
 
-            loss, ab_sse, ce, sse, kld = self.calc_loss(
+            loss, ab_sse, ce, sse, cubsse, kld = self.calc_loss(
                 depths_in,
                 depths_out,
                 tnf_in,
                 tnf_out,
                 abundance_in,
                 abundance_out,
+                cub_in,
+                cub_out,
                 mu,
                 weights,
             )
@@ -458,7 +479,7 @@ class VAE(_nn.Module):
             data_loader, data_loader.batch_size, encode=True
         )
 
-        depths_array, _, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -468,14 +489,15 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, ab, _ in new_data_loader:
+            for depths, tnf, ab, cub, _ in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
+                    cub = cub.cuda()
 
                 # Evaluate
-                _, _, _, mu = self(depths, tnf, ab)
+                _, _, _, _, mu = self(depths, tnf, ab, cub)
 
                 if self.usecuda:
                     mu = mu.cpu()
@@ -543,7 +565,7 @@ class VAE(_nn.Module):
 
     def trainmodel(
         self,
-        dataloader: _DataLoader[tuple[Tensor, Tensor, Tensor]],
+        dataloader: _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor]],
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
