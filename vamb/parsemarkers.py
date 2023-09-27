@@ -181,6 +181,9 @@ class Markers:
             )
 
         marker_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
+
+        cub_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
+
         with Pool(n_processes) as pool:
             for sub_result in pool.imap_unordered(
                 work_per_process,
@@ -188,13 +191,14 @@ class Markers:
                     zip(paths, itertools.repeat(hmm_path), itertools.repeat(name_to_id))
                 ),
             ):
-                for contig_id, markers in sub_result:
+                for contig_id, markers, codon_usage_bias in sub_result:
                     marker_list[contig_id] = markers
+                    cub_list[contig_id] = codon_usage_bias
 
         shutil.rmtree(tmpdir_to_create)
         markers = cls(marker_list, marker_names, refhash)
 
-        return markers
+        return markers, cub_list
 
 
 # Some markers have different names, but should be treated as the same SCG.
@@ -329,7 +333,7 @@ def process_chunk(
 # The return type here is optimised for a small memory footprint.
 def work_per_process(
     args: tuple[Path, Path, dict[MarkerName, MarkerID]]
-) -> list[tuple[ContigID, np.ndarray]]:
+) -> list[tuple[ContigID, np.ndarray, np.ndarray]]:
     (contig_path, hmmpath, name_to_id) = args
     with open(hmmpath, "rb") as file:
         hmms = list(pyhmmer.plan7.HMMFile(file))
@@ -337,7 +341,7 @@ def work_per_process(
     # Chunk up the FASTA file for memory efficiency reasons, while still
     # allowing pyhmmer to scan multiple sequences at once for speed
     chunk: list[FastaEntry] = []
-    result: list[tuple[ContigID, np.ndarray]] = []
+    result: list[tuple[ContigID, np.ndarray, np.ndarray]] = []
     finder = pyrodigal.GeneFinder(meta=True)
     with open(contig_path, "rb") as file:
         for record in byte_iterfasta(file):
