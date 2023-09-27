@@ -96,10 +96,6 @@ class TestDataLoader(unittest.TestCase):
             copy_tnfs[bad_tnf, :] = 0
             mask[bad_tnf] = False
 
-        for bad_rpkm in [1, 4, 11, 19]:
-            copy_rpkm[bad_rpkm, :] = 0
-            mask[bad_rpkm] = False
-
         (dl, mask2) = vamb.encode.make_dataloader(
             copy_rpkm, copy_tnfs, self.lens, batchsize=32
         )
@@ -108,11 +104,25 @@ class TestDataLoader(unittest.TestCase):
 
     def test_single_sample(self):
         single_rpkm = self.rpkm[:, [0]]
+        copy_single = single_rpkm.copy()
         (dl, mask) = vamb.encode.make_dataloader(
             single_rpkm, self.tnfs.copy(), self.lens, batchsize=32, destroy=True
         )
-        self.assertLess(np.abs(np.mean(single_rpkm)), 1e-6)
-        self.assertLess(abs(np.std(single_rpkm) - 1), 1e-6)
+        # When destroying a single sample, RPKM is set to 1.0
+        self.assertAlmostEqual(np.abs(np.mean(single_rpkm)), 1.0)
+        self.assertLess(abs(np.std(single_rpkm)), 1e-6)
+
+        # ... and the abundance are the same abundances as before,
+        # except normalized and scaled. We test that they are ordered
+        # in the same order
+        self.assertTrue(
+            (
+                torch.argsort(dl.dataset.tensors[2], dim=0)
+                == torch.argsort(torch.from_numpy(copy_single), dim=0)
+            )
+            .all()
+            .item()
+        )
 
     def test_iter(self):
         bs = 32
@@ -126,14 +136,14 @@ class TestDataLoader(unittest.TestCase):
             self.assertEqual(M.shape[0], bs)
 
         # Check it iterates the right order (rpkm, tnfs)
-        rpkm, tnfs, weights = next(iter(dl))
+        rpkm, tnfs, abundance, weights = next(iter(dl))
         self.nearly_same(np.sum(rpkm.numpy(), axis=1), np.ones(bs))
 
     def test_randomized(self):
         (dl, mask) = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=64
         )
-        rpkm, tnfs, weights = next(iter(dl))
+        rpkm, tnfs, abundances, weights = next(iter(dl))
 
         # Test that first batch is not just the first 64 elements.
         # Could happen, but vanishingly unlikely.
@@ -177,11 +187,9 @@ class TestVAE(unittest.TestCase):
         dl, mask = vamb.encode.make_dataloader(
             rpkm_copy, tnfs_copy, self.lens, batchsize=16, destroy=True
         )
-        di = torch.Tensor(rpkm_copy)
-        ti = torch.Tensor(tnfs_copy)
-        we = dl.dataset.tensors[2]
-        do, to, mu = vae(di, ti)
-        start_loss = vae.calc_loss(di, do, ti, to, mu, we)[0].data.item()
+        (di, ti, ai, we) = next(iter(dl))
+        do, to, ao, mu = vae(di, ti, ai)
+        start_loss = vae.calc_loss(di, do, ti, to, ao, ai, mu, we)[0].data.item()
         iobuffer = io.StringIO()
 
         with tempfile.TemporaryFile() as file:
@@ -189,8 +197,8 @@ class TestVAE(unittest.TestCase):
             vae.trainmodel(
                 dl, nepochs=3, batchsteps=[1, 2], logfile=iobuffer, modelfile=file
             )
-            do, to, mu = vae(di, ti)
-            end_loss = vae.calc_loss(di, do, ti, to, mu, we)[0].data.item()
+            do, to, ao, mu = vae(di, ti, ai)
+            end_loss = vae.calc_loss(di, do, ti, to, ao, ai, mu, we)[0].data.item()
             self.assertLess(end_loss, start_loss)
 
             # Also test save/load
