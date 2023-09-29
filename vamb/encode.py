@@ -125,6 +125,7 @@ def make_dataloader(
     rpkm /= nonzero_total_abundance.reshape((-1, 1))
 
     # Normalize TNF and total abundance to make SSE loss work better
+    total_abundance = _np.log(total_abundance.clip(min=0.001))
     _vambtools.zscore(total_abundance, inplace=True)
     _vambtools.zscore(tnf, axis=0, inplace=True)
     total_abundance.shape = (len(total_abundance), 1)
