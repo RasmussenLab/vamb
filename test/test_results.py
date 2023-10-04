@@ -91,14 +91,13 @@ class TestEncodingResult(unittest.TestCase):
         )
 
         vae = vamb.encode.VAE(6)
-        dl, mask = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             self.rpkm.copy(), self.tnfs, self.lens, batchsize=16
         )
         vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
         latent = vae.encode(dl)
 
         self.assertIsInstance(latent, np.ndarray)
-        self.assertIsInstance(mask, np.ndarray)
 
     if TEST_UNSTABLE_HASHES:
 
@@ -108,7 +107,7 @@ class TestEncodingResult(unittest.TestCase):
             np.random.seed(0)
             random.seed(0)
             vae = vamb.encode.VAE(6)
-            dl, mask = vamb.encode.make_dataloader(
+            dl = vamb.encode.make_dataloader(
                 self.rpkm, self.tnfs, self.lens, batchsize=16
             )
             vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2])
