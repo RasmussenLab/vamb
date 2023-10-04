@@ -744,6 +744,7 @@ def run(
 
     log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
     log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
+    log("Random seed is " + str(vamb_options.seed), logfile, 1)
     begintime = time.time()
 
     # Get TNFs, save as npz
@@ -986,7 +987,7 @@ def main():
         "--seed",
         metavar="",
         type=int,
-        default=0,
+        default=int.from_bytes(os.urandom(8), "little"),
         help="Random seed [random] (determinism not guaranteed)",
     )
 
