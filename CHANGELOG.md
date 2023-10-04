@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.2.0
+* Several details of the clustering algorithm has been rehauled.
+  It now returns more accurate clusters and may be faster in some circumstances.
+  However, GPU clustering may be significantly slower. (#198)
+* Vamb now uses both relative and absolute abundances in the encoder, compared
+  to only the relative ones before. This improves binning, especially when using
+  a low number of samples (#210)
+* Vamb now correctly uses a random seed on each invokation (#213)
+* The `benchmark` module of Vamb has been removed, as it is superseded by our
+  new benchmarking tool https://github.com/jakobnissen/VambBenchmarks.jl
+* Improved error message when the reference hash doesn't match (#191)
+* Various bugfixes
+* The printing of epoch losses has been changed (#211)
+
 ## v4.1.3
 * Fix a bug that resulting in poor clustering results (#179)
 
