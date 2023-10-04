@@ -17,7 +17,7 @@ and tnf in the latent space under gaussian noise.
 
 Usage:
 >>> vae = VAE(nsamples=6)
->>> dataloader, mask = make_dataloader(depths, tnf, lengths)
+>>> dataloader = make_dataloader(depths, tnf, lengths)
 >>> vae.trainmodel(dataloader)
 >>> latent = vae.encode(dataloader) # Encode to latent representation
 >>> latent.shape
@@ -56,24 +56,22 @@ def make_dataloader(
     batchsize: int = 256,
     destroy: bool = False,
     cuda: bool = False,
-) -> tuple[_DataLoader[tuple[Tensor, Tensor, Tensor]], _np.ndarray]:
-    """Create a DataLoader and a contig mask from RPKM and TNF.
+) -> _DataLoader:
+    """Create a DataLoader from RPKM, TNF and lengths.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
-    The data are normalized versions of the input datasets, with zero-contigs,
-    i.e. contigs where a row in either TNF or RPKM are all zeros, removed.
-    The mask is a boolean mask designating which contigs have been kept.
+    The data are normalized versions of the input datasets.
 
     Inputs:
         rpkm: RPKM matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x N_TNF)
+        lengths: Numpy array of sequence length (N_contigs)
         batchsize: Starting size of minibatches for dataloader
         destroy: Mutate rpkm and tnf array in-place instead of making a copy.
         cuda: Pagelock memory of dataloader (use when using GPU acceleration)
 
     Outputs:
         DataLoader: An object feeding data to the VAE
-        mask: A boolean mask of which contigs are kept
     """
 
     if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
@@ -88,7 +86,13 @@ def make_dataloader(
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
 
-    ### Copy arrays and mask them ###
+    if len(lengths) < batchsize:
+        raise ValueError(
+            "Fewer sequences left after filtering than the batch size. "
+            + "This probably means you try to run on a too small dataset (below ~5k sequences), "
+            + "Check the log file, and verify BAM file content is sensible."
+        )
+
     # Copy if not destroy - this way we can have all following operations in-place
     # for simplicity
     if not destroy:
@@ -103,16 +107,15 @@ def make_dataloader(
         )
     rpkm *= 1_000_000 / sample_depths_sum
 
-    mask = tnf.sum(axis=1) != 0
-    if mask.sum() < batchsize:
+    zero_tnf = tnf.sum(axis=1) == 0
+    smallest_index = _np.argmax(zero_tnf)
+    if zero_tnf[smallest_index]:
         raise ValueError(
-            "Fewer sequences left after filtering than the batch size. "
-            + "This probably means you try to run on a too small dataset (below ~10k sequences), "
-            + "or that nearly all sequences were filtered away. Check the log file, "
-            + "and verify BAM file content is sensible."
+            f"TNF row at index {smallest_index} is all zeros. "
+            + "This implies that the sequence contained no 4-mers of A, C, G, T or U, "
+            + "making this sequence uninformative. This is probably a mistake. "
+            + "Verify that the sequence contains usable information (e.g. is not all N's)"
         )
-    _vambtools.numpy_inplace_maskarray(rpkm, mask)
-    _vambtools.numpy_inplace_maskarray(tnf, mask)
 
     total_abundance = rpkm.sum(axis=1)
 
@@ -131,7 +134,7 @@ def make_dataloader(
     total_abundance.shape = (len(total_abundance), 1)
 
     # Create weights
-    lengths = (lengths[mask]).astype(_np.float32)
+    lengths = (lengths).astype(_np.float32)
     weights = _np.log(lengths).astype(_np.float32) - 5.0
     weights[weights < 2.0] = 2.0
     weights *= len(weights) / weights.sum()
@@ -155,7 +158,7 @@ def make_dataloader(
         pin_memory=cuda,
     )
 
-    return dataloader, mask
+    return dataloader
 
 
 class VAE(_nn.Module):

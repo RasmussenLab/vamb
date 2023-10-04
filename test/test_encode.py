@@ -22,13 +22,13 @@ class TestDataLoader(unittest.TestCase):
         # Bad rpkm
         with self.assertRaises(ValueError):
             vamb.encode.make_dataloader(
-                [[1, 2, 3]], self.tnfs, np.ndarray([2000]), batchsize=32
+                [[1, 2, 3]], self.tnfs, self.lens, batchsize=32
             )
 
         # bad tnfs
         with self.assertRaises(ValueError):
             vamb.encode.make_dataloader(
-                self.rpkm, [[1, 2, 3]], np.ndarray([2000]), batchsize=32
+                self.rpkm, [[1, 2, 3]], self.lens, batchsize=32
             )
 
         # Bad batchsize
@@ -58,13 +58,13 @@ class TestDataLoader(unittest.TestCase):
         copy_rpkm = self.rpkm.copy()
         copy_tnfs = self.tnfs.copy()
 
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=32
         )
         self.nearly_same(self.rpkm, copy_rpkm)
         self.nearly_same(self.tnfs, copy_tnfs)
 
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             copy_rpkm, copy_tnfs, self.lens, batchsize=32, destroy=True
         )
         self.not_nearly_same(self.rpkm, copy_rpkm)
@@ -74,7 +74,7 @@ class TestDataLoader(unittest.TestCase):
         copy_rpkm = self.rpkm.copy()
         copy_tnfs = self.tnfs.copy()
 
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             copy_rpkm, copy_tnfs, self.lens, batchsize=32, destroy=True
         )
 
@@ -87,25 +87,10 @@ class TestDataLoader(unittest.TestCase):
         self.nearly_same(np.sum(copy_rpkm, axis=1), np.ones(copy_rpkm.shape[0]))
         self.assertTrue(np.all(copy_rpkm >= 0.0))
 
-    def test_mask(self):
-        copy_rpkm = self.rpkm.copy()
-        copy_tnfs = self.tnfs.copy()
-        mask = np.ones(len(copy_rpkm)).astype(bool)
-
-        for bad_tnf in [0, 4, 9]:
-            copy_tnfs[bad_tnf, :] = 0
-            mask[bad_tnf] = False
-
-        (dl, mask2) = vamb.encode.make_dataloader(
-            copy_rpkm, copy_tnfs, self.lens, batchsize=32
-        )
-
-        self.assertTrue(np.all(mask == mask2))
-
     def test_single_sample(self):
         single_rpkm = self.rpkm[:, [0]]
         copy_single = single_rpkm.copy()
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             single_rpkm, self.tnfs.copy(), self.lens, batchsize=32, destroy=True
         )
         # When destroying a single sample, RPKM is set to 1.0
@@ -126,7 +111,7 @@ class TestDataLoader(unittest.TestCase):
 
     def test_iter(self):
         bs = 32
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=bs
         )
 
@@ -140,7 +125,7 @@ class TestDataLoader(unittest.TestCase):
         self.nearly_same(np.sum(rpkm.numpy(), axis=1), np.ones(bs))
 
     def test_randomized(self):
-        (dl, mask) = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=64
         )
         rpkm, tnfs, abundances, weights = next(iter(dl))
@@ -184,7 +169,7 @@ class TestVAE(unittest.TestCase):
         vae = vamb.encode.VAE(self.rpkm.shape[1])
         rpkm_copy = self.rpkm.copy()
         tnfs_copy = self.tnfs.copy()
-        dl, mask = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             rpkm_copy, tnfs_copy, self.lens, batchsize=16, destroy=True
         )
         (di, ti, ai, we) = next(iter(dl))
@@ -213,7 +198,7 @@ class TestVAE(unittest.TestCase):
     def test_encoding(self):
         nlatent = 15
         vae = vamb.encode.VAE(self.rpkm.shape[1], nlatent=nlatent)
-        dl, mask = vamb.encode.make_dataloader(
+        dl = vamb.encode.make_dataloader(
             self.rpkm, self.tnfs, self.lens, batchsize=32
         )
         encoding = vae.encode(dl)

@@ -765,7 +765,7 @@ def run(
         1,
     )
 
-    data_loader, mask = vamb.encode.make_dataloader(
+    data_loader = vamb.encode.make_dataloader(
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
@@ -773,14 +773,6 @@ def run(
         destroy=True,
         cuda=vamb_options.cuda,
     )
-    composition.metadata.filter_mask(mask)
-
-    print("", file=logfile)
-    log("Created dataloader and mask", logfile, 0)
-    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
-    n_discarded = len(mask) - mask.sum()
-    log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
-    log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
 
     latent = None
     if vae_options is not None:
