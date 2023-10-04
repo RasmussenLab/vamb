@@ -181,7 +181,6 @@ class Markers:
             )
 
         marker_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
-
         cub_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
 
         with Pool(n_processes) as pool:
@@ -322,6 +321,11 @@ def process_chunk(
         for hit in top_hits:
             if hit.score >= score_cutoff:
                 markers[ContigID(int(hit.name.decode()))].add(marker_id)
+        
+    # after processing all contigs in the chunk, add -1 as the marker for contigs without any marker
+    for record in chunk:
+        if ContigID(int(record.identifier)) not in markers:
+            markers[ContigID(int(record.identifier))].add(-1)
 
     return [
         (name, np.array(list(ids), dtype=np.uint8), codon_usage_per_contig[name]) for (name, ids) in markers.items()
