@@ -67,6 +67,7 @@ def make_dataloader(
         rpkm: RPKM matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x N_TNF)
         lengths: Numpy array of sequence length (N_contigs)
+        CUB: CUB matrix (N_contigs x N_CUB)
         batchsize: Starting size of minibatches for dataloader
         destroy: Mutate rpkm and tnf array in-place instead of making a copy.
         cuda: Pagelock memory of dataloader (use when using GPU acceleration)
@@ -442,18 +443,20 @@ class VAE(_nn.Module):
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
             epoch_sseloss += sse.data.item()
+            epoch_cubloss += cubsse.data.item()
             epoch_celoss += ce.data.item()
             epoch_absseloss += ab_sse.data.item()
 
         if logfile is not None:
             print(
-                "\tTime: {}\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
+                "\tTime: {}\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.6f} CUBSSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
                     datetime.datetime.now().strftime("%H:%M:%S"),
                     epoch + 1,
                     epoch_loss / len(data_loader),
                     epoch_celoss / len(data_loader),
                     epoch_absseloss / len(data_loader),
                     epoch_sseloss / len(data_loader),
+                    epoch_cubloss / len(data_loader),
                     epoch_kldloss / len(data_loader),
                     data_loader.batch_size,
                 ),
