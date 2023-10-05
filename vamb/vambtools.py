@@ -1,6 +1,5 @@
 __doc__ = "Various classes and functions Vamb uses internally."
 
-import sys
 import os as _os
 import gzip as _gzip
 import bz2 as _bz2
@@ -613,15 +612,18 @@ def write_npz(file, array: _np.ndarray):
     _np.savez_compressed(file, array)
 
 
-def concatenate_fasta(
-    outfile: IO[str], inpaths: Iterable[str], minlength: int = 2000, rename: bool = True
+def concatenate_fasta_ios(
+    outfile: IO[str],
+    readers: Iterable[Iterable[bytes]],
+    minlength: int = 2000,
+    rename: bool = True,
 ):
     """Creates a new FASTA file from input paths, and optionally rename contig headers
     to the pattern "S{sample number}C{contig identifier}".
 
     Inputs:
         outpath: Open filehandle for output file
-        inpaths: Iterable of paths to FASTA files to read from
+        readers: Iterable of iterable of bytes to read from, representing FASTA sequences
         minlength: Minimum contig length to keep [2000]
         rename: Rename headers
 
@@ -629,30 +631,42 @@ def concatenate_fasta(
     """
 
     identifiers: set[str] = set()
-    for inpathno, inpath in enumerate(inpaths):
-        try:
-            with Reader(inpath) as infile:
-                # If we rename, seq identifiers only have to be unique for each sample
-                if rename:
-                    identifiers.clear()
+    for reader_no, reader in enumerate(readers):
+        # If we rename, seq identifiers only have to be unique for each sample
+        if rename:
+            identifiers.clear()
 
-                for entry in byte_iterfasta(infile):
-                    if len(entry) < minlength:
-                        continue
+        for entry in byte_iterfasta(reader):
+            if len(entry) < minlength:
+                continue
 
-                    if rename:
-                        entry.rename(f"S{inpathno + 1}C{entry.identifier}".encode())
+            if rename:
+                entry.rename(f"S{reader_no + 1}C{entry.identifier}".encode())
 
-                    if entry.identifier in identifiers:
-                        raise ValueError(
-                            "Multiple sequences would be given "
-                            f'identifier "{entry.identifier}".'
-                        )
-                    identifiers.add(entry.identifier)
-                    print(entry.format(), file=outfile)
-        except Exception as e:
-            print(f"Exception occured when parsing file {inpath}", file=sys.stderr)
-            raise e from None
+            if entry.identifier in identifiers:
+                raise ValueError(
+                    "Multiple sequences would be given "
+                    f'identifier "{entry.identifier}".'
+                )
+            identifiers.add(entry.identifier)
+            print(entry.format(), file=outfile)
+
+
+def concatenate_fasta(
+    outfile: IO[str],
+    inpaths: Iterable[Path],
+    minlength: int = 2000,
+    rename: bool = True,
+):
+    concatenate_fasta_ios(
+        outfile, open_file_iterator(inpaths), minlength=minlength, rename=rename
+    )
+
+
+def open_file_iterator(paths: Iterable[Path]) -> Iterable[Reader]:
+    for path in paths:
+        with Reader(path) as io:
+            yield io
 
 
 def _split_bin(

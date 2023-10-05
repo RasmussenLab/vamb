@@ -391,6 +391,66 @@ class TestBinSplit(unittest.TestCase):
             list(vamb.vambtools.binsplit([(1, [2])], ""))
 
 
+class TestConcatenateFasta(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        rng = random.Random(19)
+        ios = [io.BytesIO(), io.BytesIO()]
+        for i in ios:
+            for _ in range(4):
+                fasta = testtools.make_randseq(rng, 10, 200)
+                i.write(fasta.format().encode())
+                i.write(b"\n")
+
+        cls.file_1 = ios[0]
+        cls.file_2 = ios[1]
+
+    def setUp(self):
+        self.file_1.seek(0)
+        self.file_2.seek(0)
+
+    def test_no_rename(self):
+        out = io.StringIO()
+        vamb.vambtools.concatenate_fasta_ios(
+            out, [self.file_1, self.file_2], minlength=10, rename=False
+        )
+        out.seek(0)
+        data = out.read()
+        self.file_1.seek(0)
+        self.file_2.seek(0)
+        data_1 = self.file_1.read().decode()
+        data_2 = self.file_2.read().decode()
+        self.assertEqual(data, data_1 + data_2)
+
+    def test_rename(self):
+        out = io.StringIO()
+        vamb.vambtools.concatenate_fasta_ios(
+            out, [self.file_1, self.file_2], minlength=10, rename=True
+        )
+        out.seek(0)
+        out_bytes = io.BytesIO(out.read().encode())
+        records_out = list(vamb.vambtools.byte_iterfasta(out_bytes))
+        self.file_1.seek(0)
+        self.file_2.seek(0)
+        records_1 = list(vamb.vambtools.byte_iterfasta(self.file_1))
+        records_2 = list(vamb.vambtools.byte_iterfasta(self.file_2))
+        records_in = records_1 + records_2
+        self.assertEqual(
+            [i.sequence for i in records_out], [i.sequence for i in records_in]
+        )
+        self.assertEqual(len(set(i.identifier for i in records_out)), len(records_out))
+
+        # Check that sequences present in each file now starts with S1 and S2
+        identifier_by_seq_hash = dict()
+        for record in records_out:
+            identifier_by_seq_hash[hash(bytes(record.sequence))] = record.identifier
+
+        for prefix, records in [("S1", records_1), ("S2", records_2)]:
+            for record in records:
+                identifier = identifier_by_seq_hash[hash(bytes(record.sequence))]
+                self.assertTrue(identifier.startswith(prefix))
+
+
 class TestWriteClusters(unittest.TestCase):
     test_clusters = [("C1", set("abc")), ("C2", set("hkjlmn")), ("C3", set("x"))]
     io = io.StringIO()

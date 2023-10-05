@@ -39,6 +39,11 @@ class TestParseBam(unittest.TestCase):
                 testtools.BAM_FILES, None, cp, True, 0.97, 4
             )
 
+        ab2 = vamb.parsebam.Abundance.from_files(
+            testtools.BAM_FILES, None, cp, False, 0.97, 4
+        )
+        self.assertEqual(self.abundance.refhash, ab2.refhash)
+
     def test_bad_metadata_mask(self):
         m = self.comp_metadata
 
@@ -74,6 +79,7 @@ class TestParseBam(unittest.TestCase):
         self.assertEqual(self.abundance.matrix.shape, (nm, 3))
         self.assertEqual(self.abundance.nseqs, nm)
         self.assertEqual(self.abundance.matrix.dtype, np.float32)
+        self.assertEqual(self.abundance.nsamples, 3)
 
     def test_minid(self):
         abundance = vamb.parsebam.Abundance.from_files(
