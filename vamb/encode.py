@@ -391,6 +391,7 @@ class VAE(_nn.Module):
         for depths_in, tnf_in, abundance_in, weights in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
+            abundance_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
