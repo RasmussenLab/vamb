@@ -1072,42 +1072,44 @@ def parse_mmseqs_taxonomy(
     if list(df_mmseq[0]) != list(contignames):
         raise AssertionError(f'The contig names of taxonomy entries are not the same as in the contigs metadata')
 
-    species_column = df_mmseq[df_mmseq[2].isin(["species", "subspecies"])][8].str.split(';').str[6]
-    species_dict = species_column.value_counts()
-    unique_species = sorted(
-        list(species_column.unique()), key=lambda x: species_dict[x], reverse=True
-    )
-    log(
-        f"Found {len(unique_species)} unique species in mmseqs taxonomy file",
-        logfile,
-        1,
-    )
-    if len(unique_species) > n_species:
-        log(
-            f"Pruning the taxonomy tree, only keeping {n_species} most abundant species",
-            logfile,
-            1,
-        )
-        log(
-            f"Removing the species with less than {species_dict[unique_species[n_species]]} contigs",
-            logfile,
-            1,
-        )
-        non_abundant_species = set(unique_species[n_species:])
-        df_mmseq["tax"] = df_mmseq[8]
-        df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), "tax"] = (
-            df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8]
-            .str.split(";")
-            .str[:1]
-            .map(lambda x: ";".join(x))
-        )
-        graph_column = df_mmseq["tax"]
+    # species_column = df_mmseq[df_mmseq[2].isin(["species", "subspecies"])][8].str.split(';').str[6]
+    # species_dict = species_column.value_counts()
+    # unique_species = sorted(
+    #     list(species_column.unique()), key=lambda x: species_dict[x], reverse=True
+    # )
+    # log(
+    #     f"Found {len(unique_species)} unique species in mmseqs taxonomy file",
+    #     logfile,
+    #     1,
+    # )
+    # if len(unique_species) > n_species:
+    #     log(
+    #         f"Pruning the taxonomy tree, only keeping {n_species} most abundant species",
+    #         logfile,
+    #         1,
+    #     )
+    #     log(
+    #         f"Removing the species with less than {species_dict[unique_species[n_species]]} contigs",
+    #         logfile,
+    #         1,
+    #     )
+    #     non_abundant_species = set(unique_species[n_species:])
+    #     df_mmseq["tax"] = df_mmseq[8]
+    #     df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), "tax"] = (
+    #         df_mmseq.loc[df_mmseq[3].isin(non_abundant_species), 8]
+    #         .str.split(";")
+    #         .str[:1]
+    #         .map(lambda x: ";".join(x))
+    #     )
+    #     graph_column = df_mmseq["tax"]
     return graph_column
 
 
 def predict_taxonomy(
-    composition: vamb.parsecontigs.Composition,  # metadata already masked
-    abundance: vamb.parsebam.Abundance,
+    rpkms: np.array, 
+    tnfs: np.array, 
+    lengths: np.array, 
+    contignames: np.array, 
     taxonomy_path: Path,
     n_species: int,
     out_dir: Path,
@@ -1116,12 +1118,6 @@ def predict_taxonomy(
     logfile: IO[str],
 ):
     begintime = time.time()
-    tnfs, lengths = composition.matrix, composition.metadata.lengths
-    contignames = composition.metadata.identifiers
-    if hasattr(abundance, 'matrix'):
-        rpkms = abundance.matrix
-    else:
-        rpkms = abundance
 
     graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
@@ -1141,6 +1137,7 @@ def predict_taxonomy(
         len(nodes),
         nodes,
         table_parent,
+        nhiddens=[512, 512, 512, 512],
         hier_loss=predictor_training_options.ploss,
         cuda=cuda,
     )
@@ -1167,9 +1164,6 @@ def predict_taxonomy(
     log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
     log(f"Number of sequences remaining: {len(mask_vamb) - n_discarded}", logfile, 1)
 
-    names = composition.metadata.identifiers  # already masked
-    lengths_masked = lengths
-
     predictortime = time.time()
     log(
         f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}",
@@ -1195,7 +1189,7 @@ def predict_taxonomy(
     predicted_vector, predicted_labels = model.predict(dataloader_vamb)
 
     log("Writing the taxonomy predictions", logfile, 0)
-    df_gt = pd.DataFrame({"contigs": names, "lengths": lengths_masked})
+    df_gt = pd.DataFrame({"contigs": contignames, "lengths": lengths})
     nodes_ar = np.array(nodes)
 
     log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
@@ -1229,12 +1223,10 @@ def predict_taxonomy(
     )
 
 
-def run_taxonomy_predictor(
+def extract_and_filter_data(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    predictor_training_options: PredictorTrainingOptions,
-    taxonomy_options: TaxonomyOptions,
     logfile: IO[str],
 ):
     composition, abundance = load_composition_and_abundance(
@@ -1243,9 +1235,54 @@ def run_taxonomy_predictor(
         abundance_options=abundance_options,
         logfile=logfile,
     )
+    tnfs, lengths = composition.matrix, composition.metadata.lengths
+    if hasattr(abundance, 'matrix'):
+        rpkms = abundance.matrix
+    else:
+        rpkms = abundance
+
+    _, mask_vamb = vamb.encode.make_dataloader(
+        rpkms,
+        tnfs,
+        lengths,
+    )
+
+    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
+
+    composition.metadata.filter_mask(mask_vamb)
+
+    log(
+        f"{len(composition.metadata.identifiers)} contig names after filtering",
+        logfile,
+        0,
+    )
+    return (
+        rpkms[mask_vamb], 
+        tnfs[mask_vamb], 
+        composition.metadata.lengths,
+        composition.metadata.identifiers,
+    )
+
+
+def run_taxonomy_predictor(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    predictor_training_options: PredictorTrainingOptions,
+    taxonomy_options: TaxonomyOptions,
+    logfile: IO[str],
+):
+    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        logfile=logfile,
+    )
     predict_taxonomy(
-        composition=composition,
-        abundance=abundance,
+        rpkms=rpkms,
+        tnfs=tnfs,
+        lengths=lengths,
+        contignames=contignames,
         taxonomy_path=taxonomy_options.taxonomy_path,
         n_species=taxonomy_options.n_species,
         out_dir=vamb_options.out_dir,
@@ -1267,34 +1304,11 @@ def run_vaevae(
     logfile: IO[str],
 ):
     vae_options = encoder_options.vae_options
-    composition, abundance = load_composition_and_abundance(
+    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
         logfile=logfile,
-    )
-    tnfs, lengths = composition.matrix, composition.metadata.lengths
-    if hasattr(abundance, 'matrix'):
-        rpkms = abundance.matrix
-    else:
-        rpkms = abundance
-
-    dataloader_vamb, mask_vamb = vamb.encode.make_dataloader(
-        rpkms,
-        tnfs,
-        lengths,
-        batchsize=vae_training_options.batchsize,
-        cuda=vamb_options.cuda,
-    )
-
-    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
-
-    composition.metadata.filter_mask(mask_vamb)
-
-    log(
-        f"{len(composition.metadata.identifiers)} contig names after filtering",
-        logfile,
-        0,
     )
 
     if (
@@ -1302,8 +1316,10 @@ def run_vaevae(
     ):
         log("Predicting missing values from mmseqs taxonomy", logfile, 0)
         predict_taxonomy(
-            composition=composition,
-            abundance=abundance,
+            rpkms=rpkms,
+            tnfs=tnfs,
+            lengths=lengths,
+            contignames=contignames,
             taxonomy_path=taxonomy_options.taxonomy_path,
             n_species=taxonomy_options.n_species,
             out_dir=vamb_options.out_dir,
@@ -1326,7 +1342,7 @@ def run_vaevae(
         log("Using mmseqs taxonomy for semisupervised learning", logfile, 0)
         graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
-            contignames=composition.metadata.identifiers,
+            contignames=contignames,
             n_species=taxonomy_options.n_species,
             logfile=logfile,
         )
@@ -1352,6 +1368,13 @@ def run_vaevae(
         logfile=logfile,
     )
 
+    dataloader_vamb, _ = vamb.encode.make_dataloader(
+        rpkms,
+        tnfs,
+        lengths,
+        batchsize=vae_training_options.batchsize,
+        cuda=vamb_options.cuda,
+    )
     dataloader_joint, _ = vamb.h_loss.make_dataloader_concat_hloss(
         rpkms,
         tnfs,
@@ -1419,8 +1442,8 @@ def run_vaevae(
         cluster_options,
         clusterspath,
         latent_both,
-        composition.metadata.identifiers,
-        composition.metadata.lengths,
+        contignames,
+        lengths,
         vamb_options,
         logfile,
         "vaevae_",
@@ -1437,8 +1460,8 @@ def run_vaevae(
             vamb_options.out_dir,
             clusterspath,
             path,
-            composition.metadata.identifiers,
-            composition.metadata.lengths,
+            contignames,
+            lengths,
             vamb_options.min_fasta_output_size,
             logfile,
             separator=cluster_options.binsplit_separator,
