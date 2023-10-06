@@ -7,16 +7,16 @@
 
 vamb \
     --model vaevae \
-    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevae_flat_softmax__fix2 \
+    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevae_flat_softmax_debug_mmseqs_predictor \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vambout/abundance.npz \
-    --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/human_longread_taxonomy_metabuli_otu.tsv \
-    --no_predictor \
+    --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/human_longread_taxonomy_full.tsv \
     -l 64 \
     -e 500 \
     -t 1024 \
     -q  \
     -o C \
+    --cuda \
     --minfasta 200000
 
 # vamb \

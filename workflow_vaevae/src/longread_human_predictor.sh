@@ -5,10 +5,12 @@ run_id=$1
 
 vamb \
     --model taxonomy_predictor \
-    --outdir /home/projects/cpr_10006/people/svekut/long_read_human_kfold_predictor_lengths_${run_id} \
+    --outdir /home/projects/cpr_10006/people/svekut/long_read_human_kfold_predictor_flat_softmax_${run_id} \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vambout/abundance.npz \
     --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/long_read_human_taxonomy_${run_id}.tsv \
     -pe 100 \
-    -pq 25 75 \
-    --cuda
+    -pq  \
+    -pt 1024 \
+    --cuda \
+    -ploss flat_softmax
