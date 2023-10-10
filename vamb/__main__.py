@@ -755,7 +755,7 @@ def run(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    cub_options=CodonUsageBiasOptions,
+    cub_options: CodonUsageBiasOptions,
     encoder_options: EncoderOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,

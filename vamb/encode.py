@@ -400,6 +400,7 @@ class VAE(_nn.Module):
         epoch_loss = 0.0
         epoch_kldloss = 0.0
         epoch_sseloss = 0.0
+        epoch_cubloss = 0.0
         epoch_celoss = 0.0
         epoch_absseloss = 0.0
 
