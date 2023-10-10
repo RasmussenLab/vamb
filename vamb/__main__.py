@@ -137,6 +137,22 @@ class AbundanceOptions:
 
         self.refcheck = refcheck
 
+class CodonUsageBiasOptions:
+    __slots__ = ["path"]
+
+    def __init__(self, cub_path: Optional[Path]):
+        assert isinstance(cub_path, (Path, type(None)))
+
+        # Check if the provided cub_path is a valid file
+        if cub_path is not None:
+            if not cub_path.is_file():
+                raise FileNotFoundError(
+                    f'Not an existing non-directory file: "{str(cub_path)}"'
+                )
+            self.path = cub_path
+        else:
+            self.path = None    
+
 
 class VAEOptions:
     __slots__ = ["nhiddens", "nlatent", "beta", "dropout"]
@@ -502,6 +518,13 @@ def calc_rpkm(
 
     return abundance
 
+# Simply load the CUB data from the .npz file
+def load_cub(path: Path) -> np.ndarray:
+    """Load Codon Usage Bias data from a .npz file."""
+    with np.load(path) as data:
+        lst = data.files
+        cub = data[lst[0]]
+    return cub
 
 def trainvae(
     vae_options: VAEOptions,
@@ -732,6 +755,7 @@ def run(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
+    cub_options=CodonUsageBiasOptions,
     encoder_options: EncoderOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,
@@ -765,9 +789,18 @@ def run(
         1,
     )
 
+    # Get CUBs
+    if cub_options.path is not None:
+        if not cub_options.path.is_file():
+            raise FileNotFoundError(f'Not an existing non-directory file: "{str(cub_options.path)}"')
+        cub_data = load_cub(cub_options.path)
+    else:
+        cub_data = None
+
     data_loader = vamb.encode.make_dataloader(
         abundance.matrix,
         composition.matrix,
+        cub_data,
         composition.metadata.lengths,
         256,  # dummy value - we change this before using the actual loader
         destroy=True,
@@ -1010,6 +1043,15 @@ def main():
         dest="abundancepath",
         type=Path,
         help="path to .npz of RPKM (abundances)",
+    )
+
+    # Codon Usage Bias arguments
+    cubos = parser.add_argument_group(title="Codon Usage Bias options", description=None)
+    cubos.add_argument(
+        "--cub",
+        metavar="",
+        type=Path,
+        help="path to .npz of codon usage bias (CUB)",
     )
 
     # Optional arguments
@@ -1287,6 +1329,8 @@ def main():
         not args.norefcheck,
     )
 
+    cub_options = CodonUsageBiasOptions(args.cub)
+
     if args.model in ("vae", "vae-aae"):
         vae_options = VAEOptions(
             nhiddens=args.nhiddens,
@@ -1388,6 +1432,7 @@ def main():
             vamb_options=vamb_options,
             comp_options=comp_options,
             abundance_options=abundance_options,
+            cub_options=cub_options,
             encoder_options=encoder_options,
             training_options=training_options,
             cluster_options=cluster_options,
