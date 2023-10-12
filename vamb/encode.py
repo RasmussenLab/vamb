@@ -450,7 +450,7 @@ class VAE(_nn.Module):
 
         if logfile is not None:
             print(
-                "\tTime: {}\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.6f} CUBSSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
+                "\tTime: {}\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e} CUBSSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
                     datetime.datetime.now().strftime("%H:%M:%S"),
                     epoch + 1,
                     epoch_loss / len(data_loader),
