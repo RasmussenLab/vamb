@@ -264,7 +264,7 @@ class AAE(nn.Module):
             total_batches_inthis_epoch = len(data_loader)
             time_epoch_0 = time.time()
 
-            for depths_in, tnfs_in, _ in data_loader:  # weights currently unused here
+            for depths_in, tnfs_in, _, _ in data_loader:  # weights, abundances currently unused here
                 nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
@@ -451,7 +451,7 @@ class AAE(nn.Module):
         clust_y_dict: dict[str, set[str]] = dict()
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         with torch.no_grad():
-            for depths_in, tnfs_in, _ in new_data_loader:
+            for depths_in, tnfs_in, _, _ in new_data_loader:
                 nrows, _ = depths_in.shape
                 if self.usecuda:
                     z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()

@@ -25,7 +25,9 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba create -n avamb python=3.9.16
  mamba env update -n avamb --file vamb/workflow_avamb/envs/avamb.yaml
  conda activate avamb 
- cd vamb && pip install -e . && cd ..
+ cd vamb
+ git checkout v4.1.3 # check out chosen version
+ pip install -e . && cd ..
  # Install CheckM2 in checkm2 environment
  git clone https://github.com/chklovski/CheckM2.git 
  mamba create -n checkm2 python=3.8.15
