@@ -13,7 +13,7 @@ keyword=$3
 
 vamb \
     --model vaevae \
-    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_1000 \
+    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_abs \
     --fasta /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/contigs_2kbp.fna.gz \
     --rpkm /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/abundance.npz \
     --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/${dataset}_taxonomy_${run_id}.tsv \
@@ -27,13 +27,13 @@ vamb \
     --cuda \
     --minfasta 200000
 
-vamb \
-    --model reclustering \
-    --latent_path /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_1000/vaevae_latent.npy \
-    --clusters_path /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_1000/vaevae_clusters.tsv  \
-    --fasta /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/contigs_2kbp.fna.gz \
-    --rpkm /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/abundance.npz \
-    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_reclustering_${run_id}_${keyword}_1000 \
-    --hmmout_path /home/projects/cpr_10006/projects/semi_vamb/data/marker_genes/markers_cami_${dataset}.hmmout \
-    --algorithm kmeans \
-    --minfasta 200000
+# vamb \
+#     --model reclustering \
+#     --latent_path /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_1000/vaevae_latent.npy \
+#     --clusters_path /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_${run_id}_${keyword}_1000/vaevae_clusters.tsv  \
+#     --fasta /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/contigs_2kbp.fna.gz \
+#     --rpkm /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/abundance.npz \
+#     --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_out_32_no_predictor_reclustering_${run_id}_${keyword}_1000 \
+#     --hmmout_path /home/projects/cpr_10006/projects/semi_vamb/data/marker_genes/markers_cami_${dataset}.hmmout \
+#     --algorithm kmeans \
+#     --minfasta 200000
