@@ -2,7 +2,7 @@
 
 
 import numpy as np
-from math import log
+from math import log, isfinite
 import time
 from torch.autograd import Variable
 from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
@@ -30,10 +30,23 @@ class AAE(nn.Module):
         _cuda: bool,
         seed: int,
     ):
-        if nsamples is None:
-            raise ValueError(
-                f"Number of samples  should be provided to define the encoder input layer as well as the categorical latent dimension, not {nsamples}"
-            )
+        for variable, name in [
+            (nsamples, "nsamples"),
+            (nhiddens, "nhiddens"),
+            (nlatent_l, "nlatents_l"),
+            (nlatent_y, "nlatents_y"),
+        ]:
+            if variable < 1:
+                raise ValueError(f"{name} must be at least 1, not {variable}")
+
+        real_variables = [(sl, "sl"), (slr, "slr")]
+        if alpha is not None:
+            real_variables.append((alpha, "alpha"))
+        for variable, name in real_variables:
+            if not isfinite(variable) or not (0.0 <= variable <= 1.0):
+                raise ValueError(
+                    f"{name} must be in the interval [0.0, 1.0], not {variable}"
+                )
 
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
@@ -443,7 +456,7 @@ class AAE(nn.Module):
         self.eval()
 
         new_data_loader = set_batchsize(data_loader, 256, encode=True)
-        depths_array, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _ = data_loader.dataset.tensors
 
         length = len(depths_array)
         latent = np.empty((length, self.ld), dtype=np.float32)
