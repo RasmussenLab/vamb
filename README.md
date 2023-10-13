@@ -6,7 +6,7 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 :star: Vamb is benchmarked in CAMI2. Read our interpretations of the results [here.](https://github.com/RasmussenLab/vamb/blob/master/doc/CAMI2.md) :star:
 
-For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial](https://github.com/github/RasmussenLab/blob/master/doc/tutorial.md).
+For more information about the implementation, methodological considerations, and advanced usage of Vamb, see the [Vamb paper in Nature Biotechnology](https://doi.org/10.1038/s41587-020-00777-4), a [blog post](https://go.nature.com/2JzYUvI) by Jakob on the development of Vamb, and the [Vamb tutorial](https://github.com/RasmussenLab/vamb/blob/master/doc/tutorial.md).
 
 :mega: Interested on maximizing the number of high quality bins from your samples?
 Please check out Avamb.
@@ -81,7 +81,7 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 python concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 
-3. Use your favorite aligner to map each your read files back to the FASTA file:
+3. Use your favorite aligner to map each of your read files back to the FASTA file:
 
 ```
 minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
