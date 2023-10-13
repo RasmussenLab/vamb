@@ -8,7 +8,7 @@ keyword=$3
 # 
 vamb \
     --model taxonomy_predictor \
-    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_predictor_${keyword}_${run_id}_layers \
+    --outdir /home/projects/cpr_10006/people/svekut/cami2_${dataset}_predictor_${keyword}_${run_id}_abs_in \
     --fasta /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/contigs_2kbp.fna.gz \
     --rpkm /home/projects/cpr_10006/projects/vamb/data/datasets/cami2_${dataset}/abundance.npz \
     --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/${dataset}_taxonomy_${run_id}.tsv \

@@ -32,12 +32,14 @@ def collate_fn_concat(num_categories, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
-    d = [i[3] for i in batch]
+    d = _torch.stack([i[3] for i in batch])
+    e = [i[4] for i in batch]
     return (
         a,
         b,
         c,
-        F.one_hot(_torch.as_tensor(d), num_classes=max(num_categories, 105))
+        d,
+        F.one_hot(_torch.as_tensor(e), num_classes=max(num_categories, 105))
         .squeeze(1)
         .float(),
     )
@@ -47,22 +49,26 @@ def collate_fn_semisupervised(num_categories, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
-    d = [i[3] for i in batch]
-    e = _torch.stack([i[4] for i in batch])
+    d = _torch.stack([i[3] for i in batch])
+    e = [i[4] for i in batch]
     f = _torch.stack([i[5] for i in batch])
     g = _torch.stack([i[6] for i in batch])
-    h = [i[7] for i in batch]
+    h = _torch.stack([i[7] for i in batch])
+    m = _torch.stack([i[8] for i in batch])
+    n = [i[9] for i in batch]
     return (
         a,
         b,
         c,
-        F.one_hot(_torch.as_tensor(d), num_classes=max(num_categories, 105))
+        d,
+        F.one_hot(_torch.as_tensor(e), num_classes=max(num_categories, 105))
         .squeeze(1)
         .float(),
-        e,
         f,
         g,
-        F.one_hot(_torch.as_tensor(h), num_classes=max(num_categories, 105))
+        h,
+        m,
+        F.one_hot(_torch.as_tensor(n), num_classes=max(num_categories, 105))
         .squeeze(1)
         .float(),
     )
@@ -83,8 +89,8 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
     dataloader, mask = _encode.make_dataloader(
         rpkm, tnf, lengths, batchsize, destroy, cuda
     )
-    depthstensor, tnftensor, weightstensor = dataloader.dataset.tensors
-    return depthstensor, tnftensor, weightstensor, batchsize, n_workers, cuda, mask
+    depthstensor, tnftensor, total_abundance_tensor, weightstensor = dataloader.dataset.tensors
+    return depthstensor, tnftensor, total_abundance_tensor, weightstensor, batchsize, n_workers, cuda, mask
 
 
 def make_dataloader_concat(
@@ -93,6 +99,7 @@ def make_dataloader_concat(
     (
         depthstensor,
         tnftensor,
+        total_abundance_tensor,
         weightstensor,
         batchsize,
         n_workers,
@@ -103,7 +110,7 @@ def make_dataloader_concat(
     )
     labels_int = _np.unique(labels, return_inverse=True)[1][mask]
     dataset = _TensorDataset(
-        depthstensor, tnftensor, weightstensor, _torch.from_numpy(labels_int)
+        depthstensor, tnftensor, total_abundance_tensor, weightstensor, _torch.from_numpy(labels_int)
     )
     dataloader = _DataLoader(
         dataset=dataset,
@@ -120,7 +127,7 @@ def make_dataloader_concat(
 def make_dataloader_labels(
     rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False
 ):
-    _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(
+    _, _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
     labels_int = _np.unique(labels, return_inverse=True)[1][mask]
@@ -168,11 +175,13 @@ def make_dataloader_semisupervised(
         dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
         dataloader_vamb.dataset.tensors[1][indices_unsup_vamb],
         dataloader_vamb.dataset.tensors[2][indices_unsup_vamb],
+        dataloader_vamb.dataset.tensors[3][indices_unsup_vamb],
         dataloader_labels.dataset.tensors[0][indices_unsup_labels],
         dataloader_joint.dataset.tensors[0][indices_sup],
         dataloader_joint.dataset.tensors[1][indices_sup],
         dataloader_joint.dataset.tensors[2][indices_sup],
         dataloader_joint.dataset.tensors[3][indices_sup],
+        dataloader_joint.dataset.tensors[4][indices_sup],
     )
     dataloader_all = _DataLoader(
         dataset=dataset_all,
@@ -505,28 +514,29 @@ class VAEConcat(_encode.VAE):
 
         reconstruction = self.outputlayer(tensor)
 
-        # Decompose reconstruction to depths and tnf signal
+        # Decompose reconstruction to depths, tnf and abundance signal
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
-        labels_out = reconstruction.narrow(1, self.nsamples + self.ntnf, self.nlabels)
+        abundance_out = reconstruction.narrow(1, self.nsamples + self.ntnf, 1)
+        labels_out = reconstruction.narrow(1, self.nsamples + self.ntnf + 1, self.nlabels)
 
         # If multiple samples, apply softmax
         if self.nsamples > 1:
             depths_out = _softmax(depths_out, dim=1)
-            labels_out = _softmax(labels_out, dim=1)
+            # labels_out = _softmax(labels_out, dim=1)
 
-        return depths_out, tnf_out, labels_out
+        return depths_out, tnf_out, abundance_out, labels_out
 
-    def forward(self, depths, tnf, labels):
-        tensor = _torch.cat((depths, tnf, labels), 1)
+    def forward(self, depths, tnf, abundance, labels):
+        tensor = _torch.cat((depths, tnf, abundance, labels), 1)
         mu = self._encode(tensor)
         logsigma = _torch.zeros(mu.size())
         if self.usecuda:
             logsigma = logsigma.cuda()
         latent = self.reparameterize(mu)
-        depths_out, tnf_out, labels_out = self._decode(latent)
+        depths_out, tnf_out, abundance_out, labels_out = self._decode(latent)
 
-        return depths_out, tnf_out, labels_out, mu, logsigma
+        return depths_out, tnf_out, abundance_out, labels_out, mu, logsigma
 
     def calc_loss(
         self,
@@ -534,34 +544,44 @@ class VAEConcat(_encode.VAE):
         depths_out,
         tnf_in,
         tnf_out,
+        abundance_in,
+        abundance_out,
         labels_in,
         labels_out,
         mu,
         logsigma,
         weights,
     ):
-        # If multiple samples, use cross entropy, else use SSE for abundance
-        if self.nsamples > 1:
-            # Add 1e-9 to depths_out to avoid numerical instability.
-            ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
-            ce_weight = (1 - self.alpha) / _log(self.nsamples)
+        ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
+        # Add 1e-9 to depths_out to avoid numerical instability.
+        ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+        kld = 0.5 * (mu.pow(2)).sum(dim=1)
+
+        # Avoid having the denominator be zero
+        if self.nsamples == 1:
+            ce_weight = 0.0
         else:
-            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
-            ce_weight = 1 - self.alpha
+            ce_weight = ((1 - self.alpha) * (self.nsamples - 1)) / (
+                self.nsamples * _log(self.nsamples)
+            )
+
+        ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
+        sse_weight = self.alpha / self.ntnf
+        kld_weight = 1 / (self.nlatent * self.beta)
 
         _, labels_in_indices = labels_in.max(dim=1)
         ce_labels = _nn.CrossEntropyLoss()(labels_out, labels_in_indices)
         ce_labels_weight = 1.0  # TODO: figure out
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1).mean()
-        kld = -0.5 * (1 + logsigma - mu.pow(2) - logsigma.exp()).sum(dim=1).mean()
-        sse_weight = self.alpha / self.ntnf
-        kld_weight = 1 / (self.nlatent * self.beta)
-        loss = (
-            ce * ce_weight
-            + sse * sse_weight
-            + ce_labels * ce_labels_weight
-            + kld * kld_weight
-        ) * weights
+
+        weighed_ab = ab_sse * ab_sse_weight
+        weighed_ce = ce * ce_weight
+        weighed_sse = sse * sse_weight
+        weighed_kld = kld * kld_weight
+        weighed_labels = ce_labels * ce_labels_weight
+
+        reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_labels
+        loss = (reconstruction_loss + weighed_kld) * weights
 
         _, labels_out_indices = labels_out.max(dim=1)
         _, labels_in_indices = labels_in.max(dim=1)
@@ -595,21 +615,23 @@ class VAEConcat(_encode.VAE):
                 collate_fn=data_loader.collate_fn,
             )
 
-        for depths_in, tnf_in, weights, labels_in in data_loader:
+        for depths_in, tnf_in, abundance_in, weights, labels_in in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
+            abundance_in.requires_grad = True
             labels_in.requires_grad = True
 
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                abundance_in = abundance_in.cuda()
                 weights = weights.cuda()
                 labels_in = labels_in.cuda()
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, labels_out, mu, logsigma = self(
-                depths_in, tnf_in, labels_in
+            depths_out, tnf_out, abundance_out, labels_out, mu, logsigma = self(
+                depths_in, tnf_in, abundance_in, labels_in
             )
 
             loss, ce, sse, ce_labels, kld, correct_labels = self.calc_loss(
@@ -617,6 +639,8 @@ class VAEConcat(_encode.VAE):
                 depths_out,
                 tnf_in,
                 tnf_out,
+                abundance_in,
+                abundance_out,
                 labels_in,
                 labels_out,
                 mu,
@@ -681,15 +705,16 @@ class VAEConcat(_encode.VAE):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, weights, labels in new_data_loader:
+            for depths, tnf, ab, weights, labels in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
+                    ab = ab.cuda()
                     labels = labels.cuda()
 
                 # Evaluate
-                _, _, _, mu, _ = self(depths, tnf, labels)
+                _, _, _, _, mu, _ = self(depths, tnf, ab, labels)
 
                 if self.usecuda:
                     mu = mu.cpu()
@@ -769,6 +794,8 @@ class VAEVAE(object):
         depths_out,
         tnf_in,
         tnf_out,
+        abundance_in,
+        abundance_out,
         labels_in,
         labels_out,
         mu_sup,
@@ -779,31 +806,39 @@ class VAEVAE(object):
         logsigma_labels_unsup,
         weights,
     ):
-        # If multiple samples, use cross entropy, else use SSE for abundance
-        if self.VAEVamb.nsamples > 1:
-            # Add 1e-9 to depths_out to avoid numerical instability.
-            ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1).mean()
-            ce_weight = (1 - self.VAEVamb.alpha) / _log(self.VAEVamb.nsamples)
+        ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
+        # Add 1e-9 to depths_out to avoid numerical instability.
+        ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+
+        # Avoid having the denominator be zero
+        if self.VAEVamb.nsamples == 1:
+            ce_weight = 0.0
         else:
-            ce = (depths_out - depths_in).pow(2).sum(dim=1).mean()
-            ce_weight = 1 - self.VAEVamb.alpha
+            ce_weight = ((1 - self.alpha) * (self.nsamples - 1)) / (
+                self.nsamples * _log(self.nsamples)
+            )
+
+        ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
+        sse_weight = self.alpha / self.ntnf
 
         _, labels_in_indices = labels_in.max(dim=1)
         ce_labels = _nn.CrossEntropyLoss()(labels_out, labels_in_indices)
         ce_labels_weight = 1.0  # TODO: figure out
 
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
-        sse_weight = self.VAEVamb.alpha / self.VAEVamb.ntnf
-        kld_weight = 1 / (self.VAEVamb.nlatent * self.VAEVamb.beta)
-        reconstruction_loss = (
-            ce * ce_weight + sse * sse_weight + ce_labels * ce_labels_weight
-        )
+        weighed_ab = ab_sse * ab_sse_weight
+        weighed_ce = ce * ce_weight
+        weighed_sse = sse * sse_weight
+        weighed_labels = ce_labels * ce_labels_weight
+
+        reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_labels
 
         kld_vamb = kld_gauss(mu_sup, logsigma_sup, mu_vamb_unsup, logsigma_vamb_unsup)
         kld_labels = kld_gauss(
             mu_sup, logsigma_sup, mu_labels_unsup, logsigma_labels_unsup
         )
         kld = kld_vamb + kld_labels
+        kld_weight = 1 / (self.nlatent * self.beta)
         kld_loss = kld * kld_weight
 
         loss = (reconstruction_loss + kld_loss) * weights
@@ -856,37 +891,43 @@ class VAEVAE(object):
         for (
             depths_in_sup,
             tnf_in_sup,
+            abundance_in_sup,
             weights_in_sup,
             labels_in_sup,
             depths_in_unsup,
             tnf_in_unsup,
+            abundance_in_unsup,
             weights_in_unsup,
             labels_in_unsup,
         ) in data_loader:
             depths_in_sup.requires_grad = True
             tnf_in_sup.requires_grad = True
+            abundance_in_sup.requires_grad = True
             labels_in_sup.requires_grad = True
             depths_in_unsup.requires_grad = True
             tnf_in_unsup.requires_grad = True
+            abundance_in_unsup.requires_grad = True
             labels_in_unsup.requires_grad = True
 
             if self.VAEVamb.usecuda:
                 depths_in_sup = depths_in_sup.cuda()
                 tnf_in_sup = tnf_in_sup.cuda()
+                abundance_in_sup = abundance_in_sup.cuda()
                 weights_in_sup = weights_in_sup.cuda()
                 labels_in_sup = labels_in_sup.cuda()
                 depths_in_unsup = depths_in_unsup.cuda()
                 tnf_in_unsup = tnf_in_unsup.cuda()
+                abundance_in_unsup = abundance_in_unsup.cuda()
                 weights_in_unsup = weights_in_unsup.cuda()
                 labels_in_unsup = labels_in_unsup.cuda()
 
             optimizer.zero_grad()
 
-            _, _, _, mu_sup, logsigma_sup = self.VAEJoint(
-                depths_in_sup, tnf_in_sup, labels_in_sup
+            _, _, _, _, mu_sup, logsigma_sup = self.VAEJoint(
+                depths_in_sup, tnf_in_sup, abundance_in_sup, labels_in_sup
             )  # use the two-modality latent space
 
-            depths_out_sup, tnf_out_sup = self.VAEVamb._decode(
+            depths_out_sup, tnf_out_sup, abundance_out_sup = self.VAEVamb._decode(
                 self.VAEVamb.reparameterize(mu_sup)
             )  # use the one-modality decoders
             labels_out_sup = self.VAELabels._decode(
@@ -896,13 +937,14 @@ class VAEVAE(object):
             (
                 depths_out_unsup,
                 tnf_out_unsup,
+                abundance_out_unsup,
                 mu_vamb_unsup,
-            ) = self.VAEVamb(depths_in_unsup, tnf_in_unsup)
+            ) = self.VAEVamb(depths_in_unsup, tnf_in_unsup, abundance_in_unsup)
             logsigma_vamb_unsup = _torch.zeros(mu_vamb_unsup.size())
             if self.usecuda:
                 logsigma_vamb_unsup = logsigma_vamb_unsup.cuda()
-            _, _, mu_vamb_sup_s = self.VAEVamb(
-                depths_in_sup, tnf_in_sup
+            _, _, _, mu_vamb_sup_s = self.VAEVamb(
+                depths_in_sup, tnf_in_sup, abundance_in_sup
             )
             logsigma_vamb_sup_s = _torch.zeros(mu_vamb_sup_s.size())
             if self.usecuda:
@@ -922,6 +964,8 @@ class VAEVAE(object):
                 depths_out_unsup,
                 tnf_in_unsup,
                 tnf_out_unsup,
+                abundance_in_unsup,
+                abundance_out_unsup,
                 mu_vamb_unsup,
                 weights_in_unsup,
             )
@@ -943,6 +987,8 @@ class VAEVAE(object):
                 depths_out_sup,
                 tnf_in_sup,
                 tnf_out_sup,
+                abundance_in_sup,
+                abundance_out_sup,
                 labels_in_sup,
                 labels_out_sup,
                 mu_sup,
