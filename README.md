@@ -48,6 +48,8 @@ cd vamb
 pip install -e .
 ```
 
+__note that the master branch is work-in-progress and is expected to have more bugs__
+
 ### Installing by compiling the Cython yourself
 
 If you can't/don't want to use pip/Conda, you can do it the hard way: Get the most recent versions of the Python packages `cython`, `numpy`, `torch` and `pycoverm`. Compile `src/_vambtools.pyx` then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
