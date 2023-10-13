@@ -264,7 +264,8 @@ class AAE(nn.Module):
             total_batches_inthis_epoch = len(data_loader)
             time_epoch_0 = time.time()
 
-            for depths_in, tnfs_in, _, _ in data_loader:  # weights, abundances currently unused here
+            # weights, abundances currently unused here
+            for depths_in, tnfs_in, _, _ in data_loader:
                 nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
