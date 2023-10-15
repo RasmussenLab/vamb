@@ -2,7 +2,7 @@
 Documentation: https://github.com/RasmussenLab/vamb/
 """
 
-__version__ = (4, 1, 3)
+__version__ = (4, 1, 4)
 
 from . import vambtools
 from . import parsebam
