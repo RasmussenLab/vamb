@@ -28,7 +28,7 @@ jobs:
         cache-dependency-path: '**/pyproject.toml'
     - name: Download fixtures
       run: |
-        wget https://drive.google.com/uc?export=download&id=16TCopISaPeXQjsp-0qVcr9t9UKM93OC9
+        wget https://www.dropbox.com/scl/fi/q54wfho3ultb0otq5z3rh/testset_snakemake.zip
         ls -la
         pwd
     # - uses: mamba-org/setup-micromamba@v1
