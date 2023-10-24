@@ -169,7 +169,7 @@ def make_dataloader_concat_hloss(
     return dataloader, mask
 
 
-def permute_indices(n_current: int, n_total: int, seed:int):
+def permute_indices(n_current: int, n_total: int, seed: int):
     rng = _np.random.default_rng(seed)
     x = _np.arange(n_current)
     to_add = int(n_total / n_current)
@@ -194,7 +194,9 @@ def make_dataloader_semisupervised_hloss(
 ):
     n_total = len(dataloader_vamb.dataset)
     indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total, seed)
-    indices_unsup_labels = permute_indices(len(dataloader_labels.dataset), n_total, seed)
+    indices_unsup_labels = permute_indices(
+        len(dataloader_labels.dataset), n_total, seed
+    )
     indices_sup = permute_indices(len(dataloader_joint.dataset), n_total, seed)
     dataset_all = _TensorDataset(
         dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
@@ -222,9 +224,11 @@ def make_dataloader_semisupervised_hloss(
 
 LabelMap = namedtuple("LabelMap", ["to_node", "to_target"])
 
-HierLoss = namedtuple("HierLoss", ["name", "loss_fn", "pred_helper", "pred_fn", "n_labels"])
+HierLoss = namedtuple(
+    "HierLoss", ["name", "loss_fn", "pred_helper", "pred_fn", "n_labels"]
+)
 
-DEFAULT_HIER_LOSS = 'flat_softmax'
+DEFAULT_HIER_LOSS = "flat_softmax"
 
 
 def init_hier_loss(name, tree):
@@ -238,7 +242,7 @@ def init_hier_loss(name, tree):
         ),
         cond_softmax=HierLoss(
             name="cond_softmax",
-            loss_fn= _hlosses_fast.HierSoftmaxCrossEntropy(tree),
+            loss_fn=_hlosses_fast.HierSoftmaxCrossEntropy(tree),
             pred_helper=_hlosses_fast.HierLogSoftmax(tree),
             pred_fn=lambda log_softmax_fn, theta: log_softmax_fn(theta).exp(),
             n_labels=tree.num_nodes() - 1,
@@ -246,8 +250,11 @@ def init_hier_loss(name, tree):
         soft_margin=HierLoss(
             name="soft_margin",
             loss_fn=_hlosses_fast.MarginLoss(
-                tree, with_leaf_targets=False,
-                hardness='soft', margin='incorrect', tau=0.01
+                tree,
+                with_leaf_targets=False,
+                hardness="soft",
+                margin="incorrect",
+                tau=0.01,
             ),
             pred_helper=_hlosses_fast.SumDescendants(tree, strict=False),
             pred_fn=lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
@@ -259,14 +266,16 @@ def init_hier_loss(name, tree):
                 tree, 0.1, permit_root_cut=False, with_leaf_targets=True
             ),
             pred_helper=_hlosses_fast.SumAncestors(tree, exclude_root=True),
-            pred_fn=lambda sum_ancestor_fn, theta: 
-                _torch.exp(_hlosses_fast.multilabel_log_likelihood(
-                sum_ancestor_fn(theta), replace_root=True, temperature=10.0)),
+            pred_fn=lambda sum_ancestor_fn, theta: _torch.exp(
+                _hlosses_fast.multilabel_log_likelihood(
+                    sum_ancestor_fn(theta), replace_root=True, temperature=10.0
+                )
+            ),
             n_labels=tree.num_nodes(),
         ),
     )
     if name not in CONFIG_LOSSES:
-        raise AttributeError(f'Hierarchical loss {name} not found')
+        raise AttributeError(f"Hierarchical loss {name} not found")
     return CONFIG_LOSSES[name]
 
 
@@ -546,7 +555,7 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         ce_labels_weight = 1.0
 
         loss = (
-            ab_sse*ab_sse_weight
+            ab_sse * ab_sse_weight
             + ce * ce_weight
             + sse * sse_weight
             + ce_labels * ce_labels_weight
@@ -724,12 +733,12 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
         if self.VAEVamb.nsamples == 1:
             ce_weight = 0.0
         else:
-            ce_weight = ((1 - self.alpha) * (self.nsamples - 1)) / (
-                self.nsamples * _log(self.nsamples)
+            ce_weight = ((1 - self.VAEVamb.alpha) * (self.VAEVamb.nsamples - 1)) / (
+                self.VAEVamb.nsamples * _log(self.VAEVamb.nsamples)
             )
 
-        ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
-        sse_weight = self.alpha / self.ntnf
+        ab_sse_weight = (1 - self.VAEVamb.alpha) * (1 / self.VAEVamb.nsamples)
+        sse_weight = self.VAEVamb.alpha / self.VAEVamb.ntnf
 
         ce_labels = self.VAEJoint.loss_fn(labels_out, labels_in)
         ce_labels_weight = 1.0  # TODO: figure out
@@ -746,11 +755,19 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
             mu_sup, logsigma_sup, mu_labels_unsup, logsigma_labels_unsup
         )
         kld = kld_vamb + kld_labels
-        kld_weight = 1 / (self.nlatent * self.beta)
+        kld_weight = 1 / (self.VAEVamb.nlatent * self.VAEVamb.beta)
         kld_loss = kld * kld_weight
 
         loss = (reconstruction_loss + kld_loss) * weights
-        return loss.mean(), ce.mean(), sse.mean(), ce_labels.mean(), kld_vamb.mean(), kld_labels.mean(), _torch.tensor(0)
+        return (
+            loss.mean(),
+            ce.mean(),
+            sse.mean(),
+            ce_labels.mean(),
+            kld_vamb.mean(),
+            kld_labels.mean(),
+            _torch.tensor(0),
+        )
 
 
 class VAMB2Label(_nn.Module):
@@ -905,16 +922,6 @@ class VAMB2Label(_nn.Module):
             data_loader, data_loader.batch_size, encode=True
         )
 
-        depths_array, _, _, _ = data_loader.dataset.tensors
-        length = len(depths_array)
-
-        # We make a Numpy array instead of a Torch array because, if we create
-        # a Torch array, then convert it to Numpy, Numpy will believe it doesn't
-        # own the memory block, and array resizes will not be permitted.
-        latent = _np.empty((length, self.n_tree_nodes), dtype=_np.float32)
-        labels_preds = _np.empty((length, ), dtype=_np.int64)
-
-        row = 0
         with _torch.no_grad():
             for depths, tnf, abundances, weights in new_data_loader:
                 # Move input to GPU if requested
@@ -933,13 +940,7 @@ class VAMB2Label(_nn.Module):
                     pred = _infer.argmax_with_confidence(
                         self.specificity, prob.numpy(), 0.5, self.not_trivial
                     )
-
-                latent[row : row + len(prob)] = prob
-                labels_preds[row : row + len(prob)] = pred
-                row += len(prob)
-
-        assert row == length
-        return latent, labels_preds
+                yield prob.numpy(), pred
 
     def save(self, filehandle):
         """Saves the VAE to a path or binary opened file. Load with VAE.load

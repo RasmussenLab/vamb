@@ -24,7 +24,6 @@ def log(string: str, logfile: IO[str], indent: int = 0):
 
 
 def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta):
-
     # There is room for improving the loop below to avoid repeated computation
     # but it runs very fast in any case
     for max_contamination in [0.1, 0.2, 0.3, 0.4, 0.5, 1]:
@@ -47,10 +46,15 @@ def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta
                     continue
                 recall = len(set(marker_list)) / 107
                 contamination = (len(marker_list) - len(set(marker_list))) / len(
-                    marker_list)
+                    marker_list
+                )
                 if contamination <= max_contamination:
-                    F1 = 2 * recall * (1 - contamination) / (
-                                recall + (1 - contamination))
+                    F1 = (
+                        2
+                        * recall
+                        * (1 - contamination)
+                        / (recall + (1 - contamination))
+                    )
                     if F1 > max_F1:
                         max_F1 = F1
                         weight_of_max = cur_weight
@@ -58,7 +62,7 @@ def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta
                     elif F1 == max_F1 and cur_weight <= weight_of_max:
                         weight_of_max = cur_weight
                         max_bin = bin_contig
-        if max_F1 > 0: # if there is a bin with F1 > 0
+        if max_F1 > 0:  # if there is a bin with F1 > 0
             return max_bin
 
 
@@ -134,21 +138,23 @@ def replace_bin_names(data, clusters_labels_map):
     but there is no need to search again if only the bins are different but the contigs are the same.
     This function replaces bin names in the 'orf' column
     with the new bin names from another cluster file given the same contigs.
-    
+
     TODO: refactor the whole file so there is no need for that
-    
+
     Input:
     - data: pd.DataFrame
     - clusters_labels_map: dict, {contig: bin}
-    
+
     Returns a copy of the dataframe with the updated 'orf' column
     """
     data = data.copy()
     data["contig_number"] = data["orf"].str.split(pat=".", n=0, expand=True)[1]
     data["contig_only"] = data["contig_number"].map(lambda x: x.split("_")[0])
     data["old_bin"] = data["orf"].str.split(pat=".", n=0, expand=True)[0]
-    data["new_bin"] = data["contig_only"].map(lambda x: f'bin{clusters_labels_map[x]:06}')
-    data["orf"] = data[["new_bin", "contig_number"]].agg('.'.join, axis=1)
+    data["new_bin"] = data["contig_only"].map(
+        lambda x: f"bin{clusters_labels_map[x]:06}"
+    )
+    data["orf"] = data[["new_bin", "contig_number"]].agg(".".join, axis=1)
     return data
 
 
@@ -187,8 +193,10 @@ def get_marker(
     data = data.query("(qend - qstart) / qlen > 0.4").copy()
     data["contig"] = data["orf"].map(contig_name)
     if min_contig_len is not None:
-        contig_len = {h.split('.')[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
-        data = data[data["contig"].map(lambda c: contig_len[c.split('.')[1]] >= min_contig_len)]
+        contig_len = {h.split(".")[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
+        data = data[
+            data["contig"].map(lambda c: contig_len[c.split(".")[1]] >= min_contig_len)
+        ]
     data = data.drop_duplicates(["gene", "contig"])
 
     if contig_to_marker:
@@ -209,8 +217,8 @@ def get_marker(
             # the original version broke ties by picking the shortest query, so we
             # replicate that here:
             candidates = vs.index[vs == median]
-            c = qlen.loc[candidates].idxmin()  # TODO: linter deletes this variable and breaks things, refactor to not use SQL
-            r = list(sel.query("gene == @c")["contig"])
+            c = qlen.loc[candidates].idxmin()
+            r = list(sel[sel["gene"] == c]["contig"])
             r.sort()
             return r
 
@@ -337,7 +345,7 @@ def cal_num_bins(
                     "--cut_tc",
                     "--cpu",
                     str(num_process),
-                    os.path.split(__file__)[0] + '/marker.hmm',
+                    os.path.split(__file__)[0] + "/marker.hmm",
                     contig_output,
                 ],
                 stdout=hmm_out_log,
@@ -370,17 +378,17 @@ def recluster_bins(
 ):
     contig_dict = {h: seq for h, seq in fasta_iter(contigs_path)}
     embedding = np.load(latents_path)
-    if 'arr_0' in embedding:
-        embedding = embedding['arr_0']
+    if "arr_0" in embedding:
+        embedding = embedding["arr_0"]
     df_clusters = pd.read_csv(clusters_path, delimiter="\t", header=None)
-    if (algorithm == 'dbscan') and predictions_path:
+    if (algorithm == "dbscan") and predictions_path:
         df_gt = pd.read_csv(predictions_path)
-        column = 'predictions'
-        df_gt['genus'] = df_gt[column].str.split(';').str[5].fillna('mock')
-        species = list(set(df_gt['genus']))
+        column = "predictions"
+        df_gt["genus"] = df_gt[column].str.split(";").str[5].fillna("mock")
+        species = list(set(df_gt["genus"]))
         species_ind = {s: i for i, s in enumerate(species)}
         clusters_labels_map = {
-            k: species_ind[v] for k, v in zip(df_gt["contigs"], df_gt['genus'])
+            k: species_ind[v] for k, v in zip(df_gt["contigs"], df_gt["genus"])
         }
     else:
         clusters_labels_map = {
@@ -440,46 +448,57 @@ def recluster_bins(
     log("Finished searching for markers", logfile, 1)
     log(f"Found {len(seeds)} seeds", logfile, 1)
 
-    if algorithm == 'dbscan':
+    if algorithm == "dbscan":
         contig2marker = get_marker(
-            hmmout_path, 
-            min_contig_len=binned_length, 
-            fasta_path=cfasta, 
+            hmmout_path,
+            min_contig_len=binned_length,
+            fasta_path=cfasta,
             orf_finder="prodigal",
-            clusters_dict=clusters_labels_map, 
+            clusters_dict=clusters_labels_map,
             contig_to_marker=True,
-            )
-        log('Running DBSCAN with cosine distance', logfile, 1)
+        )
+        log("Running DBSCAN with cosine distance", logfile, 1)
         extracted_all = []
         for k, v in labels_cluster_map.items():
-            log(f'Label {k}, {len(v)} contigs', logfile, 1)
+            log(f"Label {k}, {len(v)} contigs", logfile, 1)
             indices = [indices_contigs[c] for c in v]
             contignames = contignames_all[indices]
             embedding_new = embedding[indices]
             DBSCAN_results_dict = {}
-            distance_matrix = pairwise_distances(embedding_new, embedding_new, metric='cosine')
+            distance_matrix = pairwise_distances(
+                embedding_new, embedding_new, metric="cosine"
+            )
             length_weight = np.array([len(contig_dict[name]) for name in contignames])
             for eps_value in np.arange(0.01, 0.35, 0.02):
-                dbscan = DBSCAN(eps=eps_value, min_samples=5, n_jobs=num_process, metric="precomputed")
+                dbscan = DBSCAN(
+                    eps=eps_value,
+                    min_samples=5,
+                    n_jobs=num_process,
+                    metric="precomputed",
+                )
                 dbscan.fit(distance_matrix, sample_weight=length_weight)
                 labels = dbscan.labels_
-                log(f'epsilon {eps_value}, {len(set(labels))} labels', logfile, 2)
+                log(f"epsilon {eps_value}, {len(set(labels))} labels", logfile, 2)
                 DBSCAN_results_dict[eps_value] = labels.tolist()
 
-            log('Integrating results', logfile, 1)
+            log("Integrating results", logfile, 1)
 
             extracted = []
             contignames_list = list(contignames)
-            while sum(len(contig_dict[contig]) for contig in contignames_list) >= minfasta:
+            while (
+                sum(len(contig_dict[contig]) for contig in contignames_list) >= minfasta
+            ):
                 if len(contignames_list) == 1:
                     extracted.append(contignames_list)
                     break
 
-                max_bin = get_best_bin(DBSCAN_results_dict,
-                                        contig2marker,
-                                        contignames_list,
-                                        contig_dict,
-                                        minfasta)
+                max_bin = get_best_bin(
+                    DBSCAN_results_dict,
+                    contig2marker,
+                    contignames_list,
+                    contig_dict,
+                    minfasta,
+                )
                 if not max_bin:
                     break
 
@@ -492,13 +511,13 @@ def recluster_bins(
             extracted_all.extend(extracted)
 
         contig2ix = {}
-        log(f'{len(extracted_all)} extracted clusters', logfile, 1)
+        log(f"{len(extracted_all)} extracted clusters", logfile, 1)
         for i, cs in enumerate(extracted_all):
             for c in cs:
                 contig2ix[c] = i
         namelist = contignames_all.copy()
         contig_labels_reclustered = [contig2ix.get(c, -1) for c in namelist]
-    elif algorithm == 'kmeans':
+    elif algorithm == "kmeans":
         name2ix = {name: ix for ix, name in enumerate(contignames_all)}
         contig_labels_reclustered = np.empty_like(contig_labels)
         contig_labels_reclustered.fill(-1)
@@ -508,7 +527,9 @@ def recluster_bins(
             num_bin = len(seed)
 
             if num_bin > 1 and total_size[bin_ix] >= minfasta:
-                contig_indices = [i for i, ell in enumerate(contig_labels) if ell == bin_ix]
+                contig_indices = [
+                    i for i, ell in enumerate(contig_labels) if ell == bin_ix
+                ]
                 re_bin_features = embedding[contig_indices]
 
                 seed_index = [name2ix[s] for s in seed]
@@ -538,5 +559,7 @@ def recluster_bins(
         assert contig_labels_reclustered.min() >= 0
         os.remove(cfasta)
     else:
-        raise AssertionError("Reclustering algorithm must be one of ['dbscan', 'kmeans']")
+        raise AssertionError(
+            "Reclustering algorithm must be one of ['dbscan', 'kmeans']"
+        )
     return contig_labels_reclustered
