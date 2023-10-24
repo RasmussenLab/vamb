@@ -9,6 +9,7 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
+import warnings
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -86,11 +87,12 @@ def make_dataloader(
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
 
-    if len(lengths) < batchsize:
-        raise ValueError(
-            "Fewer sequences left after filtering than the batch size. "
-            + "This probably means you try to run on a too small dataset (below ~5k sequences), "
-            + "Check the log file, and verify BAM file content is sensible."
+    if len(rpkm) < 20000:
+        warnings.warn(
+            f"WARNING: Creating DataLoader with only {len(rpkm)} sequences. "
+            "We normally expect 20,000 sequences or more to prevent overfitting. "
+            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
+            "You may want to lower the beta parameter, or use a different binner altogether."
         )
 
     # Copy if not destroy - this way we can have all following operations in-place
@@ -579,17 +581,6 @@ class VAE(_nn.Module):
                 raise ValueError("All elements of batchsteps must be integers")
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:  # type: ignore
-                raise ValueError(
-                    f"Last batch size of {last_batchsize} exceeds dataset length "
-                    f"of {len(dataloader.dataset)}. "  # type: ignore
-                    "This means you have too few contigs left after filtering to train. "
-                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
-                    "after filtering. "
-                    "Please check the Vamb log file to see where the sequences were "
-                    "filtered away, and verify BAM files has sensible content."
-                )
             batchsteps_set = set(batchsteps)
 
         # Get number of features

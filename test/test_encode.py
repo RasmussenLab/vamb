@@ -46,10 +46,6 @@ class TestDataLoader(unittest.TestCase):
                 self.rpkm.astype(np.float64), self.tnfs, self.lens, batchsize=32
             )
 
-        # Batchsize is too large
-        with self.assertRaises(ValueError):
-            vamb.encode.make_dataloader(self.rpkm, self.tnfs, self.lens, batchsize=256)
-
     def test_destroy(self):
         copy_rpkm = self.rpkm.copy()
         copy_tnfs = self.tnfs.copy()
@@ -154,6 +150,16 @@ class TestVAE(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             vamb.encode.VAE(5, dropout=-0.001)
+
+    def test_samples_too_small(self):
+        vae = vamb.encode.VAE(self.rpkm.shape[1])
+        r = self.rpkm.copy()
+        t = self.tnfs.copy()
+        l = self.lens.copy()
+
+        with self.assertWarns(UserWarning):
+            dl = vamb.encode.make_dataloader(r, t, l, batchsize=64)
+            vae.trainmodel(dl, batchsteps=None, nepochs=2)
 
     def test_loss_falls(self):
         vae = vamb.encode.VAE(self.rpkm.shape[1])
