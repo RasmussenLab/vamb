@@ -240,11 +240,12 @@ class HierLogSoftmax(nn.Module):
 
 
 def multilabel_log_likelihood(
-        scores: torch.Tensor,
-        dim: int = -1,
-        insert_root: bool = False,
-        replace_root: bool = False,
-        temperature: Optional[float] = None) -> torch.Tensor:
+    scores: torch.Tensor,
+    dim: int = -1,
+    insert_root: bool = False,
+    replace_root: bool = False,
+    temperature: Optional[float] = None,
+) -> torch.Tensor:
     assert not (insert_root and replace_root)
     assert dim in (-1, scores.ndim - 1)
     device = scores.device
@@ -269,7 +270,9 @@ class RandomCut(nn.Module):
     Returns a binary mask for the leaf nodes of the cut.
     """
 
-    def __init__(self, tree: hier.Hierarchy, cut_prob: float, permit_root_cut: bool = False):
+    def __init__(
+        self, tree: hier.Hierarchy, cut_prob: float, permit_root_cut: bool = False
+    ):
         super().__init__()
         self.num_nodes = tree.num_nodes()
         self.cut_prob = cut_prob
@@ -286,18 +289,22 @@ class RandomCut(nn.Module):
     def forward(self, batch_shape: Sequence[int]) -> torch.Tensor:
         device = self.node_parent.device
         # Random Bernoulli for every node.
-        drop = torch.bernoulli(torch.full((*batch_shape, self.num_nodes), self.cut_prob))
+        drop = torch.bernoulli(
+            torch.full((*batch_shape, self.num_nodes), self.cut_prob)
+        )
         drop = drop.to(device=device)
         if not self.permit_root_cut:
             drop[..., 0] = 0
         # Check whether to keep all ancestors of each node (drop zero ancestors).
-        subtree_mask = (self.sum_ancestors(drop, dim=-1) == 0)
+        subtree_mask = self.sum_ancestors(drop, dim=-1) == 0
         # Dilate to keep nodes whose parents belong to subtree.
         subtree_mask = subtree_mask[..., self.node_parent]
         subtree_mask[..., 0] = True  # Root is always kept.
         # Count number of children (do not count parent as child of itself).
         num_children = torch.zeros((*batch_shape, self.num_nodes), device=device)
-        num_children = num_children.index_add(-1, self.node_parent[1:], subtree_mask[..., 1:].float())
+        num_children = num_children.index_add(
+            -1, self.node_parent[1:], subtree_mask[..., 1:].float()
+        )
         # Find boundary of subtree.
         boundary = subtree_mask & (num_children == 0)
         return boundary
@@ -305,16 +312,17 @@ class RandomCut(nn.Module):
 
 class RandomCutLoss(nn.Module):
     """Cross-entropy loss using the leaf nodes of a random cut.
-    
+
     As described in "Deep RTC" (Wu et al., 2020).
     """
 
     def __init__(
-            self,
-            tree: hier.Hierarchy,
-            cut_prob: float,
-            permit_root_cut: bool = False,
-            with_leaf_targets: bool = True):
+        self,
+        tree: hier.Hierarchy,
+        cut_prob: float,
+        permit_root_cut: bool = False,
+        with_leaf_targets: bool = True,
+    ):
         super().__init__()
         is_ancestor = tree.ancestor_mask(strict=False)
         # label_to_targets[gt, pr] = 1 iff pr `is_ancestor` gt
@@ -326,7 +334,9 @@ class RandomCutLoss(nn.Module):
             # Need to use FlatSoftmaxNLL?
             raise NotImplementedError
 
-        self.random_cut_fn = RandomCut(tree, cut_prob=cut_prob, permit_root_cut=permit_root_cut)
+        self.random_cut_fn = RandomCut(
+            tree, cut_prob=cut_prob, permit_root_cut=permit_root_cut
+        )
         self.label_to_targets = torch.from_numpy(label_to_targets)
 
     def _apply(self, fn):
@@ -343,7 +353,7 @@ class RandomCutLoss(nn.Module):
         cut = cut[..., 1:]
         targets = targets[..., 1:]
         # Obtain targets in cut subset.
-        cut_targets = (cut & targets)
+        cut_targets = cut & targets
         assert torch.all(torch.sum(cut_targets, dim=-1) == 1)
         # loss = F.cross_entropy(cut_scores, cut_targets, reduction='none')
         neg_inf = torch.tensor(-torch.inf, device=scores.device)
@@ -354,7 +364,6 @@ class RandomCutLoss(nn.Module):
 
 
 class LCAMetric:
-
     def __init__(self, tree: hier.Hierarchy, value: np.ndarray):
         self.value = value
         self.find_lca = hier.FindLCA(tree)
@@ -391,64 +400,74 @@ class LCAMetric:
         lca = self.find_lca(gt, pr)
         gt_value = self.value[gt]
         lca_value = self.value[lca]
-        with np.errstate(invalid='ignore'):
-            return np.where((lca_value == 0) & (gt_value == 0), 1.0, lca_value / gt_value)
+        with np.errstate(invalid="ignore"):
+            return np.where(
+                (lca_value == 0) & (gt_value == 0), 1.0, lca_value / gt_value
+            )
 
     def precision(self, gt: np.ndarray, pr: np.ndarray) -> np.ndarray:
         lca = self.find_lca(gt, pr)
         pr_value = self.value[pr]
         lca_value = self.value[lca]
-        with np.errstate(invalid='ignore'):
-            return np.where((lca_value == 0) & (pr_value == 0), 1.0, lca_value / pr_value)
+        with np.errstate(invalid="ignore"):
+            return np.where(
+                (lca_value == 0) & (pr_value == 0), 1.0, lca_value / pr_value
+            )
 
     def f1(self, gt: np.ndarray, pr: np.ndarray) -> np.ndarray:
         lca = self.find_lca(gt, pr)
         gt_value = self.value[gt]
         pr_value = self.value[pr]
         lca_value = self.value[lca]
-        with np.errstate(invalid='ignore'):
+        with np.errstate(invalid="ignore"):
             r = np.where((lca_value == 0) & (gt_value == 0), 1.0, lca_value / gt_value)
             p = np.where((lca_value == 0) & (pr_value == 0), 1.0, lca_value / pr_value)
-        with np.errstate(divide='ignore'):
-            return 2 / (1/r + 1/p)
+        with np.errstate(divide="ignore"):
+            return 2 / (1 / r + 1 / p)
 
 
 class MarginLoss(nn.Module):
     """Computes soft or hard margin loss for given a margin function."""
 
     def __init__(
-            self, tree: hier.Hierarchy,
-            with_leaf_targets: bool,
-            hardness: str = 'soft',
-            margin: str = 'depth_dist',
-            tau: float = 1.0):
+        self,
+        tree: hier.Hierarchy,
+        with_leaf_targets: bool,
+        hardness: str = "soft",
+        margin: str = "depth_dist",
+        tau: float = 1.0,
+    ):
         super().__init__()
-        if hardness not in ('soft', 'hard'):
-            raise ValueError('unknown hardness', hardness)
+        if hardness not in ("soft", "hard"):
+            raise ValueError("unknown hardness", hardness)
         n = tree.num_nodes()
         label_order = tree.leaf_subset() if with_leaf_targets else np.arange(n)
 
         # Construct array label_margin[gt_label, pr_node].
-        if margin in ('edge_dist', 'depth_dist'):
+        if margin in ("edge_dist", "depth_dist"):
             # label_margin = metrics.edge_dist(tree, label_order[:, None], np.arange(n)[None, :])
             depth = tree.depths()
             margin_arr = LCAMetric(tree, depth).dist(label_order[:, None], np.arange(n))
-        elif margin == 'incorrect':
+        elif margin == "incorrect":
             is_ancestor = tree.ancestor_mask()
             is_correct = is_ancestor[:, label_order].T
             margin_arr = 1 - is_correct
-        elif margin == 'info_dist':
+        elif margin == "info_dist":
             # TODO: Does natural log make most sense here?
             info = np.log(tree.num_leaf_nodes() / tree.num_leaf_descendants())
             margin_arr = LCAMetric(tree, info).dist(label_order[:, None], np.arange(n))
-        elif margin == 'depth_deficient':
+        elif margin == "depth_deficient":
             depth = tree.depths()
-            margin_arr = LCAMetric(tree, depth).deficient(label_order[:, None], np.arange(n))
-        elif margin == 'log_depth_f1_error':
+            margin_arr = LCAMetric(tree, depth).deficient(
+                label_order[:, None], np.arange(n)
+            )
+        elif margin == "log_depth_f1_error":
             depth = tree.depths()
-            margin_arr = np.log(1 - LCAMetric(tree, depth).f1(label_order[:, None], np.arange(n)))
+            margin_arr = np.log(
+                1 - LCAMetric(tree, depth).f1(label_order[:, None], np.arange(n))
+            )
         else:
-            raise ValueError('unknown margin', margin)
+            raise ValueError("unknown margin", margin)
 
         # correct_margins = margin_arr[np.arange(len(label_order)), label_order]
         # if not np.all(correct_margins == 0):
@@ -467,14 +486,23 @@ class MarginLoss(nn.Module):
 
     def forward(self, scores: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         labels = torch.argmax(labels, dim=1)
-        label_node = labels if self.label_order is None else self.label_order[labels.long()]
+        label_node = (
+            labels if self.label_order is None else self.label_order[labels.long()]
+        )
         label_score = scores.gather(-1, label_node.unsqueeze(-1)).squeeze(-1)
         label_margin = self.margin[labels.long(), :]
-        if self.hardness == 'soft':
-            loss = -label_score + torch.logsumexp(scores + self.tau * label_margin, axis=-1)
-        elif self.hardness == 'hard':
+        if self.hardness == "soft":
+            loss = -label_score + torch.logsumexp(
+                scores + self.tau * label_margin, axis=-1
+            )
+        elif self.hardness == "hard":
             # loss = -label_score + torch.max(torch.relu(scores + self.tau * label_margin), axis=-1)[0]
-            loss = torch.relu(torch.max(scores - label_score.unsqueeze(-1) + self.tau * label_margin, axis=-1)[0])
+            loss = torch.relu(
+                torch.max(
+                    scores - label_score.unsqueeze(-1) + self.tau * label_margin,
+                    axis=-1,
+                )[0]
+            )
         else:
             assert False
         return torch.mean(loss)
@@ -483,11 +511,11 @@ class MarginLoss(nn.Module):
 class FlatSoftmaxNLL(nn.Module):
     """Like cross_entropy() but supports internal labels."""
 
-    def __init__(self, tree, with_leaf_targets: bool = False, reduction: str = 'mean'):
+    def __init__(self, tree, with_leaf_targets: bool = False, reduction: str = "mean"):
         super().__init__()
-        assert reduction in ('mean', 'none', None)
+        assert reduction in ("mean", "none", None)
         if with_leaf_targets:
-            raise ValueError('use F.cross_entropy() instead!')
+            raise ValueError("use F.cross_entropy() instead!")
         # The value is_ancestor[i, j] is true if node i is an ancestor of node j.
         is_ancestor = tree.ancestor_mask(strict=False)
         leaf_masks = is_ancestor[:, tree.leaf_mask()]
@@ -505,16 +533,14 @@ class FlatSoftmaxNLL(nn.Module):
         # Obtain logp for leaf descendants, -inf for other nodes.
         label_leaf_mask = self.leaf_masks[labels.long(), :]
         inf = torch.tensor(torch.inf, device=scores.device)
-        logp_descendants = torch.where(label_leaf_mask, logp_leaf, -inf)
-        logp_label = torch.logsumexp(logp_descendants, dim=-1)
+        logp_ancestors = torch.where(label_leaf_mask, logp_leaf, -inf)
+        logp_label = torch.logsumexp(logp_ancestors, dim=-1)
         loss = -logp_label
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             return torch.mean(loss)
         else:
             return loss
 
 
-def SumLeafDescendants(
-        tree: hier.Hierarchy,
-        **kwargs):
+def SumLeafDescendants(tree: hier.Hierarchy, **kwargs):
     return SumDescendants(tree, subset=tree.leaf_mask(), **kwargs)

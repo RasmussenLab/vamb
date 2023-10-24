@@ -400,6 +400,7 @@ class VAE(_nn.Module):
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                abundance_in = abundance_in.cuda()
                 weights = weights.cuda()
 
             optimizer.zero_grad()
@@ -477,6 +478,7 @@ class VAE(_nn.Module):
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
+                    ab = ab.cuda()
 
                 # Evaluate
                 _, _, _, mu = self(depths, tnf, ab)

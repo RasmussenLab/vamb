@@ -89,8 +89,22 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
     dataloader, mask = _encode.make_dataloader(
         rpkm, tnf, lengths, batchsize, destroy, cuda
     )
-    depthstensor, tnftensor, total_abundance_tensor, weightstensor = dataloader.dataset.tensors
-    return depthstensor, tnftensor, total_abundance_tensor, weightstensor, batchsize, n_workers, cuda, mask
+    (
+        depthstensor,
+        tnftensor,
+        total_abundance_tensor,
+        weightstensor,
+    ) = dataloader.dataset.tensors
+    return (
+        depthstensor,
+        tnftensor,
+        total_abundance_tensor,
+        weightstensor,
+        batchsize,
+        n_workers,
+        cuda,
+        mask,
+    )
 
 
 def make_dataloader_concat(
@@ -110,7 +124,11 @@ def make_dataloader_concat(
     )
     labels_int = _np.unique(labels, return_inverse=True)[1][mask]
     dataset = _TensorDataset(
-        depthstensor, tnftensor, total_abundance_tensor, weightstensor, _torch.from_numpy(labels_int)
+        depthstensor,
+        tnftensor,
+        total_abundance_tensor,
+        weightstensor,
+        _torch.from_numpy(labels_int),
     )
     dataloader = _DataLoader(
         dataset=dataset,
@@ -145,7 +163,7 @@ def make_dataloader_labels(
     return dataloader, mask
 
 
-def permute_indices(n_current: int, n_total: int, seed:int):
+def permute_indices(n_current: int, n_total: int, seed: int):
     rng = _np.random.default_rng(seed)
     x = _np.arange(n_current)
     to_add = int(n_total / n_current)
@@ -169,8 +187,10 @@ def make_dataloader_semisupervised(
     n_labels = shapes[-1]
     n_total = len(dataloader_vamb.dataset)
     indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total, seed)
-    indices_unsup_labels = permute_indices(len(dataloader_labels.dataset), n_total, seed)
-    indices_sup = permute_indices(len(dataloader_joint.dataset), n_total. seed)
+    indices_unsup_labels = permute_indices(
+        len(dataloader_labels.dataset), n_total, seed
+    )
+    indices_sup = permute_indices(len(dataloader_joint.dataset), n_total.seed)
     dataset_all = _TensorDataset(
         dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
         dataloader_vamb.dataset.tensors[1][indices_unsup_vamb],
@@ -225,7 +245,7 @@ class VAELabels(_encode.VAE):
         logfile=None,
     ):
         super(VAELabels, self).__init__(
-            nlabels - 103,
+            nlabels - 104,
             nhiddens=nhiddens,
             nlatent=nlatent,
             alpha=alpha,
@@ -518,7 +538,9 @@ class VAEConcat(_encode.VAE):
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
         abundance_out = reconstruction.narrow(1, self.nsamples + self.ntnf, 1)
-        labels_out = reconstruction.narrow(1, self.nsamples + self.ntnf + 1, self.nlabels)
+        labels_out = reconstruction.narrow(
+            1, self.nsamples + self.ntnf + 1, self.nlabels
+        )
 
         # If multiple samples, apply softmax
         if self.nsamples > 1:
@@ -695,7 +717,7 @@ class VAEConcat(_encode.VAE):
             collate_fn=data_loader.collate_fn,
         )
 
-        depths_array, _, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -858,6 +880,7 @@ class VAEVAE(object):
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
         metrics = [
             "loss_vamb",
+            "ab_vamb",
             "ce_vamb",
             "sse_vamb",
             "kld_vamb",
@@ -956,6 +979,7 @@ class VAEVAE(object):
 
             (
                 tensors_dict["loss_vamb"],
+                tensors_dict["ab_vamb"],
                 tensors_dict["ce_vamb"],
                 tensors_dict["sse_vamb"],
                 tensors_dict["kld_vamb"],

@@ -25,7 +25,9 @@ class Hierarchy:
     def parents(self, root_loop: bool = False) -> np.ndarray:
         if root_loop:
             return np.where(
-                np.array(self._parents) >= 0, np.array(self._parents), np.arange(len(self._parents))
+                np.array(self._parents) >= 0,
+                np.array(self._parents),
+                np.arange(len(self._parents)),
             )
         else:
             return np.array(self._parents)
