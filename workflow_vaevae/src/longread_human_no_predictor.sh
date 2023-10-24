@@ -1,4 +1,7 @@
 #!/usr/bin/bash
+annotator=$1
+thres=$2
+
     # --taxonomy_predictions /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevaeout/results_taxonomy_predictor.csv \
     # --taxonomy /home/projects/cpr_10006/people/svekut/mmseq2/longread_taxonomy_2023.tsv \
 
@@ -7,10 +10,10 @@
 
 vamb \
     --model vaevae \
-    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevae_flat_softmax__fix2 \
+    --outdir /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vaevae_${annotator} \
     --fasta /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/contigs_2kbp.fna \
     --rpkm /home/projects/cpr_10006/projects/semi_vamb/data/human_longread/vambout/abundance.npz \
-    --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/human_longread_taxonomy_metabuli_otu.tsv \
+    --taxonomy /home/projects/cpr_10006/people/svekut/04_mmseq2/taxonomy_cami_kfold/human_longread_taxonomy_${annotator}.tsv \
     --no_predictor \
     -l 64 \
     -e 500 \

@@ -1,20 +1,12 @@
 #!/usr/bin/bash
-thres=$1
 
 vamb \
-    --model vaevae \
-    --outdir /home/projects/cpr_10006/projects/vamb/almeida_vaevaeout_predictor_${thres}_mem \
+    --outdir /home/projects/cpr_10006/projects/vamb/almeida_vaevaeout_vamb \
     --fasta /home/projects/cpr_10006/projects/vamb/analysis/almeida/data/almeida.fna \
     --rpkm /home/projects/cpr_10006/projects/vamb/analysis/almeida/data/almeida.jgi.depth.npz \
-    --taxonomy /home/projects/cpr_10006/people/svekut/mmseq2/almeida_taxonomy.tsv \
     -l 32 \
     -e 300 \
-    -t 1024 \
-    -q  \
-    -pe 100 \
-    -pt 1024 \
-    -pq  \
-    -pthr ${thres} \
+    -q 25 75 150 \
     -o C \
     --cuda \
     --minfasta 200000
