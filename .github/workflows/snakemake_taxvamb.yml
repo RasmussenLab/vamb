@@ -5,8 +5,6 @@ name: TaxVAMB snakemake - runs daily
 on:
   workflow_dispatch:
     inputs:
-  schedule:
-    - cron: "0 1 * * *"
 
 permissions:
   contents: read
@@ -61,3 +59,5 @@ jobs:
     #     directory: '.test'
     #     snakefile: 'workflow/Snakefile'
     #     args: '--lint'
+  # schedule:
+  #   - cron: "0 1 * * *"
