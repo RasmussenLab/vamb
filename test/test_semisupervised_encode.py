@@ -8,7 +8,6 @@ import vamb
 
 
 class TestDataLoader(unittest.TestCase):
-
     def test_permute_indices(self):
         indices = vamb.semisupervised_encode.permute_indices(10, 25, seed=1)
         set_10 = set(range(10))
@@ -22,12 +21,12 @@ class TestVAEVAE(unittest.TestCase):
     N_contigs = 111
     tnfs = np.random.random((N_contigs, 103)).astype(np.float32)
     rpkms = np.random.random((N_contigs, 14)).astype(np.float32)
-    domain = 'd_Bacteria'
-    phyla = ['f_1', 'f_2', 'f_3']
+    domain = "d_Bacteria"
+    phyla = ["f_1", "f_2", "f_3"]
     classes = {
-        'f_1': ['c_11', 'c_21', 'c_31'],
-        'f_2': ['c_12', 'c_22', 'c_32'],
-        'f_3': ['c_13', 'c_23', 'c_33'],
+        "f_1": ["c_11", "c_21", "c_31"],
+        "f_2": ["c_12", "c_22", "c_32"],
+        "f_3": ["c_13", "c_23", "c_33"],
     }
     lengths = np.random.randint(2000, 5000, size=N_contigs)
 
@@ -35,11 +34,11 @@ class TestVAEVAE(unittest.TestCase):
         phylum = np.random.choice(self.phyla, 1)[0]
         clas = np.random.choice(self.classes[phylum], 1)[0]
         if np.random.random() <= 0.2:
-            return ';'.join([self.domain])
+            return ";".join([self.domain])
         if 0.2 < np.random.random() <= 0.5:
-            return ';'.join([self.domain, phylum])
-        return ';'.join([self.domain, phylum, clas])
-        
+            return ";".join([self.domain, phylum])
+        return ";".join([self.domain, phylum, clas])
+
     def make_random_annotations(self):
         return [self.make_random_annotation() for _ in range(self.N_contigs)]
 
@@ -47,13 +46,29 @@ class TestVAEVAE(unittest.TestCase):
         annotations = self.make_random_annotations()
         nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(annotations)
         print(nodes, ind_nodes, table_parent)
-        self.assertTrue(set(nodes).issubset(set([
-            'Domain', 'd_Archaea', 'd_Bacteria',
-            'f_1', 'f_2', 'f_3', 
-            'c_11', 'c_21', 'c_31', 
-            'c_12', 'c_22', 'c_32', 
-            'c_13', 'c_23', 'c_33',
-        ])))
+        self.assertTrue(
+            set(nodes).issubset(
+                set(
+                    [
+                        "Domain",
+                        "d_Archaea",
+                        "d_Bacteria",
+                        "f_1",
+                        "f_2",
+                        "f_3",
+                        "c_11",
+                        "c_21",
+                        "c_31",
+                        "c_12",
+                        "c_22",
+                        "c_32",
+                        "c_13",
+                        "c_23",
+                        "c_33",
+                    ]
+                )
+            )
+        )
         for p, cls in self.classes.items():
             for c in cls:
                 for f in self.phyla:

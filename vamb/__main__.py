@@ -1521,7 +1521,9 @@ class BasicArguments(object):
 
     def __init__(self, args):
         self.args = args
-        self.comp_options = CompositionOptions(self.args.fasta, self.args.composition, self.args.minlength)
+        self.comp_options = CompositionOptions(
+            self.args.fasta, self.args.composition, self.args.minlength
+        )
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
             self.args.abundancepath,
@@ -1582,8 +1584,8 @@ class BinnerArguments(BasicArguments):
             dropout=args.dropout,
         )
         self.vae_training_options = VAETrainingOptions(
-            nepochs=args.nepochs, 
-            batchsize=args.batchsize, 
+            nepochs=args.nepochs,
+            batchsize=args.batchsize,
             batchsteps=args.batchsteps,
         )
         self.aae_options = None
@@ -1616,8 +1618,8 @@ class VAEAAEArguments(BinnerArguments):
 
     def init_encoder_and_training(self):
         self.encoder_options = EncoderOptions(
-            vae_options=self.vae_options, 
-            aae_options=self.aae_options, 
+            vae_options=self.vae_options,
+            aae_options=self.aae_options,
             alpha=self.args.alpha,
         )
         self.training_options = TrainingOptions(
@@ -1659,8 +1661,8 @@ class VAEVAEArguments(BinnerArguments):
     def __init__(self, args):
         super(VAEVAEArguments, self).__init__(args)
         self.encoder_options = EncoderOptions(
-            vae_options=self.vae_options, 
-            aae_options=None, 
+            vae_options=self.vae_options,
+            aae_options=None,
             alpha=args.alpha,
         )
         self.training_options = TrainingOptions(
@@ -2213,50 +2215,50 @@ def main():
         parser.print_help()
         sys.exit()
 
-    subparsers = parser.add_subparsers(dest='subcommand')
+    subparsers = parser.add_subparsers(dest="subcommand")
 
-    predict_parser = subparsers.add_parser('predict', help='predict help')
+    predict_parser = subparsers.add_parser("predict", help="predict help")
     add_input_output_arguments(predict_parser)
     add_taxonomy_arguments(predict_parser, taxonomy_only=True)
     add_predictor_arguments(predict_parser)
 
-    vaevae_parserbin_parser = subparsers.add_parser('bin', help='bin help')
-    subparsers_model = vaevae_parserbin_parser.add_subparsers(dest='model_subcommand')
+    vaevae_parserbin_parser = subparsers.add_parser("bin", help="bin help")
+    subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
 
-    vae_parser = subparsers_model.add_parser('vae', help='vae_parser help')
+    vae_parser = subparsers_model.add_parser("vae", help="vae_parser help")
     add_input_output_arguments(vae_parser)
     add_vae_arguments(vae_parser)
     add_clustering_arguments(vae_parser)
     add_predictor_arguments(vae_parser)
 
-    aae_parser = subparsers_model.add_parser('aae', help='aae_parser help')
+    aae_parser = subparsers_model.add_parser("aae", help="aae_parser help")
     add_input_output_arguments(aae_parser)
     add_aae_arguments(aae_parser)
     add_clustering_arguments(aae_parser)
 
-    vaeaae_parser = subparsers_model.add_parser('vaeaae', help='vaeaae_parser help')
+    vaeaae_parser = subparsers_model.add_parser("vaeaae", help="vaeaae_parser help")
     add_input_output_arguments(vaeaae_parser)
     add_vae_arguments(vaeaae_parser)
     add_aae_arguments(vaeaae_parser)
     add_clustering_arguments(vaeaae_parser)
 
-    vaevae_parser = subparsers_model.add_parser('vaevae', help='vaevae_parser help')
+    vaevae_parser = subparsers_model.add_parser("vaevae", help="vaevae_parser help")
     add_input_output_arguments(vaevae_parser)
     add_vae_arguments(vaevae_parser)
     add_clustering_arguments(vaevae_parser)
     add_predictor_arguments(vaevae_parser)
     add_taxonomy_arguments(vaevae_parser)
 
-    recluster_parser = subparsers.add_parser('recluster', help='recluster help')
+    recluster_parser = subparsers.add_parser("recluster", help="recluster help")
     add_input_output_arguments(recluster_parser)
     add_reclustering_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser, predictions_only=True)
 
     args = parser.parse_args()
 
-    if args.subcommand == 'predict':
+    if args.subcommand == "predict":
         runner = TaxometerArguments(args)
-    elif args.subcommand == 'bin':
+    elif args.subcommand == "bin":
         classes_map = dict(
             vae=VAEArguments,
             aae=AAEArguments,
@@ -2264,7 +2266,7 @@ def main():
             vaevae=VAEVAEArguments,
         )
         runner = classes_map[args.model_subcommand](args)
-    elif args.subcommand == 'recluster':
+    elif args.subcommand == "recluster":
         runner = ReclusteringArguments(args)
     runner.run()
 
