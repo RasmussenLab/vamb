@@ -13,9 +13,7 @@ Please check out Avamb.
 Avamb is a metagenomics binning pipeline composed by Vamb and Aamb, an adversarial autoencoder for metagenomics binning, as well as a bin dereplication and quality filtering step that runs CheckM2.
 Similar to Vamb, Avamb leverages sequence composition information from a contig catalogue and co-abundance information from BAM files by projecting those features into  latent spaces, where the metagenomics binning actually takes place.
 Avamb has shown to reconstruct 23% more high quality bins as well as to increase the bins quality.
-For more information, please check the [Avamb snakemake page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb).
-
-The Avamb pre-print can be found here [biorxiv](https://doi.org/10.1101/2023.02.27.527078). 
+For more information, please check the [Avamb snakemake page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb) and the paper [in Communications Biology](https://doi.org/10.1038/s42003-023-05452-3). 
 
 
 # Installation
