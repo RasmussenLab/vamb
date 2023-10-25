@@ -33,25 +33,46 @@ jobs:
         ls -la
         ls -la testset_snakemake
         pwd
+    - name: Clone CheckM2 repo
+      run: |
+        git clone https://github.com/chklovski/CheckM2.git 
     - uses: mamba-org/setup-micromamba@v1
       with:
         micromamba-version: '1.3.1-0'
         environment-file: workflow_avamb/envs/avamb.yaml
         environment-name: avamb
+        create-args: >-
+          python=3.9.16
         init-shell: >-
           bash
-          powershell
         cache-environment: true
         post-cleanup: 'all'
-    - name: Install dependencies
+    - uses: mamba-org/setup-micromamba@v1
+      with:
+        micromamba-version: '1.3.1-0'
+        environment-file: workflow_avamb/envs/checkm2.yml
+        environment-name: checkm2
+        create-args: >-
+          python=3.8.15
+        init-shell: >-
+          bash
+        cache-environment: true
+        post-cleanup: 'all'
+    - name: Install dependencies to avamb environment
       run: |
+        conda activate avamb 
         which pip
         pip install -e .
         pip freeze
-
-    # - name: Snakemake
-    #   uses: snakemake/snakemake-github-action@v1.25.1
-    #   with:
-    #     directory: '.test'
-    #     snakefile: 'workflow/Snakefile'
-    #     args: '--lint'
+    - name: Install CheckM2
+      run: |
+        conda activate checkm2
+        cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
+        checkm2 database --download
+        conda activate avamb
+    - name: Snakemake
+      uses: snakemake/snakemake-github-action@v1.25.1
+      with:
+        directory: '.test'
+        snakefile: 'workflow_avamb/avamb.snake.conda.smk'
+        args: '--cores 4 --configfile workflow_avamb/config.json --use-conda'
