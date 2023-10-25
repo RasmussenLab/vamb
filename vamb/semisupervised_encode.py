@@ -86,7 +86,7 @@ def kld_gauss(p_mu, p_logstd, q_mu, q_logstd):
 
 def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
     n_workers = 4 if cuda else 1
-    dataloader, mask = _encode.make_dataloader(
+    dataloader = _encode.make_dataloader(
         rpkm, tnf, lengths, batchsize, destroy, cuda
     )
     (
@@ -103,7 +103,6 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
         batchsize,
         n_workers,
         cuda,
-        mask,
     )
 
 
@@ -118,11 +117,10 @@ def make_dataloader_concat(
         batchsize,
         n_workers,
         cuda,
-        mask,
     ) = _make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
-    labels_int = _np.unique(labels, return_inverse=True)[1][mask]
+    labels_int = _np.unique(labels, return_inverse=True)[1]
     dataset = _TensorDataset(
         depthstensor,
         tnftensor,
@@ -139,16 +137,16 @@ def make_dataloader_concat(
         pin_memory=cuda,
         collate_fn=partial(collate_fn_concat, len(set(labels_int))),
     )
-    return dataloader, mask
+    return dataloader
 
 
 def make_dataloader_labels(
     rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False
 ):
-    _, _, _, _, batchsize, n_workers, cuda, mask = _make_dataset(
+    _, _, _, _, batchsize, n_workers, cuda = _make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
-    labels_int = _np.unique(labels, return_inverse=True)[1][mask]
+    labels_int = _np.unique(labels, return_inverse=True)[1]
     dataset = _TensorDataset(_torch.from_numpy(labels_int))
     dataloader = _DataLoader(
         dataset=dataset,
@@ -160,7 +158,7 @@ def make_dataloader_labels(
         collate_fn=partial(collate_fn_labels, len(set(labels_int))),
     )
 
-    return dataloader, mask
+    return dataloader
 
 
 def permute_indices(n_current: int, n_total: int, seed: int):

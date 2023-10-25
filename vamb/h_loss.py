@@ -112,7 +112,7 @@ def make_dataloader_labels_hloss(
     destroy=False,
     cuda=False,
 ):
-    _, _, _, _, batchsize, n_workers, cuda, mask = _semisupervised_encode._make_dataset(
+    _, _, _, _, batchsize, n_workers, cuda = _semisupervised_encode._make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
     dataset = _TensorDataset(_torch.Tensor(labels).long())
@@ -126,7 +126,7 @@ def make_dataloader_labels_hloss(
         collate_fn=partial(collate_fn_labels_hloss, N, table_parent),
     )
 
-    return dataloader, mask
+    return dataloader
 
 
 def make_dataloader_concat_hloss(
@@ -149,7 +149,6 @@ def make_dataloader_concat_hloss(
         batchsize,
         n_workers,
         cuda,
-        mask,
     ) = _semisupervised_encode._make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
     )
@@ -166,7 +165,7 @@ def make_dataloader_concat_hloss(
         pin_memory=cuda,
         collate_fn=partial(collate_fn_concat_hloss, N, table_parent),
     )
-    return dataloader, mask
+    return dataloader
 
 
 def permute_indices(n_current: int, n_total: int, seed: int):
