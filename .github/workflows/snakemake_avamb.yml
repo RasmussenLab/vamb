@@ -43,8 +43,12 @@ jobs:
         pip install -e .
         pip freeze
         git clone https://github.com/chklovski/CheckM2.git 
+      shell: micromamba-shell {0}
+    - name: Install dependencies to avamb environment
+      run: |
         micromamba create -n checkm2 python=3.8.15
         micromamba env update -n checkm2 --file workflow_avamb/envs/checkm2.yml
+        eval "$(micromamba shell hook --shell=bash)"
         micromamba activate checkm2
         cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
         checkm2 database --download
@@ -62,3 +66,5 @@ jobs:
         directory: '.test'
         snakefile: 'workflow_avamb/avamb.snake.conda.smk'
         args: '--cores 4 --configfile workflow_avamb/config.json --use-conda'
+      shell: micromamba-shell {0}
+
