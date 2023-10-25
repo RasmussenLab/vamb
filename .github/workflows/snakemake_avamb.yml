@@ -66,5 +66,4 @@ jobs:
         directory: '.test'
         snakefile: 'workflow_avamb/avamb.snake.conda.smk'
         args: '--cores 4 --configfile workflow_avamb/config.json --use-conda'
-      shell: micromamba-shell {0}
 
