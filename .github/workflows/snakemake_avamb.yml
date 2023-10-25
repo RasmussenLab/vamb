@@ -39,16 +39,13 @@ jobs:
         post-cleanup: 'all'
     - name: Install dependencies to avamb environment
       run: |
-        which conda
-        conda env list
-        conda activate avamb 
         which pip
         pip install -e .
         pip freeze
         git clone https://github.com/chklovski/CheckM2.git 
-        mamba create -n checkm2 python=3.8.15
-        mamba env update -n checkm2 --file workflow_avamb/envs/checkm2.yml
-        conda activate checkm2
+        micromamba create -n checkm2 python=3.8.15
+        micromamba env update -n checkm2 --file workflow_avamb/envs/checkm2.yml
+        micromamba activate checkm2
         cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
         checkm2 database --download
       shell: micromamba-shell {0}
