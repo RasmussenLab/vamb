@@ -17,7 +17,7 @@ In short it will:
 The nice thing about using snakemake for this is that it will keep track of which jobs have finished and it allows the workflow to be run on different hardware such as a laptop, a linux workstation and a HPC facility (currently with qsub). Keep in mind that there are three different paths, (named directed acyclic graphs in snakemake), that can be executed by snakemake depending on the outputs generated during the workflow and complicating a bit the interpretation of the snakemake file. That's why we added some comments for each rule briefily explaining their purpose. Feel free to reach us if you encounter any problems.  
 
 ## Installation 
-To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install) and [snakemake](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
+To run the workflow first install a Python3 version of [Miniconda](https://docs.conda.io/en/latest/miniconda.html), and [mamba](https://mamba.readthedocs.io/en/latest/installation.html#fresh-install). Avamb uses CheckM2 to score the bins, unfortunately, due to some dependencies conflicts, CheckM2 can not be installed in the same environment than vamb, therefore a specific environment should be created for CheckM2 and for Avamb:
 
 ```
  # Install Avamb in avamb environment
@@ -34,7 +34,10 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
  mamba env update -n checkm2 --file vamb/workflow_avamb/envs/checkm2.yml
  conda activate checkm2
  cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
- checkm2 database --download
+ #checkm2 database --download # It seems to not be working at the moment. As it was [posted](https://github.com/chklovski/CheckM2/issues/83#issuecomment-1767129760) ,the temporary workaround is to download a working database from Zenodo:
+ wget https://zenodo.org/records/5571251/files/checkm2_database.tar.gz && tar -xzf checkm2_database.tar.gz
+ # and set the database location manually
+ checkm2 database --setdblocation your_database_path/CheckM2_database/uniref100.KO.1.dmnd
  conda deactivate
 ```
 However, despite avamb and CheckM2 being in different environments, snakemake will be taking care of which is the right environment for each task. So now we should be ready to move forward and configure the input data to run our workflow. Installation should not take more than 30 minutes on a normal laptop, depending on your internet connexion and computer.
