@@ -1,0 +1,57 @@
+# This workflow will install snakemake and AVAMB dependencies and run the AVAMB snakemake pipeline
+
+name: AVAMB snakemake - runs daily
+
+on:
+  workflow_dispatch:
+    inputs:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+        cache-dependency-path: '**/pyproject.toml'
+    - name: Download fixtures
+      run: |
+        wget https://www.dropbox.com/scl/fi/q54wfho3ultb0otq5z3rh/testset_snakemake.zip\?rlkey\=7tbsc2giff0s42ppdmeb706fa\&dl\=0 -O testset_snakemake.zip
+        unzip testset_snakemake.zip
+        ls -la
+        ls -la testset_snakemake
+        pwd
+    - uses: mamba-org/setup-micromamba@v1
+      with:
+        micromamba-version: '1.3.1-0'
+        environment-file: workflow_avamb/envs/avamb.yaml
+        environment-name: avamb
+        init-shell: >-
+          bash
+          powershell
+        cache-environment: true
+        post-cleanup: 'all'
+    - name: Install dependencies
+      run: |
+        which pip
+        pip install -e .
+        pip freeze
+
+    # - name: Snakemake
+    #   uses: snakemake/snakemake-github-action@v1.25.1
+    #   with:
+    #     directory: '.test'
+    #     snakefile: 'workflow/Snakefile'
+    #     args: '--lint'
