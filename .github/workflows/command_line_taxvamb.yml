@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a single version of Python
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python application
+name: Command line interface tests
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
         cache-dependency-path: '**/pyproject.toml'
     - name: Download fixtures
       run: |
-        wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z&dl=0 -O ci_data.zip
+        wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z&dl=0 -o ci_data.zip
         unzip ci_data.zip
         ls -la
         ls -la ci_data
