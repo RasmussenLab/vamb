@@ -195,7 +195,9 @@ def get_marker(
     if min_contig_len is not None:
         contig_len = {h.split(".", 1)[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
         data = data[
-            data["contig"].map(lambda c: contig_len[c.split(".", 1)[1]] >= min_contig_len)
+            data["contig"].map(
+                lambda c: contig_len[c.split(".", 1)[1]] >= min_contig_len
+            )
         ]
     data = data.drop_duplicates(["gene", "contig"])
 
