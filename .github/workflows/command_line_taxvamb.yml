@@ -32,7 +32,7 @@ jobs:
     - name: Download fixtures
       run: |
         wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z&dl=0
-        mv ci_data.zip\?rlkey=b9lcqxs63iv2409q5a7q1oh9z\&dl=0 ci_data.zip
+        mv ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z ci_data.zip
         unzip ci_data.zip
         ls -la
         ls -la ci_data
