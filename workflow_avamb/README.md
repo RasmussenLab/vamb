@@ -22,19 +22,20 @@ To run the workflow first install a Python3 version of [Miniconda](https://docs.
 ```
  # Install Avamb in avamb environment
  git clone https://github.com/RasmussenLab/vamb.git 
- mamba create -n avamb python=3.9.16
- mamba env update -n avamb --file vamb/workflow_avamb/envs/avamb.yaml
+ mamba create -n avamb python=3.9.16 -y 
+ mamba env update -n avamb --file vamb/workflow_avamb/envs/avamb.yaml -y
  conda activate avamb 
  cd vamb
  git checkout v4.1.3 # check out chosen version
  pip install -e . && cd ..
  # Install CheckM2 in checkm2 environment
  git clone https://github.com/chklovski/CheckM2.git 
- mamba create -n checkm2 python=3.8.15
- mamba env update -n checkm2 --file vamb/workflow_avamb/envs/checkm2.yml
+ mamba create -n checkm2 python=3.8.15 -y 
+ mamba env update -n checkm2 --file vamb/workflow_avamb/envs/checkm2.yml -y 
  conda activate checkm2
  cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
- #checkm2 database --download # It seems to not be working at the moment. As it was [posted](https://github.com/chklovski/CheckM2/issues/83#issuecomment-1767129760) ,the temporary workaround is to download a working database from Zenodo:
+ #checkm2 database --download # It seems to not be working at the moment. As it was suggested (https://github.com/chklovski/CheckM2/issues/83#issuecomment-1767129760),
+ # the temporary workaround is to download a working database from Zenodo:
  wget https://zenodo.org/records/5571251/files/checkm2_database.tar.gz && tar -xzf checkm2_database.tar.gz
  # and set the database location manually
  checkm2 database --setdblocation your_database_path/CheckM2_database/uniref100.KO.1.dmnd
