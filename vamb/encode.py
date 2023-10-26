@@ -44,7 +44,7 @@ def set_batchsize(
         dataset=data_loader.dataset,
         batch_size=batch_size,
         shuffle=not encode,
-        drop_last=not encode,
+        drop_last=False,
         num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
@@ -154,7 +154,7 @@ def make_dataloader(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=False,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
