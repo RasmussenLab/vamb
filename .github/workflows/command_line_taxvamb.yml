@@ -31,12 +31,7 @@ jobs:
         cache-dependency-path: '**/pyproject.toml'
     - name: Download fixtures
       run: |
-        wget -h
-        wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z&dl=0
-        ls -la
-        ls -la /
-        pwd
-        mv ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z ci_data.zip
+        wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip?rlkey=b9lcqxs63iv2409q5a7q1oh9z&dl=0 -o ci_data.zip
         unzip ci_data.zip
         ls -la
         ls -la ci_data
