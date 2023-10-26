@@ -2221,17 +2221,6 @@ def main():
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
-    predict_parser = subparsers.add_parser(
-        TAXOMETER,
-        help="""
-        refines taxonomic classification of any metagenome binner. 
-        See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
-        (link)
-        """,
-    )
-    add_input_output_arguments(predict_parser)
-    add_taxonomy_arguments(predict_parser, taxonomy_only=True)
-    add_predictor_arguments(predict_parser)
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
@@ -2274,13 +2263,25 @@ def main():
         ensemble model of an adversarial autoencoder and a variational autoencoder. 
         See the paper "Adversarial and variational autoencoders improve metagenomic binning" 
         (https://www.nature.com/articles/s42003-023-05452-3). 
-        WARNING: recommended use is through a Snakemake pipeline
+        WARNING: recommended use is through the Snakemake pipeline
         """,
     )
     add_input_output_arguments(vaeaae_parser)
     add_vae_arguments(vaeaae_parser)
     add_aae_arguments(vaeaae_parser)
     add_clustering_arguments(vaeaae_parser)
+
+    predict_parser = subparsers.add_parser(
+        TAXOMETER,
+        help="""
+        refines taxonomic annotations of any metagenome classifier. 
+        See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
+        (link)
+        """,
+    )
+    add_input_output_arguments(predict_parser)
+    add_taxonomy_arguments(predict_parser, taxonomy_only=True)
+    add_predictor_arguments(predict_parser)
 
     recluster_parser = subparsers.add_parser(
         RECLUSTER,
