@@ -34,13 +34,13 @@ jobs:
         wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip\?rlkey\=b9lcqxs63iv2409q5a7q1oh9z\&dl\=0 -O ci_data.zip
         unzip ci_data.zip
         ls -la
-        ls -la ci_data
         pwd
     - name: Run VAMB
       run: |
-        vamb bin basic --outdir outdir_vamb --fasta ci_data/catalogue_mock.fna.gz --rpkm ci_data/abundance_mock.npz -l 32 -e 100 -q 25 75 -o C --minfasta 200000
+        vamb --outdir outdir_vamb --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz -l 32 -e 100 -q 25 75 -o C --minfasta 200000
+        cat outdir_vamb/log.txt
     - name: Run TaxVAMB
       run: |
-        vamb bin taxvamb --outdir outdir_taxvamb --fasta ci_data/catalogue_mock.fna.gz --rpkm ci_data/abundance_mock.npz --taxonomy ci_data/taxonomy_mock.tsv
+        vamb --model vaevae --outdir outdir_taxvamb --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv
         cat outdir_taxvamb/log.txt
 
