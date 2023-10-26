@@ -1553,7 +1553,9 @@ class TaxometerArguments(BasicArguments):
     def __init__(self, args):
         super(TaxometerArguments, self).__init__(args)
         self.taxonomy_options = TaxonomyOptions(
+            taxonomy_predictions_path=None,
             taxonomy_path=args.taxonomy,
+            no_predictor=None,
         )
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=args.pred_nepochs,
@@ -1641,20 +1643,31 @@ class VAEAAEArguments(BinnerArguments):
         )
 
 
-class VAEArguments(VAEAAEArguments):
+class VAEArguments(BinnerArguments):
     def __init__(self, args):
         super(VAEArguments, self).__init__(args)
-        self.aae_options = None
-        self.aae_training_options = None
-        self.init_encoder_and_training()
+        self.encoder_options = EncoderOptions(
+            vae_options=self.vae_options,
+            aae_options=None,
+            alpha=self.args.alpha,
+        )
+        self.training_options = TrainingOptions(
+            encoder_options=self.encoder_options,
+            vae_options=self.vae_training_options,
+            aae_options=None,
+            lrate=self.args.lrate,
+        )
 
-
-class AAEArguments(VAEAAEArguments):
-    def __init__(self, args):
-        super(AAEArguments, self).__init__(args)
-        self.vae_options = None
-        self.vae_training_options = None
-        self.init_encoder_and_training()
+    def run_inner(self, logfile):
+        run(
+            vamb_options=self.vamb_options,
+            comp_options=self.comp_options,
+            abundance_options=self.abundance_options,
+            encoder_options=self.encoder_options,
+            training_options=self.training_options,
+            cluster_options=self.cluster_options,
+            logfile=logfile,
+        )
 
 
 class VAEVAEArguments(BinnerArguments):
@@ -2241,7 +2254,6 @@ def main():
     add_input_output_arguments(vae_parser)
     add_vae_arguments(vae_parser)
     add_clustering_arguments(vae_parser)
-    add_predictor_arguments(vae_parser)
 
     vaevae_parser = subparsers_model.add_parser(
         TAXVAMB,
