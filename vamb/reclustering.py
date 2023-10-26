@@ -148,8 +148,8 @@ def replace_bin_names(data, clusters_labels_map):
     Returns a copy of the dataframe with the updated 'orf' column
     """
     data = data.copy()
-    data["contig_number"] = data["orf"].str.split(pat=".", n=0, expand=True)[1]
-    data["contig_only"] = data["contig_number"].map(lambda x: x.split("_")[0])
+    data["contig_number"] = data["orf"].str.split(pat=".", n=1, expand=True)[1]
+    data["contig_only"] = data["contig_number"].map(lambda x: x.rsplit("_", 1)[0])
     data["old_bin"] = data["orf"].str.split(pat=".", n=0, expand=True)[0]
     data["new_bin"] = data["contig_only"].map(
         lambda x: f"bin{clusters_labels_map[x]:06}"
@@ -193,9 +193,9 @@ def get_marker(
     data = data.query("(qend - qstart) / qlen > 0.4").copy()
     data["contig"] = data["orf"].map(contig_name)
     if min_contig_len is not None:
-        contig_len = {h.split(".")[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
+        contig_len = {h.split(".", 1)[1]: len(seq) for h, seq in fasta_iter(fasta_path)}
         data = data[
-            data["contig"].map(lambda c: contig_len[c.split(".")[1]] >= min_contig_len)
+            data["contig"].map(lambda c: contig_len[c.split(".", 1)[1]] >= min_contig_len)
         ]
     data = data.drop_duplicates(["gene", "contig"])
 
@@ -203,7 +203,7 @@ def get_marker(
         from collections import defaultdict
 
         marker = data["gene"].values
-        contig = data["contig"].str.split(".").str[-1].values
+        contig = data["contig"].str.lsplit(".").str[-1].values
         sequence2markers = defaultdict(list)
         for m, c in zip(marker, contig):
             sequence2markers[c].append(m)
@@ -392,7 +392,7 @@ def recluster_bins(
         }
     else:
         clusters_labels_map = {
-            k: int(v.split("_")[1]) for k, v in zip(df_clusters[1], df_clusters[0])
+            k: int(v.rsplit("_", 1)[1]) for k, v in zip(df_clusters[1], df_clusters[0])
         }
     labels_cluster_map = defaultdict(list)
     for k, v in clusters_labels_map.items():
