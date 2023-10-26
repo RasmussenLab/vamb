@@ -1934,7 +1934,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=int,
         nargs="*",
-        default=[25, 75],
+        default=[],
         help="double batch size at epochs for the taxonomy predictor [25 75]",
     )
     pred_trainos.add_argument(
