@@ -1663,7 +1663,7 @@ class VAEVAEArguments(BinnerArguments):
         self.encoder_options = EncoderOptions(
             vae_options=self.vae_options,
             aae_options=None,
-            alpha=args.alpha,
+            alpha=self.args.alpha,
         )
         self.training_options = TrainingOptions(
             encoder_options=self.encoder_options,
@@ -1672,16 +1672,16 @@ class VAEVAEArguments(BinnerArguments):
             lrate=self.args.lrate,
         )
         self.taxonomy_options = TaxonomyOptions(
-            taxonomy_path=args.taxonomy,
-            taxonomy_predictions_path=args.taxonomy_predictions,
-            no_predictor=args.no_predictor,
+            taxonomy_path=self.args.taxonomy,
+            taxonomy_predictions_path=self.args.taxonomy_predictions,
+            no_predictor=self.args.no_predictor,
         )
         self.predictor_training_options = PredictorTrainingOptions(
-            nepochs=args.pred_nepochs,
-            batchsize=args.pred_batchsize,
-            batchsteps=args.pred_batchsteps,
-            softmax_threshold=args.pred_softmax_threshold,
-            ploss=args.ploss,
+            nepochs=self.args.pred_nepochs,
+            batchsize=self.args.pred_batchsize,
+            batchsteps=self.args.pred_batchsteps,
+            softmax_threshold=self.args.pred_softmax_threshold,
+            ploss=self.args.ploss,
         )
 
     def run_inner(self, logfile):
@@ -1761,12 +1761,12 @@ def add_input_output_arguments(subparser):
         help="path to .npz of RPKM abundances",
     )
 
-    reqos = subparser.add_argument_group(title="Output required", description=None)
+    reqos = subparser.add_argument_group(title="Output (required)", description=None)
     reqos.add_argument(
         "--outdir",
         metavar="",
         type=Path,
-        # required=True,
+        # required=True, # Setting this flag breaks the argparse with positional arguments. The existence of the folder is checked elsewhere
         help="output directory to create",
     )
 
@@ -2185,15 +2185,13 @@ def add_reclustering_arguments(subparser):
 
 
 def main():
-    doc = f"""Avamb: Adversarial and Variational autoencoders for metagenomic binning.
-
+    doc = f"""
     Version: {'.'.join([str(i) for i in vamb.__version__])}
 
     Default use, good for most datasets:
-    vamb bin vae --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
+    vamb bin basic --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
 
-    For advanced use and extensions of Avamb, check documentation of the package
-    at https://github.com/RasmussenLab/vamb."""  # must be updated with the new github
+    Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,
@@ -2217,56 +2215,114 @@ def main():
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
-    predict_parser = subparsers.add_parser("predict", help="predict help")
+    TAXOMETER = "taxometer"
+    BIN = "bin"
+    VAMB = "basic"
+    TAXVAMB = "taxvamb"
+    AVAMB = "avamb"
+    AAE = "aae"
+    RECLUSTER = "recluster"
+    predict_parser = subparsers.add_parser(
+        TAXOMETER, 
+        help=
+        '''
+        refines taxonomic classification of any metagenome binner. 
+        See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
+        (link)
+        '''
+    )
     add_input_output_arguments(predict_parser)
     add_taxonomy_arguments(predict_parser, taxonomy_only=True)
     add_predictor_arguments(predict_parser)
 
-    vaevae_parserbin_parser = subparsers.add_parser("bin", help="bin help")
+    vaevae_parserbin_parser = subparsers.add_parser(
+        BIN, 
+        help=
+        '''
+        VAMB, TaxVAMB, AVAMB binners
+        '''
+    )
     subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
 
-    vae_parser = subparsers_model.add_parser("vae", help="vae_parser help")
+    vae_parser = subparsers_model.add_parser(
+        VAMB, 
+        help=
+        '''
+        default binner based on a variational autoencoder. 
+        See the paper "Improved metagenome binning and assembly using deep variational autoencoders" 
+        (https://www.nature.com/articles/s41587-020-00777-4)
+        '''
+    )
     add_input_output_arguments(vae_parser)
     add_vae_arguments(vae_parser)
     add_clustering_arguments(vae_parser)
     add_predictor_arguments(vae_parser)
 
-    aae_parser = subparsers_model.add_parser("aae", help="aae_parser help")
-    add_input_output_arguments(aae_parser)
-    add_aae_arguments(aae_parser)
-    add_clustering_arguments(aae_parser)
-
-    vaeaae_parser = subparsers_model.add_parser("vaeaae", help="vaeaae_parser help")
-    add_input_output_arguments(vaeaae_parser)
-    add_vae_arguments(vaeaae_parser)
-    add_aae_arguments(vaeaae_parser)
-    add_clustering_arguments(vaeaae_parser)
-
-    vaevae_parser = subparsers_model.add_parser("vaevae", help="vaevae_parser help")
+    vaevae_parser = subparsers_model.add_parser(
+        TAXVAMB, 
+        help=
+        '''
+        taxonomy informed binner based on a bi-modal variational autoencoder. 
+        See the paper "TaxVAMB: taxonomic annotations improve metagenome binning" 
+        (link)
+        '''
+    )
     add_input_output_arguments(vaevae_parser)
     add_vae_arguments(vaevae_parser)
     add_clustering_arguments(vaevae_parser)
     add_predictor_arguments(vaevae_parser)
     add_taxonomy_arguments(vaevae_parser)
 
-    recluster_parser = subparsers.add_parser("recluster", help="recluster help")
+    vaeaae_parser = subparsers_model.add_parser(
+        AVAMB, 
+        help=
+        '''
+        ensemble model of an adversarial autoencoder and a variational autoencoder. 
+        See the paper "Adversarial and variational autoencoders improve metagenomic binning" 
+        (https://www.nature.com/articles/s42003-023-05452-3). 
+        WARNING: recommended use is through a Snakemake pipeline
+        '''
+    )
+    add_input_output_arguments(vaeaae_parser)
+    add_vae_arguments(vaeaae_parser)
+    add_aae_arguments(vaeaae_parser)
+    add_clustering_arguments(vaeaae_parser)
+
+    aae_parser = subparsers_model.add_parser(
+        AAE, 
+        help=
+        '''
+        adversarial autoencoder (helper method for AVAMB)
+        '''
+    )
+    add_input_output_arguments(aae_parser)
+    add_aae_arguments(aae_parser)
+    add_clustering_arguments(aae_parser)
+
+    recluster_parser = subparsers.add_parser(
+        RECLUSTER, 
+        help=
+        '''
+        reclustering using single-copy genes for the binning results of VAMB, TaxVAMB or AVAMB
+        '''
+    )
     add_input_output_arguments(recluster_parser)
     add_reclustering_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser, predictions_only=True)
 
     args = parser.parse_args()
 
-    if args.subcommand == "predict":
+    if args.subcommand == TAXOMETER:
         runner = TaxometerArguments(args)
-    elif args.subcommand == "bin":
-        classes_map = dict(
-            vae=VAEArguments,
-            aae=AAEArguments,
-            vaeaae=VAEAAEArguments,
-            vaevae=VAEVAEArguments,
-        )
+    elif args.subcommand == BIN:
+        classes_map = {
+            VAMB: VAEArguments,
+            AAE: AAEArguments,
+            AVAMB: VAEAAEArguments,
+            TAXVAMB: VAEVAEArguments,
+        }
         runner = classes_map[args.model_subcommand](args)
-    elif args.subcommand == "recluster":
+    elif args.subcommand == RECLUSTER:
         runner = ReclusteringArguments(args)
     runner.run()
 
