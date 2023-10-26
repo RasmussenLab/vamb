@@ -2220,38 +2220,34 @@ def main():
     VAMB = "basic"
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
-    AAE = "aae"
     RECLUSTER = "recluster"
     predict_parser = subparsers.add_parser(
-        TAXOMETER, 
-        help=
-        '''
+        TAXOMETER,
+        help="""
         refines taxonomic classification of any metagenome binner. 
         See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
         (link)
-        '''
+        """,
     )
     add_input_output_arguments(predict_parser)
     add_taxonomy_arguments(predict_parser, taxonomy_only=True)
     add_predictor_arguments(predict_parser)
 
     vaevae_parserbin_parser = subparsers.add_parser(
-        BIN, 
-        help=
-        '''
+        BIN,
+        help="""
         VAMB, TaxVAMB, AVAMB binners
-        '''
+        """,
     )
     subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
 
     vae_parser = subparsers_model.add_parser(
-        VAMB, 
-        help=
-        '''
+        VAMB,
+        help="""
         default binner based on a variational autoencoder. 
         See the paper "Improved metagenome binning and assembly using deep variational autoencoders" 
         (https://www.nature.com/articles/s41587-020-00777-4)
-        '''
+        """,
     )
     add_input_output_arguments(vae_parser)
     add_vae_arguments(vae_parser)
@@ -2259,13 +2255,12 @@ def main():
     add_predictor_arguments(vae_parser)
 
     vaevae_parser = subparsers_model.add_parser(
-        TAXVAMB, 
-        help=
-        '''
+        TAXVAMB,
+        help="""
         taxonomy informed binner based on a bi-modal variational autoencoder. 
         See the paper "TaxVAMB: taxonomic annotations improve metagenome binning" 
         (link)
-        '''
+        """,
     )
     add_input_output_arguments(vaevae_parser)
     add_vae_arguments(vaevae_parser)
@@ -2274,37 +2269,24 @@ def main():
     add_taxonomy_arguments(vaevae_parser)
 
     vaeaae_parser = subparsers_model.add_parser(
-        AVAMB, 
-        help=
-        '''
+        AVAMB,
+        help="""
         ensemble model of an adversarial autoencoder and a variational autoencoder. 
         See the paper "Adversarial and variational autoencoders improve metagenomic binning" 
         (https://www.nature.com/articles/s42003-023-05452-3). 
         WARNING: recommended use is through a Snakemake pipeline
-        '''
+        """,
     )
     add_input_output_arguments(vaeaae_parser)
     add_vae_arguments(vaeaae_parser)
     add_aae_arguments(vaeaae_parser)
     add_clustering_arguments(vaeaae_parser)
 
-    aae_parser = subparsers_model.add_parser(
-        AAE, 
-        help=
-        '''
-        adversarial autoencoder (helper method for AVAMB)
-        '''
-    )
-    add_input_output_arguments(aae_parser)
-    add_aae_arguments(aae_parser)
-    add_clustering_arguments(aae_parser)
-
     recluster_parser = subparsers.add_parser(
-        RECLUSTER, 
-        help=
-        '''
+        RECLUSTER,
+        help="""
         reclustering using single-copy genes for the binning results of VAMB, TaxVAMB or AVAMB
-        '''
+        """,
     )
     add_input_output_arguments(recluster_parser)
     add_reclustering_arguments(recluster_parser)
@@ -2317,7 +2299,6 @@ def main():
     elif args.subcommand == BIN:
         classes_map = {
             VAMB: VAEArguments,
-            AAE: AAEArguments,
             AVAMB: VAEAAEArguments,
             TAXVAMB: VAEVAEArguments,
         }
@@ -2329,3 +2310,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+                                                      
