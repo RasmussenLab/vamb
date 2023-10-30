@@ -2202,7 +2202,7 @@ def main():
     Version: {'.'.join([str(i) for i in vamb.__version__])}
 
     Default use, good for most datasets:
-    vamb bin basic --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
+    vamb bin default --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
 
     Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
     parser = argparse.ArgumentParser(
@@ -2230,7 +2230,7 @@ def main():
 
     TAXOMETER = "taxometer"
     BIN = "bin"
-    VAMB = "basic"
+    VAMB = "default"
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
