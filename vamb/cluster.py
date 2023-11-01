@@ -1,11 +1,4 @@
-__doc__ = """Iterative medoid clustering.
-
-Usage:
->>> clusters = list(ClusterIterator(matrix))
-
-Implements one core function, cluster, along with the helper
-functions write_clusters and read_clusters.
-"""
+__doc__ = "Iterative medoid clustering"
 
 import random as _random
 import numpy as _np
@@ -33,11 +26,6 @@ class Loner:
 
 
 class NoThreshold:
-    __slots__ = []
-    pass
-
-
-class Default:
     __slots__ = []
     pass
 
@@ -312,6 +300,7 @@ class ClusterGenerator:
     def __next__(self) -> Cluster:
         if self.n_remaining_points == 0:
             raise StopIteration
+        assert self.n_remaining_points > 0  # not negative
 
         cluster, _, points = self.find_cluster()
         self.n_emitted_clusters += 1
@@ -389,9 +378,8 @@ class ClusterGenerator:
                 self.order[i] = -1
                 continue
 
-            self.order_index = (
-                i + 1
-            )  # Move to next index for the next time this is called
+            # Move to next index for the next time this is called
+            self.order_index = i + 1
             return new_index
 
     def update_successes(self, success: bool):
@@ -469,12 +457,9 @@ class ClusterGenerator:
 
         return (medoid, distances)
 
-    def find_threshold(
-        self, distances: _Tensor
-    ) -> Union[Loner, NoThreshold, Default, float]:
+    def find_threshold(self, distances: _Tensor) -> Union[Loner, NoThreshold, float]:
         # If the point is a loner, immediately return a threshold in where only
         # that point is contained.
-        # TODO: Avoid this dual pass in this critical function for performance? How...?
         if _torch.count_nonzero(distances < 0.05) == 1:
             return Loner()
 
@@ -501,9 +486,6 @@ class ClusterGenerator:
             weight=picked_lengths,
         )
 
-        # When the peak_valley_ratio is too high, we need to return something to not get caught
-        # in an infinite loop.
-        must_return_points = self.peak_valley_ratio > 0.55
         peak_density = 0.0
         peak_over = False
         minimum_x = 0.0
@@ -532,7 +514,7 @@ class ClusterGenerator:
             if not peak_over and density > peak_density:
                 # Do not accept first peak to be after x = 0.1
                 if x > 0.1:
-                    return Default() if must_return_points else NoThreshold()
+                    return NoThreshold()
                 peak_density = density
 
             # Peak is over when density drops below 60% of peak density
@@ -556,11 +538,11 @@ class ClusterGenerator:
 
         # If we have not detected a threshold, we can't return one.
         if threshold is None:
-            return Default() if must_return_points else NoThreshold()
+            return NoThreshold()
         # Else, we check whether the threshold is too high. If not, we return it.
         else:
             if threshold > 0.2 + self.peak_valley_ratio:
-                return Default() if must_return_points else NoThreshold()
+                return NoThreshold()
             else:
                 return threshold
 
@@ -582,25 +564,26 @@ class ClusterGenerator:
                 )
                 points = _torch.IntTensor([medoid])
                 return (cluster, medoid, points)
-
-            elif isinstance(threshold, Default):
-                points = _smaller_indices(
-                    distances, self.kept_mask, _DEFAULT_RADIUS, self.cuda
-                )
-                cluster = Cluster(
-                    int(self.indices[medoid].item()),  # type: ignore
-                    seed,
-                    self.indices[points].numpy(),
-                    self.peak_valley_ratio,
-                    _DEFAULT_RADIUS,
-                    True,
-                    self.successes,
-                    len(self.attempts),
-                )
-                return (cluster, medoid, points)
-
             elif isinstance(threshold, NoThreshold):
-                self.update_successes(False)
+                # When the peak_valley_ratio is too high, we need to return something to not get caught
+                # in an infinite loop.
+                if self.peak_valley_ratio > 0.55:
+                    points = _smaller_indices(
+                        distances, self.kept_mask, _DEFAULT_RADIUS, self.cuda
+                    )
+                    cluster = Cluster(
+                        int(self.indices[medoid].item()),  # type: ignore
+                        seed,
+                        self.indices[points].numpy(),
+                        self.peak_valley_ratio,
+                        _DEFAULT_RADIUS,
+                        True,
+                        self.successes,
+                        len(self.attempts),
+                    )
+                    return (cluster, medoid, points)
+                else:
+                    self.update_successes(False)
 
             elif isinstance(threshold, float):
                 points = _smaller_indices(
