@@ -2310,6 +2310,9 @@ def main():
     if args.subcommand == TAXOMETER:
         runner = TaxometerArguments(args)
     elif args.subcommand == BIN:
+        if args.model_subcommand is None:
+            vaevae_parserbin_parser.print_help()
+            sys.exit(1)
         classes_map = {
             VAMB: VAEArguments,
             AVAMB: VAEAAEArguments,
