@@ -1790,8 +1790,8 @@ def add_input_output_arguments(subparser):
         dest="minlength",
         metavar="",
         type=int,
-        default=250,
-        help="ignore contigs shorter than this [250]",
+        default=2000,
+        help="ignore contigs shorter than this [2000]",
     )
     inputos.add_argument(
         "-z",

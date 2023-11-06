@@ -51,6 +51,10 @@ class TestReadContigs(unittest.TestCase):
         with self.assertWarns(UserWarning):
             Composition.from_file(self.io, minlength=250)
 
+    def test_warns_minlength(self):
+        with self.assertWarns(UserWarning):
+            Composition.from_file(self.large_io, minlength=275)
+
     def test_filter_minlength(self):
         minlen = 500
 
