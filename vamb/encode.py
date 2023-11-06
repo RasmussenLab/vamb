@@ -9,7 +9,6 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
-import warnings
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -86,14 +85,6 @@ def make_dataloader(
 
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
-
-    if len(rpkm) < 20000:
-        warnings.warn(
-            f"WARNING: Creating DataLoader with only {len(rpkm)} sequences. "
-            "We normally expect 20,000 sequences or more to prevent overfitting. "
-            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
-            "You may want to lower the beta parameter, or use a different binner altogether."
-        )
 
     # Copy if not destroy - this way we can have all following operations in-place
     # for simplicity

@@ -524,7 +524,7 @@ def calc_tnf(
         log(f"Loading data from FASTA file {path}", logfile, 1)
         with vamb.vambtools.Reader(str(path)) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, minlength=options.min_contig_length
+                file, minlength=options.min_contig_length, logfile=logfile
             )
         composition.save(outdir.joinpath("composition.npz"))
 

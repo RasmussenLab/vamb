@@ -13,6 +13,18 @@ from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
 from pathlib import Path
+import warnings
+
+
+def showwarning_override(message, category, filename, lineno, file=None, line=None):
+    print(str(message) + "\n", file=file)
+
+
+# It may seem horrifying to override a stdlib method, but this is the way recommended by the
+# warnings documentation.
+# We do it because it's the only way I know to prevent displaying file numbers and source
+# code to our users, which I think is a terrible user experience
+warnings.showwarning = showwarning_override
 
 
 class PushArray:
