@@ -157,10 +157,6 @@ class TestVAE(unittest.TestCase):
         t = self.tnfs.copy()
         l = self.lens.copy()
 
-        with self.assertWarns(UserWarning):
-            dl = vamb.encode.make_dataloader(r, t, l, batchsize=256)
-            vae.trainmodel(dl, batchsteps=None, nepochs=2)
-
     def test_loss_falls(self):
         vae = vamb.encode.VAE(self.rpkm.shape[1])
         rpkm_copy = self.rpkm.copy()

@@ -5,12 +5,14 @@ Usage:
 ...     tnfs, contignames, lengths = read_contigs(filehandle)
 """
 
+import sys
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
-from typing import IO, Union, TypeVar
+from typing import IO, Union, TypeVar, Optional, IO
 from pathlib import Path
+import warnings
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL: _np.ndarray = _vambtools.read_npz(
@@ -158,7 +160,12 @@ class Composition:
         raw.clear()
 
     @classmethod
-    def from_file(cls: type[C], filehandle: Iterable[bytes], minlength: int = 100) -> C:
+    def from_file(
+        cls: type[C],
+        filehandle: Iterable[bytes],
+        minlength: int = 100,
+        logfile: Optional[IO[str]] = None,
+    ) -> C:
         """Parses a FASTA file open in binary reading mode, returning Composition.
 
         Input:
@@ -206,4 +213,18 @@ class Composition:
             _np.array(mask, dtype=bool),
             minlength,
         )
+
+        if len(metadata.lengths) < 20_000:
+            message = (
+                f"WARNING: Parsed only {len(metadata.lengths)} sequences from FASTA file. "
+                "We normally expect 20,000 sequences or more to prevent overfitting. "
+                "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
+                "You may want to  bin more samples as a time, lower the beta parameter, "
+                "or use a different binner altogether."
+            )
+            warnings.warn(message)
+            if logfile is not None:
+                print("\n", file=logfile)
+                print(message, file=logfile)
+
         return cls(metadata, tnfs_arr)
