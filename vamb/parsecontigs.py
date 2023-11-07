@@ -225,10 +225,7 @@ class Composition:
                 "You may want to  bin more samples as a time, lower the beta parameter, "
                 "or use a different binner altogether."
             )
-            warnings.warn(message)
-            if logfile is not None:
-                print("\n", file=logfile)
-                print(message, file=logfile)
+            _vambtools.log_and_warn(message, logfile=logfile)
 
         # Warn the user if any contigs have been observed, which is smaller
         # than the threshold.
@@ -239,9 +236,6 @@ class Composition:
                 "Better results are obtained if the sequence file is filtered to the minimum "
                 "sequence length before mapping."
             )
-            warnings.warn(message)
-            if logfile is not None:
-                print("\n", file=logfile)
-                print(message, file=logfile)
+            _vambtools.log_and_warn(message, logfile=logfile)
 
         return cls(metadata, tnfs_arr)
