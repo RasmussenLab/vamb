@@ -10,7 +10,7 @@ from collections import namedtuple
 from functools import partial
 from math import log as _log
 from pathlib import Path
-from typing import Optional, IO, Union
+from typing import Optional, IO, Union, Iterable
 import dadaptation
 
 import torch as _torch
@@ -61,12 +61,12 @@ def make_graph(taxs):
 
 
 def collate_fn_labels_hloss(
-    num_categories, table_parent, labels
+    num_categories: int, table_parent, labels
 ):  # target in form of indices
     return _semisupervised_encode.collate_fn_labels(num_categories, labels)
 
 
-def collate_fn_concat_hloss(num_categories, table_parent, batch):
+def collate_fn_concat_hloss(num_categories: int, table_parent, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
@@ -75,7 +75,7 @@ def collate_fn_concat_hloss(num_categories, table_parent, batch):
     return a, b, c, d, collate_fn_labels_hloss(num_categories, table_parent, e)[0]
 
 
-def collate_fn_semisupervised_hloss(num_categories, table_parent, batch):
+def collate_fn_semisupervised_hloss(num_categories: int, table_parent, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
@@ -133,12 +133,12 @@ def make_dataloader_concat_hloss(
     tnf,
     lengths,
     labels,
-    N,
+    N: int,
     table_parent,
-    no_filter=True,
-    batchsize=256,
-    destroy=False,
-    cuda=False,
+    no_filter: bool = True,
+    batchsize: int = 256,
+    destroy: bool = False,
+    cuda: bool = False,
 ):
     (
         depthstensor,
@@ -305,17 +305,17 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
 
     def __init__(
         self,
-        nlabels,
+        nlabels: int,
         nodes,
         table_parent,
         nhiddens=None,
-        nlatent=32,
-        alpha=None,
-        beta=200,
-        dropout=0.2,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
-        cuda=False,
-        logfile=None,
+        cuda: bool = False,
+        logfile: Optional[IO[str]] = None,
     ):
         super(VAELabelsHLoss, self).__init__(
             nlabels,
@@ -468,18 +468,18 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
 
     def __init__(
         self,
-        nsamples,
-        nlabels,
+        nsamples: int,
+        nlabels: int,
         nodes,
         table_parent,
-        nhiddens=None,
-        nlatent=32,
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
         alpha=None,
-        beta=200,
-        dropout=0.2,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
-        cuda=False,
-        logfile=None,
+        cuda: bool = False,
+        logfile: Optional[IO[str]] = None,
     ):
         super(VAEConcatHLoss, self).__init__(
             nsamples,
@@ -602,18 +602,18 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
 
     def __init__(
         self,
-        nsamples,
-        nlabels,
+        nsamples: int,
+        nlabels: int,
         nodes,
         table_parent,
-        nhiddens=None,
-        nlatent=32,
-        alpha=None,
-        beta=200,
-        dropout=0.2,
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
-        cuda=False,
-        logfile=None,
+        cuda: bool = False,
+        logfile: Optional[IO[str]] = None,
     ):
         self.usecuda = cuda
         N_l = max(nlabels, 105)
@@ -893,7 +893,7 @@ class VAMB2Label(_nn.Module):
         )
 
     def _predict(self, tensor: Tensor) -> tuple[Tensor, Tensor]:
-        tensors = list()
+        tensors: list[_torch.Tensor] = list()
 
         # Hidden layers
         for encoderlayer, encodernorm in zip(self.encoderlayers, self.encodernorms):
@@ -913,7 +913,7 @@ class VAMB2Label(_nn.Module):
         ce_labels = self.loss_fn(labels_out, labels_in)
         return ce_labels, _torch.tensor(0)
 
-    def predict(self, data_loader) -> _np.ndarray:
+    def predict(self, data_loader) -> Iterable[tuple[_np.ndarray, _np.ndarray]]:
         self.eval()
 
         new_data_loader = _encode.set_batchsize(
@@ -964,7 +964,14 @@ class VAMB2Label(_nn.Module):
     ):
         raise NotImplementedError
 
-    def trainepoch(self, data_loader, epoch, optimizer, batchsteps, logfile):
+    def trainepoch(
+        self,
+        data_loader,
+        epoch: int,
+        optimizer,
+        batchsteps: list[int],
+        logfile: Optional[IO[str]],
+    ):
         self.train()
 
         epoch_celoss = 0

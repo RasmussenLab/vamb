@@ -11,7 +11,6 @@ import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
 from typing import IO, Union, TypeVar, Optional
 from pathlib import Path
-import warnings
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
 _KERNEL: _np.ndarray = _vambtools.read_npz(
