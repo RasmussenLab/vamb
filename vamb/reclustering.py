@@ -5,7 +5,6 @@ The original code is distributed under MIT License.
 
 import os
 import subprocess
-import tempfile
 import sys
 import contextlib
 from typing import IO
@@ -16,6 +15,7 @@ import pandas as pd
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 import gzip
+import lzma
 
 
 def log(string: str, logfile: IO[str], indent: int = 0):
@@ -92,16 +92,12 @@ def fasta_iter(fname, full_header=False):
             return f
 
     elif fname.endswith(".gz"):
-        import gzip
-
         op = gzip.open
     elif fname.endswith(".bz2"):
         import bz2
 
         op = bz2.open
     elif fname.endswith(".xz"):
-        import lzma
-
         op = lzma.open
     else:
         op = open
