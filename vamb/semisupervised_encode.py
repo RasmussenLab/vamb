@@ -6,6 +6,7 @@ __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 import numpy as _np
 from functools import partial
 from math import log as _log
+from typing import Optional, IO
 
 import torch as _torch
 import torch.nn.functional as F
@@ -20,7 +21,7 @@ if _torch.__version__ < "0.4":
     raise ImportError("PyTorch version must be 0.4 or newer")
 
 
-def collate_fn_labels(num_categories, batch):
+def collate_fn_labels(num_categories: int, batch):
     return [
         F.one_hot(_torch.as_tensor(batch), num_classes=max(num_categories, 105))
         .squeeze(1)
@@ -28,7 +29,7 @@ def collate_fn_labels(num_categories, batch):
     ]
 
 
-def collate_fn_concat(num_categories, batch):
+def collate_fn_concat(num_categories: int, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
@@ -45,7 +46,7 @@ def collate_fn_concat(num_categories, batch):
     )
 
 
-def collate_fn_semisupervised(num_categories, batch):
+def collate_fn_semisupervised(num_categories: int, batch):
     a = _torch.stack([i[0] for i in batch])
     b = _torch.stack([i[1] for i in batch])
     c = _torch.stack([i[2] for i in batch])
@@ -84,7 +85,9 @@ def kld_gauss(p_mu, p_logstd, q_mu, q_logstd):
     return loss.mean()
 
 
-def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
+def _make_dataset(
+    rpkm, tnf, lengths, batchsize: int = 256, destroy: bool = False, cuda: bool = False
+):
     n_workers = 4 if cuda else 1
     dataloader = _encode.make_dataloader(rpkm, tnf, lengths, batchsize, destroy, cuda)
     (
@@ -92,7 +95,7 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
         tnftensor,
         total_abundance_tensor,
         weightstensor,
-    ) = dataloader.dataset.tensors
+    ) = dataloader.dataset.tensors  # type:ignore
     return (
         depthstensor,
         tnftensor,
@@ -105,7 +108,13 @@ def _make_dataset(rpkm, tnf, lengths, batchsize=256, destroy=False, cuda=False):
 
 
 def make_dataloader_concat(
-    rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False
+    rpkm,
+    tnf,
+    lengths,
+    labels,
+    batchsize: int = 256,
+    destroy: bool = False,
+    cuda: bool = False,
 ):
     (
         depthstensor,
@@ -139,7 +148,13 @@ def make_dataloader_concat(
 
 
 def make_dataloader_labels(
-    rpkm, tnf, lengths, labels, batchsize=256, destroy=False, cuda=False
+    rpkm,
+    tnf,
+    lengths,
+    labels,
+    batchsize: int = 256,
+    destroy: bool = False,
+    cuda: bool = False,
 ):
     _, _, _, _, batchsize, n_workers, cuda = _make_dataset(
         rpkm, tnf, lengths, batchsize=batchsize, destroy=destroy, cuda=cuda
@@ -177,8 +192,8 @@ def make_dataloader_semisupervised(
     shapes,
     seed: int,
     batchsize=256,
-    destroy=False,
-    cuda=False,
+    destroy: bool = False,
+    cuda: bool = False,
 ):
     n_labels = shapes[-1]
     n_total = len(dataloader_vamb.dataset)
@@ -231,14 +246,14 @@ class VAELabels(_encode.VAE):
 
     def __init__(
         self,
-        nlabels,
-        nhiddens=None,
-        nlatent=32,
-        alpha=None,
-        beta=200,
-        dropout=0.2,
-        cuda=False,
-        logfile=None,
+        nlabels: int,
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200,
+        dropout: Optional[float] = 0.2,
+        cuda: bool = False,
+        logfile: Optional[IO[str]] = None,
     ):
         super(VAELabels, self).__init__(
             nlabels - 104,
@@ -294,7 +309,7 @@ class VAELabels(_encode.VAE):
         if epoch in batchsteps:
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,
+                batch_size=data_loader.batch_size * 2,  # type:ignore
                 shuffle=True,
                 drop_last=True,
                 num_workers=data_loader.num_workers,
@@ -390,10 +405,10 @@ class VAELabels(_encode.VAE):
     def trainmodel(
         self,
         dataloader,
-        nepochs=500,
-        lrate=1e-3,
-        batchsteps=[25, 75, 150, 300],
-        logfile=None,
+        nepochs: int = 500,
+        lrate: float = 1e-3,
+        batchsteps: list[int] = [25, 75, 150, 300],
+        logfile: Optional[IO[str]] = None,
         modelfile=None,
     ):
         """Train the autoencoder from depths array and tnf array.
@@ -500,14 +515,14 @@ class VAEConcat(_encode.VAE):
 
     def __init__(
         self,
-        nsamples,
-        nlabels,
-        nhiddens=None,
-        nlatent=32,
-        alpha=None,
-        beta=200,
-        dropout=0.2,
-        cuda=False,
+        nsamples: int,
+        nlabels: int,
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
+        cuda: bool = False,
     ):
         super(VAEConcat, self).__init__(
             nsamples + nlabels,
@@ -625,7 +640,7 @@ class VAEConcat(_encode.VAE):
         if epoch in batchsteps:
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,
+                batch_size=data_loader.batch_size * 2,  # type:ignore
                 shuffle=True,
                 drop_last=True,
                 num_workers=data_loader.num_workers,
@@ -767,14 +782,14 @@ class VAEVAE(object):
 
     def __init__(
         self,
-        nsamples,
-        nlabels,
-        nhiddens=None,
-        nlatent=32,
-        alpha=None,
-        beta=200,
-        dropout=0.2,
-        cuda=False,
+        nsamples: int,
+        nlabels: int,
+        nhiddens: Optional[list[int]] = None,
+        nlatent: int = 32,
+        alpha: Optional[float] = None,
+        beta: float = 200.0,
+        dropout: Optional[float] = 0.2,
+        cuda: bool = False,
     ):
         N_l = max(nlabels, 105)
         self.VAEVamb = _encode.VAE(
@@ -893,8 +908,8 @@ class VAEVAE(object):
             "correct_labels_joint",
             "loss",
         ]
-        metrics_dict = {k: 0 for k in metrics}
-        tensors_dict = {k: None for k in metrics}
+        metrics_dict: dict[str, _torch.Tensor] = {k: 0 for k in metrics}
+        tensors_dict: dict[str, _torch.Tensor] = {k: None for k in metrics}
 
         if epoch in batchsteps:
             data_loader = _DataLoader(
@@ -1059,10 +1074,10 @@ class VAEVAE(object):
     def trainmodel(
         self,
         dataloader,
-        nepochs=500,
-        lrate=1e-3,
-        batchsteps=[25, 75, 150, 300],
-        logfile=None,
+        nepochs: int = 500,
+        lrate: float = 1e-3,
+        batchsteps: list[int] = [25, 75, 150, 300],
+        logfile: Optional[IO[str]] = None,
         modelfile=None,
     ):
         """Train the autoencoder from depths array, tnf array and one-hot labels array.

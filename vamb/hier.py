@@ -1,7 +1,7 @@
 import collections
 import csv
 import itertools
-from typing import Callable, Dict, Hashable, List, Optional, Sequence, TextIO, Tuple
+from typing import Callable, Hashable, Optional, Sequence, TextIO, cast
 
 import networkx as nx
 import numpy as np
@@ -19,7 +19,7 @@ class Hierarchy:
     def num_nodes(self) -> int:
         return len(self._parents)
 
-    def edges(self) -> List[Tuple[int, int]]:
+    def edges(self) -> list[tuple[int, int]]:
         return list(zip(self._parents[1:], itertools.count(1)))
 
     def parents(self, root_loop: bool = False) -> np.ndarray:
@@ -32,7 +32,7 @@ class Hierarchy:
         else:
             return np.array(self._parents)
 
-    def children(self) -> Dict[int, np.ndarray]:
+    def children(self) -> dict[int, np.ndarray]:
         result = collections.defaultdict(list)
         for i, j in self.edges():
             result[i].append(j)
@@ -147,7 +147,7 @@ class Hierarchy:
         self,
         exclude_root: bool = False,
         exclude_self: bool = False,
-    ) -> List[np.ndarray]:
+    ) -> list[np.ndarray]:
         # TODO: Could avoid potential high memory usage here using parents.
         is_descendant = self.ancestor_mask(strict=exclude_self).T
         if exclude_root:
@@ -174,10 +174,10 @@ class Hierarchy:
         padded[row_index, col_index] = np.concatenate(paths)
         return padded
 
-    def __str__(self, node_names: Optional[List[str]] = None) -> str:
+    def __str__(self, node_names: Optional[list[str]] = None) -> str:
         return format_tree(self, node_names)
 
-    def to_networkx(self, keys: Optional[List] = None) -> nx.DiGraph:
+    def to_networkx(self, keys: Optional[list] = None) -> nx.DiGraph:
         n = self.num_nodes()
         g = nx.DiGraph()
         if keys is None:
@@ -187,8 +187,8 @@ class Hierarchy:
 
 
 def make_hierarchy_from_edges(
-    pairs: Sequence[Tuple[str, str]],
-) -> Tuple[Hierarchy, List[str]]:
+    pairs: Sequence[tuple[str, str]],
+) -> tuple[Hierarchy, list[str]]:
     """Creates a hierarchy from a list of name pairs.
 
     The order of the edges determines the order of the nodes.
@@ -199,7 +199,7 @@ def make_hierarchy_from_edges(
     num_nodes = num_edges + 1
     # Data structures to populate from list of pairs.
     parents = np.full([num_nodes], -1, dtype=int)
-    names = [None] * num_nodes
+    names: list[Optional[str]] = [None] * num_nodes
     name_to_index = {}
     # Set name of root from first pair.
     root, _ = pairs[0]
@@ -213,10 +213,11 @@ def make_hierarchy_from_edges(
         parents[j] = i
         names[j] = v
         name_to_index[v] = j
-    return Hierarchy(parents), names
+    assert all(i is not None for i in names)
+    return Hierarchy(parents), cast(list[str], names)
 
 
-def load_edges(f: TextIO, delimiter=",") -> List[Tuple[str, str]]:
+def load_edges(f: TextIO, delimiter=",") -> list[tuple[str, str]]:
     """Load from file containing (parent, node) pairs."""
     reader = csv.reader(f)
     pairs = []
@@ -246,7 +247,7 @@ def rooted_subtree(tree: Hierarchy, nodes: np.ndarray) -> Hierarchy:
 
 def rooted_subtree_spanning(
     tree: Hierarchy, nodes: np.ndarray
-) -> Tuple[Hierarchy, np.ndarray]:
+) -> tuple[Hierarchy, np.ndarray]:
     nodes = ancestors_union(tree, nodes)
     subtree = rooted_subtree(tree, nodes)
     return subtree, nodes
@@ -259,7 +260,7 @@ def ancestors_union(tree: Hierarchy, node_subset: np.ndarray) -> np.ndarray:
     return np.unique(paths[paths >= 0])
 
 
-def find_subset_index(base: List[Hashable], subset: List[Hashable]) -> np.ndarray:
+def find_subset_index(base: list[Hashable], subset: list[Hashable]) -> np.ndarray:
     """Returns index of subset elements in base list (injective map)."""
     name_to_index = {x: i for i, x in enumerate(base)}
     return np.asarray([name_to_index[x] for x in subset], dtype=int)
@@ -374,7 +375,7 @@ def truncate_given_lca(gt: np.ndarray, pr: np.ndarray, lca: np.ndarray) -> np.nd
 
 
 def format_tree(
-    tree: Hierarchy, node_names: Optional[List[str]] = None, include_size: bool = False
+    tree: Hierarchy, node_names: Optional[list[str]] = None, include_size: bool = False
 ) -> str:
     if node_names is None:
         node_names = [str(i) for i in range(tree.num_nodes())]
@@ -407,7 +408,7 @@ def format_tree(
     return "".join(subtree(0, "", ""))
 
 
-def level_nodes(tree: Hierarchy, extend: bool = False) -> List[np.ndarray]:
+def level_nodes(tree: Hierarchy, extend: bool = False) -> list[np.ndarray]:
     node_depth = tree.depths()
     is_leaf = tree.leaf_mask()
     max_depth = np.max(node_depth)
@@ -423,7 +424,7 @@ def level_nodes(tree: Hierarchy, extend: bool = False) -> List[np.ndarray]:
 
 def level_successors(
     tree: Hierarchy,
-) -> Tuple[List[np.ndarray], List[List[np.ndarray]]]:
+) -> tuple[list[np.ndarray], list[list[np.ndarray]]]:
     """Returns the list of parents and their children at each depth."""
     node_depth = tree.depths()
     max_depth = np.max(node_depth)
@@ -447,7 +448,7 @@ def level_successors_padded(
     tree: Hierarchy,
     method: str = "constant",
     constant_value: int = -1,
-) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Returns the list of parents and their children at each depth."""
     level_parents, level_children = level_successors(tree)
     level_children = [
@@ -457,7 +458,7 @@ def level_successors_padded(
     return level_parents, level_children
 
 
-def siblings(tree: Hierarchy) -> List[np.ndarray]:
+def siblings(tree: Hierarchy) -> list[np.ndarray]:
     node_parent = tree.parents()
     node_children = tree.children()
     node_children[-1] = np.empty([0], dtype=int)
@@ -476,7 +477,7 @@ def _except(v, x: np.ndarray) -> np.ndarray:
 
 
 def _pad_2d(
-    x: List[np.ndarray], dtype: np.dtype, method: str = "constant", constant_value=None
+    x: list[np.ndarray], dtype: np.dtype, method: str = "constant", constant_value=None
 ) -> np.ndarray:
     num_rows = len(x)
     row_lens = list(map(len, x))
