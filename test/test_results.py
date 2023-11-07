@@ -30,9 +30,8 @@ class TestCompositionResult(unittest.TestCase):
         self.io.seek(0)
 
     def test_runs(self):
-        with self.assertRaises(UserWarning):
-            comp = vamb.parsecontigs.Composition.from_file(self.io)
-            self.assertIsInstance(comp, vamb.parsecontigs.Composition)
+        comp = vamb.parsecontigs.Composition.from_file(self.io)
+        self.assertIsInstance(comp, vamb.parsecontigs.Composition)
 
     if TEST_UNSTABLE_HASHES:
 

@@ -12,6 +12,7 @@ import datetime
 import time
 import random
 import pycoverm
+import itertools
 from math import isfinite
 from typing import Optional, IO, Tuple, Union
 from pathlib import Path
@@ -53,14 +54,19 @@ class CompositionPath(type(Path())):
 
 
 class CompositionOptions:
-    __slots__ = ["path", "min_contig_length"]
+    __slots__ = ["path", "min_contig_length", "warn_on_few_seqs"]
 
     def __init__(
-        self, fastapath: Optional[Path], npzpath: Optional[Path], min_contig_length: int
+        self,
+        fastapath: Optional[Path],
+        npzpath: Optional[Path],
+        min_contig_length: int,
+        warn_on_few_seqs: bool,
     ):
         assert isinstance(fastapath, (Path, type(None)))
         assert isinstance(npzpath, (Path, type(None)))
         assert isinstance(min_contig_length, int)
+        assert isinstance(warn_on_few_seqs, bool)
 
         if min_contig_length < 250:
             raise argparse.ArgumentTypeError(
@@ -82,6 +88,7 @@ class CompositionOptions:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
         self.min_contig_length = min_contig_length
+        self.warn_on_few_seqs = warn_on_few_seqs
 
 
 class AbundancePath(type(Path())):
@@ -247,7 +254,7 @@ class ReclusteringOptions:
         "latent_path",
         "clusters_path",
         "hmmout_path",
-        "binsplit_separator",
+        "binsplitter",
         "algorithm",
     ]
 
@@ -272,9 +279,9 @@ class ReclusteringOptions:
 
         self.latent_path = latent_path
         self.clusters_path = clusters_path
-        self.binsplit_separator = binsplit_separator
         self.hmmout_path = hmmout_path
         self.algorithm = algorithm
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
 class EncoderOptions:
@@ -411,32 +418,25 @@ class ClusterOptions:
     __slots__ = [
         "window_size",
         "min_successes",
-        "min_cluster_size",
         "max_clusters",
-        "binsplit_separator",
+        "binsplitter",
     ]
 
     def __init__(
         self,
         window_size: int,
         min_successes: int,
-        min_cluster_size: int,
         max_clusters: Optional[int],
         binsplit_separator: Optional[str],
     ):
         assert isinstance(window_size, int)
         assert isinstance(min_successes, int)
-        assert isinstance(min_cluster_size, int)
         assert isinstance(max_clusters, (int, type(None)))
         assert isinstance(binsplit_separator, (str, type(None)))
 
         if window_size < 1:
             raise argparse.ArgumentTypeError("Window size must be at least 1")
         self.window_size = window_size
-
-        if min_cluster_size < 1:
-            raise argparse.ArgumentTypeError("Minimum cluster size must be at least 0")
-        self.min_cluster_size = min_cluster_size
 
         if min_successes < 1 or min_successes > window_size:
             raise argparse.ArgumentTypeError(
@@ -447,12 +447,7 @@ class ClusterOptions:
         if max_clusters is not None and max_clusters < 1:
             raise argparse.ArgumentTypeError("Max clusters must be at least 1")
         self.max_clusters = max_clusters
-
-        if binsplit_separator is not None and len(binsplit_separator) == 0:
-            raise argparse.ArgumentTypeError(
-                "Binsplit separator cannot be an empty string"
-            )
-        self.binsplit_separator = binsplit_separator
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
 class VambOptions:
@@ -523,6 +518,7 @@ def log(string: str, logfile: IO[str], indent: int = 0):
 def calc_tnf(
     options: CompositionOptions,
     outdir: Path,
+    binsplitter: vamb.vambtools.BinSplitter,
     logfile: IO[str],
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
@@ -543,6 +539,30 @@ def calc_tnf(
                 file, minlength=options.min_contig_length, logfile=logfile
             )
         composition.save(outdir.joinpath("composition.npz"))
+
+    binsplitter.initialize(composition.metadata.identifiers)
+
+    if options.warn_on_few_seqs and composition.nseqs < 20_000:
+        message = (
+            f"WARNING: Kept only {composition.nseqs} sequences from FASTA file. "
+            "We normally expect 20,000 sequences or more to prevent overfitting. "
+            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
+            "You may want to  bin more samples as a time, lower the beta parameter, "
+            "or use a different binner altogether."
+        )
+        vamb.vambtools.log_and_warn(message, logfile=logfile)
+
+    # Warn the user if any contigs have been observed, which is smaller
+    # than the threshold.
+    if not np.all(composition.metadata.mask):
+        n_removed = len(composition.metadata.mask) - np.sum(composition.metadata.mask)
+        message = (
+            f"WARNING: The minimum sequence length has been set to {options.min_contig_length}, "
+            f"but {n_removed} sequences fell below this threshold and was filtered away."
+            "\nBetter results are obtained if the sequence file is filtered to the minimum "
+            "sequence length before mapping."
+        )
+        vamb.vambtools.log_and_warn(message, logfile=logfile)
 
     elapsed = round(time.time() - begintime, 2)
     print("", file=logfile)
@@ -712,18 +732,19 @@ def trainaae(
     return latent, clusters_y_dict
 
 
-def cluster(
-    cluster_options: ClusterOptions,
-    clusterspath: Path,
-    latent: np.ndarray,
-    contignames: Sequence[str],  # of dtype object
-    lengths: Sequence[int],  # of dtype object
+def cluster_and_write_files(
     vamb_options: VambOptions,
+    cluster_options: ClusterOptions,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    bins_dir: Path,
+    fasta_catalogue: Path,
+    latent: np.ndarray,
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
     logfile: IO[str],
-    cluster_prefix: str,
-) -> None:
+):
     begintime = time.time()
-
+    # Create cluser iterator
     log("\nClustering", logfile)
     log(f"Windowsize: {cluster_options.window_size}", logfile, 1)
     log(
@@ -732,139 +753,122 @@ def cluster(
         1,
     )
     log(f"Max clusters: {cluster_options.max_clusters}", logfile, 1)
-    log(f"Min cluster size: {cluster_options.min_cluster_size}", logfile, 1)
     log(f"Use CUDA for clustering: {vamb_options.cuda}", logfile, 1)
-    log(
-        "Separator: {}".format(
-            None
-            if cluster_options.binsplit_separator is None
-            else ('"' + cluster_options.binsplit_separator + '"')
-        ),
-        logfile,
-        1,
-    )
+    log(f"Binsplitter: {cluster_options.binsplitter.log_string()}", logfile, 1)
 
     cluster_generator = vamb.cluster.ClusterGenerator(
         latent,
-        lengths,  # type:ignore
+        sequence_lens,  # type:ignore
         windowsize=cluster_options.window_size,
         minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
-        # cuda=vamb_options.cuda,
-        cuda=False,  # disabled until clustering is fixed
+        cuda=vamb_options.cuda,
         rng_seed=vamb_options.seed,
     )
 
     renamed = (
-        (str(cluster_index + 1), {contignames[i] for i in members})
+        (str(cluster_index + 1), {sequence_names[i] for i in members})
         for (cluster_index, (_, members)) in enumerate(
             map(lambda x: x.as_tuple(), cluster_generator)
         )
     )
 
-    # Binsplit if given a separator
-    if cluster_options.binsplit_separator is not None:
-        maybe_split = vamb.vambtools.binsplit(
-            renamed, cluster_options.binsplit_separator
-        )
-    else:
-        maybe_split = renamed
-
-    with open(clusterspath, "w") as clustersfile:
-        clusternumber, ncontigs = vamb.vambtools.write_clusters(
-            clustersfile,
-            maybe_split,
-            max_clusters=cluster_options.max_clusters,
-            min_size=cluster_options.min_cluster_size,
-            rename=False,
-            cluster_prefix=cluster_prefix,
-        )
-
-    print("", file=logfile)
-    log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-
+    # This also works correctly when max_clusters is None
+    first_clusters = itertools.islice(renamed, cluster_options.max_clusters)
+    unsplit_clusters = dict(first_clusters)
     elapsed = round(time.time() - begintime, 2)
     log(f"Clustered contigs in {elapsed} seconds.", logfile, 1)
 
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        base_clusters_name,
+        bins_dir,
+        fasta_catalogue,
+        unsplit_clusters,
+        sequence_names,
+        sequence_lens,
+        logfile,
+    )
 
-def write_fasta(
-    outdir: Path,
-    clusterspath: Path,
-    fastapath: Path,
-    contignames: Sequence[str],  # of object
-    contiglengths: np.ndarray,
-    minfasta: int,
+
+def write_clusters_and_bins(
+    vamb_options: VambOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    bins_dir: Path,
+    fasta_catalogue: Path,
+    clusters: dict[str, set[str]],
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
     logfile: IO[str],
-    separator: Optional[str],
-) -> None:
+):
+    # Write unsplit clusters to file
     begintime = time.time()
-
-    log("\nWriting FASTA files", logfile)
-    log("Minimum FASTA size: " + str(minfasta), logfile, 1)
-    assert len(contignames) == len(contiglengths)
-
-    lengthof = dict(zip(contignames, contiglengths))
-    filtered_clusters: dict[str, set[str]] = dict()
-
-    with open(clusterspath) as file:
-        clusters = vamb.vambtools.read_clusters(file)
-
-    for cluster, contigs in clusters.items():
-        size = sum(lengthof[contig] for contig in contigs)
-        if size >= minfasta:
-            filtered_clusters[cluster] = clusters[cluster]
-
-    del lengthof, clusters
-    keep: set[str] = set()
-    for contigs in filtered_clusters.values():
-        keep.update(set(contigs))
-
-    with vamb.vambtools.Reader(fastapath) as file:
-        vamb.vambtools.write_bins(
-            outdir.joinpath("bins"),
-            filtered_clusters,
-            file,
-            maxbins=None,
-            separator=separator,
+    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+    with open(unsplit_path, "w") as file:
+        (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
+            file, clusters.items()
         )
 
-    ncontigs = sum(map(len, filtered_clusters.values()))
-    nfiles = len(filtered_clusters)
-    print("", file=logfile)
-    log(f"Wrote {ncontigs} contigs to {nfiles} FASTA files", logfile, 1)
+    # Open unsplit clusters and split them
+    if binsplitter.splitter is not None:
+        split_path = Path(base_clusters_name + "_split.tsv")
+        clusters = dict(binsplitter.binsplit(clusters.items()))
+        with open(split_path, "w") as file:
+            (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items()
+            )
+        msg = f"Clustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    else:
+        msg = f"Clustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
 
+    log("\n" + msg, logfile, 1)
     elapsed = round(time.time() - begintime, 2)
-    log(f"Wrote FASTA in {elapsed} seconds.", logfile, 1)
+    log(f"Wrote clusters file(s) in {elapsed} seconds.", logfile, 1)
+
+    # Write bins, if necessary
+    if vamb_options.min_fasta_output_size is not None:
+        starttime = time.time()
+        filtered_clusters: dict[str, set[str]] = dict()
+        assert len(sequence_lens) == len(sequence_names)
+        sizeof = dict(zip(sequence_names, sequence_lens))
+        for binname, contigs in clusters.items():
+            if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
+                filtered_clusters[binname] = contigs
+
+        with vamb.vambtools.Reader(fasta_catalogue) as file:
+            vamb.vambtools.write_bins(
+                bins_dir,
+                filtered_clusters,
+                file,
+                None,
+            )
+        elapsed = round(time.time() - starttime, 2)
+        n_bins = len(filtered_clusters)
+        n_contigs = sum(len(v) for v in filtered_clusters.values())
+        log(
+            f"\nWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds.",
+            logfile,
+            1,
+        )
 
 
 def load_composition_and_abundance(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
     logfile: IO[str],
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
-    log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
-    log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
-    log("Random seed is " + str(vamb_options.seed), logfile, 1)
-    begintime = time.time()
-
-    # Get TNFs, save as npz
-    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
-
-    # Parse BAMs, save as npz
+    composition = calc_tnf(comp_options, vamb_options.out_dir, binsplitter, logfile)
     abundance = calc_rpkm(
         abundance_options,
         vamb_options.out_dir,
         composition.metadata,
         vamb_options.n_threads,
         logfile,
-    )
-    time_generating_input = round(time.time() - begintime, 2)
-    log(
-        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
-        logfile,
-        1,
     )
     return (composition, abundance)
 
@@ -883,12 +887,11 @@ def run(
     vae_training_options = training_options.vae_options
     aae_training_options = training_options.aae_options
 
-    begintime = time.time()
-
     composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
+        binsplitter=cluster_options.binsplitter,
         logfile=logfile,
     )
     data_loader = vamb.encode.make_dataloader(
@@ -947,119 +950,48 @@ def run(
     if vae_options is not None:
         assert latent is not None
         assert comp_metadata.nseqs == len(latent)
-        # Cluster, save tsv file
-        clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
-        cluster(
+        cluster_and_write_files(
+            vamb_options,
             cluster_options,
-            clusterspath,
+            str(vamb_options.out_dir.joinpath("vae_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
             latent,
             comp_metadata.identifiers,  # type:ignore
             comp_metadata.lengths,  # type:ignore
-            vamb_options,
             logfile,
-            "vae_",
         )
-        log("VAE latent clustered", logfile, 1)
-
         del latent
-        fin_cluster_latent = time.time()
-
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-
-        writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-        log(f"VAE bins written in {writing_bins_time} seconds.", logfile, 1)
 
     if aae_options is not None:
         assert latent_z is not None
         assert clusters_y_dict is not None
         assert comp_metadata.nseqs == len(latent_z)
-        # Cluster, save tsv file
-        clusterspath = vamb_options.out_dir.joinpath("aae_z_clusters.tsv")
-
-        cluster(
+        cluster_and_write_files(
+            vamb_options,
             cluster_options,
-            clusterspath,
+            str(vamb_options.out_dir.joinpath("aae_z_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
             latent_z,
             comp_metadata.identifiers,  # type:ignore
             comp_metadata.lengths,  # type:ignore
-            vamb_options,
             logfile,
-            "aae_z_",
         )
-
-        fin_cluster_latent_z = time.time()
-        log("AAE z latent clustered.", logfile, 1)
-
         del latent_z
-
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-        time_writing_bins_z = time.time()
-        writing_bins_time_z = round(time_writing_bins_z - fin_cluster_latent_z, 2)
-        log(f"AAE z bins written in {writing_bins_time_z} seconds.", logfile, 1)
-
-        clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
-        # Binsplit if given a separator
-        if cluster_options.binsplit_separator is not None:
-            maybe_split = vamb.vambtools.binsplit(
-                clusters_y_dict.items(), cluster_options.binsplit_separator
-            )
-        else:
-            maybe_split = clusters_y_dict.items()
-        with open(clusterspath, "w") as clustersfile:
-            clusternumber, ncontigs = vamb.vambtools.write_clusters(
-                clustersfile,
-                maybe_split,
-                max_clusters=cluster_options.max_clusters,
-                min_size=cluster_options.min_cluster_size,
-                rename=False,
-                cluster_prefix="aae_y_",
-            )
-
-        print("", file=logfile)
-        log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-        time_start_writin_z_bins = time.time()
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-        time_writing_bins_y = time.time()
-        writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins, 2)
-        log(f"AAE y bins written in {writing_bins_time_y} seconds.", logfile, 1)
-
-    log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+        # We enforce this in the VAEAAEOptions constructor, see comment there
+        assert cluster_options.max_clusters is None
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("aae_y_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
+            clusters_y_dict,
+            comp_metadata.identifiers,  # type:ignore
+            comp_metadata.lengths,  # type:ignore
+            logfile,
+        )
 
 
 def parse_mmseqs_taxonomy(
@@ -1224,12 +1156,14 @@ def extract_and_filter_data(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
     logfile: IO[str],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
+        binsplitter=binsplitter,
         logfile=logfile,
     )
 
@@ -1255,6 +1189,7 @@ def run_taxonomy_predictor(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
+        binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
         logfile=logfile,
     )
     assert taxonomy_options.taxonomy_path is not None
@@ -1287,6 +1222,7 @@ def run_vaevae(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
+        binsplitter=cluster_options.binsplitter,
         logfile=logfile,
     )
 
@@ -1411,38 +1347,17 @@ def run_vaevae(
     np.save(LATENT_PATH, latent_both)
 
     # Cluster, save tsv file
-    clusterspath = vamb_options.out_dir.joinpath("vaevae_clusters.tsv")
-    cluster(
-        cluster_options,
-        clusterspath,
-        latent_both,
-        contignames,
-        lengths,
+    cluster_and_write_files(
         vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vaevae_clusters")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        latent_both,
+        contignames,  # type:ignore
+        lengths,  # type:ignore
         logfile,
-        "vaevae_",
     )
-    log("VAEVAE latent clustered", logfile, 1)
-
-    del latent_both
-    fin_cluster_latent = time.time()
-
-    if vamb_options.min_fasta_output_size is not None:
-        path = comp_options.path
-        assert isinstance(path, FASTAPath)
-        write_fasta(
-            vamb_options.out_dir,
-            clusterspath,
-            path,
-            contignames,
-            lengths,
-            vamb_options.min_fasta_output_size,
-            logfile,
-            separator=cluster_options.binsplit_separator,
-        )
-
-    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-    log(f"VAEVAE bins written in {writing_bins_time} seconds.", logfile, 1)
 
 
 def run_reclustering(
@@ -1457,6 +1372,7 @@ def run_reclustering(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
+        binsplitter=reclustering_options.binsplitter,
         logfile=logfile,
     )
 
@@ -1484,45 +1400,21 @@ def run_reclustering(
         predictions_path=predictions_path,
     )
 
-    cluster_dict = defaultdict(set)
+    cluster_dict: defaultdict[str, set[str]] = defaultdict(set)
     for k, v in zip(reclustered, composition.metadata.identifiers):
         cluster_dict[k].add(v)
-    clusterspath = vamb_options.out_dir.joinpath("clusters_reclustered.tsv")
-    if reclustering_options.binsplit_separator is not None:
-        maybe_split = vamb.vambtools.binsplit(
-            cluster_dict.items(), reclustering_options.binsplit_separator
-        )
-    else:
-        maybe_split = cluster_dict.items()
-    with open(clusterspath, "w") as clustersfile:
-        clusternumber, ncontigs = vamb.vambtools.write_clusters(
-            clustersfile,
-            maybe_split,
-            rename=False,
-            cluster_prefix="recluster",
-        )
 
-    print("", file=logfile)
-    log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-
-    fin_cluster_latent = time.time()
-
-    if vamb_options.min_fasta_output_size is not None:
-        path = comp_options.path
-        assert isinstance(path, FASTAPath)
-        write_fasta(
-            vamb_options.out_dir,
-            clusterspath,
-            path,
-            composition.metadata.identifiers,
-            composition.metadata.lengths,
-            vamb_options.min_fasta_output_size,
-            logfile,
-            separator=reclustering_options.binsplit_separator,
-        )
-
-    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-    log(f"Reclustered bins written in {writing_bins_time} seconds.", logfile, 1)
+    write_clusters_and_bins(
+        vamb_options,
+        reclustering_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("clusters_reclustered")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        cluster_dict,
+        composition.metadata.identifiers,  # type:ignore
+        composition.metadata.lengths,  # type:ignore
+        logfile,
+    )
 
 
 class BasicArguments(object):
@@ -1531,7 +1423,10 @@ class BasicArguments(object):
     def __init__(self, args):
         self.args = args
         self.comp_options = CompositionOptions(
-            self.args.fasta, self.args.composition, self.args.minlength
+            self.args.fasta,
+            self.args.composition,
+            self.args.minlength,
+            args.warn_on_few_seqs,
         )
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
@@ -1555,7 +1450,20 @@ class BasicArguments(object):
         torch.set_num_threads(self.vamb_options.n_threads)
         try_make_dir(self.vamb_options.out_dir)
         with open(self.vamb_options.out_dir.joinpath(self.LOGS_PATH), "w") as logfile:
+            begintime = time.time()
+            log(
+                "Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile
+            )
+            log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
+            log("Random seed is " + str(self.vamb_options.seed), logfile, 1)
+
             self.run_inner(logfile)
+
+            log(
+                f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.",
+                logfile,
+                0,
+            )
 
 
 class TaxometerArguments(BasicArguments):
@@ -1604,7 +1512,6 @@ class BinnerArguments(BasicArguments):
         self.cluster_options = ClusterOptions(
             args.window_size,
             args.min_successes,
-            args.min_cluster_size,
             args.max_clusters,
             args.binsplit_separator,
         )
@@ -2016,14 +1923,6 @@ def add_clustering_arguments(subparser):
         help="minimum success in window [15]",
     )
     clusto.add_argument(
-        "-i",
-        dest="min_cluster_size",
-        metavar="",
-        type=int,
-        default=1,
-        help="minimum cluster size [1]",
-    )
-    clusto.add_argument(
         "-c",
         dest="max_clusters",
         metavar="",
@@ -2036,8 +1935,12 @@ def add_clustering_arguments(subparser):
         dest="binsplit_separator",
         metavar="",
         type=str,
+        # This means: None is not passed, "" if passed but empty, e.g. "-o -c 5"
+        # otherwise a string.
         default=None,
-        help="binsplit separator [None = no split]",
+        const="",
+        nargs="?",
+        help="binsplit separator [C] (pass empty string to disable)",
     )
     return subparser
 
@@ -2327,8 +2230,10 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
+        args.warn_on_few_seqs = True
         runner = TaxometerArguments(args)
     elif args.subcommand == BIN:
+        args.warn_on_few_seqs = True
         if args.model_subcommand is None:
             vaevae_parserbin_parser.print_help()
             sys.exit(1)
@@ -2339,6 +2244,8 @@ def main():
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:
+        # Uniquely, the reclustering cannot overfit, so we don't need this warning
+        args.warn_on_few_seqs = False
         runner = ReclusteringArguments(args)
     else:
         # There are no more subcommands
