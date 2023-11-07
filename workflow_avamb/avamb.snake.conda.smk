@@ -332,9 +332,9 @@ rule run_avamb:
         abundance=os.path.join(OUTDIR,"abundance.npz")
     output:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
-        clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
-        clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters.tsv"),
-        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters.tsv"),
+        clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
+        clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
+        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
         contignames=os.path.join(OUTDIR,"avamb/contignames"),
         contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz")
     params:
@@ -473,9 +473,9 @@ rule run_drep_manual_vamb_z_y:
         cluster_score_dict_path_avamb=os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
         contignames=os.path.join(OUTDIR,"avamb/contignames"),
         contiglengths=os.path.join(OUTDIR,"avamb/lengths.npz"),
-        clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters.tsv"),
-        clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters.tsv"),
-        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters.tsv")
+        clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
+        clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
+        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv")
 
     output:
         clusters_avamb_manual_drep=os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv")

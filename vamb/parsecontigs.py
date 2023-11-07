@@ -215,26 +215,4 @@ class Composition:
             _np.array(mask, dtype=bool),
             minlength,
         )
-
-        if len(metadata.lengths) < 20_000:
-            message = (
-                f"WARNING: Parsed only {len(metadata.lengths)} sequences from FASTA file. "
-                "We normally expect 20,000 sequences or more to prevent overfitting. "
-                "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
-                "You may want to  bin more samples as a time, lower the beta parameter, "
-                "or use a different binner altogether."
-            )
-            _vambtools.log_and_warn(message, logfile=logfile)
-
-        # Warn the user if any contigs have been observed, which is smaller
-        # than the threshold.
-        if not _np.all(metadata.mask):
-            message = (
-                f"WARNING: The minimum sequence length has been set to {minlength}, but a contig with "
-                f"length {minimum_seen_length} was seen. "
-                "Better results are obtained if the sequence file is filtered to the minimum "
-                "sequence length before mapping."
-            )
-            _vambtools.log_and_warn(message, logfile=logfile)
-
         return cls(metadata, tnfs_arr)

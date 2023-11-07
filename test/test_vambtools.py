@@ -10,8 +10,11 @@ import itertools
 import numpy as np
 import string
 import torch
+import pathlib
+import shutil
 
 import vamb
+from vamb.vambtools import BinSplitter
 import testtools
 
 PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -220,7 +223,7 @@ class TestFASTAReader(unittest.TestCase):
         # String input
         with self.assertRaises(TypeError):
             data = ">abc\nTAG\na\nAC".splitlines()
-            list(vamb.vambtools.byte_iterfasta(data))
+            list(vamb.vambtools.byte_iterfasta(data))  # type:ignore
 
     # Various correct formats
     def test_good_files(self):
@@ -379,16 +382,48 @@ class TestBinSplit(unittest.TestCase):
         ("s12-bin2", {"s12-c0"}),
     ]
 
+    def test_inert(self):
+        self.assertEqual(
+            BinSplitter("").splitter, BinSplitter.inert_splitter().splitter
+        )
+
     def test_split(self):
-        self.assertEqual(list(vamb.vambtools.binsplit(self.before, "-")), self.after)
+        self.assertEqual(list(BinSplitter("-").binsplit(self.before)), self.after)
 
     def test_badsep(self):
         with self.assertRaises(KeyError):
-            list(vamb.vambtools.binsplit(self.before, "2"))
+            list(BinSplitter("2").binsplit(self.before))
 
     def test_badtype(self):
-        with self.assertRaises(TypeError):
-            list(vamb.vambtools.binsplit([(1, [2])], ""))
+        with self.assertRaises(Exception):
+            list(BinSplitter("x").binsplit([(1, [2])]))  # type:ignore
+
+    def test_nosplit(self):
+        self.assertEqual(
+            list(BinSplitter("").binsplit(self.before)),
+            [(k, set(s)) for (k, s) in self.before],
+        )
+
+    def test_initialize(self):
+        # Nothing happens to an inert splitter
+        b = BinSplitter.inert_splitter()
+        s = b.splitter
+        b.initialize([""])
+        self.assertEqual(s, b.splitter)
+
+        b = BinSplitter("X")
+        with self.assertRaises(ValueError):
+            b.initialize(["AXC", "S1C2"])
+
+        b = BinSplitter(None)
+        with self.assertWarns(UserWarning):
+            b.initialize(["S1C2", "ABC"])
+
+        b = BinSplitter(None)
+        b.initialize(["S1C2", "KMCPLK"])
+
+        b = BinSplitter("XYZ")
+        b.initialize(["ABXYZCD", "KLMXYZA"])
 
 
 class TestConcatenateFasta(unittest.TestCase):
@@ -459,8 +494,8 @@ class TestWriteClusters(unittest.TestCase):
         self.io.truncate(0)
         self.io.seek(0)
 
-    def linesof(self, str):
-        return list(filter(lambda x: not x.startswith("#"), str.splitlines()))
+    def linesof(self, string: str):
+        return list(filter(lambda x: not x.startswith("#"), string.splitlines()))
 
     def conforms(self, str, clusters):
         lines = self.linesof(str)
@@ -488,46 +523,29 @@ class TestWriteClusters(unittest.TestCase):
         self.assertEqual(read_names, printed_names)
 
     def test_not_writable(self):
-        buf = io.BufferedReader(io.BytesIO(b""))
+        buf = io.BufferedReader(io.BytesIO(b""))  # type:ignore
         with self.assertRaises(ValueError):
-            vamb.vambtools.write_clusters(buf, self.test_clusters)
-
-    def test_invalid_max_clusters(self):
-        with self.assertRaises(ValueError):
-            vamb.vambtools.write_clusters(self.io, self.test_clusters, max_clusters=0)
-
-        with self.assertRaises(ValueError):
-            vamb.vambtools.write_clusters(self.io, self.test_clusters, max_clusters=-11)
-
-    def test_header_has_newline(self):
-        with self.assertRaises(ValueError):
-            vamb.vambtools.write_clusters(self.io, self.test_clusters, header="foo\n")
+            vamb.vambtools.write_clusters(buf, self.test_clusters)  # type:ignore
 
     def test_normal(self):
-        vamb.vambtools.write_clusters(self.io, self.test_clusters, header="someheader")
-        self.assertTrue(self.io.getvalue().startswith("# someheader"))
+        vamb.vambtools.write_clusters(self.io, self.test_clusters)
         self.conforms(self.io.getvalue(), self.test_clusters)
 
     def test_max_clusters(self):
-        vamb.vambtools.write_clusters(self.io, self.test_clusters, max_clusters=2)
+        vamb.vambtools.write_clusters(self.io, self.test_clusters[:2])
         lines = self.linesof(self.io.getvalue())
         self.assertEqual(len(lines), 9)
         self.conforms(self.io.getvalue(), self.test_clusters[:2])
-
-    def test_min_size(self):
-        vamb.vambtools.write_clusters(self.io, self.test_clusters, min_size=5)
-        lines = self.linesof(self.io.getvalue())
-        self.assertEqual(len(lines), 6)
-        self.conforms(self.io.getvalue(), self.test_clusters[1:2])
 
 
 class TestWriteBins(unittest.TestCase):
     file = io.BytesIO()
     N_BINS = 10
-    minsize = 5 * 175  # mean of bin size
-    dirname = os.path.join(
-        tempfile.gettempdir(),
-        "".join(random.choices(string.ascii_letters + string.digits, k=10)),
+    dir = pathlib.Path(
+        os.path.join(
+            tempfile.gettempdir(),
+            "".join(random.choices(string.ascii_letters + string.digits, k=10)),
+        )
     )
 
     @classmethod
@@ -552,7 +570,7 @@ class TestWriteBins(unittest.TestCase):
 
     def tearDown(self):
         try:
-            os.rmdir(self.dirname)
+            shutil.rmtree(self.dir)
         except FileNotFoundError:
             pass
 
@@ -560,26 +578,26 @@ class TestWriteBins(unittest.TestCase):
         # Too many bins for maxbins
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                self.dirname, self.bins, self.file, maxbins=self.N_BINS - 1
-            )
-
-        # Negative minsize
-        with self.assertRaises(ValueError):
-            vamb.vambtools.write_bins(
-                self.dirname, self.bins, self.file, maxbins=self.N_BINS + 1, minsize=-1
+                self.dir, self.bins, self.file, maxbins=self.N_BINS - 1
             )
 
         # Parent does not exist
         with self.assertRaises(NotADirectoryError):
             vamb.vambtools.write_bins(
-                "svogew/foo", self.bins, self.file, maxbins=self.N_BINS + 1
+                pathlib.Path("svogew/foo"),
+                self.bins,
+                self.file,
+                maxbins=self.N_BINS + 1,
             )
 
-        # Target file already exists
+        # Target is an existing file
         with self.assertRaises(FileExistsError):
             with tempfile.NamedTemporaryFile() as file:
                 vamb.vambtools.write_bins(
-                    file.name, self.bins, self.file, maxbins=self.N_BINS + 1
+                    pathlib.Path(file.name),
+                    self.bins,
+                    self.file,
+                    maxbins=self.N_BINS + 1,
                 )
 
         # One contig missing from fasta dict
@@ -587,36 +605,31 @@ class TestWriteBins(unittest.TestCase):
             bins = {k: v.copy() for k, v in self.bins.items()}
             next(iter(bins.values())).add("a_new_bin_which_does_not_exist")
             vamb.vambtools.write_bins(
-                self.dirname, bins, self.file, maxbins=self.N_BINS + 1
+                self.dir, bins, self.file, maxbins=self.N_BINS + 1
             )
 
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as dir:
             vamb.vambtools.write_bins(
-                dir, self.bins, self.file, maxbins=self.N_BINS, minsize=self.minsize
+                pathlib.Path(dir),
+                self.bins,
+                self.file,
+                maxbins=self.N_BINS,
             )
 
             reconstructed_bins: dict[str, set[str]] = dict()
             for filename in os.listdir(dir):
                 with open(os.path.join(dir, filename), "rb") as file:
                     entries = list(vamb.vambtools.byte_iterfasta(file))
-                    if sum(map(len, entries)) < self.minsize:
-                        continue
                     binname = filename[:-4]
                     reconstructed_bins[binname] = set()
                     for entry in entries:
                         reconstructed_bins[binname].add(entry.identifier)
 
-        filtered_bins = {
-            k: v
-            for (k, v) in self.bins.items()
-            if sum(len(self.seqs[vi]) for vi in v) >= self.minsize
-        }
-
         # Same bins
-        self.assertEqual(len(filtered_bins), len(reconstructed_bins))
+        self.assertEqual(len(self.bins), len(reconstructed_bins))
         self.assertEqual(
-            sum(map(len, filtered_bins.values())),
+            sum(map(len, self.bins.values())),
             sum(map(len, reconstructed_bins.values())),
         )
-        self.assertEqual(filtered_bins, reconstructed_bins)
+        self.assertEqual(self.bins, reconstructed_bins)
