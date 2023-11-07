@@ -75,7 +75,11 @@ class Abundance:
         )
         if refhash is not None:
             vambtools.RefHasher.verify_refhash(
-                abundance.refhash, refhash, "Loaded", None, None
+                abundance.refhash,
+                refhash,
+                "the loaded Abundance object",
+                "the given refhash",
+                None,
             )
 
         return abundance
@@ -214,8 +218,10 @@ class Abundance:
         # Filter length, using comp_metadata's mask, which has been set by minlength
         if len(mask) != len(headers):
             raise ValueError(
-                f"CompositionMetaData was created with {len(mask)} sequences, "
-                f"but number of refs in BAM files are {len(headers)}."
+                f"CompositionMetaData used to create Abundance object was created with {len(mask)} sequences, "
+                f"but number of reference sequences in BAM files are {len(headers)}. "
+                "Make sure the BAM files were created by mapping to the same FASTA file "
+                "which you used to create the Composition object."
             )
 
         headers = [h for (h, m) in zip(headers, mask) if m]
@@ -229,7 +235,7 @@ class Abundance:
 
         if target_refhash is not None:
             vambtools.RefHasher.verify_refhash(
-                refhash, target_refhash, "Composition", "BAM", identifier_pairs
+                refhash, target_refhash, "FASTA file", "BAM", identifier_pairs
             )
 
         return (coverage, refhash)
