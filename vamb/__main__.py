@@ -16,7 +16,6 @@ from typing import Optional, IO, Tuple
 from pathlib import Path
 from collections.abc import Sequence
 from collections import defaultdict
-from functools import reduce
 from torch.utils.data import DataLoader
 import pandas as pd
 
@@ -1080,7 +1079,7 @@ def parse_mmseqs_taxonomy(
 
     if list(df_mmseq[0]) != list(contignames):
         raise AssertionError(
-            f"The contig names of taxonomy entries are not the same as in the contigs metadata"
+            "The contig names of taxonomy entries are not the same as in the contigs metadata"
         )
 
     return graph_column
@@ -1180,7 +1179,7 @@ def predict_taxonomy(
             while table_parent[label] != -1:
                 pred_labels.append(table_parent[label])
                 label = table_parent[label]
-            pred_labels = ";".join([nodes_ar[l] for l in pred_labels][::-1])
+            pred_labels = ";".join([nodes_ar[label] for label in pred_labels][::-1])
             threshold_mask = (
                 predicted_vector[i] > predictor_training_options.softmax_threshold
             )

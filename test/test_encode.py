@@ -151,12 +151,6 @@ class TestVAE(unittest.TestCase):
         with self.assertRaises(ValueError):
             vamb.encode.VAE(5, dropout=-0.001)
 
-    def test_samples_too_small(self):
-        vae = vamb.encode.VAE(self.rpkm.shape[1])
-        r = self.rpkm.copy()
-        t = self.tnfs.copy()
-        l = self.lens.copy()
-
     def test_loss_falls(self):
         vae = vamb.encode.VAE(self.rpkm.shape[1])
         rpkm_copy = self.rpkm.copy()

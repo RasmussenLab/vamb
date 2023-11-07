@@ -9,7 +9,7 @@ import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
-from typing import IO, Union, TypeVar, Optional, IO
+from typing import IO, Union, TypeVar, Optional
 from pathlib import Path
 import warnings
 

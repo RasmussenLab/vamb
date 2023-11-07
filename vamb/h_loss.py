@@ -18,7 +18,6 @@ from torch import nn as _nn
 import torch.nn.functional as F
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
-from torch.optim import Adam as _Adam
 from torch import Tensor
 
 import vamb.semisupervised_encode as _semisupervised_encode
