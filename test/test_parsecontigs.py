@@ -2,6 +2,7 @@ import io
 import unittest
 import random
 import numpy as np
+import warnings
 
 import testtools
 from vamb.parsecontigs import Composition, CompositionMetaData
@@ -9,6 +10,7 @@ from vamb.parsecontigs import Composition, CompositionMetaData
 
 class TestReadContigs(unittest.TestCase):
     records = []
+    large_io = io.BytesIO()
     io = io.BytesIO()
 
     @classmethod
@@ -21,8 +23,14 @@ class TestReadContigs(unittest.TestCase):
             cls.io.write(i.format().encode())
             cls.io.write(b"\n")
 
+        for i in range(25_000):
+            record = testtools.make_randseq(rng, 250, 300)
+            cls.large_io.write(record.format().encode())
+            cls.large_io.write(b"\n")
+
     def setUp(self):
         self.io.seek(0)
+        self.large_io.seek(0)
 
     def test_unique_names(self):
         with self.assertRaises(ValueError):
@@ -33,9 +41,26 @@ class TestReadContigs(unittest.TestCase):
                 1000,
             )
 
+    # Does not warn
+    def test_nowarn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            Composition.from_file(self.large_io, minlength=250)
+
+    def test_warns_n_contigs(self):
+        with self.assertWarns(UserWarning):
+            Composition.from_file(self.io, minlength=250)
+
+    def test_warns_minlength(self):
+        with self.assertWarns(UserWarning):
+            Composition.from_file(self.large_io, minlength=275)
+
     def test_filter_minlength(self):
         minlen = 500
-        composition = Composition.from_file(self.io, minlength=450)
+
+        with self.assertWarns(UserWarning):
+            composition = Composition.from_file(self.io, minlength=450)
+
         md = composition.metadata
         hash1 = md.refhash
 
@@ -74,7 +99,8 @@ class TestReadContigs(unittest.TestCase):
             Composition.from_file(self.io, minlength=3)
 
     def test_properties(self):
-        composition = Composition.from_file(self.io, minlength=420)
+        with self.assertWarns(UserWarning):
+            composition = Composition.from_file(self.io, minlength=420)
         passed = list(filter(lambda x: len(x.sequence) >= 420, self.records))
 
         self.assertEqual(composition.nseqs, len(composition.metadata.identifiers))
@@ -96,7 +122,8 @@ class TestReadContigs(unittest.TestCase):
 
     def test_save_load(self):
         buf = io.BytesIO()
-        composition_1 = Composition.from_file(self.io)
+        with self.assertWarns(UserWarning):
+            composition_1 = Composition.from_file(self.io)
         md1 = composition_1.metadata
         composition_1.save(buf)
         buf.seek(0)
@@ -126,8 +153,10 @@ class TestReadContigs(unittest.TestCase):
 
         buf1.seek(0)
         buf2.seek(0)
-        comp1 = Composition.from_file(buf1)
-        comp2 = Composition.from_file(buf2)
+        with self.assertWarns(UserWarning):
+            comp1 = Composition.from_file(buf1)
+        with self.assertWarns(UserWarning):
+            comp2 = Composition.from_file(buf2)
 
         self.assertEqual(comp1.metadata.refhash, comp2.metadata.refhash)
         self.assertTrue(np.all(comp1.matrix == comp2.matrix))

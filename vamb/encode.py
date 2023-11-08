@@ -9,7 +9,6 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
-import warnings
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -44,7 +43,7 @@ def set_batchsize(
         dataset=data_loader.dataset,
         batch_size=batch_size,
         shuffle=not encode,
-        drop_last=not encode,
+        drop_last=False,
         num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
@@ -86,14 +85,6 @@ def make_dataloader(
 
     if not (rpkm.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
-
-    if len(rpkm) < 20000:
-        warnings.warn(
-            f"WARNING: Creating DataLoader with only {len(rpkm)} sequences. "
-            "We normally expect 20,000 sequences or more to prevent overfitting. "
-            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
-            "You may want to lower the beta parameter, or use a different binner altogether."
-        )
 
     # Copy if not destroy - this way we can have all following operations in-place
     # for simplicity
@@ -154,7 +145,7 @@ def make_dataloader(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=False,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -225,6 +216,8 @@ class VAE(_nn.Module):
             raise ValueError(f"dropout must be 0 <= dropout < 1, not {dropout}")
 
         _torch.manual_seed(seed)
+        self.rng = _torch.Generator()
+        self.rng.manual_seed(seed)
         super(VAE, self).__init__()
 
         # Initialize simple attributes
@@ -388,7 +381,9 @@ class VAE(_nn.Module):
         epoch_absseloss = 0.0
 
         if epoch in batchsteps:
-            data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
+            data_loader = set_batchsize(
+                data_loader, data_loader.batch_size * 2
+            )  # type:ignore
 
         for depths_in, tnf_in, abundance_in, weights in data_loader:
             depths_in.requires_grad = True
@@ -398,6 +393,7 @@ class VAE(_nn.Module):
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                abundance_in = abundance_in.cuda()
                 weights = weights.cuda()
 
             optimizer.zero_grad()
@@ -475,6 +471,7 @@ class VAE(_nn.Module):
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
+                    ab = ab.cuda()
 
                 # Evaluate
                 _, _, _, mu = self(depths, tnf, ab)

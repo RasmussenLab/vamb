@@ -4,7 +4,11 @@ dynamic = ["version"]
 dependencies = [
     "numpy == 1.24.2",
     "torch == 1.13.1",
-    "pycoverm == 0.6.0"
+    "pycoverm == 0.6.0",
+    "networkx == 3.1",
+    "scikit-learn == 1.2.2",
+    "pandas == 2.0.0",
+    "dadaptation == 3.0",
 ]
 # Currently pycoverm does not have binaries for Python > 3.11.
 # The dependency resolver, will not error on Python 3.11, but attempt
@@ -30,7 +34,7 @@ requires = ["setuptools ~= 63.0", "Cython ~= 0.29.5"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
-ignore = ["E501"]
+ignore = ["E722", "E501"]
 
 # pyproject.toml
 [tool.pytest.ini_options]

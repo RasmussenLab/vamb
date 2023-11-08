@@ -13,6 +13,40 @@ from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator, Generator
 from typing import Optional, IO, Union
 from pathlib import Path
+import warnings
+
+
+def showwarning_override(message, category, filename, lineno, file=None, line=None):
+    print(str(message) + "\n", file=file)
+
+
+def log_and_raise(
+    message: str,
+    errortype: type[Exception] = ValueError,
+    logfile: Optional[IO[str]] = None,
+):
+    if logfile is not None:
+        print("\n", file=logfile)
+        print(message, file=logfile)
+    raise errortype(message)
+
+
+def log_and_warn(
+    message: str,
+    warntype: type[Warning] = UserWarning,
+    logfile: Optional[IO[str]] = None,
+):
+    if logfile is not None:
+        print("\n", file=logfile)
+        print(message, file=logfile)
+    warnings.warn(message, warntype)
+
+
+# It may seem horrifying to override a stdlib method, but this is the way recommended by the
+# warnings documentation.
+# We do it because it's the only way I know to prevent displaying file numbers and source
+# code to our users, which I think is a terrible user experience
+warnings.showwarning = showwarning_override
 
 
 class PushArray:
@@ -219,7 +253,9 @@ class FastaEntry:
             raise ValueError(
                 f'Invalid header in FASTA: "{header.decode()}". '
                 '\nMust conform to identifier regex pattern of SAM specification: "'
-                '>([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)([^\\S\\r\\n][^\\r\\n]*)?$"'
+                '>([0-9A-Za-z!$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)([^\\S\\r\\n][^\\r\\n]*)?$".\n'
+                "If the header does not fit this pattern, the header cannot be represented in BAM files, "
+                "which means Vamb cannot compare sequences in BAM and FASTA files."
             )
         identifier, description = m.groups()
         description = "" if description is None else description.decode()
@@ -361,37 +397,46 @@ class RefHasher:
         if refhash == target_refhash:
             return None
 
-        obs_name = "Observed" if observed_name is None else observed_name
-        tgt_name = "Target" if target_name is None else target_name
+        obs_name = "observed" if observed_name is None else observed_name
+        tgt_name = "target" if target_name is None else target_name
+
+        message = (
+            f"Mismatch between sequence identifiers (names) in {obs_name} and {tgt_name}.\n"
+            f"Observed {obs_name} identifier hash: {refhash.hex()}.\n"
+            f"Expected {tgt_name} identifier hash: {target_refhash.hex()}\n"
+            f"Make sure all identifiers in {obs_name} and {tgt_name} are identical "
+            "and in the same order. "
+            "Note that the identifier is the header before any whitespace."
+        )
+
         if identifiers is not None:
             (observed_ids, target_ids) = identifiers
             for i, (observed_id, target_id) in enumerate(
                 zip_longest(observed_ids, target_ids)
             ):
                 if observed_id is None:
-                    raise ValueError(
-                        f"{obs_name} identifiers has only {i} identifier(s), which is fewer than {tgt_name}"
+                    message += (
+                        f"\nIdentifier mismatch: {obs_name} has only "
+                        f"{i} identifier(s), which is fewer than {tgt_name}"
                     )
+                    log_and_raise(message)
                 elif target_id is None:
-                    raise ValueError(
-                        f"{tgt_name} identifiers has only {i} identifier(s), which is ffewer than {obs_name}"
+                    message += (
+                        f"\nIdentifier mismatch: {tgt_name} has only "
+                        f"{i} identifier(s), which is fewer than {obs_name}"
                     )
+                    log_and_raise(message)
                 elif observed_id != target_id:
-                    raise ValueError(
-                        f"Identifier number {i+1} does not match between {obs_name} and {tgt_name}:"
+                    message += (
+                        f"\nIdentifier mismatch: Identifier number {i+1} does not match "
+                        f"between {obs_name} and {tgt_name}:"
                         f'{obs_name}: "{observed_id}"'
                         f'{tgt_name}: "{target_id}"'
                     )
+                    log_and_raise(message)
             assert False
         else:
-            raise ValueError(
-                f"Mismatch between reference hash of {obs_name} and {tgt_name}."
-                f"Observed {obs_name} hash: {refhash.hex()}."
-                f"Expected {tgt_name} hash: {target_refhash.hex()}"
-                "Make sure all identifiers are identical "
-                "and in the same order. "
-                "Note that the identifier is the header before any whitespace."
-            )
+            log_and_raise(message)
 
 
 def write_clusters(
