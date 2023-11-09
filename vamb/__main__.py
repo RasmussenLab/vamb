@@ -248,10 +248,18 @@ class ReclusteringOptions:
         clusters_path: Path,
         hmmout_path: Path,
         binsplit_separator: Optional[str],
-        algorithm: Optional[str],
+        algorithm: str,
     ):
         assert isinstance(latent_path, Path)
         assert isinstance(clusters_path, Path)
+        assert isinstance(hmmout_path, Path)
+
+        for path in [latent_path, clusters_path, hmmout_path]:
+            if not path.is_file():
+                raise FileNotFoundError(path)
+
+        if algorithm not in ("kmeans", "dbscan"):
+            raise ValueError("Algortihm must be 'kmeans' or 'dbscan'")
 
         self.latent_path = latent_path
         self.clusters_path = clusters_path
@@ -1706,7 +1714,6 @@ class VAEVAEArguments(BinnerArguments):
 class ReclusteringArguments(BasicArguments):
     def __init__(self, args):
         super(ReclusteringArguments, self).__init__(args)
-        assert args.algorithm in ("kmeans", "dbscan")
         self.reclustering_options = ReclusteringOptions(
             latent_path=args.latent_path,
             clusters_path=args.clusters_path,
