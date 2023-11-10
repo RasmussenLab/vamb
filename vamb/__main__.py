@@ -13,7 +13,7 @@ import random
 import pycoverm
 import itertools
 from math import isfinite
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, cast
 from pathlib import Path
 from collections.abc import Sequence
 from collections import defaultdict
@@ -756,17 +756,30 @@ def cluster_and_write_files(
         cuda=vamb_options.cuda,
         rng_seed=vamb_options.seed,
     )
-
-    renamed = (
-        (str(cluster_index + 1), {sequence_names[i] for i in members})
-        for (cluster_index, (_, members)) in enumerate(
-            map(lambda x: x.as_tuple(), cluster_generator)
-        )
-    )
-
     # This also works correctly when max_clusters is None
-    first_clusters = itertools.islice(renamed, cluster_options.max_clusters)
-    unsplit_clusters = dict(first_clusters)
+    clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
+    cluster_dict: dict[str, set[str]] = dict()
+
+    # Write the cluster metadata to file
+    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs", file=file)
+        for i, cluster in enumerate(clusters):
+            cluster_dict[str(i + 1)] = {
+                sequence_names[cast(int, i)] for i in cluster.members
+            }
+            print(
+                str(i + 1),
+                None if cluster.radius is None else round(cluster.radius, 3),
+                None
+                if cluster.observed_pvr is None
+                else round(cluster.observed_pvr, 2),
+                cluster.kind_str,
+                sum(sequence_lens[i] for i in cluster.members),
+                len(cluster.members),
+                file=file,
+                sep="\t",
+            )
+
     elapsed = round(time.time() - begintime, 2)
 
     write_clusters_and_bins(
@@ -775,7 +788,7 @@ def cluster_and_write_files(
         base_clusters_name,
         bins_dir,
         fasta_catalogue,
-        unsplit_clusters,
+        cluster_dict,
         sequence_names,
         sequence_lens,
     )
