@@ -1613,6 +1613,17 @@ class BinnerArguments(BasicArguments):
 class VAEAAEArguments(BinnerArguments):
     def __init__(self, args):
         super(VAEAAEArguments, self).__init__(args)
+
+        # For the VAE-AAE workflow, we must cluster the full set of sequences,
+        # else the cluster dereplication step makes no sense, as the different
+        # clusterings will contain different sets of clusters.
+        # So, enforce this here
+        if self.cluster_options.max_clusters is not None:
+            raise ValueError(
+                "When using the VAE-AAE model, `max_clusters` (option `-c`) "
+                "must not be set."
+            )
+
         self.aae_options = AAEOptions(
             nhiddens=args.nhiddens_aae,
             nlatent_z=args.nlatent_aae_z,
