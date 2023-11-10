@@ -147,7 +147,8 @@ class TestClusterResult(unittest.TestCase):
             # Uncomment when updating this test.
             # lens = list()
             for cluster in vamb.cluster.ClusterGenerator(self.latent.copy()):
-                medoid, points = cluster.as_tuple()
+                medoid = cluster.metadata.medoid
+                points = set(cluster.members)
                 # Set hashing may differ from run to run, so turn into sorted arrays
                 arr = np.array(list(points))
                 arr.sort()

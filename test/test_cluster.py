@@ -1,8 +1,6 @@
 import unittest
 import numpy as np
 from hashlib import md5
-import random
-import string
 
 import vamb
 
@@ -91,39 +89,3 @@ class TestClusterer(unittest.TestCase):
     def test_cluster(self):
         x = next(vamb.cluster.ClusterGenerator(self.data, self.lens))
         self.assertIsInstance(x.members, np.ndarray)
-        med, st = x.as_tuple()
-        self.assertIsInstance(st, set)
-        self.assertEqual(set(x.members), st)
-        self.assertIn(med, st)
-
-
-class TestPairs(unittest.TestCase):
-    rng = np.random.RandomState(6)
-    n_samples = 1024
-    data = rng.random((n_samples, 40)).astype(np.float32)
-    lens = rng.randint(500, 1000, size=1024)
-
-    @staticmethod
-    def randstring(len):
-        return "".join(random.choices(string.ascii_letters, k=len))
-
-    def test_too_few_names(self):
-        clstr = vamb.cluster.ClusterGenerator(self.data, self.lens)
-        nameset = {self.randstring(10) for i in range(len(self.data) - 1)}
-        with self.assertRaises(ValueError):
-            list(vamb.cluster.pairs(clstr, list(nameset)))
-
-    def test_pairs(self):
-        clstr = vamb.cluster.ClusterGenerator(self.data, self.lens)
-        nameset = {self.randstring(10) for i in range(len(self.data))}
-        pairs = list(vamb.cluster.pairs(clstr, list(nameset)))
-
-        medoid, members = pairs[0]
-        self.assertIsInstance(medoid, str)
-        self.assertIsInstance(members, set)
-        self.assertTrue(all(len(i[1]) > 0 for i in pairs))
-        self.assertTrue(sum(map(lambda i: len(i[1]), pairs)), len(nameset))
-        allmembers = set()
-        for medoid, mems in pairs:
-            allmembers.update(mems)
-        self.assertEqual(allmembers, nameset)
