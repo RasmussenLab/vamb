@@ -16,6 +16,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 import gzip
 import lzma
+import vamb
 
 
 def log(string: str, logfile: IO[str], indent: int = 0):
@@ -378,7 +379,6 @@ def recluster_bins(
     embedding = np.load(latents_path)
     if "arr_0" in embedding:
         embedding = embedding["arr_0"]
-    df_clusters = pd.read_csv(clusters_path, delimiter="\t", header=None)
     if (algorithm == "dbscan") and predictions_path:
         df_gt = pd.read_csv(predictions_path)
         column = "predictions"
@@ -389,9 +389,13 @@ def recluster_bins(
             k: species_ind[v] for k, v in zip(df_gt["contigs"], df_gt["genus"])
         }
     else:
-        clusters_labels_map = {
-            k: int(v.rsplit("_", 1)[1]) for k, v in zip(df_clusters[1], df_clusters[0])
-        }
+        with open(clusters_path) as file:
+            clusters = vamb.vambtools.read_clusters(file)
+        index_of_cluster = {c: i for (i, c) in enumerate(clusters.keys())}
+        clusters_labels_map: dict[str, int] = dict()
+        for cluster, contigs in clusters.items():
+            for contig in contigs:
+                clusters_labels_map[contig] = index_of_cluster[cluster]
     labels_cluster_map = defaultdict(list)
     for k, v in clusters_labels_map.items():
         labels_cluster_map[v].append(k)
