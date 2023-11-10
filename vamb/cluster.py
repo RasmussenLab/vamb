@@ -7,8 +7,7 @@ from collections import deque as _deque
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
-from typing import TypeVar, Union, cast
-from collections.abc import Sequence, Iterable
+from typing import TypeVar, Union, Optional, cast
 
 _DEFAULT_RADIUS = 0.12
 # _DEFAULT_RADIUS = 0.06
@@ -77,7 +76,8 @@ class Cluster:
         "medoid",
         "seed",
         "members",
-        "pvr",
+        "maximal_pvr",
+        "observed_pvr",
         "radius",
         "isdefault",
         "successes",
@@ -89,45 +89,32 @@ class Cluster:
         medoid: int,
         seed: int,
         members: _np.ndarray,
-        pvr: float,
-        radius: float,
-        isdefault: bool,
+        maximal_pvr: float,
+        # If loner or default: None
+        observed_pvr: Optional[float],
+        # If loner: None. If default, _DEFAULT_RADIUS
+        radius: Optional[float],
         successes: int,
         attempts: int,
     ):
         self.medoid = medoid
         self.seed = seed
         self.members = members
-        self.pvr = pvr
+        self.maximal_pvr = maximal_pvr
+        self.observed_pvr = observed_pvr
         self.radius = radius
-        self.isdefault = isdefault
         self.successes = successes
         self.attempts = attempts
 
-    def __repr__(self) -> str:
-        return f"<Cluster of medoid {self.medoid}, {len(self.members)} members>"
-
-    def as_tuple(self) -> tuple[int, set[int]]:
-        return (self.medoid, {i for i in self.members})
-
-    def dump(self) -> str:
-        return (
-            f"{self.medoid}\t{self.seed}\t{self.pvr}\t{self.radius}\t{self.isdefault}"
-            f"\t{self.successes}\t{self.attempts}\t"
-        ) + ",".join([str(i) for i in self.members])
-
-    def __str__(self) -> str:
-        radius = f"{self.radius:.3f}"
-        if self.isdefault:
-            radius += " (fallback)"
-
-        return f"""Cluster of medoid {self.medoid}
-  N members: {len(self.members)}
-  seed:      {self.seed}
-  radius:    {radius}
-  successes: {self.successes} / {self.attempts}
-  pvr:       {self.pvr:.1f}
-  """
+    @property
+    def kind_str(self) -> str:
+        if self.observed_pvr is not None:
+            return "normal"
+        else:
+            if self.radius is None:
+                return "loner"
+            else:
+                return "fallback"
 
 
 class ClusterGenerator:
@@ -452,7 +439,9 @@ class ClusterGenerator:
 
         return (medoid, distances)
 
-    def find_threshold(self, distances: _Tensor) -> Union[Loner, NoThreshold, float]:
+    def find_threshold(
+        self, distances: _Tensor
+    ) -> Union[Loner, NoThreshold, tuple[float, float]]:
         # If the point is a loner, immediately return a threshold in where only
         # that point is contained.
         if _torch.count_nonzero(distances < 0.05) == 1:
@@ -503,7 +492,8 @@ class ClusterGenerator:
         # Analyze the point densities to find the valley
         x = 0
         density_at_minimum = 0.0
-        for density in densities:
+        for density_ in densities:
+            density = cast(float, density_.item())
             # Define the first "peak" in point density. That's simply the max until
             # the peak is defined as being over.
             if not peak_over and density > peak_density:
@@ -539,7 +529,8 @@ class ClusterGenerator:
             if threshold > 0.2 + self.peak_valley_ratio:
                 return NoThreshold()
             else:
-                return threshold
+                observed_pvr = density_at_minimum / peak_density
+                return (threshold, observed_pvr)
 
     def find_cluster(self) -> tuple[Cluster, int, _Tensor]:
         while True:
@@ -552,8 +543,8 @@ class ClusterGenerator:
                     seed,
                     _np.array([self.indices[medoid].item()]),
                     self.peak_valley_ratio,
-                    _DEFAULT_RADIUS,
-                    False,
+                    None,
+                    None,
                     self.successes,
                     len(self.attempts),
                 )
@@ -571,8 +562,8 @@ class ClusterGenerator:
                         seed,
                         self.indices[points].numpy(),
                         self.peak_valley_ratio,
+                        None,
                         _DEFAULT_RADIUS,
-                        True,
                         self.successes,
                         len(self.attempts),
                     )
@@ -580,7 +571,8 @@ class ClusterGenerator:
                 else:
                     self.update_successes(False)
 
-            elif isinstance(threshold, float):
+            elif isinstance(threshold, tuple):
+                (threshold, observed_pvr) = threshold
                 points = _smaller_indices(
                     distances, self.kept_mask, threshold, self.cuda
                 )
@@ -589,8 +581,8 @@ class ClusterGenerator:
                     seed,
                     self.indices[points].numpy(),
                     self.peak_valley_ratio,
+                    observed_pvr,
                     threshold,
-                    False,
                     self.successes,
                     len(self.attempts),
                 )
@@ -663,29 +655,3 @@ def _calc_distances(matrix: _Tensor, index: int) -> _Tensor:
     dists = 0.5 - matrix.matmul(matrix[index])
     dists[index] = 0.0  # avoid float rounding errors
     return dists
-
-
-def pairs(
-    clustergenerator: ClusterGenerator, labels: Sequence[str]
-) -> Iterable[tuple[str, set[str]]]:
-    """Create an iterable of (N, {label1, label2 ...}) for each
-    cluster in a ClusterGenerator, where N is "1", "2", "3", etc.
-    Useful to pass to e.g. vambtools.writer_clusters.
-
-    Inputs:
-        clustergenerator: A ClusterGenerator object
-        labels: List or array of cluster labels
-    Output:
-        Generator yielding ("1", {label1, label2 ... }) for each cluster
-    """
-    maxindex = clustergenerator.indices.max()
-    if len(labels) <= maxindex:
-        raise ValueError(
-            f"Cluster generator contains point with index {maxindex}, "
-            f"but was given only {len(labels)} labels"
-        )
-
-    return (
-        (str(i + 1), {labels[j] for j in c.as_tuple()[1]})
-        for (i, c) in enumerate(clustergenerator)
-    )
