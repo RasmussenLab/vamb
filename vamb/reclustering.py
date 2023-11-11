@@ -7,7 +7,6 @@ import os
 import subprocess
 import sys
 import contextlib
-from typing import IO
 from sklearn.cluster import KMeans
 import numpy as np
 from collections import defaultdict
@@ -16,12 +15,8 @@ from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 import gzip
 import lzma
+from loguru import logger
 import vamb
-
-
-def log(string: str, logfile: IO[str], indent: int = 0):
-    print(("\t" * indent) + string, file=logfile)
-    logfile.flush()
 
 
 def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta):
@@ -361,7 +356,6 @@ def cal_num_bins(
 
 
 def recluster_bins(
-    logfile,
     clusters_path,
     latents_path,
     contigs_path,
@@ -400,10 +394,10 @@ def recluster_bins(
     for k, v in clusters_labels_map.items():
         labels_cluster_map[v].append(k)
     indices_contigs = {c: i for i, c in enumerate(contignames_all)}
-    log(f"Latent shape {embedding.shape}", logfile, 1)
-    log(f"N contignames for the latent space {len(contignames_all)}", logfile, 1)
-    log(f"N contigs in fasta files {len(contig_dict)}", logfile, 1)
-    log(f"N contigs in the cluster file {len(clusters_labels_map)}", logfile, 1)
+    logger.info(f"\tLatent shape {embedding.shape}")
+    logger.info(f"\tN contignames for the latent space {len(contignames_all)}")
+    logger.info(f"\tN contigs in fasta files {len(contig_dict)}")
+    logger.info(f"\tN contigs in the cluster file {len(clusters_labels_map)}")
 
     contig_labels = np.array([clusters_labels_map[c] for c in contignames_all])
 
@@ -422,10 +416,10 @@ def recluster_bins(
             concat_out.write(f">bin{bin_ix:06}.{h}\n")
             concat_out.write(contig_dict[contignames_all[ix]] + "\n")
 
-    log("Starting searching for markers", logfile, 1)
+    logger.info("\tStarting searching for markers")
 
     if hmmout_path is not None:
-        log(f"hmmout file is provided at {hmmout_path}", logfile, 2)
+        logger.info(f"\t\thmmout file is provided at {hmmout_path}")
         seeds = cal_num_bins(
             cfasta,
             binned_length,
@@ -445,10 +439,10 @@ def recluster_bins(
         )
     # we cannot bypass the orf_finder here, because of the renaming of the contigs
     if seeds == []:
-        log("No bins found in the concatenated fasta file.", logfile, 1)
+        logger.info("\tNo bins found in the concatenated fasta file.")
         return contig_labels
-    log("Finished searching for markers", logfile, 1)
-    log(f"Found {len(seeds)} seeds", logfile, 1)
+    logger.info("\tFinished searching for markers")
+    logger.info(f"\tFound {len(seeds)} seeds")
 
     if algorithm == "dbscan":
         contig2marker = get_marker(
@@ -459,10 +453,10 @@ def recluster_bins(
             clusters_dict=clusters_labels_map,
             contig_to_marker=True,
         )
-        log("Running DBSCAN with cosine distance", logfile, 1)
+        logger.info("\tRunning DBSCAN with cosine distance")
         extracted_all = []
         for k, v in labels_cluster_map.items():
-            log(f"Label {k}, {len(v)} contigs", logfile, 1)
+            logger.info(f"\tLabel {k}, {len(v)} contigs")
             indices = [indices_contigs[c] for c in v]
             contignames = contignames_all[indices]
             embedding_new = embedding[indices]
@@ -480,10 +474,10 @@ def recluster_bins(
                 )
                 dbscan.fit(distance_matrix, sample_weight=length_weight)
                 labels = dbscan.labels_
-                log(f"epsilon {eps_value}, {len(set(labels))} labels", logfile, 2)
+                logger.info(f"\t\tepsilon {eps_value}, {len(set(labels))} labels")
                 DBSCAN_results_dict[eps_value] = labels.tolist()
 
-            log("Integrating results", logfile, 1)
+            logger.info("\tIntegrating results")
 
             extracted = []
             contignames_list = list(contignames)
@@ -513,7 +507,7 @@ def recluster_bins(
             extracted_all.extend(extracted)
 
         contig2ix = {}
-        log(f"{len(extracted_all)} extracted clusters", logfile, 1)
+        logger.info(f"\t{len(extracted_all)} extracted clusters")
         for i, cs in enumerate(extracted_all):
             for c in cs:
                 contig2ix[c] = i
@@ -543,7 +537,7 @@ def recluster_bins(
                     ]
                 )
                 seeds_embedding = embedding[seed_index]
-                log(f"Starting K-means reclutering for bin {bin_ix}", logfile, 2)
+                logger.info(f"\t\tStarting K-means reclutering for bin {bin_ix}")
                 kmeans = KMeans(
                     n_clusters=num_bin,
                     init=seeds_embedding,
@@ -551,7 +545,7 @@ def recluster_bins(
                     random_state=random_seed,
                 )
                 kmeans.fit(re_bin_features, sample_weight=length_weight)
-                log("Finished K-means reclutering", logfile, 2)
+                logger.info("\t\tFinished K-means reclutering")
                 for i, label in enumerate(kmeans.labels_):
                     contig_labels_reclustered[contig_indices[i]] = next_label + label
                 next_label += num_bin

@@ -17,6 +17,10 @@ from . import hlosses_fast
 from . import infer
 from . import reclustering
 
+from loguru import logger
+
+logger.remove()
+
 __all__ = [
     "vambtools",
     "parsebam",

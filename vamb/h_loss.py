@@ -12,6 +12,7 @@ from math import log as _log
 from pathlib import Path
 from typing import Optional, IO, Union, Iterable
 import dadaptation
+from loguru import logger
 
 import torch as _torch
 from torch import nn as _nn
@@ -295,7 +296,7 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         beta: Multiply KLD by the inverse of this value [200]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
         Trains the model, returning None
     vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
@@ -315,7 +316,6 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
         cuda: bool = False,
-        logfile: Optional[IO[str]] = None,
     ):
         super(VAELabelsHLoss, self).__init__(
             nlabels,
@@ -327,7 +327,6 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
             cuda=cuda,
         )
         self.nodes = nodes
-        self.logfile = logfile
         self.table_parent = table_parent
         self.tree = _hier.Hierarchy(table_parent)
         self.hierloss = init_hier_loss(hier_loss, self.tree)
@@ -365,7 +364,6 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
-        logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, Path, IO[bytes]] = None,
     ):
         if lrate < 0:
@@ -403,31 +401,27 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         # optimizer = _Adam(self.parameters(), lr=lrate)
         optimizer = dadaptation.DAdaptAdam(self.parameters(), lr=1, decouple=True)
 
-        if logfile is not None:
-            print("\tNetwork properties:", file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tAlpha:", self.alpha, file=logfile)
-            print("\tBeta:", self.beta, file=logfile)
-            print("\tDropout:", self.dropout, file=logfile)
-            print("\tN hidden:", ", ".join(map(str, self.nhiddens)), file=logfile)
-            print("\tN latent:", self.nlatent, file=logfile)
-            print("\n\tTraining properties:", file=logfile)
-            print("\tN epochs:", nepochs, file=logfile)
-            print("\tStarting batch size:", dataloader.batch_size, file=logfile)
-            batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps_set)))
-                if batchsteps_set
-                else "None"
-            )
-            print("\tBatchsteps:", batchsteps_string, file=logfile)
-            print("\tLearning rate:", lrate, file=logfile)
-            print("\tN labels:", nlabels, file=logfile, end="\n\n")
+        logger.info("\tNetwork properties:")
+        logger.info(f"\tCUDA: {self.usecuda}")
+        logger.info(f"\tAlpha: {self.alpha}")
+        logger.info(f"\tBeta: {self.beta}")
+        logger.info(f"\tDropout: {self.dropout}")
+        logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
+        logger.info(f"\tN latent: {self.nlatent}")
+        logger.info("\tTraining properties:")
+        logger.info(f"\tN epochs: {nepochs}")
+        logger.info(f"\tStarting batch size: {dataloader.batch_size}")
+        batchsteps_string = (
+            ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
+        )
+        logger.info(f"\tBatchsteps: {batchsteps_string}")
+        logger.info(f"\tLearning rate: {lrate}")
+        logger.info(f"\tN labels: {nlabels}")
 
         # Train
         for epoch in range(nepochs):
             dataloader = self.trainepoch(
-                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+                dataloader, epoch, optimizer, sorted(batchsteps_set)
             )
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
@@ -458,7 +452,7 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         beta: Multiply KLD by the inverse of this value [200]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
         Trains the model, returning None
     vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
@@ -479,7 +473,6 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
         cuda: bool = False,
-        logfile: Optional[IO[str]] = None,
     ):
         super(VAEConcatHLoss, self).__init__(
             nsamples,
@@ -494,7 +487,6 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         self.nsamples = nsamples
         # self.nlabels = nlabels
         self.nodes = nodes
-        self.logfile = logfile
         self.table_parent = table_parent
         self.tree = _hier.Hierarchy(table_parent)
         self.hierloss = init_hier_loss(hier_loss, self.tree)
@@ -592,7 +584,7 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
         beta: Multiply KLD by the inverse of this value [200]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
         Trains the model, returning None
     vae.encode(self, data_loader):
         Encodes the data in the data loader and returns the encoded matrix.
@@ -613,7 +605,6 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
         dropout: Optional[float] = 0.2,
         hier_loss=DEFAULT_HIER_LOSS,
         cuda: bool = False,
-        logfile: Optional[IO[str]] = None,
     ):
         self.usecuda = cuda
         N_l = max(nlabels, 105)
@@ -637,7 +628,6 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
             dropout=dropout,
             hier_loss=hier_loss,
             cuda=cuda,
-            logfile=logfile,
         )
         self.VAEJoint = VAEConcatHLoss(
             nsamples,
@@ -651,7 +641,6 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
             dropout=dropout,
             hier_loss=hier_loss,
             cuda=cuda,
-            logfile=logfile,
         )
 
     @classmethod
@@ -785,7 +774,7 @@ class VAMB2Label(_nn.Module):
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
         Trains the model, returning None
 
     vae.encode(self, data_loader):
@@ -970,7 +959,6 @@ class VAMB2Label(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
-        logfile: Optional[IO[str]],
     ):
         self.train()
 
@@ -1013,20 +1001,14 @@ class VAMB2Label(_nn.Module):
             epoch_celoss += loss.mean().data.item()
             epoch_correct_labels += correct_labels.data.item()
 
-        if logfile is not None:
-            print(
-                "\tEpoch: {}\tCE: {:.7f}\taccuracy: {:.4f}\tBatchsize: {}".format(
-                    epoch + 1,
-                    epoch_celoss / len(data_loader),
-                    epoch_correct_labels / len(data_loader),
-                    data_loader.batch_size,
-                ),
-                file=logfile,
-                flush=True,
+        logger.info(
+            "\tEpoch: {}\tCE: {:.7f}\taccuracy: {:.4f}\tBatchsize: {}".format(
+                epoch + 1,
+                epoch_celoss / len(data_loader),
+                epoch_correct_labels / len(data_loader),
+                data_loader.batch_size,
             )
-
-            logfile.flush()
-
+        )
         self.eval()
         return data_loader
 
@@ -1036,7 +1018,6 @@ class VAMB2Label(_nn.Module):
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
-        logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, Path, IO[bytes]] = None,
     ):
         """Train the autoencoder from depths array and tnf array.
@@ -1046,7 +1027,6 @@ class VAMB2Label(_nn.Module):
             nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
             batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
-            logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
         Output: None
@@ -1087,30 +1067,27 @@ class VAMB2Label(_nn.Module):
         # optimizer = _Adam(self.parameters(), lr=lrate)
         optimizer = dadaptation.DAdaptAdam(self.parameters(), lr=1, decouple=True)
 
-        if logfile is not None:
-            print("\tNetwork properties:", file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tHierarchical loss:", self.hierloss.name, file=logfile)
-            print("\tAlpha:", self.alpha, file=logfile)
-            print("\tBeta:", self.beta, file=logfile)
-            print("\tDropout:", self.dropout, file=logfile)
-            print("\tN hidden:", ", ".join(map(str, self.nhiddens)), file=logfile)
-            print("\n\tTraining properties:", file=logfile)
-            print("\tN epochs:", nepochs, file=logfile)
-            print("\tStarting batch size:", dataloader.batch_size, file=logfile)
-            batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps_set)))
-                if batchsteps_set
-                else "None"
-            )
-            print("\tBatchsteps:", batchsteps_string, file=logfile)
-            print("\tLearning rate:", lrate, file=logfile)
-            print("\tN labels:", nlabels, file=logfile, end="\n\n")
+        logger.info("\tNetwork properties:")
+        logger.info(f"\tCUDA: {self.usecuda}")
+        logger.info(f"\tHierarchical loss: {self.hierloss.name}")
+        logger.info(f"\tAlpha: {self.alpha}")
+        logger.info(f"\tBeta: {self.beta}")
+        logger.info(f"\tDropout: {self.dropout}")
+        logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
+        logger.info("\tTraining properties:")
+        logger.info(f"\tN epochs: {nepochs}")
+        logger.info(f"\tStarting batch size: {dataloader.batch_size}")
+        batchsteps_string = (
+            ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
+        )
+        logger.info(f"\tBatchsteps: {batchsteps_string}")
+        logger.info(f"\tLearning rate: {lrate}")
+        logger.info(f"\tN labels: {nlabels}")
 
         # Train
         for epoch in range(nepochs):
             dataloader = self.trainepoch(
-                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+                dataloader, epoch, optimizer, sorted(batchsteps_set)
             )
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions

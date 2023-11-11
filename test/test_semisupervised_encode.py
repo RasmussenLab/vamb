@@ -1,8 +1,6 @@
 import unittest
 import numpy as np
 import tempfile
-import io
-
 import vamb
 
 
@@ -76,7 +74,6 @@ class TestVAEVAE(unittest.TestCase):
                     self.assertTrue(table_parent[ind_nodes[c]] == ind_nodes[p])
 
     def test_encoding(self):
-        iobuffer = io.StringIO()
         nlatent = 10
         batchsize = 10
         nepochs = 2
@@ -93,7 +90,6 @@ class TestVAEVAE(unittest.TestCase):
             table_parent,
             nlatent=nlatent,
             cuda=False,
-            logfile=iobuffer,
         )
 
         dataloader_vamb = vamb.encode.make_dataloader(
@@ -141,7 +137,6 @@ class TestVAEVAE(unittest.TestCase):
                 dataloader,
                 nepochs=nepochs,
                 modelfile=modelfile,
-                logfile=iobuffer,
                 batchsteps=[],
             )
 
