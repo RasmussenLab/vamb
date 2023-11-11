@@ -110,13 +110,6 @@ class Abundance:
         # (issue #7). Can be solved by setting it to a low value
         minid = minid if minid > 0.001 else 0.001
 
-        for path in paths:
-            if not _os.path.isfile(path):
-                raise FileNotFoundError(path)
-
-            if not pycoverm.is_bam_sorted(str(path)):
-                raise ValueError(f"Path {path} is not sorted by reference.")
-
         if nthreads < 1:
             raise ValueError(f"nthreads must be > 0, not {nthreads}")
 

@@ -11,6 +11,7 @@ import torch
 import datetime
 import time
 import random
+import pycoverm
 from math import isfinite
 from typing import Optional, IO, Tuple, Union
 from pathlib import Path
@@ -42,10 +43,12 @@ def try_make_dir(name: Union[Path, str]):
 
 
 class FASTAPath(type(Path())):
+    __slots__ = []
     pass
 
 
 class CompositionPath(type(Path())):
+    __slots__ = []
     pass
 
 
@@ -119,6 +122,8 @@ class AbundanceOptions:
                     raise FileNotFoundError(
                         f'Not an existing non-directory file: "{str(bampath)}"'
                     )
+                if not pycoverm.is_bam_sorted(str(bampath)):
+                    raise ValueError(f"Path {bampath} is not sorted by reference.")
             self.path = bampaths
 
         if min_alignment_id is not None:
@@ -227,6 +232,10 @@ class TaxonomyOptions:
             raise argparse.ArgumentTypeError(
                 "The taxonomy predictor needs --taxonomy_path for training"
             )
+
+        for path in (taxonomy_path, taxonomy_predictions_path):
+            if path is not None and not path.is_file():
+                raise FileNotFoundError(path)
 
         self.taxonomy_path = taxonomy_path
         self.taxonomy_predictions_path = taxonomy_predictions_path

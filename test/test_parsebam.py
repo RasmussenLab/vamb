@@ -60,7 +60,7 @@ class TestParseBam(unittest.TestCase):
             )
 
     def test_badfile(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(BaseException):
             vamb.parsebam.Abundance.from_files(
                 ["noexist"], None, self.comp_metadata, True, 0.97, 1
             )
