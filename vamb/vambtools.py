@@ -12,7 +12,12 @@ from hashlib import md5 as _md5
 from collections.abc import Iterable, Iterator
 from typing import Optional, IO, Union
 from pathlib import Path
-import warnings
+from loguru import logger
+
+
+def log_and_error(typ: type, msg: str):
+    logger.error(msg)
+    raise typ(msg)
 
 
 class BinSplitter:
@@ -62,26 +67,27 @@ class BinSplitter:
             "or contains it at the very start or end.\n"
             "A binsplit separator X implies that every sequence identifier is formatted as\n"
             "[sample identifier][X][sequence identifier], e.g. a binsplit separator of 'C' "
-            "means that 'S1C19' and '7C11' are valid identifiers."
+            "means that 'S1C19' and '7C11' are valid identifiers.\n"
         )
 
         if not self.is_default:
             for identifier in identifiers:
                 (front, _, rest) = identifier.partition(separator)
                 if not front or not rest:
-                    log_and_raise(
+                    log_and_error(
+                        ValueError,
                         message.format(
                             imexplicit="explicitly",
                             separator=separator,
                             identifier=identifier,
-                        )
+                        ),
                     )
         else:
             for identifier in identifiers:
                 (front, _, rest) = identifier.partition(separator)
                 if not front or not rest:
                     message += "\nSkipping binsplitting."
-                    log_and_warn(
+                    logger.warning(
                         message.format(
                             imexplicit="implicitly",
                             separator=separator,
@@ -147,39 +153,6 @@ class BinSplitter:
                 return "Defaulting to 'C', but disabled due to incompatible identifiers"
             else:
                 return "Defaulting to 'C'"
-
-
-def showwarning_override(message, category, filename, lineno, file=None, line=None):
-    print(str(message) + "\n", file=file)
-
-
-def log_and_raise(
-    message: str,
-    errortype: type[Exception] = ValueError,
-    logfile: Optional[IO[str]] = None,
-):
-    if logfile is not None:
-        print("\n", file=logfile)
-        print(message, file=logfile)
-    raise errortype(message)
-
-
-def log_and_warn(
-    message: str,
-    warntype: type[Warning] = UserWarning,
-    logfile: Optional[IO[str]] = None,
-):
-    if logfile is not None:
-        print("\n", file=logfile)
-        print(message, file=logfile)
-    warnings.warn(message, warntype)
-
-
-# It may seem horrifying to override a stdlib method, but this is the way recommended by the
-# warnings documentation.
-# We do it because it's the only way I know to prevent displaying file numbers and source
-# code to our users, which I think is a terrible user experience
-warnings.showwarning = showwarning_override
 
 
 class PushArray:
@@ -552,13 +525,13 @@ class RefHasher:
                         f"\nIdentifier mismatch: {obs_name} has only "
                         f"{i} identifier(s), which is fewer than {tgt_name}"
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
                 elif target_id is None:
                     message += (
                         f"\nIdentifier mismatch: {tgt_name} has only "
                         f"{i} identifier(s), which is fewer than {obs_name}"
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
                 elif observed_id != target_id:
                     message += (
                         f"\nIdentifier mismatch: Identifier number {i+1} does not match "
@@ -566,10 +539,10 @@ class RefHasher:
                         f'{obs_name}: "{observed_id}"'
                         f'{tgt_name}: "{target_id}"'
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
             assert False
         else:
-            log_and_raise(message)
+            log_and_error(ValueError, message)
 
 
 def write_clusters(

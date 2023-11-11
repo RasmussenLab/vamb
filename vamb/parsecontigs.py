@@ -9,7 +9,7 @@ import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
-from typing import IO, Union, TypeVar, Optional
+from typing import IO, Union, TypeVar
 from pathlib import Path
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
@@ -162,14 +162,12 @@ class Composition:
         cls: type[C],
         filehandle: Iterable[bytes],
         minlength: int = 2000,
-        logfile: Optional[IO[str]] = None,
     ) -> C:
         """Parses a FASTA file open in binary reading mode, returning Composition.
 
         Input:
             filehandle: Filehandle open in binary mode of a FASTA file
             minlength: Ignore any references shorter than N bases [2000]
-            logfile: Logfile to print warning to, if any
         """
 
         if minlength < 4:

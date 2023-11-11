@@ -416,8 +416,8 @@ class TestBinSplit(unittest.TestCase):
             b.initialize(["AXC", "S1C2"])
 
         b = BinSplitter(None)
-        with self.assertWarns(UserWarning):
-            b.initialize(["S1C2", "ABC"])
+        b.initialize(["S1C2", "ABC"])
+        self.assertEqual(b.splitter, None)
 
         b = BinSplitter(None)
         b.initialize(["S1C2", "KMCPLK"])

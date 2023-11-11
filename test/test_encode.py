@@ -2,8 +2,6 @@ import unittest
 import numpy as np
 import torch
 import tempfile
-import io
-
 import vamb
 
 
@@ -161,13 +159,10 @@ class TestVAE(unittest.TestCase):
         (di, ti, ai, we) = next(iter(dl))
         do, to, ao, mu = vae(di, ti, ai)
         start_loss = vae.calc_loss(di, do, ti, to, ao, ai, mu, we)[0].data.item()
-        iobuffer = io.StringIO()
 
         with tempfile.TemporaryFile() as file:
             # Loss drops with training
-            vae.trainmodel(
-                dl, nepochs=3, batchsteps=[1, 2], logfile=iobuffer, modelfile=file
-            )
+            vae.trainmodel(dl, nepochs=3, batchsteps=[1, 2], modelfile=file)
             do, to, ao, mu = vae(di, ti, ai)
             end_loss = vae.calc_loss(di, do, ti, to, ao, ai, mu, we)[0].data.item()
             self.assertLess(end_loss, start_loss)

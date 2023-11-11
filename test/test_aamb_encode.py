@@ -1,8 +1,6 @@
 import unittest
 import numpy as np
-import io
 import random
-
 import vamb
 
 
@@ -55,7 +53,6 @@ class TestAAE(unittest.TestCase):
         (di, ti, ai, we) = next(iter(dl))
         mu, do, to, _, _, _, _ = aae(di, ti)
         start_loss = aae.calc_loss(di, do, ti, to)[0].data.item()
-        iobuffer = io.StringIO()
 
         # Loss drops with training
         aae.trainmodel(
@@ -64,7 +61,6 @@ class TestAAE(unittest.TestCase):
             batchsteps=[1, 2],
             T=self.default_temperature,
             lr=self.default_lr,
-            logfile=iobuffer,
             modelfile=None,
         )
         mu, do, to, _, _, _, _ = aae(di, ti)
