@@ -422,9 +422,7 @@ class ClusterGenerator:
 
         medoid = seed
         tried: set[int] = {medoid}
-        cluster, distances, local_density = _sample_medoid(
-            self.matrix, self.lengths, self.kept_mask, seed, _MEDOID_RADIUS, self.cuda
-        )
+        cluster, distances, local_density = self.sample_medoid(seed)
         candidates: list[int] = [i for i in cluster.tolist() if i not in tried]
         candidates = self.rng.sample(candidates, k=min(len(candidates), self.maxsteps))
         i = 0
@@ -432,16 +430,9 @@ class ClusterGenerator:
         while i < len(candidates):
             sampled_medoid = candidates[i]
             tried.add(sampled_medoid)
-
-            sampling = _sample_medoid(
-                self.matrix,
-                self.lengths,
-                self.kept_mask,
-                sampled_medoid,
-                _MEDOID_RADIUS,
-                self.cuda,
+            sample_cluster, sample_distances, sample_density = self.sample_medoid(
+                sampled_medoid
             )
-            sample_cluster, sample_distances, sample_density = sampling
 
             # If the mean distance of inner points of the sample is lower,
             # we move the medoid and start over
@@ -610,6 +601,30 @@ class ClusterGenerator:
             else:  # No more types
                 assert False
 
+    def sample_medoid(
+        self,
+        medoid: int,
+    ) -> tuple[_Tensor, _Tensor, float]:
+        """Returns:
+        - A vector of indices to points within threshold
+        - A vector Xf distances to all points
+        - The mean distance from medoid to the other points in the first vector
+        """
+
+        distances = _calc_distances(self.matrix, medoid)
+
+        if self.cuda:
+            within_threshold = (distances <= _MEDOID_RADIUS) & self.kept_mask
+            cluster = _torch.nonzero(within_threshold).flatten().cpu()
+        else:
+            within_threshold = distances.numpy() <= _MEDOID_RADIUS
+            cluster = _torch.from_numpy(within_threshold.nonzero()[0])
+
+        closeness = _MEDOID_RADIUS - distances[within_threshold]
+        local_density = (self.lengths[within_threshold] * closeness).sum().item()
+
+        return cluster, distances, local_density
+
 
 def _smaller_indices(
     tensor: _Tensor, kept_mask: _Tensor, threshold: float, cuda: bool
@@ -648,35 +663,6 @@ def _calc_distances(matrix: _Tensor, index: int) -> _Tensor:
     dists = 0.5 - matrix.matmul(matrix[index])
     dists[index] = 0.0  # avoid float rounding errors
     return dists
-
-
-def _sample_medoid(
-    matrix: _Tensor,
-    lengths: _Tensor,
-    kept_mask: _Tensor,
-    medoid: int,
-    threshold: float,
-    cuda: bool,
-) -> tuple[_Tensor, _Tensor, float]:
-    """Returns:
-    - A vector of indices to points within threshold
-    - A vector of distances to all points
-    - The mean distance from medoid to the other points in the first vector
-    """
-
-    distances = _calc_distances(matrix, medoid)
-
-    if cuda:
-        within_threshold = (distances <= threshold) & kept_mask
-        cluster = _torch.nonzero(within_threshold).flatten().cpu()
-    else:
-        within_threshold = distances.numpy() <= threshold
-        cluster = _torch.from_numpy(within_threshold.nonzero()[0])
-
-    closeness = threshold - distances[within_threshold]
-    local_density = (lengths[within_threshold] * closeness).sum().item()
-
-    return cluster, distances, local_density
 
 
 def pairs(
