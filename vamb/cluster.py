@@ -171,6 +171,8 @@ class ClusterGenerator:
         # On GPU, deleting rows is not feasable because that requires us to copy the matrix from and to the GPU,
         # so we instead use this array to mask away any point emitted in an earlier iteration.
         "kept_mask",
+        # This dict caches the computation of `sample_medoid`, which is the most compute heavy function
+        "medoid_cache",
     ]
 
     def __repr__(self) -> str:
@@ -281,6 +283,7 @@ class ClusterGenerator:
         self.histogram = histogram
         self.histogram_edges = _torch.linspace(0.0, _XMAX, round(_XMAX / _DELTA_X) + 1)
         self.kept_mask = kept_mask
+        self.medoid_cache: dict[int, tuple[_Tensor, _Tensor, float]] = dict()
 
     # It's an iterator itself
     def __iter__(self):
@@ -292,6 +295,7 @@ class ClusterGenerator:
         assert self.n_remaining_points > 0  # not negative
 
         cluster, _, points = self.find_cluster()
+        self.medoid_cache.clear()
         self.n_emitted_clusters += 1
         self.n_remaining_points -= len(points)
 
@@ -416,7 +420,7 @@ class ClusterGenerator:
             sampled_medoid = candidates[i]
             tried.add(sampled_medoid)
             sample_cluster, sample_distances, sample_density = self.sample_medoid(
-                sampled_medoid
+                medoid
             )
 
             # If the mean distance of inner points of the sample is lower,
@@ -600,6 +604,9 @@ class ClusterGenerator:
         - A vector Xf distances to all points
         - The mean distance from medoid to the other points in the first vector
         """
+        existing = self.medoid_cache.get(medoid, None)
+        if existing is not None:
+            return existing
 
         distances = _calc_distances(self.matrix, medoid)
 
@@ -612,8 +619,10 @@ class ClusterGenerator:
 
         closeness = _MEDOID_RADIUS - distances[within_threshold]
         local_density = (self.lengths[within_threshold] * closeness).sum().item()
+        result = (cluster, distances, local_density)
+        self.medoid_cache[medoid] = result
 
-        return cluster, distances, local_density
+        return result
 
 
 def _smaller_indices(
