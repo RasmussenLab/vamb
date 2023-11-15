@@ -16,6 +16,7 @@ from loguru import logger
 
 
 def log_and_error(typ: type, msg: str):
+    logger.opt(raw=True).info("\n")
     logger.error(msg)
     raise typ(msg)
 
@@ -87,6 +88,7 @@ class BinSplitter:
                 (front, _, rest) = identifier.partition(separator)
                 if not front or not rest:
                     message += "\nSkipping binsplitting."
+                    logger.opt(raw=True).info("\n")
                     logger.warning(
                         message.format(
                             imexplicit="implicitly",

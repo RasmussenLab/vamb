@@ -452,7 +452,7 @@ def level_successors_padded(
     """Returns the list of parents and their children at each depth."""
     level_parents, level_children = level_successors(tree)
     level_children = [
-        _pad_2d(x, dtype=int, method=method, constant_value=constant_value)
+        _pad_2d(x, dtype=np.dtype(int), method=method, constant_value=constant_value)
         for x in level_children
     ]
     return level_parents, level_children
@@ -469,7 +469,9 @@ def siblings_padded(
     tree: Hierarchy, method: str = "constant", constant_value: int = -1
 ) -> np.ndarray:
     ragged = siblings(tree)
-    return _pad_2d(ragged, dtype=int, method=method, constant_value=constant_value)
+    return _pad_2d(
+        ragged, dtype=np.dtype(int), method=method, constant_value=constant_value
+    )
 
 
 def _except(v, x: np.ndarray) -> np.ndarray:

@@ -492,15 +492,16 @@ class MarginLoss(nn.Module):
         label_score = scores.gather(-1, label_node.unsqueeze(-1)).squeeze(-1)
         label_margin = self.margin[labels.long(), :]
         if self.hardness == "soft":
+            # TODO: This function appear to not be tested
             loss = -label_score + torch.logsumexp(
-                scores + self.tau * label_margin, axis=-1
+                scores + self.tau * label_margin, dim=-1
             )
         elif self.hardness == "hard":
-            # loss = -label_score + torch.max(torch.relu(scores + self.tau * label_margin), axis=-1)[0]
+            # TODO: This function appear to not be tested
             loss = torch.relu(
                 torch.max(
                     scores - label_score.unsqueeze(-1) + self.tau * label_margin,
-                    axis=-1,
+                    dim=-1,
                 )[0]
             )
         else:
