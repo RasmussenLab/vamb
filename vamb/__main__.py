@@ -39,10 +39,10 @@ def format_log(record) -> str:
     colors = {"WARNING": "red", "INFO": "green", "DEBUG": "blue", "ERROR": "red"}
     L = colors.get(record["level"].name, "blue")
     T = "red" if record["level"].name in ("WARNING", "ERROR") else "cyan"
+    message = "<red>{message}</red>" if T == "red" else "{message}"
     time = f"<{T}>{{time:YYYY-MM-DD HH:mm:ss.SSS}}</{T}>"
     level = f"<b><{L}>{{level:<7}}</{L}></b>"
-    rest = f"<{L}>{{message}}</{L}>\n{{exception}}"
-    return f"{time} | {level} | {rest}"
+    return f"{time} | {level} | {message}\n{{exception}}"
 
 
 def try_make_dir(name: Union[Path, str]):
@@ -1425,7 +1425,7 @@ class TaxometerArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_predictions_path=None,
             taxonomy_path=args.taxonomy,
-            no_predictor=None,
+            no_predictor=False,
         )
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=args.pred_nepochs,
@@ -1604,7 +1604,7 @@ class ReclusteringArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_path=None,
             taxonomy_predictions_path=self.preds,
-            no_predictor=None,
+            no_predictor=False,
         )
 
     def run_inner(self):
@@ -1708,7 +1708,7 @@ def add_input_output_arguments(subparser):
         "--seed",
         metavar="",
         type=int,
-        default=int.from_bytes(os.urandom(8), "little"),
+        default=int.from_bytes(os.urandom(7), "little"),
         help="Random seed random determinism not guaranteed",
     )
     return subparser

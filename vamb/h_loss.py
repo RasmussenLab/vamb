@@ -675,7 +675,7 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
             alpha,
             beta,
             dropout,
-            cuda,
+            cuda=cuda,
         )
         vae.VAEVamb.load_state_dict(dictionary["state_VAEVamb"])
         vae.VAELabels.load_state_dict(dictionary["state_VAELabels"])
@@ -1014,7 +1014,7 @@ class VAMB2Label(_nn.Module):
 
     def trainmodel(
         self,
-        dataloader: _DataLoader[tuple[Tensor]],
+        dataloader: _DataLoader[tuple[Tensor, ...]],
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],

@@ -186,6 +186,8 @@ def permute_indices(n_current: int, n_total: int, seed: int):
     return _np.concatenate(to_concatenate)[:n_total]
 
 
+# TODO: This function is not used (and doesn't run).
+# Can we just remove it?
 def make_dataloader_semisupervised(
     dataloader_joint,
     dataloader_vamb,
@@ -202,6 +204,7 @@ def make_dataloader_semisupervised(
     indices_unsup_labels = permute_indices(
         len(dataloader_labels.dataset), n_total, seed
     )
+    # TODO: Missing an argument
     indices_sup = permute_indices(len(dataloader_joint.dataset), n_total.seed)
     dataset_all = _TensorDataset(
         dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
