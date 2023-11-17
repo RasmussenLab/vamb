@@ -1,6 +1,5 @@
 __doc__ = "Various classes and functions Vamb uses internally."
 
-import os as _os
 import gzip as _gzip
 import bz2 as _bz2
 import lzma as _lzma
@@ -10,43 +9,150 @@ from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from itertools import zip_longest
 from hashlib import md5 as _md5
-from collections.abc import Iterable, Iterator, Generator
+from collections.abc import Iterable, Iterator
 from typing import Optional, IO, Union
 from pathlib import Path
-import warnings
+from loguru import logger
 
 
-def showwarning_override(message, category, filename, lineno, file=None, line=None):
-    print(str(message) + "\n", file=file)
+def log_and_error(typ: type, msg: str):
+    logger.error(msg)
+    raise typ(msg)
 
 
-def log_and_raise(
-    message: str,
-    errortype: type[Exception] = ValueError,
-    logfile: Optional[IO[str]] = None,
-):
-    if logfile is not None:
-        print("\n", file=logfile)
-        print(message, file=logfile)
-    raise errortype(message)
+class BinSplitter:
+    """
+    The binsplitter can be either
+    * Instantiated with an explicit option, in which case `is_default` is False,
+      and `splitter` is None if the user explicitly opted out of binsplitting by
+      passing in an empty string, else a `str`, the string explicitly asked for
+    * Instantiated by default, in which case `is_default` is `True`, and `splitter`
+      is `_DEFAULT_SPLITTER`
 
+    The `initialize` function checks the validity of the binsplitter on the set of
+    identifiers:
+    * If the binsplitter sep is explicitly `None`, do nothing
+    * If the binsplitter is default and the separator is not found, warn the user,
+      then set the separator to `None` (disabling binsplitting)
+    * If the binsplitter is explicitly a string, check this string occurs in all
+      identifiers, else error early.
+    """
 
-def log_and_warn(
-    message: str,
-    warntype: type[Warning] = UserWarning,
-    logfile: Optional[IO[str]] = None,
-):
-    if logfile is not None:
-        print("\n", file=logfile)
-        print(message, file=logfile)
-    warnings.warn(message, warntype)
+    _DEFAULT_SPLITTER = "C"
+    __slots__ = ["is_default", "splitter"]
 
+    def __init__(self, binsplitter: Optional[str]):
+        if binsplitter is None:
+            self.is_default = True
+            self.splitter = self._DEFAULT_SPLITTER
 
-# It may seem horrifying to override a stdlib method, but this is the way recommended by the
-# warnings documentation.
-# We do it because it's the only way I know to prevent displaying file numbers and source
-# code to our users, which I think is a terrible user experience
-warnings.showwarning = showwarning_override
+        else:
+            self.is_default = False
+            if len(binsplitter) == 0:
+                self.splitter = None
+            else:
+                self.splitter = binsplitter
+
+    @classmethod
+    def inert_splitter(cls):
+        return cls("")
+
+    def initialize(self, identifiers: Iterable[str]):
+        separator = self.splitter
+        if separator is None:
+            return None
+        message = (
+            'Binsplit separator (option `-o`) {imexplicit} passed as "{separator}", '
+            'but sequence identifier "{identifier}" does not contain this separator, '
+            "or contains it at the very start or end.\n"
+            "A binsplit separator X implies that every sequence identifier is formatted as\n"
+            "[sample identifier][X][sequence identifier], e.g. a binsplit separator of 'C' "
+            "means that 'S1C19' and '7C11' are valid identifiers.\n"
+        )
+
+        if not self.is_default:
+            for identifier in identifiers:
+                (front, _, rest) = identifier.partition(separator)
+                if not front or not rest:
+                    log_and_error(
+                        ValueError,
+                        message.format(
+                            imexplicit="explicitly",
+                            separator=separator,
+                            identifier=identifier,
+                        ),
+                    )
+        else:
+            for identifier in identifiers:
+                (front, _, rest) = identifier.partition(separator)
+                if not front or not rest:
+                    message += "\nSkipping binsplitting."
+                    logger.warning(
+                        message.format(
+                            imexplicit="implicitly",
+                            separator=separator,
+                            identifier=identifier,
+                        )
+                    )
+                    self.splitter = None
+                    break
+
+    def split_bin(
+        self,
+        binname: str,
+        identifiers: Iterable[str],
+    ) -> Iterable[tuple[str, set[str]]]:
+        "Split a single bin by the prefix of the headers"
+        if self.splitter is None:
+            yield (binname, set(identifiers))
+            return None
+        else:
+            by_sample: dict[str, set[str]] = _collections.defaultdict(set)
+            for identifier in identifiers:
+                sample, _, rest = identifier.partition(self.splitter)
+
+                if not rest or not sample:
+                    raise KeyError(
+                        f"Separator '{self.splitter}' not in sequence identifier, or is at the very start or end of identifier: '{identifier}'"
+                    )
+
+                by_sample[sample].add(identifier)
+
+            for sample, splitheaders in by_sample.items():
+                newbinname = f"{sample}{self.splitter}{binname}"
+                yield newbinname, splitheaders
+
+    def binsplit(
+        self,
+        clusters: Iterable[tuple[str, Iterable[str]]],
+    ) -> Iterable[tuple[str, set[str]]]:
+        """Splits a set of clusters by the prefix of their names.
+        The separator is a string which separated prefix from postfix of contignames. The
+        resulting split clusters have the prefix and separator prepended to them.
+
+        clusters can be an iterator, in which case this function returns an iterator, or a dict
+        with contignames: set_of_contignames pair, in which case a dict is returned.
+
+        Example:
+        >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
+        >>> binsplit(clusters, "-")
+        {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
+        """
+        for binname, headers in clusters:
+            for newbinname, splitheaders in self.split_bin(binname, headers):
+                yield newbinname, splitheaders
+
+    def log_string(self) -> str:
+        if not self.is_default:
+            if self.splitter is None:
+                return "Explicitly passed as empty (no binsplitting)"
+            else:
+                return '"{self.splitter}"'
+        else:
+            if self.splitter is None:
+                return "Defaulting to 'C', but disabled due to incompatible identifiers"
+            else:
+                return "Defaulting to 'C'"
 
 
 class PushArray:
@@ -419,13 +525,13 @@ class RefHasher:
                         f"\nIdentifier mismatch: {obs_name} has only "
                         f"{i} identifier(s), which is fewer than {tgt_name}"
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
                 elif target_id is None:
                     message += (
                         f"\nIdentifier mismatch: {tgt_name} has only "
                         f"{i} identifier(s), which is fewer than {obs_name}"
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
                 elif observed_id != target_id:
                     message += (
                         f"\nIdentifier mismatch: Identifier number {i+1} does not match "
@@ -433,74 +539,25 @@ class RefHasher:
                         f'{obs_name}: "{observed_id}"'
                         f'{tgt_name}: "{target_id}"'
                     )
-                    log_and_raise(message)
+                    log_and_error(ValueError, message)
             assert False
         else:
-            log_and_raise(message)
+            log_and_error(ValueError, message)
 
 
 def write_clusters(
-    filehandle: IO[str],
+    unsplit_io: IO[str],
     clusters: Iterable[tuple[str, set[str]]],
-    max_clusters: Optional[int] = None,
-    min_size: int = 1,
-    header: Optional[str] = None,
-    rename: bool = True,
-    cluster_prefix: str = "",
 ) -> tuple[int, int]:
-    """Writes clusters to an open filehandle.
-    Inputs:
-        filehandle: An open filehandle that can be written to
-        clusters: An iterator generated by function `clusters` or a dict
-        max_clusters: Stop printing after this many clusters [None]
-        min_size: Don't output clusters smaller than N contigs
-        header: Commented one-line header to add
-        rename: Rename clusters to "cluster_1", "cluster_2" etc.
-        cluster_prefix: prepend a tag to identify which model produced the clusters (vae,aae_l, aae_y)
+    n_clusters = 0
+    n_contigs = 0
+    for cluster_name, contig_names in clusters:
+        n_clusters += 1
+        n_contigs += len(contig_names)
+        for contig_name in contig_names:
+            print(cluster_name, contig_name, sep="\t", file=unsplit_io)
 
-    Outputs:
-        clusternumber: Number of clusters written
-        ncontigs: Number of contigs written
-    """
-
-    if not hasattr(filehandle, "writable") or not filehandle.writable():
-        raise ValueError("Filehandle must be a writable file")
-
-    if max_clusters is not None and max_clusters < 1:
-        raise ValueError("max_clusters must None or at least 1, not {max_clusters}")
-
-    if header is not None and len(header) > 0:
-        if "\n" in header:
-            raise ValueError("Header cannot contain newline")
-
-        if header[0] != "#":
-            header = "# " + header
-
-        print(header, file=filehandle)
-
-    clusternumber = 0
-    ncontigs = 0
-
-    for clustername, contigs in clusters:
-        if len(contigs) < min_size:
-            continue
-
-        if rename:
-            clustername = cluster_prefix + "cluster_" + str(clusternumber + 1)
-        else:
-            clustername = cluster_prefix + str(clusternumber + 1)
-
-        for contig in contigs:
-            print(clustername, contig, sep="\t", file=filehandle)
-        filehandle.flush()
-
-        clusternumber += 1
-        ncontigs += len(contigs)
-
-        if clusternumber == max_clusters:
-            break
-
-    return clusternumber, ncontigs
+    return (n_clusters, n_contigs)
 
 
 def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set[str]]:
@@ -528,24 +585,36 @@ def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set
     return contigsof_dict
 
 
+def check_is_creatable_file_path(path: Path) -> None:
+    if path.exists():
+        raise FileExistsError(path)
+    if not path.parent.is_dir():
+        raise NotADirectoryError(path.parent)
+
+
+def create_dir_if_not_existing(path: Path) -> None:
+    if path.is_dir():
+        return None
+    if path.is_file():
+        raise FileExistsError(path)
+    if not path.parent.is_dir():
+        raise NotADirectoryError(path.parent)
+    path.mkdir(exist_ok=True)
+
+
 def write_bins(
-    directory: Union[str, Path],
+    directory: Path,
     bins: dict[str, set[str]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 250,
-    minsize: int = 0,
-    separator: Optional[str] = None,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
 
     Inputs:
         directory: Directory to create or put files in
-        bins: dict[str: set[str]] (can be loaded from
-        clusters.tsv using vamb.cluster.read_clusters)
+        bins: dict[str: set[str]] (can be loaded from clusters.tsv using vamb.cluster.read_clusters)
         fastaio: bytes iterator containing FASTA file with all sequences
         maxbins: None or else raise an error if trying to make more bins than this [250]
-        minsize: Minimum number of nucleotides in cluster to be output [0]
-        separator: string that separates the contig/cluster name from the sample ; i.e. sample_id_separator_contig_name/cluster_name
     Output: None
     """
 
@@ -555,67 +624,32 @@ def write_bins(
     if maxbins is not None and len(bins) > maxbins:
         raise ValueError(f"{len(bins)} bins exceed maxbins of {maxbins}")
 
-    # Check that the directory is not a non-directory file,
-    # and that its parent directory indeed exists
-    abspath = _os.path.abspath(directory)
-    parentdir = _os.path.dirname(abspath)
+    create_dir_if_not_existing(directory)
 
-    if parentdir != "" and not _os.path.isdir(parentdir):
-        raise NotADirectoryError(parentdir)
+    keep: set[str] = set()
+    for i in bins.values():
+        keep.update(i)
 
-    if _os.path.isfile(abspath):
-        raise FileExistsError(abspath)
-
-    if minsize < 0:
-        raise ValueError("Minsize must be nonnegative")
-
-    byteslen_by_id: dict[str, tuple[bytes, int]] = dict()
+    bytes_by_id: dict[str, bytes] = dict()
     for entry in byte_iterfasta(fastaio):
-        byteslen_by_id[entry.identifier] = (
-            _gzip.compress(entry.format().encode(), compresslevel=1),
-            len(entry),
-        )
-
-    # Make the directory if it does not exist - if it does, do nothing
-    try:
-        _os.mkdir(directory)
-    except FileExistsError:
-        pass
+        if entry.identifier in keep:
+            bytes_by_id[entry.identifier] = _gzip.compress(
+                entry.format().encode(), compresslevel=1
+            )
 
     # Now actually print all the contigs to files
     for binname, contigs in bins.items():
-        size = 0
-        if separator is not None:
-            binsample = next(iter(contigs)).split(separator)[0]
-        else:
-            binsample = None
         for contig in contigs:
-            byteslen = byteslen_by_id.get(contig)
-            if byteslen is None:
+            byts = bytes_by_id.get(contig)
+            if byts is None:
                 raise IndexError(
                     f'Contig "{contig}" in bin missing from input FASTA file'
                 )
-            size += byteslen[1]
-
-        if size < minsize:
-            continue
-
-        # Split bin files into sample dirs
-        if binsample is not None:
-            bin_dir = _os.path.join(directory, binsample)
-            try:
-                _os.mkdir(bin_dir)
-            except FileExistsError:
-                pass
-        else:
-            bin_dir = directory
 
         # Print bin to file
-        filename = _os.path.join(bin_dir, binname + ".fna")
-
-        with open(filename, "wb") as file:
+        with open(directory.joinpath(binname + ".fna"), "wb") as file:
             for contig in contigs:
-                file.write(_gzip.decompress(byteslen_by_id[contig][0]))
+                file.write(_gzip.decompress(bytes_by_id[contig]))
                 file.write(b"\n")
 
 
@@ -712,50 +746,3 @@ def open_file_iterator(paths: Iterable[Path]) -> Iterable[Reader]:
     for path in paths:
         with Reader(path) as io:
             yield io
-
-
-def _split_bin(
-    binname: str,
-    headers: Iterable[str],
-    separator: str,
-    bysample: _collections.defaultdict[str, set[str]] = _collections.defaultdict(set),
-) -> Generator[tuple[str, set[str]], None, None]:
-    "Split a single bin by the prefix of the headers"
-
-    bysample.clear()
-    for header in headers:
-        if not isinstance(header, str):  # type: ignore
-            raise TypeError(
-                f"Can only split named sequences, not of type {type(header)}"
-            )
-
-        sample, _, identifier = header.partition(separator)
-
-        if not identifier:
-            raise KeyError(f"Separator '{separator}' not in sequence label: '{header}'")
-
-        bysample[sample].add(header)
-
-    for sample, splitheaders in bysample.items():
-        newbinname = f"{sample}{separator}{binname}"
-        yield newbinname, splitheaders
-
-
-def binsplit(
-    clusters: Iterable[tuple[str, Iterable[str]]], separator: str
-) -> Generator[tuple[str, set[str]], None, None]:
-    """Splits a set of clusters by the prefix of their names.
-    The separator is a string which separated prefix from postfix of contignames. The
-    resulting split clusters have the prefix and separator prepended to them.
-
-    clusters can be an iterator, in which case this function returns an iterator, or a dict
-    with contignames: set_of_contignames pair, in which case a dict is returned.
-
-    Example:
-    >>> clusters = {"bin1": {"s1-c1", "s1-c5", "s2-c1", "s2-c3", "s5-c8"}}
-    >>> binsplit(clusters, "-")
-    {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
-    """
-    for binname, headers in clusters:
-        for newbinname, splitheaders in _split_bin(binname, headers, separator):
-            yield newbinname, splitheaders

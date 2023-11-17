@@ -58,6 +58,6 @@ jobs:
         cat outdir_taxometer/log.txt
     - name: Run k-means reclustering
       run: |
-        vamb recluster --outdir outdir_recluster --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --latent_path outdir_taxvamb/vaevae_latent.npy --clusters_path outdir_taxvamb/vaevae_clusters.tsv --hmmout_path markers_mock.hmmout --algorithm kmeans --minfasta 200000
+        vamb recluster --outdir outdir_recluster --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --latent_path outdir_taxvamb/vaevae_latent.npy --clusters_path outdir_taxvamb/vaevae_clusters_split.tsv --hmmout_path markers_mock.hmmout --algorithm kmeans --minfasta 200000
         ls -la outdir_recluster
         cat outdir_recluster/log.txt

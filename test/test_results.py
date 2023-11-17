@@ -30,9 +30,8 @@ class TestCompositionResult(unittest.TestCase):
         self.io.seek(0)
 
     def test_runs(self):
-        with self.assertRaises(UserWarning):
-            comp = vamb.parsecontigs.Composition.from_file(self.io)
-            self.assertIsInstance(comp, vamb.parsecontigs.Composition)
+        comp = vamb.parsecontigs.Composition.from_file(self.io)
+        self.assertIsInstance(comp, vamb.parsecontigs.Composition)
 
     if TEST_UNSTABLE_HASHES:
 
@@ -148,7 +147,8 @@ class TestClusterResult(unittest.TestCase):
             # Uncomment when updating this test.
             # lens = list()
             for cluster in vamb.cluster.ClusterGenerator(self.latent.copy()):
-                medoid, points = cluster.as_tuple()
+                medoid = cluster.metadata.medoid
+                points = set(cluster.members)
                 # Set hashing may differ from run to run, so turn into sorted arrays
                 arr = np.array(list(points))
                 arr.sort()

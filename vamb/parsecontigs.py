@@ -9,7 +9,7 @@ import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
-from typing import IO, Union, TypeVar, Optional
+from typing import IO, Union, TypeVar
 from pathlib import Path
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
@@ -162,14 +162,12 @@ class Composition:
         cls: type[C],
         filehandle: Iterable[bytes],
         minlength: int = 2000,
-        logfile: Optional[IO[str]] = None,
     ) -> C:
         """Parses a FASTA file open in binary reading mode, returning Composition.
 
         Input:
             filehandle: Filehandle open in binary mode of a FASTA file
             minlength: Ignore any references shorter than N bases [2000]
-            logfile: Logfile to print warning to, if any
         """
 
         if minlength < 4:
@@ -215,26 +213,4 @@ class Composition:
             _np.array(mask, dtype=bool),
             minlength,
         )
-
-        if len(metadata.lengths) < 20_000:
-            message = (
-                f"WARNING: Parsed only {len(metadata.lengths)} sequences from FASTA file. "
-                "We normally expect 20,000 sequences or more to prevent overfitting. "
-                "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
-                "You may want to  bin more samples as a time, lower the beta parameter, "
-                "or use a different binner altogether."
-            )
-            _vambtools.log_and_warn(message, logfile=logfile)
-
-        # Warn the user if any contigs have been observed, which is smaller
-        # than the threshold.
-        if not _np.all(metadata.mask):
-            message = (
-                f"WARNING: The minimum sequence length has been set to {minlength}, but a contig with "
-                f"length {minimum_seen_length} was seen. "
-                "Better results are obtained if the sequence file is filtered to the minimum "
-                "sequence length before mapping."
-            )
-            _vambtools.log_and_warn(message, logfile=logfile)
-
         return cls(metadata, tnfs_arr)

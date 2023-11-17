@@ -14,6 +14,7 @@ from vamb.encode import set_batchsize
 from collections.abc import Sequence
 from typing import Optional, IO, Union
 from numpy.typing import NDArray
+from loguru import logger
 
 
 ############################################################################# MODEL ###########################################################
@@ -208,7 +209,6 @@ class AAE(nn.Module):
         batchsteps: list[int],
         T,
         lr: float,
-        logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, IO[bytes]] = None,
     ):
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
@@ -216,22 +216,20 @@ class AAE(nn.Module):
         ncontigs, _ = data_loader.dataset.tensors[0].shape
 
         # Initialize generator and discriminator
-
-        if logfile is not None:
-            print("\tNetwork properties:", file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tAlpha:", self.alpha, file=logfile)
-            print("\tY length:", self.y_len, file=logfile)
-            print("\tZ length:", self.ld, file=logfile)
-            print("\n\tTraining properties:", file=logfile)
-            print("\tN epochs:", nepochs, file=logfile)
-            print("\tStarting batch size:", data_loader.batch_size, file=logfile)
-            batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
-            )
-            print("\tBatchsteps:", batchsteps_string, file=logfile)
-            print("\tN sequences:", ncontigs, file=logfile)
-            print("\tN samples:", self.nsamples, file=logfile, end="\n\n")
+        logger.info("\tNetwork properties:")
+        logger.info(f"\tCUDA: {self.usecuda}")
+        logger.info(f"\tAlpha: {self.alpha}")
+        logger.info(f"\tY length: {self.y_len}")
+        logger.info(f"\tZ length: {self.ld}")
+        logger.info("\n\tTraining properties:")
+        logger.info(f"\tN epochs: {nepochs}")
+        logger.info(f"\tStarting batch size: {data_loader.batch_size}")
+        batchsteps_string = (
+            ", ".join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
+        )
+        logger.info(f"\tBatchsteps: {batchsteps_string}")
+        logger.info(f"\tN sequences: {ncontigs}")
+        logger.info(f"\tN samples: {self.nsamples}")
 
         # we need to separate the paramters due to the adversarial training
 
@@ -396,22 +394,19 @@ class AAE(nn.Module):
             time_epoch_1 = time.time()
             time_e = np.round((time_epoch_1 - time_epoch_0) / 60, 3)
 
-            if logfile is not None:
-                print(
-                    "\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dz loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}".format(
-                        epoch_i + 1,
-                        ED_loss_e / total_batches_inthis_epoch,
-                        V_loss_e / total_batches_inthis_epoch,
-                        CE_e / total_batches_inthis_epoch,
-                        SSE_e / total_batches_inthis_epoch,
-                        D_z_loss_e / total_batches_inthis_epoch,
-                        D_y_loss_e / total_batches_inthis_epoch,
-                        data_loader.batch_size,
-                        time_e,
-                    ),
-                    file=logfile,
-                )
-                logfile.flush()
+            logger.info(
+                "\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dz loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}".format(
+                    epoch_i + 1,
+                    ED_loss_e / total_batches_inthis_epoch,
+                    V_loss_e / total_batches_inthis_epoch,
+                    CE_e / total_batches_inthis_epoch,
+                    SSE_e / total_batches_inthis_epoch,
+                    D_z_loss_e / total_batches_inthis_epoch,
+                    D_y_loss_e / total_batches_inthis_epoch,
+                    data_loader.batch_size,
+                    time_e,
+                ),
+            )
 
             # save model
             if modelfile is not None:

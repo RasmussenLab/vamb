@@ -1,15 +1,16 @@
 import unittest
 import numpy as np
 from hashlib import md5
-import random
-import string
 
 import vamb
 
 
 class TestClusterer(unittest.TestCase):
-    data = np.random.random((1024, 40)).astype(np.float32)
-    lens = np.random.randint(500, 1000, size=1024)
+    # This seed has been set just so the unit tests runs faster.
+    # How many iterations of the clustering depends on the input data
+    rng = np.random.RandomState(5)
+    data = rng.random((1024, 40)).astype(np.float32)
+    lens = rng.randint(500, 1000, size=1024)
 
     def test_bad_params(self):
         with self.assertRaises(ValueError):
@@ -33,19 +34,6 @@ class TestClusterer(unittest.TestCase):
             vamb.cluster.ClusterGenerator(
                 np.random.random((0, 40)), np.array([], dtype=int)
             )
-
-    # In the code, in __init__ of the cluster generator, the input matrix
-    # is shuffled, and an index array is permuted to keep track of which
-    # indices was which.
-    # This depends on the implementation of shuffling and permute being
-    # the same, which I test here.
-    def test_shuffling(self):
-        seed = 0
-        cp = self.data.copy()
-        np.random.Generator(np.random.PCG64(seed)).shuffle((cp))
-        indices = np.random.Generator(np.random.PCG64(seed)).permutation(len(cp))
-        cplike = self.data[indices]
-        self.assertTrue(np.all(cplike == cp))
 
     def test_basics(self):
         clstr = vamb.cluster.ClusterGenerator(self.data, self.lens)
@@ -101,38 +89,3 @@ class TestClusterer(unittest.TestCase):
     def test_cluster(self):
         x = next(vamb.cluster.ClusterGenerator(self.data, self.lens))
         self.assertIsInstance(x.members, np.ndarray)
-        med, st = x.as_tuple()
-        self.assertIsInstance(st, set)
-        self.assertEqual(set(x.members), st)
-        self.assertIn(med, st)
-
-
-class TestPairs(unittest.TestCase):
-    n_samples = 1024
-    data = np.random.random((n_samples, 40)).astype(np.float32)
-    lens = np.random.randint(500, 1000, size=1024)
-
-    @staticmethod
-    def randstring(len):
-        return "".join(random.choices(string.ascii_letters, k=len))
-
-    def test_too_few_names(self):
-        clstr = vamb.cluster.ClusterGenerator(self.data, self.lens)
-        nameset = {self.randstring(10) for i in range(len(self.data) - 1)}
-        with self.assertRaises(ValueError):
-            list(vamb.cluster.pairs(clstr, list(nameset)))
-
-    def test_pairs(self):
-        clstr = vamb.cluster.ClusterGenerator(self.data, self.lens)
-        nameset = {self.randstring(10) for i in range(len(self.data))}
-        pairs = list(vamb.cluster.pairs(clstr, list(nameset)))
-
-        medoid, members = pairs[0]
-        self.assertIsInstance(medoid, str)
-        self.assertIsInstance(members, set)
-        self.assertTrue(all(len(i[1]) > 0 for i in pairs))
-        self.assertTrue(sum(map(lambda i: len(i[1]), pairs)), len(nameset))
-        allmembers = set()
-        for medoid, mems in pairs:
-            allmembers.update(mems)
-        self.assertEqual(allmembers, nameset)

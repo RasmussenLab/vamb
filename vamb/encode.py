@@ -1,4 +1,3 @@
-import datetime
 from typing import Optional, IO, Union
 from pathlib import Path
 import vamb.vambtools as _vambtools
@@ -9,6 +8,7 @@ from torch.optim import Adam as _Adam
 from torch import Tensor
 from torch import nn as _nn
 from math import log as _log
+from loguru import logger
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -166,7 +166,7 @@ class VAE(_nn.Module):
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
         Trains the model, returning None
 
     vae.encode(self, data_loader):
@@ -370,7 +370,6 @@ class VAE(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
-        logfile,
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
         self.train()
 
@@ -422,22 +421,17 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
             epoch_absseloss += ab_sse.data.item()
 
-        if logfile is not None:
-            print(
-                "\tTime: {}\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
-                    datetime.datetime.now().strftime("%H:%M:%S"),
-                    epoch + 1,
-                    epoch_loss / len(data_loader),
-                    epoch_celoss / len(data_loader),
-                    epoch_absseloss / len(data_loader),
-                    epoch_sseloss / len(data_loader),
-                    epoch_kldloss / len(data_loader),
-                    data_loader.batch_size,
-                ),
-                file=logfile,
+        logger.info(
+            "\t\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
+                epoch + 1,
+                epoch_loss / len(data_loader),
+                epoch_celoss / len(data_loader),
+                epoch_absseloss / len(data_loader),
+                epoch_sseloss / len(data_loader),
+                epoch_kldloss / len(data_loader),
+                data_loader.batch_size,
             )
-
-            logfile.flush()
+        )
 
         self.eval()
         return data_loader
@@ -546,7 +540,6 @@ class VAE(_nn.Module):
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
-        logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, Path, IO[bytes]] = None,
     ):
         """Train the autoencoder from depths array and tnf array.
@@ -556,7 +549,6 @@ class VAE(_nn.Module):
             nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
             batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
-            logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
         Output: None
@@ -585,31 +577,28 @@ class VAE(_nn.Module):
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape  # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
 
-        if logfile is not None:
-            print("\tNetwork properties:", file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tAlpha:", self.alpha, file=logfile)
-            print("\tBeta:", self.beta, file=logfile)
-            print("\tDropout:", self.dropout, file=logfile)
-            print("\tN hidden:", ", ".join(map(str, self.nhiddens)), file=logfile)
-            print("\tN latent:", self.nlatent, file=logfile)
-            print("\n\tTraining properties:", file=logfile)
-            print("\tN epochs:", nepochs, file=logfile)
-            print("\tStarting batch size:", dataloader.batch_size, file=logfile)
-            batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps_set)))
-                if batchsteps_set
-                else "None"
-            )
-            print("\tBatchsteps:", batchsteps_string, file=logfile)
-            print("\tLearning rate:", lrate, file=logfile)
-            print("\tN sequences:", ncontigs, file=logfile)
-            print("\tN samples:", nsamples, file=logfile, end="\n\n")
+        logger.info("\tNetwork properties:")
+        logger.info(f"\tCUDA: {self.usecuda}")
+        logger.info(f"\tAlpha: {self.alpha}")
+        logger.info(f"\tBeta: {self.beta}")
+        logger.info(f"\tDropout: {self.dropout}")
+        logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
+        logger.info(f"\tN latent: {self.nlatent}")
+        logger.info("\tTraining properties:")
+        logger.info(f"\tN epochs: {nepochs}")
+        logger.info(f"\tStarting batch size: {dataloader.batch_size}")
+        batchsteps_string = (
+            ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
+        )
+        logger.info(f"\tBatchsteps: {batchsteps_string}")
+        logger.info(f"\tLearning rate: {lrate}")
+        logger.info(f"\tN sequences: {ncontigs}")
+        logger.info(f"\tN samples: {nsamples}")
 
         # Train
         for epoch in range(nepochs):
             dataloader = self.trainepoch(
-                dataloader, epoch, optimizer, sorted(batchsteps_set), logfile
+                dataloader, epoch, optimizer, sorted(batchsteps_set)
             )
 
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions

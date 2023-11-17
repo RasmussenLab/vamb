@@ -8,16 +8,17 @@ import sys
 import os
 import argparse
 import torch
-import datetime
 import time
 import random
+import pycoverm
+import itertools
 from math import isfinite
-from typing import Optional, IO, Tuple, Union
+from typing import Optional, Tuple, Union, cast
 from pathlib import Path
 from collections.abc import Sequence
 from collections import defaultdict
 from torch.utils.data import DataLoader
-import pandas as pd
+from loguru import logger
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -34,6 +35,16 @@ parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
 
+def format_log(record) -> str:
+    colors = {"WARNING": "red", "INFO": "green", "DEBUG": "blue", "ERROR": "red"}
+    L = colors.get(record["level"].name, "blue")
+    T = "red" if record["level"].name in ("WARNING", "ERROR") else "cyan"
+    time = f"<{T}>{{time:YYYY-MM-DD HH:mm:ss.SSS}}</{T}>"
+    level = f"<b><{L}>{{level:<7}}</{L}></b>"
+    rest = f"<{L}>{{message}}</{L}>\n{{exception}}"
+    return f"{time} | {level} | {rest}"
+
+
 def try_make_dir(name: Union[Path, str]):
     try:
         os.mkdir(name)
@@ -42,22 +53,29 @@ def try_make_dir(name: Union[Path, str]):
 
 
 class FASTAPath(type(Path())):
+    __slots__ = []
     pass
 
 
 class CompositionPath(type(Path())):
+    __slots__ = []
     pass
 
 
 class CompositionOptions:
-    __slots__ = ["path", "min_contig_length"]
+    __slots__ = ["path", "min_contig_length", "warn_on_few_seqs"]
 
     def __init__(
-        self, fastapath: Optional[Path], npzpath: Optional[Path], min_contig_length: int
+        self,
+        fastapath: Optional[Path],
+        npzpath: Optional[Path],
+        min_contig_length: int,
+        warn_on_few_seqs: bool,
     ):
         assert isinstance(fastapath, (Path, type(None)))
         assert isinstance(npzpath, (Path, type(None)))
         assert isinstance(min_contig_length, int)
+        assert isinstance(warn_on_few_seqs, bool)
 
         if min_contig_length < 250:
             raise argparse.ArgumentTypeError(
@@ -79,6 +97,7 @@ class CompositionOptions:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
         self.min_contig_length = min_contig_length
+        self.warn_on_few_seqs = warn_on_few_seqs
 
 
 class AbundancePath(type(Path())):
@@ -119,6 +138,8 @@ class AbundanceOptions:
                     raise FileNotFoundError(
                         f'Not an existing non-directory file: "{str(bampath)}"'
                     )
+                if not pycoverm.is_bam_sorted(str(bampath)):
+                    raise ValueError(f"Path {bampath} is not sorted by reference.")
             self.path = bampaths
 
         if min_alignment_id is not None:
@@ -228,6 +249,10 @@ class TaxonomyOptions:
                 "The taxonomy predictor needs --taxonomy_path for training"
             )
 
+        for path in (taxonomy_path, taxonomy_predictions_path):
+            if path is not None and not path.is_file():
+                raise FileNotFoundError(path)
+
         self.taxonomy_path = taxonomy_path
         self.taxonomy_predictions_path = taxonomy_predictions_path
         self.no_predictor = no_predictor
@@ -238,7 +263,7 @@ class ReclusteringOptions:
         "latent_path",
         "clusters_path",
         "hmmout_path",
-        "binsplit_separator",
+        "binsplitter",
         "algorithm",
     ]
 
@@ -248,16 +273,24 @@ class ReclusteringOptions:
         clusters_path: Path,
         hmmout_path: Path,
         binsplit_separator: Optional[str],
-        algorithm: Optional[str],
+        algorithm: str,
     ):
         assert isinstance(latent_path, Path)
         assert isinstance(clusters_path, Path)
+        assert isinstance(hmmout_path, Path)
+
+        for path in [latent_path, clusters_path, hmmout_path]:
+            if not path.is_file():
+                raise FileNotFoundError(path)
+
+        if algorithm not in ("kmeans", "dbscan"):
+            raise ValueError("Algortihm must be 'kmeans' or 'dbscan'")
 
         self.latent_path = latent_path
         self.clusters_path = clusters_path
-        self.binsplit_separator = binsplit_separator
         self.hmmout_path = hmmout_path
         self.algorithm = algorithm
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
 class EncoderOptions:
@@ -394,32 +427,25 @@ class ClusterOptions:
     __slots__ = [
         "window_size",
         "min_successes",
-        "min_cluster_size",
         "max_clusters",
-        "binsplit_separator",
+        "binsplitter",
     ]
 
     def __init__(
         self,
         window_size: int,
         min_successes: int,
-        min_cluster_size: int,
         max_clusters: Optional[int],
         binsplit_separator: Optional[str],
     ):
         assert isinstance(window_size, int)
         assert isinstance(min_successes, int)
-        assert isinstance(min_cluster_size, int)
         assert isinstance(max_clusters, (int, type(None)))
         assert isinstance(binsplit_separator, (str, type(None)))
 
         if window_size < 1:
             raise argparse.ArgumentTypeError("Window size must be at least 1")
         self.window_size = window_size
-
-        if min_cluster_size < 1:
-            raise argparse.ArgumentTypeError("Minimum cluster size must be at least 0")
-        self.min_cluster_size = min_cluster_size
 
         if min_successes < 1 or min_successes > window_size:
             raise argparse.ArgumentTypeError(
@@ -430,12 +456,7 @@ class ClusterOptions:
         if max_clusters is not None and max_clusters < 1:
             raise argparse.ArgumentTypeError("Max clusters must be at least 1")
         self.max_clusters = max_clusters
-
-        if binsplit_separator is not None and len(binsplit_separator) == 0:
-            raise argparse.ArgumentTypeError(
-                "Binsplit separator cannot be an empty string"
-            )
-        self.binsplit_separator = binsplit_separator
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
 class VambOptions:
@@ -498,43 +519,61 @@ class VambOptions:
         self.cuda = cuda
 
 
-def log(string: str, logfile: IO[str], indent: int = 0):
-    print(("\t" * indent) + string, file=logfile)
-    logfile.flush()
-
-
 def calc_tnf(
     options: CompositionOptions,
     outdir: Path,
-    logfile: IO[str],
+    binsplitter: vamb.vambtools.BinSplitter,
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
-    log("\nLoading TNF", logfile, 0)
-    log(f"Minimum sequence length: {options.min_contig_length}", logfile, 1)
+    logger.info("Loading TNF")
+    logger.info(f"\tMinimum sequence length: {options.min_contig_length}")
 
     path = options.path
 
     if isinstance(path, CompositionPath):
-        log(f"Loading composition from npz {path}", logfile, 1)
+        logger.info(f"\tLoading composition from npz at: {path}")
         composition = vamb.parsecontigs.Composition.load(str(path))
         composition.filter_min_length(options.min_contig_length)
     else:
         assert isinstance(path, FASTAPath)
-        log(f"Loading data from FASTA file {path}", logfile, 1)
+        logger.info(f"\tLoading data from FASTA file {path}")
         with vamb.vambtools.Reader(str(path)) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, minlength=options.min_contig_length, logfile=logfile
+                file, minlength=options.min_contig_length
             )
         composition.save(outdir.joinpath("composition.npz"))
 
+    binsplitter.initialize(composition.metadata.identifiers)
+
+    if options.warn_on_few_seqs and composition.nseqs < 20_000:
+        message = (
+            f"Kept only {composition.nseqs} sequences from FASTA file. "
+            "We normally expect 20,000 sequences or more to prevent overfitting. "
+            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
+            "You may want to  bin more samples as a time, lower the beta parameter, "
+            "or use a different binner altogether.\n"
+        )
+        logger.opt(raw=True).info("\n")
+        logger.warning(message)
+
+    # Warn the user if any contigs have been observed, which is smaller
+    # than the threshold.
+    if not np.all(composition.metadata.mask):
+        n_removed = len(composition.metadata.mask) - np.sum(composition.metadata.mask)
+        message = (
+            f"The minimum sequence length has been set to {options.min_contig_length}, "
+            f"but {n_removed} sequences fell below this threshold and was filtered away."
+            "\nBetter results are obtained if the sequence file is filtered to the minimum "
+            "sequence length before mapping.\n"
+        )
+        logger.opt(raw=True).info("\n")
+        logger.warning(message)
+
     elapsed = round(time.time() - begintime, 2)
-    print("", file=logfile)
-    log(
-        f"Kept {composition.count_bases()} bases in {composition.nseqs} sequences",
-        logfile,
-        1,
+    logger.info(
+        f"\tKept {composition.count_bases()} bases in {composition.nseqs} sequences"
     )
-    log(f"Processed TNF in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tProcessed TNF in {elapsed} seconds.\n")
 
     return composition
 
@@ -544,19 +583,16 @@ def calc_rpkm(
     outdir: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     nthreads: int,
-    logfile: IO[str],
 ) -> vamb.parsebam.Abundance:
     begintime = time.time()
-    log("\nLoading depths", logfile)
-    log(
-        f'Reference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else "None"}',
-        logfile,
-        1,
+    logger.info("Loading depths")
+    logger.info(
+        f'\tReference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else "None"}'
     )
 
     path = abundance_options.path
     if isinstance(path, AbundancePath):
-        log(f"Loading depths from npz array {str(path)}", logfile, 1)
+        logger.info(f"\tLoading depths from npz at: {str(path)}")
 
         abundance = vamb.parsebam.Abundance.load(
             path, comp_metadata.refhash if abundance_options.refcheck else None
@@ -572,7 +608,7 @@ def calc_rpkm(
             )
     else:
         assert isinstance(path, list)
-        log(f"Parsing {len(path)} BAM files with {nthreads} threads", logfile, 1)
+        logger.info(f"\tParsing {len(path)} BAM files with {nthreads} threads")
 
         abundance = vamb.parsebam.Abundance.from_files(
             path,
@@ -584,13 +620,13 @@ def calc_rpkm(
         )
         abundance.save(outdir.joinpath("abundance.npz"))
 
-        log(f"Min identity: {abundance.minid}\n", logfile, 1)
-        log("Order of columns is:", logfile, 1)
-        log("\n\t".join(abundance.samplenames), logfile, 1)
+        logger.info(f"\tMin identity: {abundance.minid}")
+        logger.info("\tOrder of columns is:")
+        for samplename in abundance.samplenames:
+            logger.info(f"\t\t{samplename}")
 
     elapsed = round(time.time() - begintime, 2)
-    print("", file=logfile)
-    log(f"Processed RPKM in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tProcessed RPKM in {elapsed} seconds.\n")
 
     return abundance
 
@@ -602,10 +638,9 @@ def trainvae(
     lrate: float,
     alpha: Optional[float],
     data_loader: DataLoader,
-    logfile: IO[str],
 ) -> np.ndarray:
     begintime = time.time()
-    log("\nCreating and training VAE", logfile)
+    logger.info("Creating and training VAE")
 
     nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
     vae = vamb.encode.VAE(
@@ -619,25 +654,23 @@ def trainvae(
         seed=vamb_options.seed,
     )
 
-    log("Created VAE", logfile, 1)
+    logger.info("\tCreated VAE")
     modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(data_loader, training_options.batchsize),
         nepochs=training_options.nepochs,
         lrate=lrate,
         batchsteps=training_options.batchsteps,
-        logfile=logfile,
         modelfile=modelpath,
     )
 
-    print("", file=logfile)
-    log("Encoding to latent representation", logfile, 1)
+    logger.info("\tEncoding to latent representation")
     latent = vae.encode(data_loader)
     vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    log(f"Trained VAE and encoded in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tTrained VAE and encoded in {elapsed} seconds.\n")
 
     return latent
 
@@ -649,11 +682,10 @@ def trainaae(
     vamb_options: VambOptions,
     lrate: float,
     alpha: Optional[float],  # set automatically if None
-    logfile: IO[str],
     contignames: Sequence[str],
 ) -> tuple[np.ndarray, dict[str, set[str]]]:
     begintime = time.time()
-    log("\nCreating and training AAE", logfile)
+    logger.info("Creating and training AAE")
     nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
 
     aae = vamb.aamb_encode.AAE(
@@ -668,7 +700,7 @@ def trainaae(
         seed=vamb_options.seed,
     )
 
-    log("Created AAE", logfile, 1)
+    logger.info("\tCreated AAE")
     modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
     aae.trainmodel(
         vamb.encode.set_batchsize(data_loader, training_options.batchsize),
@@ -676,12 +708,10 @@ def trainaae(
         training_options.batchsteps,
         training_options.temp,
         lrate,
-        logfile,
         modelpath,
     )
 
-    print("", file=logfile)
-    log("Encoding to latent representation", logfile, 1)
+    logger.info("\tEncoding to latent representation")
     clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
     vamb.vambtools.write_npz(
         os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
@@ -690,164 +720,152 @@ def trainaae(
     del aae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    log(f"Trained AAE and encoded in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tTrained AAE and encoded in {elapsed} seconds.\n")
 
     return latent, clusters_y_dict
 
 
-def cluster(
-    cluster_options: ClusterOptions,
-    clusterspath: Path,
-    latent: np.ndarray,
-    contignames: Sequence[str],  # of dtype object
-    lengths: Sequence[int],  # of dtype object
+def cluster_and_write_files(
     vamb_options: VambOptions,
-    logfile: IO[str],
-    cluster_prefix: str,
-) -> None:
+    cluster_options: ClusterOptions,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    bins_dir: Path,
+    fasta_catalogue: Path,
+    latent: np.ndarray,
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
+):
     begintime = time.time()
-
-    log("\nClustering", logfile)
-    log(f"Windowsize: {cluster_options.window_size}", logfile, 1)
-    log(
-        f"Min successful thresholds detected: {cluster_options.min_successes}",
-        logfile,
-        1,
+    # Create cluser iterator
+    logger.info("Clustering")
+    logger.info(f"\tWindowsize: {cluster_options.window_size}")
+    logger.info(
+        f"\tMin successful thresholds detected: {cluster_options.min_successes}",
     )
-    log(f"Max clusters: {cluster_options.max_clusters}", logfile, 1)
-    log(f"Min cluster size: {cluster_options.min_cluster_size}", logfile, 1)
-    log(f"Use CUDA for clustering: {vamb_options.cuda}", logfile, 1)
-    log(
-        "Separator: {}".format(
-            None
-            if cluster_options.binsplit_separator is None
-            else ('"' + cluster_options.binsplit_separator + '"')
-        ),
-        logfile,
-        1,
-    )
+    logger.info(f"\tMax clusters: {cluster_options.max_clusters}")
+    logger.info(f"\tUse CUDA for clustering: {vamb_options.cuda}")
+    logger.info(f"\tBinsplitter: {cluster_options.binsplitter.log_string()}")
 
     cluster_generator = vamb.cluster.ClusterGenerator(
         latent,
-        lengths,  # type:ignore
+        sequence_lens,  # type:ignore
         windowsize=cluster_options.window_size,
         minsuccesses=cluster_options.min_successes,
         destroy=True,
         normalized=False,
-        # cuda=vamb_options.cuda,
-        cuda=False,  # disabled until clustering is fixed
+        cuda=vamb_options.cuda,
         rng_seed=vamb_options.seed,
     )
+    # This also works correctly when max_clusters is None
+    clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
+    cluster_dict: dict[str, set[str]] = dict()
 
-    renamed = (
-        (str(cluster_index + 1), {contignames[i] for i in members})
-        for (cluster_index, (_, members)) in enumerate(
-            map(lambda x: x.as_tuple(), cluster_generator)
-        )
+    # Write the cluster metadata to file
+    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs", file=file)
+        for i, cluster in enumerate(clusters):
+            cluster_dict[str(i + 1)] = {
+                sequence_names[cast(int, i)] for i in cluster.members
+            }
+            print(
+                str(i + 1),
+                None if cluster.radius is None else round(cluster.radius, 3),
+                None
+                if cluster.observed_pvr is None
+                else round(cluster.observed_pvr, 2),
+                cluster.kind_str,
+                sum(sequence_lens[i] for i in cluster.members),
+                len(cluster.members),
+                file=file,
+                sep="\t",
+            )
+
+    elapsed = round(time.time() - begintime, 2)
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        base_clusters_name,
+        bins_dir,
+        fasta_catalogue,
+        cluster_dict,
+        sequence_names,
+        sequence_lens,
     )
-
-    # Binsplit if given a separator
-    if cluster_options.binsplit_separator is not None:
-        maybe_split = vamb.vambtools.binsplit(
-            renamed, cluster_options.binsplit_separator
-        )
-    else:
-        maybe_split = renamed
-
-    with open(clusterspath, "w") as clustersfile:
-        clusternumber, ncontigs = vamb.vambtools.write_clusters(
-            clustersfile,
-            maybe_split,
-            max_clusters=cluster_options.max_clusters,
-            min_size=cluster_options.min_cluster_size,
-            rename=False,
-            cluster_prefix=cluster_prefix,
-        )
-
-    print("", file=logfile)
-    log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-
-    elapsed = round(time.time() - begintime, 2)
-    log(f"Clustered contigs in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
 
-def write_fasta(
-    outdir: Path,
-    clusterspath: Path,
-    fastapath: Path,
-    contignames: Sequence[str],  # of object
-    contiglengths: np.ndarray,
-    minfasta: int,
-    logfile: IO[str],
-    separator: Optional[str],
-) -> None:
+def write_clusters_and_bins(
+    vamb_options: VambOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    bins_dir: Path,
+    fasta_catalogue: Path,
+    clusters: dict[str, set[str]],
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
+):
+    # Write unsplit clusters to file
     begintime = time.time()
-
-    log("\nWriting FASTA files", logfile)
-    log("Minimum FASTA size: " + str(minfasta), logfile, 1)
-    assert len(contignames) == len(contiglengths)
-
-    lengthof = dict(zip(contignames, contiglengths))
-    filtered_clusters: dict[str, set[str]] = dict()
-
-    with open(clusterspath) as file:
-        clusters = vamb.vambtools.read_clusters(file)
-
-    for cluster, contigs in clusters.items():
-        size = sum(lengthof[contig] for contig in contigs)
-        if size >= minfasta:
-            filtered_clusters[cluster] = clusters[cluster]
-
-    del lengthof, clusters
-    keep: set[str] = set()
-    for contigs in filtered_clusters.values():
-        keep.update(set(contigs))
-
-    with vamb.vambtools.Reader(fastapath) as file:
-        vamb.vambtools.write_bins(
-            outdir.joinpath("bins"),
-            filtered_clusters,
-            file,
-            maxbins=None,
-            separator=separator,
+    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+    with open(unsplit_path, "w") as file:
+        (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
+            file, clusters.items()
         )
 
-    ncontigs = sum(map(len, filtered_clusters.values()))
-    nfiles = len(filtered_clusters)
-    print("", file=logfile)
-    log(f"Wrote {ncontigs} contigs to {nfiles} FASTA files", logfile, 1)
+    # Open unsplit clusters and split them
+    if binsplitter.splitter is not None:
+        split_path = Path(base_clusters_name + "_split.tsv")
+        clusters = dict(binsplitter.binsplit(clusters.items()))
+        with open(split_path, "w") as file:
+            (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items()
+            )
+        msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    else:
+        msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
 
+    logger.info(msg)
     elapsed = round(time.time() - begintime, 2)
-    log(f"Wrote FASTA in {elapsed} seconds.", logfile, 1)
+    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+
+    # Write bins, if necessary
+    if vamb_options.min_fasta_output_size is not None:
+        starttime = time.time()
+        filtered_clusters: dict[str, set[str]] = dict()
+        assert len(sequence_lens) == len(sequence_names)
+        sizeof = dict(zip(sequence_names, sequence_lens))
+        for binname, contigs in clusters.items():
+            if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
+                filtered_clusters[binname] = contigs
+
+        with vamb.vambtools.Reader(fasta_catalogue) as file:
+            vamb.vambtools.write_bins(
+                bins_dir,
+                filtered_clusters,
+                file,
+                None,
+            )
+        elapsed = round(time.time() - starttime, 2)
+        n_bins = len(filtered_clusters)
+        n_contigs = sum(len(v) for v in filtered_clusters.values())
+        logger.info(
+            f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
+        )
 
 
 def load_composition_and_abundance(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    logfile: IO[str],
+    binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
-    log("Starting Vamb version " + ".".join(map(str, vamb.__version__)), logfile)
-    log("Date and time is " + str(datetime.datetime.now()), logfile, 1)
-    log("Random seed is " + str(vamb_options.seed), logfile, 1)
-    begintime = time.time()
-
-    # Get TNFs, save as npz
-    composition = calc_tnf(comp_options, vamb_options.out_dir, logfile)
-
-    # Parse BAMs, save as npz
+    composition = calc_tnf(comp_options, vamb_options.out_dir, binsplitter)
     abundance = calc_rpkm(
         abundance_options,
         vamb_options.out_dir,
         composition.metadata,
         vamb_options.n_threads,
-        logfile,
-    )
-    time_generating_input = round(time.time() - begintime, 2)
-    log(
-        f"\nTNF and coabundances generated in {time_generating_input} seconds.",
-        logfile,
-        1,
     )
     return (composition, abundance)
 
@@ -859,20 +877,17 @@ def run(
     encoder_options: EncoderOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,
-    logfile: IO[str],
 ):
     vae_options = encoder_options.vae_options
     aae_options = encoder_options.aae_options
     vae_training_options = training_options.vae_options
     aae_training_options = training_options.aae_options
 
-    begintime = time.time()
-
     composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        logfile=logfile,
+        binsplitter=cluster_options.binsplitter,
     )
     data_loader = vamb.encode.make_dataloader(
         abundance.matrix,
@@ -894,9 +909,7 @@ def run(
             lrate=training_options.lrate,
             alpha=encoder_options.alpha,
             data_loader=data_loader,
-            logfile=logfile,
         )
-        print("", file=logfile)
 
     clusters_y_dict = None
     latent_z = None
@@ -910,10 +923,8 @@ def run(
             training_options=aae_training_options,
             lrate=training_options.lrate,
             alpha=encoder_options.alpha,
-            logfile=logfile,
             contignames=composition.metadata.identifiers,  # type:ignore
         )
-        print("", file=logfile)
 
     # Free up memory
     comp_metadata = composition.metadata
@@ -930,155 +941,89 @@ def run(
     if vae_options is not None:
         assert latent is not None
         assert comp_metadata.nseqs == len(latent)
-        # Cluster, save tsv file
-        clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
-        cluster(
+        cluster_and_write_files(
+            vamb_options,
             cluster_options,
-            clusterspath,
+            str(vamb_options.out_dir.joinpath("vae_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
             latent,
             comp_metadata.identifiers,  # type:ignore
             comp_metadata.lengths,  # type:ignore
-            vamb_options,
-            logfile,
-            "vae_",
         )
-        log("VAE latent clustered", logfile, 1)
-
         del latent
-        fin_cluster_latent = time.time()
-
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-
-        writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-        log(f"VAE bins written in {writing_bins_time} seconds.", logfile, 1)
 
     if aae_options is not None:
         assert latent_z is not None
         assert clusters_y_dict is not None
         assert comp_metadata.nseqs == len(latent_z)
-        # Cluster, save tsv file
-        clusterspath = vamb_options.out_dir.joinpath("aae_z_clusters.tsv")
-
-        cluster(
+        cluster_and_write_files(
+            vamb_options,
             cluster_options,
-            clusterspath,
+            str(vamb_options.out_dir.joinpath("aae_z_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
             latent_z,
             comp_metadata.identifiers,  # type:ignore
             comp_metadata.lengths,  # type:ignore
-            vamb_options,
-            logfile,
-            "aae_z_",
         )
-
-        fin_cluster_latent_z = time.time()
-        log("AAE z latent clustered.", logfile, 1)
-
         del latent_z
-
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-        time_writing_bins_z = time.time()
-        writing_bins_time_z = round(time_writing_bins_z - fin_cluster_latent_z, 2)
-        log(f"AAE z bins written in {writing_bins_time_z} seconds.", logfile, 1)
-
-        clusterspath = vamb_options.out_dir.joinpath("aae_y_clusters.tsv")
-        # Binsplit if given a separator
-        if cluster_options.binsplit_separator is not None:
-            maybe_split = vamb.vambtools.binsplit(
-                clusters_y_dict.items(), cluster_options.binsplit_separator
-            )
-        else:
-            maybe_split = clusters_y_dict.items()
-        with open(clusterspath, "w") as clustersfile:
-            clusternumber, ncontigs = vamb.vambtools.write_clusters(
-                clustersfile,
-                maybe_split,
-                max_clusters=cluster_options.max_clusters,
-                min_size=cluster_options.min_cluster_size,
-                rename=False,
-                cluster_prefix="aae_y_",
-            )
-
-        print("", file=logfile)
-        log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-        time_start_writin_z_bins = time.time()
-        if vamb_options.min_fasta_output_size is not None:
-            path = comp_options.path
-            assert isinstance(path, FASTAPath)
-            write_fasta(
-                vamb_options.out_dir,
-                clusterspath,
-                path,
-                comp_metadata.identifiers,  # type:ignore
-                comp_metadata.lengths,
-                vamb_options.min_fasta_output_size,
-                logfile,
-                separator=cluster_options.binsplit_separator,
-            )
-        time_writing_bins_y = time.time()
-        writing_bins_time_y = round(time_writing_bins_y - time_start_writin_z_bins, 2)
-        log(f"AAE y bins written in {writing_bins_time_y} seconds.", logfile, 1)
-
-    log(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.", logfile, 0)
+        # We enforce this in the VAEAAEOptions constructor, see comment there
+        assert cluster_options.max_clusters is None
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("aae_y_clusters")),
+            vamb_options.out_dir.joinpath("bins"),
+            comp_options.path,
+            clusters_y_dict,
+            comp_metadata.identifiers,  # type:ignore
+            comp_metadata.lengths,  # type:ignore
+        )
 
 
 def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
-    contignames: list[str],  # already masked
-    logfile: IO[str],
-) -> pd.Series:
-    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
-    assert (
-        len(df_mmseq.columns) >= 9
-    ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
-    df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
-    log(f"{len(df_mmseq)} lines in taxonomy file", logfile, 1)
-    log(f"{len(contignames)} contigs", logfile, 1)
-    df_mmseq = df_mmseq[df_mmseq[0].isin(contignames)]
+    contignames: Sequence[str],  # already masked
+) -> list[str]:
+    names_index = {n: i for (i, n) in enumerate(contignames)}
+    names_graphs: list[tuple[str, str]] = []
+    n_lines_in_file = 0
+    with open(taxonomy_path) as file:
+        for line in map(lambda line: line.lstrip().rstrip("\n"), file):
+            n_lines_in_file += 1
+            if len(line) == 0:
+                continue
+            fields = line.split("\t")
+            if len(fields) < 9:
+                raise ValueError(
+                    f"Too few columns ({len(fields)}) in line in mmseqs taxonomy file"
+                )
+            contig = fields[0]
+            if contig not in names_index:
+                continue
+            names_graphs.append((contig, fields[8]))
 
+    # Add contigs missing from the tax file with standin information
     # TODO: rethink when we start working with other domains
-    missing_contigs = set(contignames) - set(df_mmseq[0])
-    for c in missing_contigs:
-        new_row: dict[int, Union[str, float]] = {i: np.nan for i in range(9)}
-        new_row[0] = c
-        new_row[2] = "domain"
-        new_row[8] = "d_Bacteria"
-        df_mmseq = pd.concat([df_mmseq, pd.DataFrame([new_row])], ignore_index=True)
+    for missing_name in set(names_index).difference(
+        (name for (name, _) in names_graphs)
+    ):
+        names_graphs.append((missing_name, "d_Bacteria"))
 
-    df_mmseq.set_index(0, inplace=True)
-    df_mmseq = df_mmseq.loc[contignames]
-    df_mmseq.reset_index(inplace=True)
-    graph_column = df_mmseq[8]
+    # Reorder to have the same order as the input contignames
+    names: list[str] = [""] * len(names_graphs)
+    graphs: list[str] = [""] * len(names_graphs)
+    for name, graph in names_graphs:
+        i = names_index[name]
+        names[i] = name
+        graphs[i] = graph
 
-    if list(df_mmseq[0]) != list(contignames):
-        raise AssertionError(
-            "The contig names of taxonomy entries are not the same as in the contigs metadata"
-        )
+    logger.info(f"\t{n_lines_in_file} lines in taxonomy file")
+    logger.info(f"\t{len(contignames)} contigs")
 
-    return graph_column
+    assert names == list(contignames)
+    return graphs
 
 
 def predict_taxonomy(
@@ -1090,21 +1035,17 @@ def predict_taxonomy(
     out_dir: Path,
     predictor_training_options: PredictorTrainingOptions,
     cuda: bool,
-    logfile: IO[str],
 ):
     begintime = time.time()
 
-    graph_column = parse_mmseqs_taxonomy(
+    graphs = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
-        contignames=contignames,
-        logfile=logfile,
+        contignames=contignames,  # type:ignore
     )
 
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
-    log(f"{len(nodes)} nodes in the graph", logfile, 1)
-
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
-    targets = np.array([ind_nodes[i] for i in classes_order])
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
+    logger.info(f"\t{len(nodes)} nodes in the graph")
+    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
 
     model = vamb.h_loss.VAMB2Label(
         rpkms.shape[1],
@@ -1132,16 +1073,11 @@ def predict_taxonomy(
         batchsize=predictor_training_options.batchsize,
     )
 
-    print("", file=logfile)
-    log("Created dataloader", logfile, 0)
+    logger.info("\tCreated dataloader")
 
     predictortime = time.time()
-    log(
-        f"Starting training the taxonomy predictor at {str(datetime.datetime.now())}",
-        logfile,
-        0,
-    )
-    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
+    logger.info("Starting training the taxonomy predictor")
+    logger.info(f"Using threshold {predictor_training_options.softmax_threshold}")
 
     model_path = out_dir.joinpath("predictor_model.pt")
     with open(model_path, "wb") as modelfile:
@@ -1149,32 +1085,27 @@ def predict_taxonomy(
             dataloader_joint,
             nepochs=predictor_training_options.nepochs,
             modelfile=modelfile,
-            logfile=logfile,
             batchsteps=predictor_training_options.batchsteps,
         )
-    log(
-        f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds.",
-        logfile,
-        0,
+    logger.info(
+        f"Finished training the taxonomy predictor in {round(time.time() - predictortime, 2)} seconds."
     )
 
-    log("Writing the taxonomy predictions", logfile, 0)
+    logger.info("Writing the taxonomy predictions")
     predicted_path = out_dir.joinpath("results_taxonomy_predictor.csv")
     nodes_ar = np.array(nodes)
 
-    log(f"Using threshold {predictor_training_options.softmax_threshold}", logfile, 0)
+    logger.info(f"Using threshold {predictor_training_options.softmax_threshold}")
     row = 0
+    output_exists = False
     for predicted_vector, predicted_labels in model.predict(dataloader_vamb):
         N = len(predicted_vector)
         predictions: list[str] = []
-        probs: list[float] = []
+        probs: list[str] = []
         for i in range(predicted_vector.shape[0]):
             label = predicted_labels[i]
-            pred_labels: list[str] = [label]
             while table_parent[label] != -1:
-                pred_labels.append(table_parent[label])
                 label = table_parent[label]
-            pred_labels = ";".join([nodes_ar[label] for label in pred_labels][::-1])
             threshold_mask = (
                 predicted_vector[i] > predictor_training_options.softmax_threshold
             )
@@ -1183,23 +1114,19 @@ def predict_taxonomy(
             absolute_probs = predicted_vector[i][threshold_mask]
             absolute_prob = ";".join(map(str, absolute_probs[1:]))
             probs.append(absolute_prob)
-        df_gt = pd.DataFrame(
-            {"contigs": contignames[row : row + N], "lengths": lengths[row : row + N]}
-        )
-        df_gt["predictions"] = predictions
-        df_gt["probabilities"] = probs
-        df_gt.to_csv(
-            predicted_path,
-            mode="a",
-            index=None,
-            header=not os.path.exists(predicted_path),
-        )
+
+        with open(predicted_path, "a") as file:
+            if not output_exists:
+                print("contigs,lengths,predictions,probabilities", file=file)
+            for contig, length, prediction, prob in zip(
+                contignames[row : row + N], lengths[row : row + N], predictions, probs
+            ):
+                print(contig, length, prediction, prob, file=file, sep=",")
+        output_exists = True
         row += N
 
-    log(
-        f"\nCompleted taxonomy predictions in {round(time.time() - begintime, 2)} seconds.",
-        logfile,
-        0,
+    logger.info(
+        f"Completed taxonomy predictions in {round(time.time() - begintime, 2)} seconds."
     )
 
 
@@ -1207,17 +1134,15 @@ def extract_and_filter_data(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    logfile: IO[str],
+    binsplitter: vamb.vambtools.BinSplitter,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        logfile=logfile,
+        binsplitter=binsplitter,
     )
-
-    log(f"{len(composition.metadata.identifiers)} contig names", logfile, 0)
-
+    logger.info(f"{len(composition.metadata.identifiers)} contig names")
     return (
         abundance.matrix,
         composition.matrix,
@@ -1232,13 +1157,12 @@ def run_taxonomy_predictor(
     abundance_options: AbundanceOptions,
     predictor_training_options: PredictorTrainingOptions,
     taxonomy_options: TaxonomyOptions,
-    logfile: IO[str],
 ):
     rpkms, tnfs, lengths, contignames = extract_and_filter_data(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        logfile=logfile,
+        binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
     )
     assert taxonomy_options.taxonomy_path is not None
     predict_taxonomy(
@@ -1250,7 +1174,6 @@ def run_taxonomy_predictor(
         out_dir=vamb_options.out_dir,
         predictor_training_options=predictor_training_options,
         cuda=vamb_options.cuda,
-        logfile=logfile,
     )
 
 
@@ -1263,18 +1186,17 @@ def run_vaevae(
     taxonomy_options: TaxonomyOptions,
     cluster_options: ClusterOptions,
     encoder_options: EncoderOptions,
-    logfile: IO[str],
 ):
     vae_options = encoder_options.vae_options
     rpkms, tnfs, lengths, contignames = extract_and_filter_data(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        logfile=logfile,
+        binsplitter=cluster_options.binsplitter,
     )
 
     if taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
-        log("Predicting missing values from mmseqs taxonomy", logfile, 0)
+        logger.info("Predicting missing values from mmseqs taxonomy")
         predict_taxonomy(
             rpkms=rpkms,
             tnfs=tnfs,
@@ -1284,39 +1206,43 @@ def run_vaevae(
             out_dir=vamb_options.out_dir,
             predictor_training_options=predictor_training_options,
             cuda=vamb_options.cuda,
-            logfile=logfile,
         )
         predictions_path = vamb_options.out_dir.joinpath(
             "results_taxonomy_predictor.csv"
         )
     elif taxonomy_options.taxonomy_predictions_path is not None:
-        log("mmseqs taxonomy predictions are provided", logfile, 0)
+        logger.info("mmseqs taxonomy predictions are provided")
         predictions_path = taxonomy_options.taxonomy_predictions_path
     else:
-        log("Not predicting the taxonomy", logfile, 0)
+        logger.info("Not predicting the taxonomy")
         predictions_path = None
 
     if predictions_path is not None:
-        df_gt = pd.read_csv(predictions_path)
-        df_gt.loc[
-            df_gt["predictions"].isna(), "predictions"
-        ] = "d_Bacteria"  # TODO: it's a hack
-        graph_column = df_gt["predictions"]
+        graphs: list[str] = []
+        with open(predictions_path) as file:
+            header = next(file)
+            if header.rstrip() != "contigs,lengths,predictions,probabilities":
+                raise ValueError("Invlaid header in predictions path")
+            for fields in map(lambda s: s.rstrip().split(","), file):
+                if fields[0] == "":
+                    continue
+                (_, _, prediction, _) = fields
+                if prediction == "":
+                    graphs.append("d_Bacteria")  # TODO: it's a hack
+                else:
+                    graphs.append(prediction)
     elif taxonomy_options.no_predictor:
-        log("Using mmseqs taxonomy for semisupervised learning", logfile, 0)
+        logger.info("Using mmseqs taxonomy for semisupervised learning")
         assert taxonomy_options.taxonomy_path is not None
-        graph_column = parse_mmseqs_taxonomy(
+        graphs = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
             contignames=contignames,  # type:ignore
-            logfile=logfile,
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
-
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
-    targets = np.array([ind_nodes[i] for i in classes_order])
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
+    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
 
     assert vae_options is not None
     vae = vamb.h_loss.VAEVAEHLoss(
@@ -1330,7 +1256,6 @@ def run_vaevae(
         beta=vae_options.beta,
         dropout=vae_options.dropout,
         cuda=vamb_options.cuda,
-        logfile=logfile,
     )
 
     dataloader_vamb = vamb.encode.make_dataloader(
@@ -1379,53 +1304,26 @@ def run_vaevae(
             dataloader,
             nepochs=vae_training_options.nepochs,
             modelfile=modelfile,
-            logfile=logfile,
             batchsteps=vae_training_options.batchsteps,
         )
 
     latent_both = vae.VAEJoint.encode(dataloader_joint)
-    log(
-        f"{latent_both.shape} embedding shape",
-        logfile,
-        0,
-    )
+    logger.info(f"{latent_both.shape} embedding shape")
 
     LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
     np.save(LATENT_PATH, latent_both)
 
     # Cluster, save tsv file
-    clusterspath = vamb_options.out_dir.joinpath("vaevae_clusters.tsv")
-    cluster(
-        cluster_options,
-        clusterspath,
-        latent_both,
-        contignames,
-        lengths,
+    cluster_and_write_files(
         vamb_options,
-        logfile,
-        "vaevae_",
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vaevae_clusters")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        latent_both,
+        contignames,  # type:ignore
+        lengths,  # type:ignore
     )
-    log("VAEVAE latent clustered", logfile, 1)
-
-    del latent_both
-    fin_cluster_latent = time.time()
-
-    if vamb_options.min_fasta_output_size is not None:
-        path = comp_options.path
-        assert isinstance(path, FASTAPath)
-        write_fasta(
-            vamb_options.out_dir,
-            clusterspath,
-            path,
-            contignames,
-            lengths,
-            vamb_options.min_fasta_output_size,
-            logfile,
-            separator=cluster_options.binsplit_separator,
-        )
-
-    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-    log(f"VAEVAE bins written in {writing_bins_time} seconds.", logfile, 1)
 
 
 def run_reclustering(
@@ -1434,25 +1332,19 @@ def run_reclustering(
     abundance_options: AbundanceOptions,
     reclustering_options: ReclusteringOptions,
     taxonomy_options: TaxonomyOptions,
-    logfile: IO[str],
 ):
     composition, _ = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        logfile=logfile,
+        binsplitter=reclustering_options.binsplitter,
     )
 
-    log(
-        f"{len(composition.metadata.identifiers)} contig names after filtering",
-        logfile,
-        0,
-    )
-    log("mmseqs taxonomy predictions are provided", logfile, 0)
+    logger.info(f"{len(composition.metadata.identifiers)} contig names after filtering")
+    logger.info("mmseqs taxonomy predictions are provided")
     predictions_path = taxonomy_options.taxonomy_predictions_path
 
     reclustered = vamb.reclustering.recluster_bins(
-        logfile,
         reclustering_options.clusters_path,
         reclustering_options.latent_path,
         str(comp_options.path),
@@ -1467,45 +1359,20 @@ def run_reclustering(
         predictions_path=predictions_path,
     )
 
-    cluster_dict = defaultdict(set)
+    cluster_dict: defaultdict[str, set[str]] = defaultdict(set)
     for k, v in zip(reclustered, composition.metadata.identifiers):
         cluster_dict[k].add(v)
-    clusterspath = vamb_options.out_dir.joinpath("clusters_reclustered.tsv")
-    if reclustering_options.binsplit_separator is not None:
-        maybe_split = vamb.vambtools.binsplit(
-            cluster_dict.items(), reclustering_options.binsplit_separator
-        )
-    else:
-        maybe_split = cluster_dict.items()
-    with open(clusterspath, "w") as clustersfile:
-        clusternumber, ncontigs = vamb.vambtools.write_clusters(
-            clustersfile,
-            maybe_split,
-            rename=False,
-            cluster_prefix="recluster",
-        )
 
-    print("", file=logfile)
-    log(f"Clustered {ncontigs} contigs in {clusternumber} bins", logfile, 1)
-
-    fin_cluster_latent = time.time()
-
-    if vamb_options.min_fasta_output_size is not None:
-        path = comp_options.path
-        assert isinstance(path, FASTAPath)
-        write_fasta(
-            vamb_options.out_dir,
-            clusterspath,
-            path,
-            composition.metadata.identifiers,
-            composition.metadata.lengths,
-            vamb_options.min_fasta_output_size,
-            logfile,
-            separator=reclustering_options.binsplit_separator,
-        )
-
-    writing_bins_time = round(time.time() - fin_cluster_latent, 2)
-    log(f"Reclustered bins written in {writing_bins_time} seconds.", logfile, 1)
+    write_clusters_and_bins(
+        vamb_options,
+        reclustering_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("clusters_reclustered")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        cluster_dict,
+        composition.metadata.identifiers,  # type:ignore
+        composition.metadata.lengths,  # type:ignore
+    )
 
 
 class BasicArguments(object):
@@ -1514,7 +1381,10 @@ class BasicArguments(object):
     def __init__(self, args):
         self.args = args
         self.comp_options = CompositionOptions(
-            self.args.fasta, self.args.composition, self.args.minlength
+            self.args.fasta,
+            self.args.composition,
+            self.args.minlength,
+            args.warn_on_few_seqs,
         )
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
@@ -1531,14 +1401,22 @@ class BasicArguments(object):
             self.args.cuda,
         )
 
-    def run_inner(self, logfile):
+    def run_inner(self):
         raise NotImplementedError
 
+    @logger.catch()
     def run(self):
         torch.set_num_threads(self.vamb_options.n_threads)
         try_make_dir(self.vamb_options.out_dir)
-        with open(self.vamb_options.out_dir.joinpath(self.LOGS_PATH), "w") as logfile:
-            self.run_inner(logfile)
+        logger.add(
+            self.vamb_options.out_dir.joinpath(self.LOGS_PATH), format=format_log
+        )
+        logger.add(sys.stderr, format=format_log)
+        begintime = time.time()
+        logger.info("Starting Vamb version " + ".".join(map(str, vamb.__version__)))
+        logger.info("Random seed is " + str(self.vamb_options.seed))
+        self.run_inner()
+        logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
 
 
 class TaxometerArguments(BasicArguments):
@@ -1557,14 +1435,13 @@ class TaxometerArguments(BasicArguments):
             ploss=args.ploss,
         )
 
-    def run_inner(self, logfile):
+    def run_inner(self):
         run_taxonomy_predictor(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
             abundance_options=self.abundance_options,
             taxonomy_options=self.taxonomy_options,
             predictor_training_options=self.predictor_training_options,
-            logfile=logfile,
         )
 
 
@@ -1587,7 +1464,6 @@ class BinnerArguments(BasicArguments):
         self.cluster_options = ClusterOptions(
             args.window_size,
             args.min_successes,
-            args.min_cluster_size,
             args.max_clusters,
             args.binsplit_separator,
         )
@@ -1596,6 +1472,17 @@ class BinnerArguments(BasicArguments):
 class VAEAAEArguments(BinnerArguments):
     def __init__(self, args):
         super(VAEAAEArguments, self).__init__(args)
+
+        # For the VAE-AAE workflow, we must cluster the full set of sequences,
+        # else the cluster dereplication step makes no sense, as the different
+        # clusterings will contain different sets of clusters.
+        # So, enforce this here
+        if self.cluster_options.max_clusters is not None:
+            raise ValueError(
+                "When using the VAE-AAE model, `max_clusters` (option `-c`) "
+                "must not be set."
+            )
+
         self.aae_options = AAEOptions(
             nhiddens=args.nhiddens_aae,
             nlatent_z=args.nlatent_aae_z,
@@ -1623,7 +1510,7 @@ class VAEAAEArguments(BinnerArguments):
             lrate=self.args.lrate,
         )
 
-    def run_inner(self, logfile: Optional[IO[str]]):
+    def run_inner(self):
         run(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
@@ -1631,7 +1518,6 @@ class VAEAAEArguments(BinnerArguments):
             encoder_options=self.encoder_options,
             training_options=self.training_options,
             cluster_options=self.cluster_options,
-            logfile=logfile,
         )
 
 
@@ -1650,7 +1536,7 @@ class VAEArguments(BinnerArguments):
             lrate=self.args.lrate,
         )
 
-    def run_inner(self, logfile: Optional[IO[str]]):
+    def run_inner(self):
         run(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
@@ -1658,7 +1544,6 @@ class VAEArguments(BinnerArguments):
             encoder_options=self.encoder_options,
             training_options=self.training_options,
             cluster_options=self.cluster_options,
-            logfile=logfile,
         )
 
 
@@ -1689,7 +1574,7 @@ class VAEVAEArguments(BinnerArguments):
             ploss=self.args.ploss,
         )
 
-    def run_inner(self, logfile: Optional[IO[str]]):
+    def run_inner(self):
         run_vaevae(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
@@ -1699,14 +1584,12 @@ class VAEVAEArguments(BinnerArguments):
             predictor_training_options=self.predictor_training_options,
             cluster_options=self.cluster_options,
             encoder_options=self.encoder_options,
-            logfile=logfile,
         )
 
 
 class ReclusteringArguments(BasicArguments):
     def __init__(self, args):
         super(ReclusteringArguments, self).__init__(args)
-        assert args.algorithm in ("kmeans", "dbscan")
         self.reclustering_options = ReclusteringOptions(
             latent_path=args.latent_path,
             clusters_path=args.clusters_path,
@@ -1724,14 +1607,13 @@ class ReclusteringArguments(BasicArguments):
             no_predictor=None,
         )
 
-    def run_inner(self, logfile: Optional[IO[str]]):
+    def run_inner(self):
         run_reclustering(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
             abundance_options=self.abundance_options,
             reclustering_options=self.reclustering_options,
             taxonomy_options=self.taxonomy_options,
-            logfile=logfile,
         )
 
 
@@ -1989,14 +1871,6 @@ def add_clustering_arguments(subparser):
         help="minimum success in window [15]",
     )
     clusto.add_argument(
-        "-i",
-        dest="min_cluster_size",
-        metavar="",
-        type=int,
-        default=1,
-        help="minimum cluster size [1]",
-    )
-    clusto.add_argument(
         "-c",
         dest="max_clusters",
         metavar="",
@@ -2009,8 +1883,12 @@ def add_clustering_arguments(subparser):
         dest="binsplit_separator",
         metavar="",
         type=str,
+        # This means: None is not passed, "" if passed but empty, e.g. "-o -c 5"
+        # otherwise a string.
         default=None,
-        help="binsplit separator [None = no split]",
+        const="",
+        nargs="?",
+        help="binsplit separator [C] (pass empty string to disable)",
     )
     return subparser
 
@@ -2300,8 +2178,10 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
+        args.warn_on_few_seqs = True
         runner = TaxometerArguments(args)
     elif args.subcommand == BIN:
+        args.warn_on_few_seqs = True
         if args.model_subcommand is None:
             vaevae_parserbin_parser.print_help()
             sys.exit(1)
@@ -2312,6 +2192,8 @@ def main():
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:
+        # Uniquely, the reclustering cannot overfit, so we don't need this warning
+        args.warn_on_few_seqs = False
         runner = ReclusteringArguments(args)
     else:
         # There are no more subcommands
