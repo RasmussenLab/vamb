@@ -1,0 +1,68 @@
+# This workflow will install snakemake and AVAMB dependencies and run the AVAMB snakemake pipeline
+
+name: AVAMB snakemake - runs daily
+
+on:
+  workflow_dispatch:
+    inputs:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+        cache-dependency-path: '**/pyproject.toml'
+    - uses: mamba-org/setup-micromamba@v1
+      with:
+        micromamba-version: '1.3.1-0'
+        environment-file: workflow_avamb/envs/avamb.yaml
+        environment-name: avamb
+        create-args: >-
+          python=3.9.16
+        init-shell: >-
+          bash
+        cache-environment: true
+        post-cleanup: 'all'
+    - name: Install dependencies to avamb environment
+      run: |
+        which pip
+        pip install -e .
+        pip freeze
+        git clone https://github.com/chklovski/CheckM2.git 
+      shell: micromamba-shell {0}
+    - name: Install CheckM2 environment
+      run: |
+        micromamba create -n checkm2 python=3.8.15 pandas=2.1.1
+        micromamba env update -n checkm2 --file workflow_avamb/envs/checkm2.yml
+        eval "$(micromamba shell hook --shell=bash)"
+        micromamba activate checkm2
+        cd CheckM2  && git checkout e563159 && python setup.py install && cd ..
+        checkm2 database --download
+      shell: micromamba-shell {0}
+    - name: Download fixtures
+      run: |
+        wget https://www.dropbox.com/scl/fi/q54wfho3ultb0otq5z3rh/testset_snakemake.zip\?rlkey\=7tbsc2giff0s42ppdmeb706fa\&dl\=0 -O testset_snakemake.zip
+        unzip testset_snakemake.zip
+        ls -la
+        ls -la testset_snakemake
+        pwd
+    - name: Snakemake
+      uses: snakemake/snakemake-github-action@v1.25.1
+      with:
+        directory: '.test'
+        snakefile: 'workflow_avamb/avamb.snake.conda.smk'
+        args: '--cores 4 --configfile workflow_avamb/config.json --use-conda'

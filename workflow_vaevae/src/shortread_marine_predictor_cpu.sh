@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 keyword=$1
-    # --cuda \
 
 vamb taxometer \
     --outdir /home/projects/cpr_10006/people/svekut/cami2_marine_predictor_taxometer_${keyword}_cpu \

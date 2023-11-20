@@ -34,22 +34,17 @@ if _torch.__version__ < "0.4":
 def make_graph(taxs):
     table_parent = []
     G = nx.DiGraph()
-    G_op = nx.Graph()
     root = "Domain"
-    G.add_edge(root, "d_Archaea")
-    G_op.add_edge(root, "d_Archaea")
-    G.add_edge(root, "d_Bacteria")
-    G_op.add_edge(root, "d_Bacteria")
     for i, row in enumerate(taxs):
         try:
             r = row.split(";")
         except AttributeError:  # ignore non-strings in the input
             continue
-        if len(r) == 1:
+        if len(r) == 0:
             continue
+        G.add_edge(root, r[0])
         for j in range(1, len(r)):
             G.add_edge(r[j - 1], r[j])
-            G_op.add_edge(r[j - 1], r[j])
     edges = nx.bfs_edges(G, root)
     nodes = [root] + [v for u, v in edges]
     ind_nodes = {v: i for i, v in enumerate(nodes)}

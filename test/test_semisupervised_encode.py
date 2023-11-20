@@ -48,7 +48,6 @@ class TestVAEVAE(unittest.TestCase):
                 set(
                     [
                         "Domain",
-                        "d_Archaea",
                         "d_Bacteria",
                         "f_1",
                         "f_2",
@@ -70,7 +69,7 @@ class TestVAEVAE(unittest.TestCase):
             for c in cls:
                 for f in self.phyla:
                     self.assertTrue(ind_nodes.get(f, -666) < ind_nodes.get(c, 666))
-                    self.assertTrue(table_parent[ind_nodes[f]] == 2)
+                    self.assertTrue(table_parent[ind_nodes[f]] == 1)
                     self.assertTrue(table_parent[ind_nodes[c]] == ind_nodes[p])
 
     def test_encoding(self):
