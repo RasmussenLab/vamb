@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from loguru import logger
+import pandas as pd
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -986,44 +987,34 @@ def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
     contignames: Sequence[str],  # already masked
 ) -> list[str]:
-    names_index = {n: i for (i, n) in enumerate(contignames)}
-    names_graphs: list[tuple[str, str]] = []
-    n_lines_in_file = 0
-    with open(taxonomy_path) as file:
-        for line in map(lambda line: line.lstrip().rstrip("\n"), file):
-            n_lines_in_file += 1
-            if len(line) == 0:
-                continue
-            fields = line.split("\t")
-            if len(fields) < 9:
-                raise ValueError(
-                    f"Too few columns ({len(fields)}) in line in mmseqs taxonomy file"
-                )
-            contig = fields[0]
-            if contig not in names_index:
-                continue
-            names_graphs.append((contig, fields[8]))
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
+    assert (
+        len(df_mmseq.columns) >= 9
+    ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
+    df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
+    logger.info(f"{len(df_mmseq)} lines in taxonomy file")
+    logger.info(f"{len(contignames)} contigs")
+    df_mmseq = df_mmseq[df_mmseq[0].isin(contignames)]
 
-    # Add contigs missing from the tax file with standin information
-    # TODO: rethink when we start working with other domains
-    for missing_name in set(names_index).difference(
-        (name for (name, _) in names_graphs)
-    ):
-        names_graphs.append((missing_name, "d_Bacteria"))
+    missing_contigs = set(contignames) - set(df_mmseq[0])
+    for c in missing_contigs:
+        new_row: dict[int, Union[str, float]] = {i: np.nan for i in range(9)}
+        new_row[0] = c
+        new_row[2] = np.nan
+        new_row[8] = np.nan
+        df_mmseq = pd.concat([df_mmseq, pd.DataFrame([new_row])], ignore_index=True)
 
-    # Reorder to have the same order as the input contignames
-    names: list[str] = [""] * len(names_graphs)
-    graphs: list[str] = [""] * len(names_graphs)
-    for name, graph in names_graphs:
-        i = names_index[name]
-        names[i] = name
-        graphs[i] = graph
+    df_mmseq.set_index(0, inplace=True)
+    df_mmseq = df_mmseq.loc[contignames]
+    df_mmseq.reset_index(inplace=True)
+    graph_column = df_mmseq[8]
 
-    logger.info(f"\t{n_lines_in_file} lines in taxonomy file")
-    logger.info(f"\t{len(contignames)} contigs")
+    if list(df_mmseq[0]) != list(contignames):
+        raise AssertionError(
+            f"The contig names of taxonomy entries are not the same as in the contigs metadata"
+        )
 
-    assert names == list(contignames)
-    return graphs
+    return graph_column
 
 
 def predict_taxonomy(
@@ -1038,14 +1029,19 @@ def predict_taxonomy(
 ):
     begintime = time.time()
 
-    graphs = parse_mmseqs_taxonomy(
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
+
+    graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
         contignames=contignames,  # type:ignore
     )
-
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
-    logger.info(f"\t{len(nodes)} nodes in the graph")
-    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
+    graph_column.loc[graph_column == ''] = np.nan
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    logger.info(f"{len(nodes)} nodes in the graph")
+    graph_column = graph_column.fillna('Domain')
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
 
     model = vamb.h_loss.VAMB2Label(
         rpkms.shape[1],
@@ -1218,31 +1214,24 @@ def run_vaevae(
         predictions_path = None
 
     if predictions_path is not None:
-        graphs: list[str] = []
-        with open(predictions_path) as file:
-            header = next(file)
-            if header.rstrip() != "contigs,lengths,predictions,probabilities":
-                raise ValueError("Invlaid header in predictions path")
-            for fields in map(lambda s: s.rstrip().split(","), file):
-                if fields[0] == "":
-                    continue
-                (_, _, prediction, _) = fields
-                if prediction == "":
-                    graphs.append("d_Bacteria")  # TODO: it's a hack
-                else:
-                    graphs.append(prediction)
+        df_gt = pd.read_csv(predictions_path)
+        df_gt = df_gt.fillna(value=np.nan)
+        graph_column = df_gt["predictions"]
     elif taxonomy_options.no_predictor:
         logger.info("Using mmseqs taxonomy for semisupervised learning")
         assert taxonomy_options.taxonomy_path is not None
-        graphs = parse_mmseqs_taxonomy(
+        graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
             contignames=contignames,  # type:ignore
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
-
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
-    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
+    
+    graph_column.loc[graph_column == ''] = np.nan
+    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    graph_column = graph_column.fillna('Domain')
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
 
     assert vae_options is not None
     vae = vamb.h_loss.VAEVAEHLoss(
