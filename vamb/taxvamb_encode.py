@@ -23,9 +23,7 @@ from torch import Tensor
 
 import vamb.semisupervised_encode as _semisupervised_encode
 import vamb.encode as _encode
-import vamb.hlosses_fast as _hlosses_fast
-import vamb.hier as _hier
-import vamb.infer as _infer
+import vamb.hloss_misc as _hloss
 
 if _torch.__version__ < "0.4":
     raise ImportError("PyTorch version must be 0.4 or newer")
@@ -183,7 +181,6 @@ def make_dataloader_semisupervised_hloss(
     shapes,
     seed: int,
     batchsize=256,
-    destroy=False,
     cuda=False,
 ):
     n_total = len(dataloader_vamb.dataset)
@@ -229,28 +226,28 @@ def init_hier_loss(name, tree):
     CONFIG_LOSSES = dict(
         flat_softmax=HierLoss(
             name="flat_softmax",
-            loss_fn=_hlosses_fast.FlatSoftmaxNLL(tree),
-            pred_helper=_hlosses_fast.SumLeafDescendants(tree, strict=False),
+            loss_fn=_hloss.FlatSoftmaxNLL(tree),
+            pred_helper=_hloss.SumLeafDescendants(tree, strict=False),
             pred_fn=lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
             n_labels=tree.leaf_mask().nonzero()[0].shape[0],
         ),
         cond_softmax=HierLoss(
             name="cond_softmax",
-            loss_fn=_hlosses_fast.HierSoftmaxCrossEntropy(tree),
-            pred_helper=_hlosses_fast.HierLogSoftmax(tree),
+            loss_fn=_hloss.HierSoftmaxCrossEntropy(tree),
+            pred_helper=_hloss.HierLogSoftmax(tree),
             pred_fn=lambda log_softmax_fn, theta: log_softmax_fn(theta).exp(),
             n_labels=tree.num_nodes() - 1,
         ),
         soft_margin=HierLoss(
             name="soft_margin",
-            loss_fn=_hlosses_fast.MarginLoss(
+            loss_fn=_hloss.MarginLoss(
                 tree,
                 with_leaf_targets=False,
                 hardness="soft",
                 margin="incorrect",
                 tau=0.01,
             ),
-            pred_helper=_hlosses_fast.SumDescendants(tree, strict=False),
+            pred_helper=_hloss.SumDescendants(tree, strict=False),
             pred_fn=lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
             n_labels=tree.num_nodes(),
         ),
@@ -310,7 +307,7 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         )
         self.nodes = nodes
         self.table_parent = table_parent
-        self.tree = _hier.Hierarchy(table_parent)
+        self.tree = _hloss.Hierarchy(table_parent)
         self.hierloss = init_hier_loss(hier_loss, self.tree)
         self.nlabels = self.hierloss.n_labels
         self.loss_fn = self.hierloss.loss_fn
@@ -321,9 +318,9 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
         self.pred_fn = partial(self.hierloss.pred_fn, self.pred_helper)
         self.specificity = -self.tree.num_leaf_descendants()
         self.not_trivial = self.tree.num_children() != 1
-        self.find_lca = _hier.FindLCA(self.tree)
-        node_subset = _hier.find_subset_index(self.nodes, self.nodes)
-        project_to_subtree = _hier.find_projection(self.tree, node_subset)
+        self.find_lca = _hloss.FindLCA(self.tree)
+        node_subset = _hloss.find_subset_index(self.nodes, self.nodes)
+        project_to_subtree = _hloss.find_projection(self.tree, node_subset)
         label_to_node = self.tree.parents()
         label_to_subtree_node = project_to_subtree[label_to_node]
         self.eval_label_map = LabelMap(
@@ -470,7 +467,7 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         # self.nlabels = nlabels
         self.nodes = nodes
         self.table_parent = table_parent
-        self.tree = _hier.Hierarchy(table_parent)
+        self.tree = _hloss.Hierarchy(table_parent)
         self.hierloss = init_hier_loss(hier_loss, self.tree)
         self.nlabels = self.hierloss.n_labels
         self.loss_fn = self.hierloss.loss_fn
@@ -481,9 +478,9 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
         self.pred_fn = partial(self.hierloss.pred_fn, self.pred_helper)
         self.specificity = -self.tree.num_leaf_descendants()
         self.not_trivial = self.tree.num_children() != 1
-        self.find_lca = _hier.FindLCA(self.tree)
-        node_subset = _hier.find_subset_index(self.nodes, self.nodes)
-        project_to_subtree = _hier.find_projection(self.tree, node_subset)
+        self.find_lca = _hloss.FindLCA(self.tree)
+        node_subset = _hloss.find_subset_index(self.nodes, self.nodes)
+        project_to_subtree = _hloss.find_projection(self.tree, node_subset)
         label_to_node = self.tree.parents()
         label_to_subtree_node = project_to_subtree[label_to_node]
         self.eval_label_map = LabelMap(
@@ -828,7 +825,7 @@ class VAMB2Label(_nn.Module):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
-        self.tree = _hier.Hierarchy(table_parent)
+        self.tree = _hloss.Hierarchy(table_parent)
         self.nlabels = nlabels
         self.n_tree_nodes = nlabels
         # self.nlabels = self.tree.leaf_mask().nonzero()[0].shape[0]
@@ -853,9 +850,9 @@ class VAMB2Label(_nn.Module):
         self.pred_fn = partial(self.hierloss.pred_fn, self.pred_helper)
         self.specificity = -self.tree.num_leaf_descendants()
         self.not_trivial = self.tree.num_children() != 1
-        self.find_lca = _hier.FindLCA(self.tree)
-        node_subset = _hier.find_subset_index(self.nodes, self.nodes)
-        project_to_subtree = _hier.find_projection(self.tree, node_subset)
+        self.find_lca = _hloss.FindLCA(self.tree)
+        node_subset = _hloss.find_subset_index(self.nodes, self.nodes)
+        project_to_subtree = _hloss.find_projection(self.tree, node_subset)
         label_to_node = self.tree.parents()
         label_to_subtree_node = project_to_subtree[label_to_node]
         self.eval_label_map = LabelMap(
@@ -906,7 +903,7 @@ class VAMB2Label(_nn.Module):
                     prob = self.pred_fn(labels)
                     if self.usecuda:
                         prob = prob.cpu()
-                    pred = _infer.argmax_with_confidence(
+                    pred = _hloss.argmax_with_confidence(
                         self.specificity, prob.numpy(), 0.5, self.not_trivial
                     )
                 yield prob.numpy(), pred
