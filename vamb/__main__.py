@@ -231,7 +231,7 @@ class TaxonomyOptions:
         self,
         taxonomy_path: Optional[Path],
         taxonomy_predictions_path: Optional[Path],
-        no_predictor: bool,
+        no_predictor: Optional[bool],
     ):
         assert isinstance(taxonomy_path, (Path, type(None)))
         assert isinstance(taxonomy_predictions_path, (Path, type(None)))
@@ -601,7 +601,7 @@ def calc_rpkm(
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
-        if hasattr(abundance, "nseqs") and abundance.nseqs != comp_metadata.nseqs:
+        if abundance.nseqs != comp_metadata.nseqs:
             assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
@@ -985,7 +985,7 @@ def run(
 
 def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
-    contignames: Sequence[str],  # already masked
+    contignames: Sequence[str],
 ) -> list[str]:
     df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
     assert (
@@ -1011,7 +1011,7 @@ def parse_mmseqs_taxonomy(
 
     if list(df_mmseq[0]) != list(contignames):
         raise AssertionError(
-            f"The contig names of taxonomy entries are not the same as in the contigs metadata"
+            "The contig names of taxonomy entries are not the same as in the contigs metadata"
         )
 
     return graph_column
@@ -1112,7 +1112,7 @@ def predict_taxonomy(
 
         with open(predicted_path, "a") as file:
             if not output_exists:
-                print("contigs,lengths,predictions,probabilities", file=file)
+                print("contigs,lengths,predictions,scores", file=file)
             for contig, length, prediction, prob in zip(
                 contignames[row : row + N], lengths[row : row + N], predictions, probs
             ):
@@ -1125,27 +1125,6 @@ def predict_taxonomy(
     )
 
 
-def extract_and_filter_data(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
-    binsplitter: vamb.vambtools.BinSplitter,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    composition, abundance = load_composition_and_abundance(
-        vamb_options=vamb_options,
-        comp_options=comp_options,
-        abundance_options=abundance_options,
-        binsplitter=binsplitter,
-    )
-    logger.info(f"{len(composition.metadata.identifiers)} contig names")
-    return (
-        abundance.matrix,
-        composition.matrix,
-        composition.metadata.lengths,
-        composition.metadata.identifiers,
-    )
-
-
 def run_taxonomy_predictor(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
@@ -1153,11 +1132,17 @@ def run_taxonomy_predictor(
     predictor_training_options: PredictorTrainingOptions,
     taxonomy_options: TaxonomyOptions,
 ):
-    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
+    composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
         binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
+    )
+    rpkms, tnfs, lengths, contignames = (
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        composition.metadata.identifiers,
     )
     assert taxonomy_options.taxonomy_path is not None
     predict_taxonomy(
@@ -1183,11 +1168,17 @@ def run_vaevae(
     encoder_options: EncoderOptions,
 ):
     vae_options = encoder_options.vae_options
-    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
+    composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        binsplitter=cluster_options.binsplitter,
+        binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
+    )
+    rpkms, tnfs, lengths, contignames = (
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        composition.metadata.identifiers,
     )
 
     if taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
