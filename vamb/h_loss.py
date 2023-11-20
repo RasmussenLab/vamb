@@ -254,19 +254,6 @@ def init_hier_loss(name, tree):
             pred_fn=lambda sum_fn, theta: sum_fn(F.softmax(theta, dim=-1), dim=-1),
             n_labels=tree.num_nodes(),
         ),
-        random_cut=HierLoss(  # TODO: debug
-            name="random_cut",
-            loss_fn=_hlosses_fast.RandomCutLoss(
-                tree, 0.1, permit_root_cut=False, with_leaf_targets=True
-            ),
-            pred_helper=_hlosses_fast.SumAncestors(tree, exclude_root=True),
-            pred_fn=lambda sum_ancestor_fn, theta: _torch.exp(
-                _hlosses_fast.multilabel_log_likelihood(
-                    sum_ancestor_fn(theta), replace_root=True, temperature=10.0
-                )
-            ),
-            n_labels=tree.num_nodes(),
-        ),
     )
     if name not in CONFIG_LOSSES:
         raise AttributeError(f"Hierarchical loss {name} not found")

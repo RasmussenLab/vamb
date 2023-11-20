@@ -352,7 +352,7 @@ class PredictorTrainingOptions(VAETrainingOptions):
         softmax_threshold: float,
         ploss: str,
     ):
-        losses = ["flat_softmax", "cond_softmax", "soft_margin", "random_cut"]
+        losses = ["flat_softmax", "cond_softmax", "soft_margin"]
         if (softmax_threshold > 1) or (softmax_threshold < 0):
             raise argparse.ArgumentTypeError(
                 f"Softmax threshold should be between 0 and 1, currently {softmax_threshold}"
@@ -1029,17 +1029,14 @@ def predict_taxonomy(
 ):
     begintime = time.time()
 
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
-    targets = np.array([ind_nodes[i] for i in classes_order])
-
     graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
         contignames=contignames,  # type:ignore
     )
-    graph_column.loc[graph_column == ''] = np.nan
+    graph_column.loc[graph_column == ""] = np.nan
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
     logger.info(f"{len(nodes)} nodes in the graph")
-    graph_column = graph_column.fillna('Domain')
+    graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = np.array([ind_nodes[i] for i in classes_order])
 
@@ -1226,10 +1223,10 @@ def run_vaevae(
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
-    
-    graph_column.loc[graph_column == ''] = np.nan
+
+    graph_column.loc[graph_column == ""] = np.nan
     nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
-    graph_column = graph_column.fillna('Domain')
+    graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = np.array([ind_nodes[i] for i in classes_order])
 
@@ -1835,7 +1832,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=str,
         default="flat_softmax",
-        help='Hierarchical loss one of flat_softmax, cond_softmax, soft_margin, random_cut ["flat_softmax"]',
+        help='Hierarchical loss one of flat_softmax, cond_softmax, soft_margin ["flat_softmax"]',
     )
     return subparser
 
