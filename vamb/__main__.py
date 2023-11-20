@@ -1034,7 +1034,9 @@ def predict_taxonomy(
         contignames=contignames,  # type:ignore
     )
     graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(graph_column.unique())
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        graph_column.unique()
+    )
     logger.info(f"{len(nodes)} nodes in the graph")
     graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
@@ -1225,7 +1227,9 @@ def run_vaevae(
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
     graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(graph_column.unique())
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        graph_column.unique()
+    )
     graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = np.array([ind_nodes[i] for i in classes_order])
