@@ -25,9 +25,6 @@ import vamb.semisupervised_encode as _semisupervised_encode
 import vamb.encode as _encode
 import vamb.hloss_misc as _hloss
 
-if _torch.__version__ < "0.4":
-    raise ImportError("PyTorch version must be 0.4 or newer")
-
 
 def make_graph(taxs):
     table_parent = []
@@ -112,7 +109,7 @@ def make_dataloader_labels_hloss(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=False,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -164,7 +161,7 @@ def make_dataloader_concat_hloss(
 def permute_indices(n_current: int, n_total: int, seed: int):
     rng = _np.random.default_rng(seed)
     x = _np.arange(n_current)
-    to_add = int(n_total / n_current)
+    to_add = n_total // n_current
     to_concatenate = [rng.permutation(x)]
     for _ in range(to_add):
         b = rng.permutation(x)
@@ -464,7 +461,6 @@ class VAEConcatHLoss(_semisupervised_encode.VAEConcat):
             cuda=cuda,
         )
         self.nsamples = nsamples
-        # self.nlabels = nlabels
         self.nodes = nodes
         self.table_parent = table_parent
         self.tree = _hloss.Hierarchy(table_parent)
@@ -826,14 +822,7 @@ class VAMB2Label(_nn.Module):
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
         self.tree = _hloss.Hierarchy(table_parent)
-        self.nlabels = nlabels
         self.n_tree_nodes = nlabels
-        # self.nlabels = self.tree.leaf_mask().nonzero()[0].shape[0]
-        # Reconstruction (output) layer
-        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nlabels)
-        # Activation functions
-        self.relu = _nn.LeakyReLU()
-        self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         if cuda:
             self.cuda()
@@ -859,6 +848,12 @@ class VAMB2Label(_nn.Module):
             to_node=label_to_subtree_node,
             to_target=label_to_subtree_node,
         )
+
+        # Reconstruction (output) layer
+        self.outputlayer = _nn.Linear(self.nhiddens[0], self.nlabels)
+        # Activation functions
+        self.relu = _nn.LeakyReLU()
+        self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
     def _predict(self, tensor: Tensor) -> tuple[Tensor, Tensor]:
         tensors: list[_torch.Tensor] = list()
@@ -1028,16 +1023,6 @@ class VAMB2Label(_nn.Module):
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
             last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:  # type: ignore
-                raise ValueError(
-                    f"Last batch size of {last_batchsize} exceeds dataset length "
-                    f"of {len(dataloader.dataset)}. "  # type: ignore
-                    "This means you have too few contigs left after filtering to train. "
-                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
-                    "after filtering. "
-                    "Please check the Vamb log file to see where the sequences were "
-                    "filtered away, and verify BAM files has sensible content."
-                )
             batchsteps_set = set(batchsteps)
 
         # Get number of features

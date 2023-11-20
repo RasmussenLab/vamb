@@ -1,3 +1,7 @@
+"""
+The following code is a modification of a hierarchical losses implementation first published at https://github.com/jvlmdr/hiercls
+"""
+
 from functools import partial
 from typing import Callable, Optional, Sequence, Tuple
 import numpy as np
@@ -73,49 +77,20 @@ class Hierarchy:
         return np.count_nonzero(self.num_children() > 1)
 
     def depths(self) -> np.ndarray:
-        # n = len(self._parents)
-        # d = np.zeros([n], dtype=int)
-        # for i, j in self.edges():
-        #     assert i < j, 'require edges in topological order'
-        #     d[j] = d[i] + 1
-        # return d
         return self.accumulate_ancestors(np.add, (self._parents >= 0).astype(int))
 
     def num_leaf_descendants(self) -> np.ndarray:
-        # c = self.leaf_mask().astype(int)
-        # for i, j in reversed(self.edges()):
-        #     assert i < j, 'require edges in topological order'
-        #     c[i] += c[j]
-        # return c
         return self.accumulate_descendants(np.add, self.leaf_mask().astype(int))
 
     def max_heights(self) -> np.ndarray:
         heights = np.zeros_like(self.depths())
-        # for i, j in reversed(self.edges()):
-        #     heights[i] = max(heights[i], heights[j] + 1)
-        # return heights
         return self.accumulate_descendants(lambda u, v: max(u, v + 1), heights)
 
     def min_heights(self) -> np.ndarray:
         # Initialize leaf nodes to zero, internal nodes to upper bound.
-        #   height + depth <= max_depth
-        #   height <= max_depth - depth
         depths = self.depths()
         heights = np.where(self.leaf_mask(), 0, depths.max() - depths)
-        # for i, j in reversed(self.edges()):
-        #     heights[i] = min(heights[i], heights[j] + 1)
-        # return heights
         return self.accumulate_descendants(lambda u, v: min(u, v + 1), heights)
-
-    # def accumulate_ancestors_inplace(self, func: Callable, values: MutableSequence):
-    #     # Start from root and move down.
-    #     for i, j in self.edges():
-    #         values[j] = func(values[i], values[j])
-
-    # def accumulate_descendants_inplace(self, func: Callable, values: MutableSequence):
-    #     # Start from leaves and move up.
-    #     for i, j in reversed(self.edges()):
-    #         values[i] = func(values[i], values[j])
 
     def accumulate_ancestors(self, func: Callable, values: ArrayLike) -> np.ndarray:
         # Start from root and move down.
@@ -155,7 +130,6 @@ class Hierarchy:
         exclude_root: bool = False,
         exclude_self: bool = False,
     ) -> list[np.ndarray]:
-        # TODO: Could avoid potential high memory usage here using parents.
         is_descendant = self.ancestor_mask(strict=exclude_self).T
         if exclude_root:
             paths = [np.flatnonzero(mask) + 1 for mask in is_descendant[:, 1:]]
@@ -275,7 +249,6 @@ def find_subset_index(base: list[Hashable], subset: list[Hashable]) -> np.ndarra
 
 def find_projection(tree: Hierarchy, node_subset: np.ndarray) -> np.ndarray:
     """Finds projection to nearest ancestor in subtree."""
-    # TODO: Only works for rooted sub-trees?
     # Use paths rather than ancestor_mask to avoid large memory usage.
     assert np.all(node_subset >= 0)
     paths = tree.paths_padded(-1)
@@ -285,7 +258,6 @@ def find_projection(tree: Hierarchy, node_subset: np.ndarray) -> np.ndarray:
     subset_paths = np.where(paths >= 0, reindex[paths], -1)
     deepest = _last_nonzero(subset_paths >= 0, axis=1)
     # Check that all ancestors are present.
-    # TODO: Could consider removing for non-rooted sub-trees?
     assert np.all(np.count_nonzero(subset_paths >= 0, axis=1) - 1 == deepest)
     return subset_paths[np.arange(tree.num_nodes()), deepest]
 
@@ -309,7 +281,6 @@ def uniform_leaf(tree: Hierarchy) -> np.ndarray:
 
 def uniform_cond(tree: Hierarchy) -> np.ndarray:
     """Returns a uniform distribution over child nodes at each conditional."""
-    # TODO: Ensure exact.
     node_to_num_children = {k: len(v) for k, v in tree.children().items()}
     num_children = np.asarray(
         [node_to_num_children.get(x, 0) for x in range(tree.num_nodes())]
@@ -389,14 +360,6 @@ def format_tree(
 
     node_to_children = tree.children()
     node_sizes = tree.num_leaf_descendants()
-
-    # def subtree(node, prefix, is_last):
-    #     yield prefix + ('└── ' if is_last else '├── ') + node_names[node] + '\n'
-    #     children = node_to_children.get(node, ())
-    #     child_prefix = prefix + ('    ' if is_last else '│   ')
-    #     for i, child in enumerate(children):
-    #         child_is_last = (i == len(children) - 1)
-    #         yield from subtree(child, child_prefix, child_is_last)
 
     def subtree(node, node_prefix, desc_prefix):
         name = node_names[node]
@@ -614,14 +577,9 @@ def arglexmin_where(
     axis: int = -1,
     keepdims: bool = False,
 ) -> np.ndarray:
-    # TODO: Make more efficient (linear rather than log-linear).
     assert np.all(np.any(condition, axis=axis)), "require at least one valid element"
     order = np.lexsort(keys, axis=axis)
     # Take first element in order that satisfies condition.
-    # TODO: Would be faster to take subset and then sort?
-    # Would this break the vectorization?
-    # first_valid = np.argmax(np.take_along_axis(condition, order, axis=axis),
-    #                         axis=axis, keepdims=True)
     first_valid = np.expand_dims(
         np.argmax(np.take_along_axis(condition, order, axis=axis), axis=axis), axis
     )
@@ -700,7 +658,6 @@ class Sum(nn.Module):
         return self
 
     def forward(self, values: torch.Tensor, dim: int = -1) -> torch.Tensor:
-        # TODO: Re-order dimensions to make this work with dim != -1.
         assert dim in (-1, values.ndim - 1)
         return torch.tensordot(values, self.matrix, dims=1)
 
@@ -768,14 +725,6 @@ def hier_cond_log_softmax(
     tree: Hierarchy, scores: torch.Tensor, dim: int = -1
 ) -> torch.Tensor:
     """Returns log-likelihood of each node given its parent."""
-    # Split scores into softmax for each internal node over its children.
-    # Convert from [s[0], s[1], ..., s[n-1]]
-    # to [[s[0], ..., s[k-1], -inf, -inf, ...],
-    #     ...
-    #     [..., s[n-1], -inf, -inf, ...]].
-    # Use index_copy with flat_index, then reshape and compute log_softmax.
-    # Then re-flatten and use index_select with flat_index.
-    # This is faster than using torch.split() and map(log_softmax, ...).
     assert dim == -1 or dim == scores.ndim - 1
     num_nodes = tree.num_nodes()
     num_internal = tree.num_internal_nodes()
@@ -783,7 +732,6 @@ def hier_cond_log_softmax(
     cond_children = [node_to_children[x] for x in tree.internal_subset()]
     cond_num_children = list(map(len, cond_children))
     max_num_children = max(cond_num_children)
-    # TODO: Use _split_and_pad?
     row_index = np.concatenate([np.full(n, i) for i, n in enumerate(cond_num_children)])
     col_index = np.concatenate([np.arange(n) for n in cond_num_children])
     flat_index = row_index * max_num_children + col_index
@@ -818,7 +766,6 @@ def hier_log_softmax(
     # Finally, take sum over ancestor conditionals to obtain likelihoods.
     assert dim in (-1, scores.ndim - 1)
     log_cond_p = hier_cond_log_softmax(tree, scores, dim=dim)
-    # TODO: Use functional form here?
     device = scores.device
     sum_ancestors_fn = SumAncestors(tree, exclude_root=True).to(device)
     return sum_ancestors_fn(log_cond_p, dim=-1)
@@ -835,7 +782,6 @@ class HierCondLogSoftmax(nn.Module):
         cond_children = [node_to_children[x] for x in tree.internal_subset()]
         cond_num_children = list(map(len, cond_children))
         max_num_children = max(cond_num_children)
-        # TODO: Use _split_and_pad?
         row_index = np.concatenate(
             [np.full(n, i) for i, n in enumerate(cond_num_children)]
         )
@@ -1028,12 +974,10 @@ class LCAMetric:
         return self.value[lca]
 
     def value_at_gt(self, gt: np.ndarray, pr: np.ndarray) -> np.ndarray:
-        # TODO: Avoid broadcasting of unused array?
         gt, _ = np.broadcast_arrays(gt, pr)
         return self.value[gt]
 
     def value_at_pr(self, gt: np.ndarray, pr: np.ndarray) -> np.ndarray:
-        # TODO: Avoid broadcasting of unused array?
         _, pr = np.broadcast_arrays(gt, pr)
         return self.value[pr]
 
@@ -1108,7 +1052,6 @@ class MarginLoss(nn.Module):
             is_correct = is_ancestor[:, label_order].T
             margin_arr = 1 - is_correct
         elif margin == "info_dist":
-            # TODO: Does natural log make most sense here?
             info = np.log(tree.num_leaf_nodes() / tree.num_leaf_descendants())
             margin_arr = LCAMetric(tree, info).dist(label_order[:, None], np.arange(n))
         elif margin == "depth_deficient":
@@ -1123,10 +1066,6 @@ class MarginLoss(nn.Module):
             )
         else:
             raise ValueError("unknown margin", margin)
-
-        # correct_margins = margin_arr[np.arange(len(label_order)), label_order]
-        # if not np.all(correct_margins == 0):
-        #     raise ValueError('margin with self is not zero', correct_margins)
 
         self.hardness = hardness
         self.tau = tau
@@ -1147,12 +1086,10 @@ class MarginLoss(nn.Module):
         label_score = scores.gather(-1, label_node.unsqueeze(-1)).squeeze(-1)
         label_margin = self.margin[labels.long(), :]
         if self.hardness == "soft":
-            # TODO: This function appear to not be tested
             loss = -label_score + torch.logsumexp(
                 scores + self.tau * label_margin, dim=-1
             )
         elif self.hardness == "hard":
-            # TODO: This function appear to not be tested
             loss = torch.relu(
                 torch.max(
                     scores - label_score.unsqueeze(-1) + self.tau * label_margin,
