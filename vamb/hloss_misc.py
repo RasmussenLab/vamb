@@ -664,6 +664,7 @@ def plurality_threshold(
         threshold = np.expand_dims(threshold, -1)
     return threshold
 
+
 def _apply_to_maybe(fn: Callable, x: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
     return fn(x) if x is not None else None
 
@@ -926,9 +927,7 @@ class RandomCut(nn.Module):
     Returns a binary mask for the leaf nodes of the cut.
     """
 
-    def __init__(
-        self, tree: Hierarchy, cut_prob: float, permit_root_cut: bool = False
-    ):
+    def __init__(self, tree: Hierarchy, cut_prob: float, permit_root_cut: bool = False):
         super().__init__()
         self.num_nodes = tree.num_nodes()
         self.cut_prob = cut_prob
