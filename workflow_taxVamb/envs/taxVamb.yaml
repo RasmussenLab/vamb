@@ -15,4 +15,5 @@ dependencies:
 - prodigal
 - hmmer
 - pip:
-  - ordered-set==4.1.0
+  - dadaptation==3.0
+  - loguru==0.7.2

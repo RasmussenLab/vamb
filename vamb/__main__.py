@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from loguru import logger
+import pandas as pd
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -39,10 +40,10 @@ def format_log(record) -> str:
     colors = {"WARNING": "red", "INFO": "green", "DEBUG": "blue", "ERROR": "red"}
     L = colors.get(record["level"].name, "blue")
     T = "red" if record["level"].name in ("WARNING", "ERROR") else "cyan"
+    message = "<red>{message}</red>" if T == "red" else "{message}"
     time = f"<{T}>{{time:YYYY-MM-DD HH:mm:ss.SSS}}</{T}>"
     level = f"<b><{L}>{{level:<7}}</{L}></b>"
-    rest = f"<{L}>{{message}}</{L}>\n{{exception}}"
-    return f"{time} | {level} | {rest}"
+    return f"{time} | {level} | {message}\n{{exception}}"
 
 
 def try_make_dir(name: Union[Path, str]):
@@ -230,7 +231,7 @@ class TaxonomyOptions:
         self,
         taxonomy_path: Optional[Path],
         taxonomy_predictions_path: Optional[Path],
-        no_predictor: bool,
+        no_predictor: Optional[bool],
     ):
         assert isinstance(taxonomy_path, (Path, type(None)))
         assert isinstance(taxonomy_predictions_path, (Path, type(None)))
@@ -351,7 +352,7 @@ class PredictorTrainingOptions(VAETrainingOptions):
         softmax_threshold: float,
         ploss: str,
     ):
-        losses = ["flat_softmax", "cond_softmax", "soft_margin", "random_cut"]
+        losses = ["flat_softmax", "cond_softmax", "soft_margin"]
         if (softmax_threshold > 1) or (softmax_threshold < 0):
             raise argparse.ArgumentTypeError(
                 f"Softmax threshold should be between 0 and 1, currently {softmax_threshold}"
@@ -600,7 +601,7 @@ def calc_rpkm(
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
-        if hasattr(abundance, "nseqs") and abundance.nseqs != comp_metadata.nseqs:
+        if abundance.nseqs != comp_metadata.nseqs:
             assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
@@ -984,46 +985,36 @@ def run(
 
 def parse_mmseqs_taxonomy(
     taxonomy_path: Path,
-    contignames: Sequence[str],  # already masked
+    contignames: Sequence[str],
 ) -> list[str]:
-    names_index = {n: i for (i, n) in enumerate(contignames)}
-    names_graphs: list[tuple[str, str]] = []
-    n_lines_in_file = 0
-    with open(taxonomy_path) as file:
-        for line in map(lambda line: line.lstrip().rstrip("\n"), file):
-            n_lines_in_file += 1
-            if len(line) == 0:
-                continue
-            fields = line.split("\t")
-            if len(fields) < 9:
-                raise ValueError(
-                    f"Too few columns ({len(fields)}) in line in mmseqs taxonomy file"
-                )
-            contig = fields[0]
-            if contig not in names_index:
-                continue
-            names_graphs.append((contig, fields[8]))
+    df_mmseq = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
+    assert (
+        len(df_mmseq.columns) >= 9
+    ), f"Too few columns ({len(df_mmseq.columns)}) in mmseqs taxonomy file"
+    df_mmseq = df_mmseq[~(df_mmseq[2] == "no rank")]
+    logger.info(f"{len(df_mmseq)} lines in taxonomy file")
+    logger.info(f"{len(contignames)} contigs")
+    df_mmseq = df_mmseq[df_mmseq[0].isin(contignames)]
 
-    # Add contigs missing from the tax file with standin information
-    # TODO: rethink when we start working with other domains
-    for missing_name in set(names_index).difference(
-        (name for (name, _) in names_graphs)
-    ):
-        names_graphs.append((missing_name, "d_Bacteria"))
+    missing_contigs = set(contignames) - set(df_mmseq[0])
+    for c in missing_contigs:
+        new_row: dict[int, Union[str, float]] = {i: np.nan for i in range(9)}
+        new_row[0] = c
+        new_row[2] = np.nan
+        new_row[8] = np.nan
+        df_mmseq = pd.concat([df_mmseq, pd.DataFrame([new_row])], ignore_index=True)
 
-    # Reorder to have the same order as the input contignames
-    names: list[str] = [""] * len(names_graphs)
-    graphs: list[str] = [""] * len(names_graphs)
-    for name, graph in names_graphs:
-        i = names_index[name]
-        names[i] = name
-        graphs[i] = graph
+    df_mmseq.set_index(0, inplace=True)
+    df_mmseq = df_mmseq.loc[contignames]
+    df_mmseq.reset_index(inplace=True)
+    graph_column = df_mmseq[8]
 
-    logger.info(f"\t{n_lines_in_file} lines in taxonomy file")
-    logger.info(f"\t{len(contignames)} contigs")
+    if list(df_mmseq[0]) != list(contignames):
+        raise AssertionError(
+            "The contig names of taxonomy entries are not the same as in the contigs metadata"
+        )
 
-    assert names == list(contignames)
-    return graphs
+    return graph_column
 
 
 def predict_taxonomy(
@@ -1038,16 +1029,20 @@ def predict_taxonomy(
 ):
     begintime = time.time()
 
-    graphs = parse_mmseqs_taxonomy(
+    graph_column = parse_mmseqs_taxonomy(
         taxonomy_path=taxonomy_path,
         contignames=contignames,  # type:ignore
     )
+    graph_column.loc[graph_column == ""] = np.nan
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        graph_column.unique()
+    )
+    logger.info(f"{len(nodes)} nodes in the graph")
+    graph_column = graph_column.fillna("Domain")
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
 
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
-    logger.info(f"\t{len(nodes)} nodes in the graph")
-    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
-
-    model = vamb.h_loss.VAMB2Label(
+    model = vamb.taxvamb_encode.VAMB2Label(
         rpkms.shape[1],
         len(nodes),
         nodes,
@@ -1063,7 +1058,7 @@ def predict_taxonomy(
         lengths,
         batchsize=predictor_training_options.batchsize,
     )
-    dataloader_joint = vamb.h_loss.make_dataloader_concat_hloss(
+    dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1117,7 +1112,7 @@ def predict_taxonomy(
 
         with open(predicted_path, "a") as file:
             if not output_exists:
-                print("contigs,lengths,predictions,probabilities", file=file)
+                print("contigs,lengths,predictions,scores", file=file)
             for contig, length, prediction, prob in zip(
                 contignames[row : row + N], lengths[row : row + N], predictions, probs
             ):
@@ -1130,27 +1125,6 @@ def predict_taxonomy(
     )
 
 
-def extract_and_filter_data(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
-    binsplitter: vamb.vambtools.BinSplitter,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    composition, abundance = load_composition_and_abundance(
-        vamb_options=vamb_options,
-        comp_options=comp_options,
-        abundance_options=abundance_options,
-        binsplitter=binsplitter,
-    )
-    logger.info(f"{len(composition.metadata.identifiers)} contig names")
-    return (
-        abundance.matrix,
-        composition.matrix,
-        composition.metadata.lengths,
-        composition.metadata.identifiers,
-    )
-
-
 def run_taxonomy_predictor(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
@@ -1158,11 +1132,17 @@ def run_taxonomy_predictor(
     predictor_training_options: PredictorTrainingOptions,
     taxonomy_options: TaxonomyOptions,
 ):
-    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
+    composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
         binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
+    )
+    rpkms, tnfs, lengths, contignames = (
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        composition.metadata.identifiers,
     )
     assert taxonomy_options.taxonomy_path is not None
     predict_taxonomy(
@@ -1188,11 +1168,17 @@ def run_vaevae(
     encoder_options: EncoderOptions,
 ):
     vae_options = encoder_options.vae_options
-    rpkms, tnfs, lengths, contignames = extract_and_filter_data(
+    composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        binsplitter=cluster_options.binsplitter,
+        binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
+    )
+    rpkms, tnfs, lengths, contignames = (
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        composition.metadata.identifiers,
     )
 
     if taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
@@ -1218,34 +1204,29 @@ def run_vaevae(
         predictions_path = None
 
     if predictions_path is not None:
-        graphs: list[str] = []
-        with open(predictions_path) as file:
-            header = next(file)
-            if header.rstrip() != "contigs,lengths,predictions,probabilities":
-                raise ValueError("Invlaid header in predictions path")
-            for fields in map(lambda s: s.rstrip().split(","), file):
-                if fields[0] == "":
-                    continue
-                (_, _, prediction, _) = fields
-                if prediction == "":
-                    graphs.append("d_Bacteria")  # TODO: it's a hack
-                else:
-                    graphs.append(prediction)
+        df_gt = pd.read_csv(predictions_path)
+        df_gt = df_gt.fillna(value=np.nan)
+        graph_column = df_gt["predictions"]
     elif taxonomy_options.no_predictor:
         logger.info("Using mmseqs taxonomy for semisupervised learning")
         assert taxonomy_options.taxonomy_path is not None
-        graphs = parse_mmseqs_taxonomy(
+        graph_column = parse_mmseqs_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
             contignames=contignames,  # type:ignore
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(list(set(graphs)))
-    targets = np.array([ind_nodes[i.split(";")[-1]] for i in graphs])
+    graph_column.loc[graph_column == ""] = np.nan
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        graph_column.unique()
+    )
+    graph_column = graph_column.fillna("Domain")
+    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    targets = np.array([ind_nodes[i] for i in classes_order])
 
     assert vae_options is not None
-    vae = vamb.h_loss.VAEVAEHLoss(
+    vae = vamb.taxvamb_encode.VAEVAEHLoss(
         rpkms.shape[1],
         len(nodes),
         nodes,
@@ -1265,7 +1246,7 @@ def run_vaevae(
         batchsize=vae_training_options.batchsize,
         cuda=vamb_options.cuda,
     )
-    dataloader_joint = vamb.h_loss.make_dataloader_concat_hloss(
+    dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1275,7 +1256,7 @@ def run_vaevae(
         batchsize=vae_training_options.batchsize,
         cuda=vamb_options.cuda,
     )
-    dataloader_labels = vamb.h_loss.make_dataloader_labels_hloss(
+    dataloader_labels = vamb.taxvamb_encode.make_dataloader_labels_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1287,7 +1268,7 @@ def run_vaevae(
     )
 
     shapes = (rpkms.shape[1], 103, 1, len(nodes))
-    dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
+    dataloader = vamb.taxvamb_encode.make_dataloader_semisupervised_hloss(
         dataloader_joint,
         dataloader_vamb,
         dataloader_labels,
@@ -1425,7 +1406,7 @@ class TaxometerArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_predictions_path=None,
             taxonomy_path=args.taxonomy,
-            no_predictor=None,
+            no_predictor=False,
         )
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=args.pred_nepochs,
@@ -1604,7 +1585,7 @@ class ReclusteringArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_path=None,
             taxonomy_predictions_path=self.preds,
-            no_predictor=None,
+            no_predictor=False,
         )
 
     def run_inner(self):
@@ -1708,7 +1689,7 @@ def add_input_output_arguments(subparser):
         "--seed",
         metavar="",
         type=int,
-        default=int.from_bytes(os.urandom(8), "little"),
+        default=int.from_bytes(os.urandom(7), "little"),
         help="Random seed random determinism not guaranteed",
     )
     return subparser
@@ -1846,7 +1827,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=str,
         default="flat_softmax",
-        help='Hierarchical loss one of flat_softmax, cond_softmax, soft_margin, random_cut ["flat_softmax"]',
+        help='Hierarchical loss one of flat_softmax, cond_softmax, soft_margin ["flat_softmax"]',
     )
     return subparser
 

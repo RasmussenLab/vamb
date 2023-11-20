@@ -80,7 +80,7 @@ class CompositionMetaData:
         if length <= self.minlength:
             return None
 
-        self.filter_mask(self.lengths >= length)
+        self.filter_mask(self.lengths >= length)  # type:ignore
         self.minlength = length
 
 

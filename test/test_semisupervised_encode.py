@@ -41,14 +41,13 @@ class TestVAEVAE(unittest.TestCase):
 
     def test_make_graph(self):
         annotations = self.make_random_annotations()
-        nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(annotations)
+        nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(annotations)
         print(nodes, ind_nodes, table_parent)
         self.assertTrue(
             set(nodes).issubset(
                 set(
                     [
                         "Domain",
-                        "d_Archaea",
                         "d_Bacteria",
                         "f_1",
                         "f_2",
@@ -70,7 +69,7 @@ class TestVAEVAE(unittest.TestCase):
             for c in cls:
                 for f in self.phyla:
                     self.assertTrue(ind_nodes.get(f, -666) < ind_nodes.get(c, 666))
-                    self.assertTrue(table_parent[ind_nodes[f]] == 2)
+                    self.assertTrue(table_parent[ind_nodes[f]] == 1)
                     self.assertTrue(table_parent[ind_nodes[c]] == ind_nodes[p])
 
     def test_encoding(self):
@@ -78,12 +77,12 @@ class TestVAEVAE(unittest.TestCase):
         batchsize = 10
         nepochs = 2
         annotations = self.make_random_annotations()
-        nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(annotations)
+        nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(annotations)
 
         classes_order = np.array([a.split(";")[-1] for a in annotations])
         targets = np.array([ind_nodes[i] for i in classes_order])
 
-        vae = vamb.h_loss.VAEVAEHLoss(
+        vae = vamb.taxvamb_encode.VAEVAEHLoss(
             self.rpkms.shape[1],
             len(nodes),
             nodes,
@@ -99,7 +98,7 @@ class TestVAEVAE(unittest.TestCase):
             batchsize=batchsize,
             cuda=False,
         )
-        dataloader_joint = vamb.h_loss.make_dataloader_concat_hloss(
+        dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
             self.rpkms,
             self.tnfs,
             self.lengths,
@@ -109,7 +108,7 @@ class TestVAEVAE(unittest.TestCase):
             batchsize=batchsize,
             cuda=False,
         )
-        dataloader_labels = vamb.h_loss.make_dataloader_labels_hloss(
+        dataloader_labels = vamb.taxvamb_encode.make_dataloader_labels_hloss(
             self.rpkms,
             self.tnfs,
             self.lengths,
@@ -121,7 +120,7 @@ class TestVAEVAE(unittest.TestCase):
         )
 
         shapes = (self.rpkms.shape[1], 103, 1, len(nodes))
-        dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
+        dataloader = vamb.taxvamb_encode.make_dataloader_semisupervised_hloss(
             dataloader_joint,
             dataloader_vamb,
             dataloader_labels,
