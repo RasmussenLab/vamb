@@ -11,10 +11,8 @@ from . import cluster
 from . import encode
 from . import aamb_encode
 from . import semisupervised_encode
-from . import h_loss
-from . import hier
-from . import hlosses_fast
-from . import infer
+from . import hloss_misc
+from . import taxvamb_encode
 from . import reclustering
 
 from loguru import logger
@@ -29,9 +27,7 @@ __all__ = [
     "encode",
     "aamb_encode",
     "semisupervised_encode",
-    "h_loss",
-    "hier",
-    "hlosses_fast",
-    "infer",
+    "taxvamb_encode",
+    "hloss_misc",
     "reclustering",
 ]

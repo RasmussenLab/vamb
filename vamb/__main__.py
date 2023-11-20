@@ -1034,13 +1034,13 @@ def predict_taxonomy(
         contignames=contignames,  # type:ignore
     )
     graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(graph_column.unique())
     logger.info(f"{len(nodes)} nodes in the graph")
     graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = np.array([ind_nodes[i] for i in classes_order])
 
-    model = vamb.h_loss.VAMB2Label(
+    model = vamb.taxvamb_encode.VAMB2Label(
         rpkms.shape[1],
         len(nodes),
         nodes,
@@ -1056,7 +1056,7 @@ def predict_taxonomy(
         lengths,
         batchsize=predictor_training_options.batchsize,
     )
-    dataloader_joint = vamb.h_loss.make_dataloader_concat_hloss(
+    dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1225,13 +1225,13 @@ def run_vaevae(
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
     graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.h_loss.make_graph(graph_column.unique())
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(graph_column.unique())
     graph_column = graph_column.fillna("Domain")
     classes_order = np.array(list(graph_column.str.split(";").str[-1]))
     targets = np.array([ind_nodes[i] for i in classes_order])
 
     assert vae_options is not None
-    vae = vamb.h_loss.VAEVAEHLoss(
+    vae = vamb.taxvamb_encode.VAEVAEHLoss(
         rpkms.shape[1],
         len(nodes),
         nodes,
@@ -1251,7 +1251,7 @@ def run_vaevae(
         batchsize=vae_training_options.batchsize,
         cuda=vamb_options.cuda,
     )
-    dataloader_joint = vamb.h_loss.make_dataloader_concat_hloss(
+    dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1261,7 +1261,7 @@ def run_vaevae(
         batchsize=vae_training_options.batchsize,
         cuda=vamb_options.cuda,
     )
-    dataloader_labels = vamb.h_loss.make_dataloader_labels_hloss(
+    dataloader_labels = vamb.taxvamb_encode.make_dataloader_labels_hloss(
         rpkms,
         tnfs,
         lengths,
@@ -1273,7 +1273,7 @@ def run_vaevae(
     )
 
     shapes = (rpkms.shape[1], 103, 1, len(nodes))
-    dataloader = vamb.h_loss.make_dataloader_semisupervised_hloss(
+    dataloader = vamb.taxvamb_encode.make_dataloader_semisupervised_hloss(
         dataloader_joint,
         dataloader_vamb,
         dataloader_labels,

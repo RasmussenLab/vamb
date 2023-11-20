@@ -186,50 +186,6 @@ def permute_indices(n_current: int, n_total: int, seed: int):
     return _np.concatenate(to_concatenate)[:n_total]
 
 
-# TODO: This function is not used (and doesn't run).
-# Can we just remove it?
-def make_dataloader_semisupervised(
-    dataloader_joint,
-    dataloader_vamb,
-    dataloader_labels,
-    shapes,
-    seed: int,
-    batchsize=256,
-    destroy: bool = False,
-    cuda: bool = False,
-):
-    n_labels = shapes[-1]
-    n_total = len(dataloader_vamb.dataset)
-    indices_unsup_vamb = permute_indices(len(dataloader_vamb.dataset), n_total, seed)
-    indices_unsup_labels = permute_indices(
-        len(dataloader_labels.dataset), n_total, seed
-    )
-    # TODO: Missing an argument
-    indices_sup = permute_indices(len(dataloader_joint.dataset), n_total.seed)
-    dataset_all = _TensorDataset(
-        dataloader_vamb.dataset.tensors[0][indices_unsup_vamb],
-        dataloader_vamb.dataset.tensors[1][indices_unsup_vamb],
-        dataloader_vamb.dataset.tensors[2][indices_unsup_vamb],
-        dataloader_vamb.dataset.tensors[3][indices_unsup_vamb],
-        dataloader_labels.dataset.tensors[0][indices_unsup_labels],
-        dataloader_joint.dataset.tensors[0][indices_sup],
-        dataloader_joint.dataset.tensors[1][indices_sup],
-        dataloader_joint.dataset.tensors[2][indices_sup],
-        dataloader_joint.dataset.tensors[3][indices_sup],
-        dataloader_joint.dataset.tensors[4][indices_sup],
-    )
-    dataloader_all = _DataLoader(
-        dataset=dataset_all,
-        batch_size=batchsize,
-        drop_last=True,
-        shuffle=False,
-        num_workers=dataloader_joint.num_workers,
-        pin_memory=cuda,
-        collate_fn=partial(collate_fn_semisupervised, n_labels),
-    )
-    return dataloader_all
-
-
 class VAELabels(_encode.VAE):
     """Variational autoencoder that encodes only the onehot labels, subclass of VAE.
     Instantiate with:
