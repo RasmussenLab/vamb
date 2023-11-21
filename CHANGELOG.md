@@ -1,5 +1,64 @@
 # Changelog
 
+## v5.0.0 [UNRELEASED]
+Version 5 is a major release that includes several breaking changes to the API,
+as well as new DL models and workflows, improved binning accuracy, and more user
+friendliness.
+
+### Added
+* Added the TaxVamb binner - a semi-supervised model that can augment binning
+  using taxonomic assignment from e.g. mmseqs2 of some of the input contigs.
+  TaxVamb is state-of-the-art, and significantly outperforms all other Vamb
+  models when the taxonomic assignment is reasonably good.
+  TaxVamb is available from command-line using `vamb bin taxvamb`
+* Added the Taxometer annotation refiner. This sub-program enhances taxonomic
+  assignment of metagenomic contigs using a DL-based model.
+  TaxVamb will automatically run Taxometer to increase accuracy.
+  Taxometer is available from command-line using `vamb taxometer`
+* [EXPERIMENTAL] Added reclustering functionality, which reclusters an existing
+  binning using single-copy genes, using the technique from the SemiBin2 tool.
+  This improves bacterial bins.
+  We may remove this feature in future versions of Vamb
+
+### Breaking changes
+* The command-line interface of Vamb has been changed, such that the different
+  functionality should be used through subcommands. For example, the binners in
+  Vamb are accesible through `vamb bin`.
+  Also, a few command-line flags have been removed.
+* All output files ending in `.tsv` is now actually in TSV format. Previously,
+  Vamb did not include a header in the file, as the TSV format requires.
+  In version 5, the header is included.
+* The file `mask.npz` is no longer output, because the encoder no longer masks
+  any sequences.
+* The name of the output clusters files have been changed. When binsplitting is
+  used, Vamb now outputs both the split, and the unsplit clusters.
+  The name of the output files are now:
+  	- `vae_clusters_split.tsv`
+  	- `vae_clusters_unsplit.tsv`
+  And similarly for e.g. `vaevae_clusters_split.tsv`.
+  When binsplitting is not used, only the unsplit clusters are output.
+
+### Other changes
+* Vamb now binsplits with `-o C` by default.
+	- To disable binsplitting, pass `-o` without an argument
+* Vamb no longer errors when the batch size is too large.
+* Several errors and warnings have been improved:
+	- Vamb now warns the user when running on fewer than 20,000 contigs, since
+	  this may cause overfitting
+	- The user is warned if any sequences are filtered away for falling below
+	  the contig size cutoff (flag `-m`).
+	  We currently believe that you obtain better results by removing short
+	  contigs before the mapping step, before Vamb is run.
+	- Improved the error message when the FASTA and BAM headers to not match.
+	- Vamb now errors early if the binsplit separator (flag `-o`) is not found
+	  in the parsed contig identifiers.
+	  If the binsplit separator is not set explicitly and defaults to `-o C`,
+	  Vamb will instead warn the user and disable binsplitting. 
+* Vamb now writes its log to both stderr and to the logfile. Every line in the
+  log is now timestamped, and formatted better.
+* Vamb now outputs metadata about the unsplit clusters in the output TSV file
+  `vae_clusters_metadata.tsv`.
+
 ## v4.2.0
 * Several details of the clustering algorithm has been rehauled.
   It now returns more accurate clusters and may be faster in some circumstances.

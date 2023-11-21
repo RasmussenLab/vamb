@@ -70,6 +70,7 @@ def main(
             del cluster_contigs_not_ripped[cluster]
 
     with open(path_clusters_not_ripped, "w") as file:
+        print(vamb.vambtools.CLUSTERS_HEADER, file=file)
         for cluster, contigs_nr in cluster_contigs_not_ripped.items():
             contigs_o = cluster_contigs_original[cluster]
             if contigs_o != contigs_nr:

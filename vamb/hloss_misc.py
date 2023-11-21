@@ -3,15 +3,13 @@ The following code is a modification of a hierarchical losses implementation fir
 """
 
 from functools import partial
-from typing import Callable, Optional, Sequence, Tuple
 import numpy as np
 import collections
 import csv
 import itertools
-from typing import Callable, Hashable, Optional, Sequence, TextIO, cast
+from typing import Callable, Hashable, Optional, Sequence, Tuple, TextIO, cast
 
 import networkx as nx
-import numpy as np
 from numpy.typing import ArrayLike
 
 import torch

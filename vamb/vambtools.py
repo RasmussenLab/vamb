@@ -14,6 +14,8 @@ from typing import Optional, IO, Union
 from pathlib import Path
 from loguru import logger
 
+CLUSTERS_HEADER = "clustername\tcontigname"
+
 
 def log_and_error(typ: type, msg: str):
     logger.opt(raw=True).info("\n")
@@ -548,16 +550,17 @@ class RefHasher:
 
 
 def write_clusters(
-    unsplit_io: IO[str],
+    io: IO[str],
     clusters: Iterable[tuple[str, set[str]]],
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
+    print(CLUSTERS_HEADER, file=io)
     for cluster_name, contig_names in clusters:
         n_clusters += 1
         n_contigs += len(contig_names)
         for contig_name in contig_names:
-            print(cluster_name, contig_name, sep="\t", file=unsplit_io)
+            print(cluster_name, contig_name, sep="\t", file=io)
 
     return (n_clusters, n_contigs)
 
@@ -572,8 +575,14 @@ def read_clusters(filehandle: Iterable[str], min_size: int = 1) -> dict[str, set
     Output: A {clustername: set(contigs)} dict"""
 
     contigsof: _collections.defaultdict[str, set[str]] = _collections.defaultdict(set)
+    lines = iter(filehandle)
+    header = next(lines)
+    if header.rstrip(" \n") != CLUSTERS_HEADER:
+        raise ValueError(
+            f'Expected cluster TSV file to start with header: "{CLUSTERS_HEADER}"'
+        )
 
-    for line in filehandle:
+    for line in lines:
         stripped = line.strip()
 
         if not stripped or stripped[0] == "#":

@@ -23,6 +23,7 @@ then
 
 cluster_name=$(echo $bin | sed 's=.fna==g' | sed 's=.fa==g')
 
+echo -e   "clustername\tcontigname"  >> $output_file
 for contig in $(grep '>' $bin | sed 's=>==g')
 do
 echo -e   "$cluster_name""\t""$contig"  >> $output_file
