@@ -1022,7 +1022,6 @@ class VAMB2Label(_nn.Module):
                 raise ValueError("All elements of batchsteps must be integers")
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
             batchsteps_set = set(batchsteps)
 
         # Get number of features
