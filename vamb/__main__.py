@@ -1569,6 +1569,7 @@ class VAEVAEArguments(BinnerArguments):
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=self.args.pred_nepochs,
             batchsize=self.args.pred_batchsize,
+            batchsteps=[],
             softmax_threshold=self.args.pred_softmax_threshold,
             ploss=self.args.ploss,
         )
