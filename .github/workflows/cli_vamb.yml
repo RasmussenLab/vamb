@@ -56,6 +56,9 @@ jobs:
         vamb taxometer --outdir outdir_taxometer --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv -pe 10 -pt 10
         ls -la outdir_taxometer
         cat outdir_taxometer/log.txt
+        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy outdir_taxometer/results_taxonomy_predictor.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -pe 10 -pt 10
+        ls -la outdir_taxometer_pred
+        cat outdir_taxometer/log.txt
     - name: Run k-means reclustering
       run: |
         vamb recluster --outdir outdir_recluster --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --latent_path outdir_taxvamb/vaevae_latent.npy --clusters_path outdir_taxvamb/vaevae_clusters_split.tsv --hmmout_path markers_mock.hmmout --algorithm kmeans --minfasta 200000
