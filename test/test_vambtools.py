@@ -499,7 +499,8 @@ class TestWriteClusters(unittest.TestCase):
 
     def conforms(self, str, clusters):
         lines = self.linesof(str)
-        self.assertEqual(len(lines), sum(len(v) for (_, v) in clusters))
+        self.assertEqual(lines[0], vamb.vambtools.CLUSTERS_HEADER)
+        self.assertEqual(len(lines) - 1, sum(len(v) for (_, v) in clusters))
         allcontigs = set()
         printed = set()
         printed_names = set()
@@ -509,7 +510,7 @@ class TestWriteClusters(unittest.TestCase):
         for k, v in clusters:
             allcontigs.update(v)
 
-        for line in lines:
+        for line in lines[1:]:
             name, _, contig = line.partition("\t")
             printed.add(contig)
             printed_names.add(name)
@@ -534,7 +535,7 @@ class TestWriteClusters(unittest.TestCase):
     def test_max_clusters(self):
         vamb.vambtools.write_clusters(self.io, self.test_clusters[:2])
         lines = self.linesof(self.io.getvalue())
-        self.assertEqual(len(lines), 9)
+        self.assertEqual(len(lines), 10)
         self.conforms(self.io.getvalue(), self.test_clusters[:2])
 
 

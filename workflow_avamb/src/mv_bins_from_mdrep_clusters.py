@@ -108,6 +108,7 @@ def write_final_nc_clusters(
     path_nc_clusters: str,
 ):
     with open(path_nc_clusters, "w") as file:
+        print(vamb.vambtools.CLUSTERS_HEADER, file=file)
         for nc_cluster in cluster_scores.keys():
             nc_contigs = cluster_contigs[nc_cluster]
             for nc_contig in nc_contigs:

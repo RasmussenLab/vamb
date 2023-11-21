@@ -63,6 +63,7 @@ def main(
         raise FileExistsError(outpath)
 
     with open(outpath, "w") as file:
+        print(vamb.vambtools.CLUSTERS_HEADER, file=file)
         for bin in dereplicated:
             bin_name = bin_names[bin]
             bin_name = bin_name.replace(".fna", "")
