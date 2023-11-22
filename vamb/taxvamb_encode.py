@@ -976,12 +976,7 @@ class VAMB2Label(_nn.Module):
             epoch_correct_labels += correct_labels.data.item()
 
         logger.info(
-            "\tEpoch: {}\tCE: {:.7f}\taccuracy: {:.4f}\tBatchsize: {}".format(
-                epoch + 1,
-                epoch_celoss / len(data_loader),
-                epoch_correct_labels / len(data_loader),
-                data_loader.batch_size,
-            )
+            f"\tEpoch: {epoch + 1}\tCE: {epoch_celoss / len(data_loader):.7f}\tBatchsize: {data_loader.batch_size}"
         )
         self.eval()
         return data_loader
