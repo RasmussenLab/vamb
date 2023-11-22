@@ -48,7 +48,7 @@ jobs:
         vamb bin taxvamb --outdir outdir_taxvamb_no_predict --no_predictor --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv -e 10 -q -t 10 -o C --minfasta 200000
         ls -la outdir_taxvamb_no_predict
         cat outdir_taxvamb_no_predict/log.txt
-        vamb bin taxvamb --outdir outdir_taxvamb_preds --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz  --no_predictor --taxonomy outdir_taxvamb/results_taxonomy_predictor.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -e 10 -q -t 10 -o C --minfasta 200000
+        vamb bin taxvamb --outdir outdir_taxvamb_preds --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz  --no_predictor --taxonomy outdir_taxvamb/results_taxometer.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -e 10 -q -t 10 -o C --minfasta 200000
         ls -la outdir_taxvamb_preds
         cat outdir_taxvamb_preds/log.txt
     - name: Run Taxometer
@@ -56,7 +56,7 @@ jobs:
         vamb taxometer --outdir outdir_taxometer --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv -pe 10 -pt 10
         ls -la outdir_taxometer
         cat outdir_taxometer/log.txt
-        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy outdir_taxometer/results_taxonomy_predictor.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -pe 10 -pt 10
+        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy outdir_taxometer/results_taxometer.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -pe 10 -pt 10
         ls -la outdir_taxometer_pred
         cat outdir_taxometer/log.txt
     - name: Run k-means reclustering

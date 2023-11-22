@@ -1228,6 +1228,9 @@ def run_vaevae(
         graph_column = parse_taxonomy(
             taxonomy_path=taxonomy_options.taxonomy_path,
             contignames=contignames,  # type:ignore
+            column_contigs=taxonomy_options.column_contigs,
+            column_taxonomy=taxonomy_options.column_taxonomy,
+            delimiter_taxonomy=taxonomy_options.delimiter_taxonomy,
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
