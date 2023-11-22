@@ -989,14 +989,14 @@ def parse_taxonomy(
     column_contigs: Optional[str],
     column_taxonomy: Optional[str],
     delimiter_taxonomy: Optional[str],
-) -> list[str]:
+) -> pd.Series:
     if column_contigs is None or column_taxonomy is None:
         df_taxonomy = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
         column_contigs = 0
         column_taxonomy = 8
         if len(df_taxonomy.columns) != 9:
             raise ValueError(
-                f"The contigs column or the taxonomy column are not defined, but the taxonomy file is not in MMseqs2 format"
+                "The contigs column or the taxonomy column are not defined, but the taxonomy file is not in MMseqs2 format"
             )
     else:
         df_taxonomy = pd.read_csv(taxonomy_path, delimiter=delimiter_taxonomy)
@@ -1007,17 +1007,18 @@ def parse_taxonomy(
     df_taxonomy = df_taxonomy[df_taxonomy[column_contigs].isin(contignames)]
 
     missing_contigs = set(contignames) - set(df_taxonomy[column_contigs])
+    new_rows = []
     for c in missing_contigs:
         new_row: dict[int, Union[str, float]] = {i: np.nan for i in df_taxonomy.columns}
         new_row[column_contigs] = c
-        df_taxonomy = pd.concat(
-            [df_taxonomy, pd.DataFrame([new_row])], ignore_index=True
-        )
+        new_rows.append(new_row)
+
+    df_taxonomy = pd.concat([df_taxonomy, pd.DataFrame(new_rows)], ignore_index=True)
 
     df_taxonomy.set_index(column_contigs, inplace=True)
     df_taxonomy = df_taxonomy.loc[contignames]
     df_taxonomy.reset_index(inplace=True)
-    graph_column = df_taxonomy[column_taxonomy]
+    graph_column = df_taxonomy[column_taxonomy].astype(str)
 
     if list(df_taxonomy[column_contigs]) != list(contignames):
         raise AssertionError(
