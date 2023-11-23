@@ -2,8 +2,6 @@
 Documentation: https://github.com/RasmussenLab/vamb/
 """
 
-__version__ = (4, 1, 3)
-
 from . import vambtools
 from . import parsebam
 from . import parsecontigs
@@ -15,8 +13,10 @@ from . import hloss_misc
 from . import taxvamb_encode
 from . import reclustering
 
+from importlib.metadata import version as get_version
 from loguru import logger
 
+__version_str__ = get_version("vamb")
 logger.remove()
 
 __all__ = [
