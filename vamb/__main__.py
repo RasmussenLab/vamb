@@ -1413,7 +1413,7 @@ class BasicArguments(object):
         )
         logger.add(sys.stderr, format=format_log)
         begintime = time.time()
-        logger.info("Starting Vamb version " + ".".join(map(str, vamb.__version__)))
+        logger.info("Starting Vamb version " + vamb.__version_str__)
         logger.info("Random seed is " + str(self.vamb_options.seed))
         self.run_inner()
         logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
@@ -2071,7 +2071,7 @@ def add_reclustering_arguments(subparser):
 
 def main():
     doc = f"""
-    Version: {'.'.join([str(i) for i in vamb.__version__])}
+    Version: {vamb.__version_str__}
 
     Default use, good for most datasets:
     vamb bin default --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
@@ -2091,7 +2091,7 @@ def main():
     helpos.add_argument(
         "--version",
         action="version",
-        version=f'Vamb {".".join(map(str, vamb.__version__))}',
+        version=f"Vamb {vamb.__version_str__}",
     )
 
     if len(sys.argv) == 1:

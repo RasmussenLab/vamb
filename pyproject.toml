@@ -26,12 +26,14 @@ authors = [
 url = "https://github.com/RasmussenLab/vamb"
 description = "Variational and Adversarial autoencoders for Metagenomic Binning"
 license = "MIT"
-[tool.setuptools.dynamic]
-version = {attr = "vamb.__version__"}
 readme = {file = "README.md"}
 
 [build-system]
-requires = ["setuptools ~= 63.0", "Cython ~= 0.29.5"]
+requires = [
+    "setuptools ~= 64.0",
+    "setuptools-scm >= 8.0",
+    "Cython ~= 0.29.5"
+]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
@@ -43,3 +45,5 @@ filterwarnings = [
     "error",
     "ignore::UserWarning",
 ]
+
+[tool.setuptools_scm]
