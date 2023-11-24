@@ -16,7 +16,7 @@ The Vamb package contains several programs, including three binners:
   TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
 
 And a taxonomy predictor:
-* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. [Article still in the works].
+* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. Go to the [release branch](https://github.com/RasmussenLab/vamb/blob/taxometer_release/README_Taxometer.md) for the instructions. [Preprint](https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1)
 
 # Installation
 Vamb is in continuous development. Make sure to install the latest version for the best results.
