@@ -1,7 +1,7 @@
 # Taxometer
 Taxometer is a tool that improves taxonomic annotations from any taxonomic classifier for the set of contigs. Taxometer does not use a database or map contigs to reference sequences. Instead, the underlying neural network uses tetra-nucleotide frequencies and contigs abundances from a multi-sample metagenomic experiment to identify the contigs of the same origin and then completes and refines taxonomic annotations provided by any classifier using this information. 
 
-For more explanation, motivation and benchmarks see the Taxometer preprint (link).
+For more explanation, motivation and benchmarks see the Taxometer preprint https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1.
 
 Any questions, bug reports or feature requests are most welcome.
 
@@ -84,7 +84,20 @@ Columns:
 
 ## Links and references
 
-To cite Taxometer, use the following reference (link).
+To cite Taxometer, use the following reference:
+```
+@article {Kutuzova2023.11.23.568413,
+	author = {Svetlana Kutuzova and Mads Nielsen and Pau Piera Lindez and Jakob Nybo Nissen and Simon Rasmussen},
+	title = {Taxometer: Improving taxonomic classification of metagenomics contigs},
+	elocation-id = {2023.11.23.568413},
+	year = {2023},
+	doi = {10.1101/2023.11.23.568413},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413},
+	eprint = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413.full.pdf},
+	journal = {bioRxiv}
+}
+```
 
 Benchmarked taxonomic classifiers:
 * __MMseqs2__ [Article](https://academic.oup.com/bioinformatics/article/37/18/3029/6178277?login=true) [Github](https://github.com/soedinglab/MMseqs2)
