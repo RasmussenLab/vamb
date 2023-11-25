@@ -60,7 +60,7 @@ vamb taxometer --outdir path/to/outdir \
   --bamfiles /path/to/bam/*.bam \
   --taxonomy another_taxonomy.csv \
   --column_contigs contigs \
-  --column_taxonomy predictions \
+  --column_taxonomy taxonomy \
   --delimiter_taxonomy ,
 ```
 
