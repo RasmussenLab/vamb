@@ -355,7 +355,7 @@ if __name__ == "__main__":
     path_bins_ripped_checkm_quality_report = opt.sbr
 
     ripped_bins_scores_ar = np.loadtxt(
-        path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2
+        path_bins_ripped_checkm_quality_report, dtype=str, skiprows=1, ndmin=2, delimiter="\t" 
     )
 
     drep_folder = opt.d
