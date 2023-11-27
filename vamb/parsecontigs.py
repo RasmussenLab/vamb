@@ -178,20 +178,25 @@ class Composition:
         lengths = _vambtools.PushArray(_np.int32)
         mask = bytearray()  # we convert to Numpy at end
         contignames: list[str] = list()
-        minimum_seen_length = 2_000_000_000
-
         entries = _vambtools.byte_iterfasta(filehandle)
 
         for entry in entries:
             length = len(entry)
-            minimum_seen_length = min(minimum_seen_length, length)
             skip = length < minlength
             mask.append(not skip)
 
             if skip:
                 continue
 
-            raw.extend(entry.kmercounts(4))
+            counts = entry.kmercounts(4)
+            if counts.sum() == 0:
+                raise ValueError(
+                    f'TNF value of contig "{entry.header}" is all zeros. '
+                    + "This implies that the sequence contained no 4-mers of A, C, G, T or U, "
+                    + "making this sequence uninformative. This is probably a mistake. "
+                    + "Verify that the sequence contains usable information (e.g. is not all N's)"
+                )
+            raw.extend(counts)
 
             if len(raw) > 256000:
                 Composition._convert(raw, projected)

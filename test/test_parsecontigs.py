@@ -31,6 +31,16 @@ class TestReadContigs(unittest.TestCase):
         self.io.seek(0)
         self.large_io.seek(0)
 
+    def test_only_ns(self):
+        file = io.BytesIO()
+        file.write(b">abc\n")
+        file.write(b"N" * 2500)
+        file.write(b"\n")
+        file.seek(0)
+
+        with self.assertRaises(ValueError):
+            Composition.from_file(file)
+
     def test_unique_names(self):
         with self.assertRaises(ValueError):
             CompositionMetaData(

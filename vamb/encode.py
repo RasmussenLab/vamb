@@ -99,17 +99,6 @@ def make_dataloader(
             "One or more samples have zero depth in all sequences, so cannot be depth normalized"
         )
     rpkm *= 1_000_000 / sample_depths_sum
-
-    zero_tnf = tnf.sum(axis=1) == 0
-    smallest_index = _np.argmax(zero_tnf)
-    if zero_tnf[smallest_index]:
-        raise ValueError(
-            f"TNF row at index {smallest_index} is all zeros. "
-            + "This implies that the sequence contained no 4-mers of A, C, G, T or U, "
-            + "making this sequence uninformative. This is probably a mistake. "
-            + "Verify that the sequence contains usable information (e.g. is not all N's)"
-        )
-
     total_abundance = rpkm.sum(axis=1)
 
     # Normalize rpkm to sum to 1
