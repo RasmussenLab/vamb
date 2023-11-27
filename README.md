@@ -10,7 +10,7 @@ For more information about the implementation, methodological considerations, an
 The Vamb package contains several programs, including three binners:
 * __Vamb__: The original binner based on variational autoencoders. [Article](https://doi.org/10.1038/s41587-020-00777-4)
 * __Avamb__: An ensemble model based on Vamb and adversarial autoencoders. [Article](https://doi.org/10.1038/s42003-023-05452-3).
-  Avamb produces somewhat better bins than Vamb, but is a more complex and computationally demanding pipeline.
+  Avamb produces better bins than Vamb, but is a more complex and computationally demanding pipeline.
   See the [Avamb README page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb) for more information.
 * __TaxVamb__: A semi-supervised binner that uses taxonomy information from e.g. `mmseqs taxonomy`. [Article still in the works].
   TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
@@ -30,7 +30,7 @@ pip install vamb
 :bangbang: An active Conda environment can hijack your system's linker, causing an error during installation. Either deactivate `conda`, or delete the `~/miniconda/compiler_compats` directory before installing with pip.
 
 Alternatively, it can be installed as a [Bioconda's package](https://anaconda.org/bioconda/vamb) (thanks to contribution from Antônio Pedro Camargo).
-Currently, the Conda version is severely outdated, so we recommend installing using pip. Also, the BioConda package does not include GPU support.
+The BioConda package does not include GPU support.
  
 ```
 conda install -c pytorch pytorch torchvision cudatoolkit=10.2
@@ -55,10 +55,10 @@ If you can't/don't want to use pip/Conda, you can do it the hard way: Install th
 
 # Running Vamb
 First, figure out what program you want to run:
-* If you want to refine existing taxonomic classification, run `vamb taxometer`
-* If you want to bin, and is able to get taxonomic information, run `vamb bin taxvamb`
-* If you want to bin, and don't mind a more complex, but performant workflow run the [Avamb Snakemake workflow](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb)
 * If you want a decent and simple binner, run `vamb bin default`
+* If you want to bin, and don't mind a more complex, but performant workflow run the [Avamb Snakemake workflow](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb)
+* If you want to bin, and is able to get taxonomic information, run `vamb bin taxvamb`
+* If you want to refine existing taxonomic classification, run `vamb taxometer`
 
 For more command-line options, see the command-line help menu:
 ```
@@ -100,15 +100,10 @@ minimap2 -t 8 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit /path/to/reads/sa
 4. Run Vamb:
 
 ```
-vamb bin basic --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C
+vamb bin default --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C
 ```
 
 5. Apply any desired postprocessing to Vamb's output.
-
-## How to run: Using the Vamb Snakemake workflow
-To make it even easier to run Vamb, we have created a [Snakemake](https://snakemake.readthedocs.io/en/stable/#) workflow.
-This workflow runs steps 2-5 above using `minimap2` to align, and [CheckM](https://ecogenomics.github.io/CheckM/) to estimate completeness and contamination of the resulting bins.
-The workflow can run both on a local machine, a workstation and a HPC system using `qsub`. It can be found in the `workflow` folder - see the file `workflow/README.md` for details.
 
 # Detailed user instructions
 See the tutorial in `doc/tutorial.md` for even more detailed instructions.
@@ -187,7 +182,7 @@ __5) Run Vamb__
 By default, Vamb does not output any FASTA files of the bins. In the examples below, the option `--minfasta 200000` is set, meaning that all bins with a size of 200 kbp or more will be output as FASTA files.
 Run Vamb with:
 
-`vamb bin basic -o SEP --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`,
+`vamb bin default -o SEP --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`,
 
 where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
 
@@ -202,8 +197,8 @@ Vamb will bin every input contig. Contigs that cannot be binned with other conti
 The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default for multiple samples is `-l 32 -n 512 512`):
 
 ```
-vamb bin basic -l 24 -n 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
-vamb bin basic -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
+vamb bin default -l 24 -n 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
+vamb bin default -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
 ```
 
 It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
