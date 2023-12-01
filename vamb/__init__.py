@@ -14,6 +14,7 @@ from . import semisupervised_encode
 from . import hloss_misc
 from . import taxvamb_encode
 from . import reclustering
+from . import encode_n2v_asimetric
 
 from loguru import logger
 
@@ -30,4 +31,5 @@ __all__ = [
     "taxvamb_encode",
     "hloss_misc",
     "reclustering",
+    "encode_n2v_asimetric",
 ]

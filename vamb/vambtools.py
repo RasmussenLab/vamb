@@ -555,7 +555,7 @@ def write_clusters(
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
-    print(CLUSTERS_HEADER, file=io)
+    # print(CLUSTERS_HEADER, file=io)
     for cluster_name, contig_names in clusters:
         n_clusters += 1
         n_contigs += len(contig_names)
