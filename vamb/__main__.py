@@ -23,7 +23,7 @@ import pandas as pd
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 import datetime
-
+import networkx as nx
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -180,7 +180,6 @@ class EmbeddingsOptions:
         "radius",
         "gamma",
         "neighs_object_path",
-        "negative_neighs_object_path",
         "embeddings_mask_path",
         "embeddings_processed_path",
         "margin",
@@ -195,7 +194,6 @@ class EmbeddingsOptions:
         radius: float,
         gamma: float,
         neighs_object_path: Optional[Path],
-        negative_neighs_object_path: Optional[Path],
         embeddings_mask_path: Optional[Path],
         embeddings_processed_path: Optional[Path],
         margin: float = 0.01,
@@ -216,7 +214,6 @@ class EmbeddingsOptions:
                 and embeddings_processed_path is not None
             )
             self.neighs_object_path = neighs_object_path  # np.load(neighs_object_path,allow_pickle=True)["arr_0"]
-            self.negative_neighs_object_path = negative_neighs_object_path
             self.embeddings_mask_path = embeddings_mask_path
             self.embeddings_processed_path = embeddings_processed_path
 
@@ -797,7 +794,6 @@ def trainvae_n2v_asimetric(
     alpha: Optional[float],
     data_loader: DataLoader,
     neighs_object: np.ndarray,
-    negative_neighs_object: np.ndarray,
 ) -> np.ndarray:
     begintime = time.time()
     logger.info("Creating and training VAE")
@@ -811,7 +807,6 @@ def trainvae_n2v_asimetric(
         ncontigs,
         n_embedding,
         neighs_object,
-        negative_neighs_object,
         nhiddens=vae_options.nhiddens,
         nlatent=vae_options.nlatent,
         alpha=alpha,
@@ -1224,17 +1219,12 @@ def load_composition_and_abundance_and_embeddings(
             "arr_0"
         ]
 
-        neighs_negative = np.load(
-            embeddings_options.negative_neighs_object_path, allow_pickle=True
-        )["arr_0"]
-
     return (
         composition,
         abundance,
         embeddings_2k_complete,
         contigs_2k_complete_w_neighs_mask,
         neighs,
-        neighs_negative,
     )
 
 
@@ -1766,7 +1756,6 @@ def run_n2v_asimetric(
         embeddings,
         embeddings_mask,
         neighs_object,
-        negative_neighs_object,
     ) = load_composition_and_abundance_and_embeddings(
         vamb_options=vamb_options,
         comp_options=comp_options,
@@ -1792,10 +1781,6 @@ def run_n2v_asimetric(
         vamb_options.out_dir.joinpath("neighs_object.npz"),
         neighs_object,
     )
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("negative_neighs_object.npz"),
-        negative_neighs_object,
-    )
 
     logger.info(
         "Creating dataloader and mask (including embeddings and neighbours objects)"
@@ -1804,7 +1789,6 @@ def run_n2v_asimetric(
     (
         data_loader,
         neighs_object_after_dataloader,
-        negative_neighs_object_after_dataloader,
         # mask,
     ) = vamb.encode_n2v_asimetric.make_dataloader_n2v(
         abundance.matrix.astype(np.float32),
@@ -1812,7 +1796,6 @@ def run_n2v_asimetric(
         embeddings.astype(np.float32),
         embeddings_mask.astype(np.float32),
         neighs_object,
-        negative_neighs_object,
         composition.metadata.lengths,
         256,  # dummy value - we change this before using the actual loader
         destroy=True,
@@ -1842,7 +1825,6 @@ def run_n2v_asimetric(
         alpha=encoder_options.alpha,
         data_loader=data_loader,
         neighs_object=neighs_object_after_dataloader,
-        negative_neighs_object=negative_neighs_object_after_dataloader,
     )
 
     # Free up memory
@@ -1854,13 +1836,79 @@ def run_n2v_asimetric(
     assert latent is not None
     assert comp_metadata.nseqs == len(latent)
     # Cluster with DBSCAN, save tsv file
-    clusterspath = vamb_options.out_dir.joinpath("vae_dbscan_clusters.tsv")
-    cluster_dbs(
-        dbs_cluster_options,
-        clusterspath,
-        latent,
-        comp_metadata.identifiers,
+    # clusterspath = vamb_options.out_dir.joinpath("vae_dbscan_clusters.tsv")
+    # cluster_dbs(
+    #     dbs_cluster_options,
+    #     clusterspath,
+    #     latent,
+    #     comp_metadata.identifiers,
+    # )
+
+    # Cluster first contigs within the neighbourhoods margins
+
+    withinmarginclusters_cs_d, mask_contigs_already_clustered = cluster_neighs_based(
+        neighs_object=neighs_object,
+        latents=latent,
+        contignames=comp_metadata.identifiers,
     )
+    # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
+    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_margins.tsv")
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_margins")),
+        vamb_options.out_dir.joinpath("bins_within_margins"),
+        comp_options.path,
+        withinmarginclusters_cs_d,
+        comp_metadata.identifiers[mask_contigs_already_clustered],
+        comp_metadata.lengths[mask_contigs_already_clustered],
+    )
+    logger.info(f"\tClustered within neighs contigs.\n")
+
+    # now cluster the remaining contigs not within margins
+    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_margins.tsv")
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vae_clusters_outside_margins")),
+        vamb_options.out_dir.joinpath("bins_outside_margins"),
+        comp_options.path,
+        latent[~mask_contigs_already_clustered],
+        comp_metadata.identifiers[~mask_contigs_already_clustered],  # type:ignore
+        comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
+    )
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_outside_margins_unsplit.tsv"
+    )
+    merged_cl_cs_d = withinmarginclusters_cs_d.copy()
+    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
+    for cl in set(cl_c_ar[:, 0]):
+        merged_cl_cs_d[cl] = set()
+
+    for cl, c in cl_c_ar:
+        merged_cl_cs_d[cl].add(c)
+
+    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        comp_metadata.identifiers
+    )
+    # save clusters within margins and outside margins
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_within_margins_complete.tsv"
+    )
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_margins_complete")),
+        vamb_options.out_dir.joinpath("bins_within_margins_complete"),
+        comp_options.path,
+        merged_cl_cs_d,
+        comp_metadata.identifiers,
+        comp_metadata.lengths,
+    )
+    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
 
     # Cluster, save tsv file
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
@@ -1875,6 +1923,94 @@ def run_n2v_asimetric(
         comp_metadata.lengths,  # type:ignore
     )
     del latent
+
+
+def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_size=2):
+    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
+    idx2c = {i: contigname for i, contigname in enumerate(contignames)}
+
+    mask_contigs_already_clustered = np.zeros(len(contignames), dtype=bool)
+
+    neighbourhoods_graph = nx.Graph()
+    for c_i, neigh_idxs in enumerate(neighs_object):
+        if c_i in neigh_idxs and len(neigh_idxs) == 1:
+            continue
+
+        if c_i not in neigh_idxs and len(neigh_idxs) == 0:
+            continue
+
+        assert c_i in neigh_idxs
+
+        for n_i in neigh_idxs:
+            neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])
+            mask_contigs_already_clustered[n_i] = True
+            mask_contigs_already_clustered[c_i] = True
+    contigs_in_neighbourhoods = [
+        c for cs in nx.connected_components(neighbourhoods_graph) for c in cs
+    ]
+    assert len(contigs_in_neighbourhoods) == len(set(contigs_in_neighbourhoods))
+
+    print("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
+
+    withinmarginclusters_g = nx.Graph()
+
+    for cs in nx.connected_components(neighbourhoods_graph):
+        # print(cs)
+        if len(cs) < 2:
+            continue
+        cs_list = list(cs)
+
+        for i, c_i in enumerate(cs_list):
+            # mask_contigs_already_clustered[c2idx[c_i]] = True
+            for c_j in cs_list[i + 1 :]:
+                assert c2idx[c_i] != c2idx[c_j]
+                withinmarginclusters_g.add_edge(c_i, c_j)
+                # print(c_i, c_j)
+            #    mask_contigs_already_clustered[c2idx[c_j]] = True
+        for c in cs_list:
+            assert c in withinmarginclusters_g.nodes()
+        for c in cs:
+            assert c in withinmarginclusters_g.nodes()
+        # break
+        idxs_cs = [c2idx[c] for c in cs]
+
+        limit_h = np.max(latents[idxs_cs], axis=0)
+        limit_l = np.min(latents[idxs_cs], axis=0)
+
+        limits = [(l, h) for h, l in zip(limit_h, limit_l)]
+
+        idxs_not_cs = set(np.arange(len(contignames))) - set(idxs_cs)
+
+        for idx_not_cs in idxs_not_cs:
+            if all(
+                limits[i][0] <= latents[idx_not_cs][i] <= limits[i][1]
+                for i in range(latents.shape[1])
+            ):
+                extra_contig = contignames[idx_not_cs]
+
+                withinmarginclusters_g.add_edge(extra_contig, cs_list[-1])
+                mask_contigs_already_clustered[idx_not_cs] = True
+
+    for c in contignames[mask_contigs_already_clustered]:
+        assert c in withinmarginclusters_g.nodes()
+
+    withinmarginclusters_cs_d = {
+        "nneighs_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(withinmarginclusters_g))
+    }
+    print(
+        "Contigs already clustered mask sum %i" % np.sum(mask_contigs_already_clustered)
+    )
+    print(
+        "Contigs in withinmargin_d %i, %i, %i"
+        % (
+            len(set([c for cs in withinmarginclusters_cs_d.values() for c in cs])),
+            len([c for cs in withinmarginclusters_cs_d.values() for c in cs]),
+            len(withinmarginclusters_g.nodes()),
+        )
+    )
+
+    return withinmarginclusters_cs_d, mask_contigs_already_clustered
 
 
 class BasicArguments(object):
@@ -2142,7 +2278,6 @@ class VAEASYarguments(BinnerArguments):
             radius=args.R,
             gamma=args.gamma,
             neighs_object_path=args.neighs,
-            negative_neighs_object_path=args.negative_neighs,
             embeddings_mask_path=args.embeds_mask,
             embeddings_processed_path=args.embeds_processed,
             margin=args.margin,
@@ -2399,12 +2534,6 @@ def add_vae_n2v_asy_arguments(subparser):
         metavar="",
         type=Path,
         help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
-    )
-    vae_asy_os.add_argument(
-        "--negative_neighs",
-        metavar="",
-        type=Path,
-        help="paths to graph neighs obj, where each row (contig) indicates the negative neibouring contig indices",
     )
 
     vae_asy_os.add_argument(
@@ -2738,12 +2867,6 @@ def add_vae_n2v_asy_arguments(subparser):
         metavar="",
         type=Path,
         help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
-    )
-    vae_asy_os.add_argument(
-        "--negative_neighs",
-        metavar="",
-        type=Path,
-        help="paths to graph neighs obj, where each row (contig) indicates the negative neibouring contig indices",
     )
 
     vae_asy_os.add_argument(

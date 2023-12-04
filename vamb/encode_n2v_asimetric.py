@@ -34,56 +34,6 @@ import numpy as _np
 import torch as _torch
 
 
-class MyCustomDataset(Dataset):
-    def __init__(
-        self,
-        depths,
-        tnfs,
-        embeddings,
-        embeddings_mask,
-        weights,
-        indices,
-        neighs,
-    ):
-        self.depths = depths
-        self.tnfs = tnfs
-        self.embeddings = embeddings
-        self.embeddings_mask = embeddings_mask
-        self.weights = weights
-        self.indices = indices
-        self.neighs = neighs
-
-    def __getitem__(self, index):
-        depth = self.depths[index]
-        tnf = self.tnfs[index]
-        embedding = self.embeddings[index]
-        embedding_mask = self.embeddings_mask[index]
-        weight = self.weights[index]
-        neighs_i = self.neighs[index]  # self.neighs_d.get(index,[])
-        idx = self.indices[index]
-
-        sample = {
-            "depth": depth,
-            "tnf": tnf,
-            "embedding": embedding,
-            "embedding_mask": embedding_mask,
-            "weight": weight,
-            "idx": idx,
-            "neighs": neighs_i,
-        }
-
-        return sample
-
-    def __len__(self):
-        return len(self.depths)
-
-    def nsamples(self):
-        return self.depths.shape[1]
-
-    def embedding_n(self):
-        return self.embeddings.shape[1]
-
-
 class CosineSimilarityLoss_asimetric(_nn.Module):
     def __init__(self):
         super(CosineSimilarityLoss_asimetric, self).__init__()
@@ -150,7 +100,6 @@ def make_dataloader_n2v(
     embeddings: _np.ndarray,
     embeddings_mask: _np.ndarray,
     neighs: _np.ndarray,
-    negative_neighs: _np.ndarray,
     lengths: _np.ndarray,
     batchsize: int = 256,
     destroy: bool = False,
@@ -200,10 +149,9 @@ def make_dataloader_n2v(
         or len(embeddings) != len(lengths)
         or len(embeddings_mask) != len(lengths)
         or len(neighs) != len(lengths)
-        or len(negative_neighs) != len(lengths)
     ):
         raise ValueError(
-            "Lengths of TNF, RPKM, Embedding, Embedding mask,neighs, negative neighs, and lengths arrays must be the same"
+            "Lengths of TNF, RPKM, Embedding, Embedding mask,neighs, and lengths arrays must be the same"
         )
 
     if not (
@@ -298,7 +246,7 @@ def make_dataloader_n2v(
         pin_memory=cuda,
     )
 
-    return dataloader, neighs, negative_neighs
+    return dataloader, neighs
 
 
 class VAE(_nn.Module):
@@ -329,7 +277,6 @@ class VAE(_nn.Module):
         ncontigs: int,
         n_embedding: int,
         neighs_object: _np.ndarray,
-        negative_neighs_object: _np.ndarray,
         nhiddens: Optional[list[int]] = None,
         nlatent: int = 32,
         alpha: Optional[float] = None,
@@ -429,7 +376,6 @@ class VAE(_nn.Module):
 
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
-        self.negative_neighs = negative_neighs_object
 
         if cuda:
             self.cuda()
@@ -540,7 +486,7 @@ class VAE(_nn.Module):
 
         # embedding loss
 
-        loss_emb, _ = self.cosinesimilarity_loss(
+        loss_emb, loss_emb_std = self.cosinesimilarity_loss(
             mu,
             preds_idxs,
             # self.neighs, self.mu_container,
@@ -576,7 +522,8 @@ class VAE(_nn.Module):
             loss_emb_cat, dim=0
         )[0] * self.gamma
         loss_emb_pop = loss_emb[emb_mask]
-        loss_emb_unpop = loss_emb[~emb_mask]
+        loss_emb_pop_std = loss_emb_std[emb_mask]
+        # loss_emb_unpop = loss_emb[~emb_mask]
 
         return (
             loss.mean(),
@@ -585,7 +532,8 @@ class VAE(_nn.Module):
             weighed_sse.mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(),  # .sum(dim=0) / _torch.sum(emb_mask),  # stil neccesary to averge ???
-            loss_emb_unpop.mean(),
+            loss_emb_pop_std.mean()
+            # loss_emb_unpop.mean(),
         )
 
         # return loss.mean(), ce.mean(), sse.mean(), kld.mean()
@@ -607,7 +555,7 @@ class VAE(_nn.Module):
                 )
                 avg_cosine_distances.append(cosine_distances.mean())
                 median_cosine_distances.append(cosine_distances.median())
-
+                std_cosine_distances.append(cosine_distances.std(unbiased=False))
                 # cosine_distances_neg = 1 - F.cosine_similarity(
                 #    mu_i.unsqueeze(0), mu_i.unsqueeze(0), dim=-1
                 # )
@@ -711,8 +659,8 @@ class VAE(_nn.Module):
         epoch_sseloss = 0.0
         epoch_celoss = 0.0
         epoch_embloss_pop = 0.0
-        # epoch_embstd_pop = 0.0
-        epoch_embloss_unpop = 0.0
+        epoch_embstd_pop = 0.0
+        # epoch_embloss_unpop = 0.0
         epoch_absseloss = 0.0
 
         # epoch_embloss_neg_pop = 0.0
@@ -763,7 +711,7 @@ class VAE(_nn.Module):
                 sse,
                 kld,
                 loss_emb_pop,
-                _,
+                loss_emb_pop_std,
             ) = self.calc_loss(
                 depths_in,
                 depths_out,
@@ -787,7 +735,7 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
             epoch_embloss_pop += loss_emb_pop.item()  # .data.item()
             epoch_absseloss += ab_sse.data.item()
-            # epoch_embstd_pop += std_emb_pop.item()  # .data.item()
+            epoch_embstd_pop += loss_emb_pop_std.item()  # .data.item()
             # epoch_embloss_unpop += loss_emb_unpop.item()  # .data.item()
 
             # epoch_embloss_neg_pop += loss_emb_neg_pop.item()  # .data.item()
@@ -797,14 +745,14 @@ class VAE(_nn.Module):
             # epoch_embloss_unpop += loss_emb_unpop.item()  # .data.item()
 
         logger.info(
-            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
+            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tembloss_std_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
                 epoch_loss / len(data_loader),
                 epoch_celoss / len(data_loader),
                 epoch_absseloss / len(data_loader),
                 epoch_sseloss / len(data_loader),
                 epoch_embloss_pop / len(data_loader),
-                # epoch_embstd_pop / len(data_loader),
+                epoch_embstd_pop / len(data_loader),
                 # epoch_embloss_neg_pop / len(data_loader),
                 # epoch_embstd_neg_pop / len(data_loader),
                 epoch_kldloss / len(data_loader),

@@ -80,6 +80,7 @@ class Cluster:
         "isdefault",
         "successes",
         "attempts",
+        "assisted",
     ]
 
     def __init__(
@@ -94,6 +95,7 @@ class Cluster:
         radius: Optional[float],
         successes: int,
         attempts: int,
+        assisted: bool = False,
     ):
         self.medoid = medoid
         self.seed = seed
@@ -103,6 +105,7 @@ class Cluster:
         self.radius = radius
         self.successes = successes
         self.attempts = attempts
+        self.assisted = assisted
 
     @property
     def kind_str(self) -> str:
@@ -119,7 +122,7 @@ class ClusterGenerator:
     """Iterative medoid cluster generator. Iterate this object to get clusters.
 
     Inputs:
-        matrix: A (obs x features) Numpy matrix of data type numpy.float32
+        Matrix: A (obs x features) Numpy matrix of data type numpy.float32
         maxsteps: Stop searching for optimal medoid after N futile attempts [25]
         windowsize: Length of window to count successes [200]
         minsuccesses: Minimum acceptable number of successes [15]
@@ -171,6 +174,11 @@ class ClusterGenerator:
         # On GPU, deleting rows is not feasable because that requires us to copy the matrix from and to the GPU,
         # so we instead use this array to mask away any point emitted in an earlier iteration.
         "kept_mask",
+        "initial_seeds",  # from the neighbourhoods we can have a good guess of some seeds for some clusters
+        "initial_seeds_mask",  # from the neighbourhoods we can have a good guess of some seeds for some clusters
+        "all_initial_seeds_contig_lengths",
+        "initial_seed_idx",
+        "initial_seeds_exahusted",
     ]
 
     def __repr__(self) -> str:
@@ -236,6 +244,7 @@ class ClusterGenerator:
         normalized: bool = False,
         cuda: bool = False,
         rng_seed: int = 0,
+        initial_seeds: _np.ndarray = _np.array([]),
     ):
         self._check_params(
             matrix,
@@ -282,6 +291,14 @@ class ClusterGenerator:
         self.histogram_edges = _torch.linspace(0.0, _XMAX, round(_XMAX / _DELTA_X) + 1)
         self.kept_mask = kept_mask
 
+        self.initial_seeds = initial_seeds
+        self.initial_seeds_mask = _np.zeros(len(self.lengths), dtype=bool)
+        if len(self.initial_seeds) > 0:
+            self.initial_seeds_mask[initial_seeds] = True
+            self.all_initial_seeds_contig_lengths = lengths[self.initial_seeds]
+        self.initial_seed_idx = 0
+        self.initial_seeds_exahusted = False
+
     # It's an iterator itself
     def __iter__(self):
         return self
@@ -315,6 +332,9 @@ class ClusterGenerator:
             self.indices = self.indices[cpu_kept_mask]
 
         else:
+            self.initial_seeds_mask = self.initial_seeds_mask[self.kept_mask]
+            self.initial_seeds = _np.where(self.initial_seeds_mask == True)[0]
+
             _vambtools.torch_inplace_maskarray(self.matrix, self.kept_mask)
             self.indices = self.indices[self.kept_mask]
 
@@ -399,6 +419,7 @@ class ClusterGenerator:
             # After relaxing criteria, start over from the best candidate
             # seed contigs which may have been skipped the first time around
             self.order_index = 0
+            self.initial_seeds_exahusted = False
 
     def wander_medoid(self, seed) -> tuple[int, _Tensor]:
         """Keeps sampling new points within the cluster until it has sampled
@@ -436,6 +457,9 @@ class ClusterGenerator:
                 i += 1
 
         return (medoid, distances)
+
+    def next_initial_seed(self):
+        return
 
     def find_threshold(
         self, distances: _Tensor
@@ -532,9 +556,21 @@ class ClusterGenerator:
 
     def find_cluster(self) -> tuple[Cluster, int, _Tensor]:
         while True:
-            seed = self.get_next_seed()
+            if len(self.initial_seeds) > 0 and not self.initial_seeds_exahusted:
+                # assert set(self.lengths[self.initial_seeds].numpy()).issubset(
+                #    set(self.all_initial_seeds_contig_lengths)
+                # )
+                seed = self.initial_seeds[self.initial_seed_idx]
+                assisted = True
+
+            else:
+                seed = self.get_next_seed()
+                assisted = False
+            # print(seed, self.initial_seeds)
             medoid, distances = self.wander_medoid(seed)
+
             threshold = self.find_threshold(distances)
+
             if isinstance(threshold, Loner):
                 cluster = Cluster(
                     int(self.indices[medoid].item()),  # type: ignore
@@ -545,6 +581,7 @@ class ClusterGenerator:
                     None,
                     self.successes,
                     len(self.attempts),
+                    assisted,
                 )
                 points = _torch.IntTensor([medoid])
                 return (cluster, medoid, points)
@@ -564,10 +601,15 @@ class ClusterGenerator:
                         _DEFAULT_RADIUS,
                         self.successes,
                         len(self.attempts),
+                        assisted,
                     )
                     return (cluster, medoid, points)
                 else:
                     self.update_successes(False)
+                    if len(self.initial_seeds) < self.initial_seed_idx:
+                        self.initial_seed_idx += 1
+                    else:
+                        self.initial_seeds_exahusted = True
 
             elif isinstance(threshold, tuple):
                 (threshold, observed_pvr) = threshold
@@ -583,6 +625,7 @@ class ClusterGenerator:
                     threshold,
                     self.successes,
                     len(self.attempts),
+                    assisted,
                 )
                 if self.peak_valley_ratio < 0.55:
                     self.update_successes(True)
