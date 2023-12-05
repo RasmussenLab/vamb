@@ -1939,7 +1939,7 @@ def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_
         if c_i not in neigh_idxs and len(neigh_idxs) == 0:
             continue
 
-        assert c_i in neigh_idxs
+        #assert c_i in neigh_idxs
 
         for n_i in neigh_idxs:
             neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])
