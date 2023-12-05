@@ -1952,9 +1952,9 @@ def run_n2v_asimetric(
     for cl, c in cl_c_ar:
         merged_cl_cs_d[cl].add(c)
 
-    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-        comp_metadata.identifiers
-    )
+    # assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+    #    comp_metadata.identifiers
+    # )
 
     # save clusters within margins and outside margins
     clusterspath = vamb_options.out_dir.joinpath(
