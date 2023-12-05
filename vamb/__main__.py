@@ -1911,6 +1911,7 @@ def run_n2v_asimetric(
         mask_contigs_already_clustered,
     ) = cluster_neighs_based_2(neighs_object, comp_metadata.identifiers, latent_neighs)
 
+    ############ NEIGHBOURHOOD BASED
     # save clusters based only in neihbourhoods ONLY THERE WILL BE MISSING CONTIGS HERE
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods.tsv")
 
@@ -1939,6 +1940,40 @@ def run_n2v_asimetric(
         comp_metadata.identifiers[~mask_contigs_already_clustered],  # type:ignore
         comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
     )
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_outside_neighbourhoods_unsplit.tsv"
+    )
+    merged_cl_cs_d = neighbourhood_cs_d.copy()
+    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
+    for cl in set(cl_c_ar[:, 0]):
+        merged_cl_cs_d[cl] = set()
+
+    for cl, c in cl_c_ar:
+        merged_cl_cs_d[cl].add(c)
+
+    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        comp_metadata.identifiers
+    )
+
+    # save clusters within margins and outside margins
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_neighbourhoods_complete.tsv"
+    )
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete")),
+        vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete"),
+        comp_options.path,
+        merged_cl_cs_d,
+        comp_metadata.identifiers,
+        comp_metadata.lengths,
+    )
+    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
+
+    ############ NEIGHBOURHOOD RADIUS BASED
 
     # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_radius.tsv")
@@ -1967,6 +2002,39 @@ def run_n2v_asimetric(
         comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
     )
 
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_outside_radius_unsplit.tsv"
+    )
+    merged_cl_cs_d = withinradiusclusters_cs_d.copy()
+    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
+    for cl in set(cl_c_ar[:, 0]):
+        merged_cl_cs_d[cl] = set()
+
+    for cl, c in cl_c_ar:
+        merged_cl_cs_d[cl].add(c)
+
+    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        comp_metadata.identifiers
+    )
+    # save clusters within margins and outside margins
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_within_radius_complete.tsv"
+    )
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete")),
+        vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete"),
+        comp_options.path,
+        merged_cl_cs_d,
+        comp_metadata.identifiers,
+        comp_metadata.lengths,
+    )
+    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
+
+    ############ NEIGHBOURHOOD LIMIT BASED
     # Cluster first contigs within the neighbourhoods margins
 
     withinmarginclusters_cs_d, mask_contigs_already_clustered = cluster_neighs_based(
