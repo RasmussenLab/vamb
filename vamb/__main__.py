@@ -816,6 +816,7 @@ def trainvae_n2v_asimetric(
         cuda=vamb_options.cuda,
         seed=vamb_options.seed,
         margin=embeddings_options.margin,
+        embs_loss=embeddings_options.embeds_loss,
     )
 
     logger.info("\nCreated VAE with embeddings")
@@ -1218,7 +1219,8 @@ def load_composition_and_abundance_and_embeddings(
         neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
             "arr_0"
         ]
-
+        contigs_with_neighs_n = np.sum([1 for neighs in neighs if len(neighs) > 0])
+        logger.info(f"\nContigs with neighs   {contigs_with_neighs_n}.")
     return (
         composition,
         abundance,
@@ -1939,7 +1941,7 @@ def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_
         if c_i not in neigh_idxs and len(neigh_idxs) == 0:
             continue
 
-        #assert c_i in neigh_idxs
+        # assert c_i in neigh_idxs
 
         for n_i in neigh_idxs:
             neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])

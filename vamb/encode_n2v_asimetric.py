@@ -34,47 +34,6 @@ import numpy as _np
 import torch as _torch
 
 
-class CosineSimilarityLoss_asimetric(_nn.Module):
-    def __init__(self):
-        super(CosineSimilarityLoss_asimetric, self).__init__()
-        # self.cosine_similarity = _nn.CosineSimilarity(dim=1, eps=1e-6)
-
-    def forward(self, mu, idxs_preds, neighs_object, mu_container, emb_mask):
-        avg_cosine_distances = []
-
-        for mu_i, idx_pred, emb_mask_i in zip(mu, idxs_preds, emb_mask):
-            if (
-                len(neighs_object[idx_pred]) == 0 or emb_mask_i == False
-            ):  # if it has no neighbours
-                cosine_distances = 1 - F.cosine_similarity(
-                    mu_i.unsqueeze(0), mu_i.unsqueeze(0), dim=-1
-                )
-
-                avg_cosine_distances.append(cosine_distances.mean())
-                # print("avg_cosine_distance with itself", avg_cosine_distances[-1])
-                continue
-
-            # Select the neighs
-            mus_neighs = mu_container[neighs_object[idx_pred]]
-
-            # Compute cosine distance
-            cosine_distances = 1 - F.cosine_similarity(
-                mu_i.unsqueeze(0), mus_neighs, dim=-1
-            )
-
-            # Compute the average cosine distance for the specific batch item
-
-            avg_cosine_distance = cosine_distances.mean()
-
-            avg_cosine_distances.append(avg_cosine_distance)
-            # print("avg_cosine_distance", avg_cosine_distances[-1])
-
-        # if len(avg_cosine_distances) == 0:
-        #    return _torch.zeros(mu.shape[0])
-        print(_torch.stack(avg_cosine_distances).shape)
-        return _torch.stack(avg_cosine_distances)
-
-
 def set_batchsize(
     data_loader: _DataLoader, batch_size: int, encode=False
 ) -> _DataLoader:
@@ -286,6 +245,7 @@ class VAE(_nn.Module):
         cuda: bool = False,
         seed: int = 0,
         margin: float = 0.01,
+        embs_loss: str = "cos",
     ):
         if nlatent < 1:
             raise ValueError(f"Minimum 1 latent neuron, not {nlatent}")
@@ -325,6 +285,7 @@ class VAE(_nn.Module):
         self.nsamples = nsamples
         self.ncontigs = ncontigs
         self.n_embedding = n_embedding
+        self.embs_loss = embs_loss
 
         self.ntnf = 103
         self.alpha = alpha
@@ -340,9 +301,6 @@ class VAE(_nn.Module):
         self.encodernorms = _nn.ModuleList()
         self.decoderlayers = _nn.ModuleList()
         self.decodernorms = _nn.ModuleList()
-
-        # self.cosine_loss = CosineSimilarityLoss()
-        self.cosine_loss_asimetric = CosineSimilarityLoss_asimetric()
 
         # Add all other hidden layers
         for nin, nout in zip(
@@ -485,21 +443,19 @@ class VAE(_nn.Module):
         # loss = (reconstruction_loss + kld_loss) * weights
 
         # embedding loss
+        if self.embs_loss == "cos":
+            loss_emb, loss_emb_std = self.cosinesimilarity_loss(
+                mu,
+                preds_idxs,
+                emb_mask,
+            )
+        elif self.embs_loss == "euclidean":
+            loss_emb, loss_emb_std = self.euclidean_loss(
+                mu,
+                preds_idxs,
+                emb_mask,
+            )
 
-        loss_emb, loss_emb_std = self.cosinesimilarity_loss(
-            mu,
-            preds_idxs,
-            # self.neighs, self.mu_container,
-            emb_mask,
-        )
-
-        # loss_emb, std_emb = self.euclidean_loss(
-        #     mu,
-        #     preds_idxs,
-        #     # self.neighs, self.mu_container,
-        #     emb_mask,
-        # )
-        # print(loss_emb)
         loss_emb_cat = _torch.cat(
             (
                 loss_emb.unsqueeze(0) - self.margin,
@@ -543,9 +499,6 @@ class VAE(_nn.Module):
         median_cosine_distances = []
         std_cosine_distances = []
 
-        # avg_cosine_distances_negative = []
-        # std_cosine_distances_negative = []
-
         for mu_i, idx_pred, emb_mask_i in zip(mu, idxs_preds, emb_mask):
             if (
                 len(self.neighs[idx_pred]) == 0 or emb_mask_i == False
@@ -556,12 +509,6 @@ class VAE(_nn.Module):
                 avg_cosine_distances.append(cosine_distances.mean())
                 median_cosine_distances.append(cosine_distances.median())
                 std_cosine_distances.append(cosine_distances.std(unbiased=False))
-                # cosine_distances_neg = 1 - F.cosine_similarity(
-                #    mu_i.unsqueeze(0), mu_i.unsqueeze(0), dim=-1
-                # )
-                # avg_cosine_distances_negative.append(cosine_distances_neg.mean())
-
-                # print("avg_cosine_distance with itself", avg_cosine_distances[-1])
                 continue
             assert len(self.neighs[idx_pred]) != 0
             # Select the neighs
@@ -575,35 +522,15 @@ class VAE(_nn.Module):
             median_cosine_distance = cosine_distances.median()
             std_cosine_distance = cosine_distances.std(unbiased=False)
 
-            # mus_neighs_negative = self.mu_container[self.negative_neighs[idx_pred]]
-            # cosine_distances_neg = 1 - F.cosine_similarity(
-            #    mu_i.unsqueeze(0), mus_neighs_negative, dim=-1
-            # )
-
-            # avg_cosine_distance_negative = cosine_distances_neg.mean()
-            # std_cosine_distance_negative = cosine_distances_neg.std(unbiased=False)
-
             # Compute the average cosine distance for the specific batch item
 
-            # print(cosine_distances, cosine_distances.std())
             avg_cosine_distances.append(avg_cosine_distance)
             median_cosine_distances.append(median_cosine_distance)
             std_cosine_distances.append(std_cosine_distance)
 
-            # avg_cosine_distances_negative.append(avg_cosine_distance_negative)
-            # std_cosine_distances_negative.append(std_cosine_distance_negative)
-
-            # print("avg_cosine_distance", avg_cosine_distances[-1])
-
-        # if len(avg_cosine_distances) == 0:
-        #    return _torch.zeros(mu.shape[0])
-        # print(_torch.stack(avg_cosine_distances).shape)
         return (
             _torch.stack(avg_cosine_distances),
-            # _torch.stack(median_cosine_distances),
             _torch.stack(std_cosine_distances),
-            # _torch.stack(avg_cosine_distances_negative),
-            # _torch.stack(std_cosine_distances_negative),
         )
 
     def euclidean_loss(self, mu, idxs_preds, emb_mask):
@@ -617,6 +544,7 @@ class VAE(_nn.Module):
                 euclidean_distances = (mu_i.unsqueeze(0) - mu_i.unsqueeze(0)).pow(2)
 
                 avg_euclidean_distances.append(euclidean_distances.mean())
+                std_euclidean_distances.append(euclidean_distances.std(unbiased=False))
                 # print("avg_euclidean_distance with itself", avg_euclidean_distances[-1])
                 continue
             assert len(self.neighs[idx_pred]) != 0
@@ -958,7 +886,7 @@ class VAE(_nn.Module):
         logger.info(f"\tN sequences: {ncontigs}")
         logger.info(f"\tN samples: {nsamples}")
         logger.info(f"\tEmbedding size: {n_embedding}")
-        logger.info(f"\tEmbedding loss: Asymetric\n\n")
+        logger.info(f"\tEmbedding loss: Asymetric {self.embs_loss}\n\n")
 
         # Train
         for epoch in range(nepochs):
