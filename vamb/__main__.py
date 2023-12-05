@@ -183,6 +183,7 @@ class EmbeddingsOptions:
         "embeddings_mask_path",
         "embeddings_processed_path",
         "margin",
+        "radius_clustering",
     ]
 
     def __init__(
@@ -197,6 +198,7 @@ class EmbeddingsOptions:
         embeddings_mask_path: Optional[Path],
         embeddings_processed_path: Optional[Path],
         margin: float = 0.01,
+        radius_clustering: float = 0.01,
     ):
         assert isinstance(embeddingspath, (Path, type(None)))
 
@@ -207,6 +209,7 @@ class EmbeddingsOptions:
         self.radius = radius
         self.gamma = gamma
         self.margin = margin
+        self.radius_clustering = (radius_clustering,)
 
         if neighs_object_path is not None:
             assert (
@@ -1076,32 +1079,74 @@ def load_composition_and_abundance(
     return (composition, abundance)
 
 
+# def find_neighbours(
+#     embeddings,
+#     radius=0.2,
+# ):
+#     # Compute pairwise cosine distances
+#     #cosine_distances = cdist(embeddings, embeddings, metric="cosine")
+
+#     # Set the diagonal to a value greater than the threshold to avoid self-selection
+#     np.fill_diagonal(cosine_distances, 1)
+
+#     # Find the indices of rows that are closer than the threshold in cosine distance
+#     # closer_indices = np.where(cosine_distances < radius)
+
+#     # Print pairs of indices
+#     idxs_with_neighs = []
+
+#     neighs = list()
+#     for i in range(len(cosine_distances)):
+#         neighs_i = list()
+#         for j in range(len(cosine_distances)):
+#             if cosine_distances[i, j] < radius:
+#                 neighs_i.append(j)
+#         neighs.append(neighs_i)
+#         if len(neighs_i) > 0:
+#             idxs_with_neighs.append(i)
+#     return neighs, idxs_with_neighs
+
+
 def find_neighbours(
-    embeddings,
-    radius=0.2,
+    cosine_distances,
+    radius=0.02,
 ):
-    # Compute pairwise cosine distances
-    cosine_distances = cdist(embeddings, embeddings, metric="cosine")
+    print(radius)
 
     # Set the diagonal to a value greater than the threshold to avoid self-selection
     np.fill_diagonal(cosine_distances, 1)
 
-    # Find the indices of rows that are closer than the threshold in cosine distance
-    # closer_indices = np.where(cosine_distances < radius)
+    # Use NumPy operations for faster neighbor finding
+    mask = cosine_distances < radius
+    idxs_with_neighs = np.any(mask, axis=1)
+    # neighs = [list(np.where(mask[i])[0]) for i in range(mask.shape[0])]
+    neighs = [
+        list(np.where(mask[i])[0]) if idxs_with_neighs[i] else []
+        for i in range(mask.shape[0])
+    ]
 
-    # Print pairs of indices
-    idxs_with_neighs = []
+    # new part
+    neighs_sorted = []
+    for i, nn_idxs in enumerate(neighs):
+        if len(nn_idxs) == 0:
+            neighs_sorted.append([])
+            continue
 
-    neighs = list()
-    for i in range(len(cosine_distances)):
-        neighs_i = list()
-        for j in range(len(cosine_distances)):
-            if cosine_distances[i, j] < radius:
-                neighs_i.append(j)
-        neighs.append(neighs_i)
-        if len(neighs_i) > 0:
-            idxs_with_neighs.append(i)
-    return neighs, idxs_with_neighs
+        distances_neighs_i = cosine_distances[i, mask[i, :]]
+        sorted_distances_i = sorted(
+            range(len(distances_neighs_i)), key=lambda i: distances_neighs_i[i]
+        )
+        nn_idxs_sorted = [nn_idxs[i] for i in sorted_distances_i]
+        neighs_sorted.append(nn_idxs_sorted)
+
+        # if i < 5:
+        #     print("Before sorting")
+        #     print(cosine_distances[i,nn_idxs])
+
+        #     print("After sorting")
+        #     print(cosine_distances[i,nn_idxs_sorted])
+
+    return neighs_sorted, np.where(idxs_with_neighs)[0]
 
 
 def load_composition_and_abundance_and_embeddings(
@@ -1153,8 +1198,11 @@ def load_composition_and_abundance_and_embeddings(
         embeddings_2k_incomplete = embeddings[mask_contigs_embedded_all]
 
         # # now mask embeddings_2k by contigs that have neighs within radius
+        cosine_distances = cdist(
+            embeddings_2k_incomplete, embeddings_2k_incomplete, metric="cosine"
+        )
         neighs, idxs_with_neighs = find_neighbours(
-            embeddings_2k_incomplete, radius=embeddings_options.radius
+            cosine_distances, radius=embeddings_options.radius
         )
         contigs_embedds_d = {
             c: neighs_c for c, neighs_c in zip(contigs_embedded_all, neighs)
@@ -1847,6 +1895,79 @@ def run_n2v_asimetric(
     # )
 
     # Cluster first contigs within the neighbourhoods margins
+    logger.info("Computing cosine distances")
+
+    cosine_latent_distances = cdist(latent, latent, metric="cosine")
+
+    logger.info("Finding network neighbours")
+
+    latent_neighs, _ = find_neighbours(
+        cosine_latent_distances,
+        embeddings_options.radius_clustering,
+    )
+    (
+        neighbourhood_cs_d,
+        withinradiusclusters_cs_d,
+        mask_contigs_already_clustered,
+    ) = cluster_neighs_based_2(neighs_object, comp_metadata.identifiers, latent_neighs)
+
+    # save clusters based only in neihbourhoods ONLY THERE WILL BE MISSING CONTIGS HERE
+    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods.tsv")
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods")),
+        vamb_options.out_dir.joinpath("bins_neighbourhoods"),
+        comp_options.path,
+        neighbourhood_cs_d,
+        comp_metadata.identifiers[mask_contigs_already_clustered],
+        comp_metadata.lengths[mask_contigs_already_clustered],
+    )
+    logger.info(f"\tClustered neighs contigs.\n")
+    # now cluster the remaining contigs not within margins
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_outside_neighbourhoods.tsv"
+    )
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vae_clusters_outside_neighbourhoods")),
+        vamb_options.out_dir.joinpath("bins_outside_neighbourhoods"),
+        comp_options.path,
+        latent.copy()[~mask_contigs_already_clustered],
+        comp_metadata.identifiers[~mask_contigs_already_clustered],  # type:ignore
+        comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
+    )
+
+    # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
+    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_radius.tsv")
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius")),
+        vamb_options.out_dir.joinpath("bins_within_radius"),
+        comp_options.path,
+        withinradiusclusters_cs_d,
+        comp_metadata.identifiers[mask_contigs_already_clustered],
+        comp_metadata.lengths[mask_contigs_already_clustered],
+    )
+    logger.info(f"\tClustered within neighs radius contigs.\n")
+    # now cluster the remaining contigs not within radius
+    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius")),
+        vamb_options.out_dir.joinpath("bins_outside_radius"),
+        comp_options.path,
+        latent.copy()[~mask_contigs_already_clustered],
+        comp_metadata.identifiers[~mask_contigs_already_clustered],  # type:ignore
+        comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
+    )
+
+    # Cluster first contigs within the neighbourhoods margins
 
     withinmarginclusters_cs_d, mask_contigs_already_clustered = cluster_neighs_based(
         neighs_object=neighs_object,
@@ -1876,7 +1997,7 @@ def run_n2v_asimetric(
         str(vamb_options.out_dir.joinpath("vae_clusters_outside_margins")),
         vamb_options.out_dir.joinpath("bins_outside_margins"),
         comp_options.path,
-        latent[~mask_contigs_already_clustered],
+        latent.copy()[~mask_contigs_already_clustered],
         comp_metadata.identifiers[~mask_contigs_already_clustered],  # type:ignore
         comp_metadata.lengths[~mask_contigs_already_clustered],  # type:ignore
     )
@@ -1973,7 +2094,7 @@ def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_
             assert c in withinmarginclusters_g.nodes()
         for c in cs:
             assert c in withinmarginclusters_g.nodes()
-        # break
+
         idxs_cs = [c2idx[c] for c in cs]
 
         limit_h = np.max(latents[idxs_cs], axis=0)
@@ -2013,6 +2134,90 @@ def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_
     )
 
     return withinmarginclusters_cs_d, mask_contigs_already_clustered
+
+
+def cluster_neighs_based_2(neighs_object, contignames, latent_neighs):
+    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
+    idx2c = {i: contigname for i, contigname in enumerate(contignames)}
+
+    mask_contigs_already_clustered = np.zeros(len(contignames), dtype=bool)
+
+    neighbourhoods_graph = nx.Graph()
+    for c_i, neigh_idxs in enumerate(neighs_object):
+        if c_i in neigh_idxs and len(neigh_idxs) == 1:
+            continue
+
+        if c_i not in neigh_idxs and len(neigh_idxs) == 0:
+            continue
+
+        # assert c_i in neigh_idxs
+
+        for n_i in neigh_idxs:
+            neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])
+            mask_contigs_already_clustered[n_i] = True
+            mask_contigs_already_clustered[c_i] = True
+
+    contigs_in_neighbourhoods = [
+        c for cs in nx.connected_components(neighbourhoods_graph) for c in cs
+    ]
+
+    assert len(contigs_in_neighbourhoods) == len(set(contigs_in_neighbourhoods))
+
+    neighbourhood_cs_d = {
+        "neighs_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
+        if len(cs) >= 2
+    }
+
+    print("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
+
+    withinradiusclusters_g = nx.Graph()
+
+    for cs in nx.connected_components(neighbourhoods_graph):
+        # print(cs)
+        if len(cs) < 2:
+            continue
+        cs_list = list(cs)
+
+        for i, c_i in enumerate(cs_list):
+            # mask_contigs_already_clustered[c2idx[c_i]] = True
+            for c_j in cs_list[i + 1 :]:
+                assert c2idx[c_i] != c2idx[c_j]
+                withinradiusclusters_g.add_edge(c_i, c_j)
+
+        idxs_cs = [c2idx[c] for c in cs]
+        idxs_not_cs = set(np.arange(len(contignames))) - set(idxs_cs)
+
+        for idx_not_cs in idxs_not_cs:
+            latent_neighs_neighbourhood = set(latent_neighs[idx_not_cs]).intersection(
+                set(idxs_cs)
+            )
+            if len(latent_neighs_neighbourhood) > 0:
+                for l_n_idx in latent_neighs_neighbourhood:
+                    withinradiusclusters_g.add_edge(idx2c[l_n_idx], idx2c[idx_not_cs])
+                    mask_contigs_already_clustered[idx_not_cs] = True
+
+    for c in contignames[mask_contigs_already_clustered]:
+        assert c in withinradiusclusters_g.nodes()
+
+    withinradiusclusters_cs_d = {
+        "nneighs_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(withinradiusclusters_g))
+    }
+
+    print(
+        "Contigs already clustered mask sum %i" % np.sum(mask_contigs_already_clustered)
+    )
+
+    print(
+        "Contigs in withinmargin_d %i, %i, %i"
+        % (
+            len(set([c for cs in withinradiusclusters_cs_d.values() for c in cs])),
+            len([c for cs in withinradiusclusters_cs_d.values() for c in cs]),
+            len(withinradiusclusters_g.nodes()),
+        )
+    )
+    return neighbourhood_cs_d, withinradiusclusters_cs_d, mask_contigs_already_clustered
 
 
 class BasicArguments(object):
