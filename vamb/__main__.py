@@ -2164,9 +2164,11 @@ def cluster_neighs_based(neighs_object, latents, contignames, min_neighbourhood_
             assert c in withinmarginclusters_g.nodes()
 
         idxs_cs = [c2idx[c] for c in cs]
+        limit_h = np.mean(latents[idxs_cs], axis=0) + np.std(latents[idxs_cs], axis=0)
+        limit_l = np.mean(latents[idxs_cs], axis=0) - np.std(latents[idxs_cs], axis=0)
 
-        limit_h = np.max(latents[idxs_cs], axis=0)
-        limit_l = np.min(latents[idxs_cs], axis=0)
+        # limit_h = np.max(latents[idxs_cs], axis=0)
+        # limit_l = np.min(latents[idxs_cs], axis=0)
 
         limits = [(l, h) for h, l in zip(limit_h, limit_l)]
 
