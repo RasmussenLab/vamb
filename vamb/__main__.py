@@ -1913,6 +1913,7 @@ def run_n2v_asimetric(
 
     ############ NEIGHBOURHOOD BASED
     # save clusters based only in neihbourhoods ONLY THERE WILL BE MISSING CONTIGS HERE
+    logger.info("Straegy 1: Clustering based on neighbourhoods")
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods.tsv")
 
     write_clusters_and_bins(
@@ -1925,11 +1926,12 @@ def run_n2v_asimetric(
         comp_metadata.identifiers[mask_contigs_already_clustered],
         comp_metadata.lengths[mask_contigs_already_clustered],
     )
-    logger.info(f"\tClustered neighs contigs.\n")
+
     # now cluster the remaining contigs not within margins
     clusterspath = vamb_options.out_dir.joinpath(
         "vae_clusters_outside_neighbourhoods.tsv"
     )
+    logger.info("\tClustering remaining contigs not in neighbourhoods")
     cluster_and_write_files(
         vamb_options,
         cluster_options,
@@ -1957,6 +1959,7 @@ def run_n2v_asimetric(
     # )
 
     # save clusters within margins and outside margins
+
     clusterspath = vamb_options.out_dir.joinpath(
         "vae_clusters_neighbourhoods_complete.tsv"
     )
@@ -1971,10 +1974,9 @@ def run_n2v_asimetric(
         comp_metadata.identifiers,
         comp_metadata.lengths,
     )
-    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
 
     ############ NEIGHBOURHOOD RADIUS BASED
-
+    logger.info("Straegy 2: Clustering based on radius from neighbourhood members")
     # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_radius.tsv")
 
@@ -1988,8 +1990,11 @@ def run_n2v_asimetric(
         comp_metadata.identifiers[mask_contigs_already_clustered],
         comp_metadata.lengths[mask_contigs_already_clustered],
     )
-    logger.info(f"\tClustered within neighs radius contigs.\n")
+
     # now cluster the remaining contigs not within radius
+    logger.info(
+        "\tClustering remaining contigs not within a radius distance from neighbourhood members"
+    )
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
     cluster_and_write_files(
         vamb_options,
@@ -2032,10 +2037,10 @@ def run_n2v_asimetric(
         comp_metadata.identifiers,
         comp_metadata.lengths,
     )
-    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
 
     ############ NEIGHBOURHOOD LIMIT BASED
     # Cluster first contigs within the neighbourhoods margins
+    logger.info("Straegy 3: Clustering based on neighbourhood margins'")
 
     withinmarginclusters_cs_d, mask_contigs_already_clustered = cluster_neighs_based(
         neighs_object=neighs_object,
@@ -2055,9 +2060,9 @@ def run_n2v_asimetric(
         comp_metadata.identifiers[mask_contigs_already_clustered],
         comp_metadata.lengths[mask_contigs_already_clustered],
     )
-    logger.info(f"\tClustered within neighs contigs.\n")
 
     # now cluster the remaining contigs not within margins
+    logger.info("\tClustering remaining contigs not within the neighbourhood limits")
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_margins.tsv")
     cluster_and_write_files(
         vamb_options,
@@ -2099,9 +2104,9 @@ def run_n2v_asimetric(
         comp_metadata.identifiers,
         comp_metadata.lengths,
     )
-    logger.info(f"\tClustered contigs within neighs and outside neighs.\n")
 
     # Cluster, save tsv file
+    logger.info("Straegy 4: Clustering latents with vamb")
     clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
     cluster_and_write_files(
         vamb_options,
