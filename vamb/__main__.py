@@ -202,9 +202,6 @@ class EmbeddingsOptions:
     ):
         assert isinstance(embeddingspath, (Path, type(None)))
 
-        self.path = EmbeddingsPath(embeddingspath)
-        self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
-        self.shuffle_embeds = shuffle_embeds
         self.embeds_loss = embeds_loss
         self.radius = radius
         self.gamma = gamma
@@ -219,6 +216,10 @@ class EmbeddingsOptions:
             self.neighs_object_path = neighs_object_path  # np.load(neighs_object_path,allow_pickle=True)["arr_0"]
             self.embeddings_mask_path = embeddings_mask_path
             self.embeddings_processed_path = embeddings_processed_path
+        else:
+            self.path = EmbeddingsPath(embeddingspath)
+            self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
+            self.shuffle_embeds = shuffle_embeds
 
 
 class VAEOptions:
@@ -784,6 +785,58 @@ def trainvae(
 
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tTrained VAE and encoded in {elapsed} seconds.\n")
+
+    return latent
+
+
+def trainvae_n2v(
+    vae_options: VAEOptions,
+    training_options: VAETrainingOptions,
+    vamb_options: VambOptions,
+    embeddings_options: EmbeddingsOptions,
+    lrate: float,
+    alpha: Optional[float],
+    data_loader: DataLoader,
+) -> np.ndarray:
+    begintime = time.time()
+    logger.info(
+        "\nCreating and training VAE with graph embeddings as part of the input"
+    )
+
+    n_embedding = data_loader.dataset.tensors[2].shape[1]
+    nsamples = data_loader.dataset.tensors[0].shape[1]
+    vae = vamb.encode_n2v.VAE(
+        nsamples,
+        n_embedding,
+        nhiddens=vae_options.nhiddens,
+        nlatent=vae_options.nlatent,
+        alpha=alpha,
+        beta=vae_options.beta,
+        gamma=embeddings_options.gamma,
+        dropout=vae_options.dropout,
+        cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
+    )
+
+    logger.info("Created VAE with embeddings as part of the input")
+    modelpath = vamb_options.out_dir.joinpath("model.pt")
+    vae.trainmodel(
+        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
+        nepochs=training_options.nepochs,
+        lrate=lrate,
+        batchsteps=training_options.batchsteps,
+        modelfile=modelpath,
+        warmup=training_options.warmup,
+        emb_loss=embeddings_options.embeds_loss,
+    )
+
+    logger.info("Encoding to latent representation")
+    latent = vae.encode(data_loader)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
+    del vae  # Needed to free "latent" array's memory references?
+
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"Trained VAE and encoded in {elapsed} seconds.")
 
     return latent
 
@@ -1388,6 +1441,86 @@ def run(
             comp_metadata.identifiers,  # type:ignore
             comp_metadata.lengths,  # type:ignore
         )
+
+
+def run_n2v(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    embeddings_options: EmbeddingsOptions,
+    encoder_options: Encodern2vOptions,
+    training_options: TrainingOptions,
+    cluster_options: ClusterOptions,
+):
+    vae_options = encoder_options.vae_options
+    vae_training_options = training_options.vae_options
+
+    begintime = time.time()
+
+    (
+        composition,
+        abundance,
+        embeddings,
+        embeddings_mask,
+        _,
+    ) = load_composition_and_abundance_and_embeddings(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        embeddings_options=embeddings_options,
+        binsplitter=cluster_options.binsplitter,
+    )
+
+    data_loader = vamb.encode_n2v.make_dataloader_n2v(
+        abundance.matrix.astype(np.float32),
+        composition.matrix.astype(np.float32),
+        embeddings.astype(np.float32),
+        embeddings_mask.astype(np.float32),
+        composition.metadata.lengths,
+        256,  # dummy value - we change this before using the actual loader
+        destroy=True,
+        cuda=vamb_options.cuda,
+    )
+    # composition.metadata.filter_mask(mask)
+
+    logger.info("Created dataloader and mask (including embeddings)")
+    if embeddings_options.shuffle_embeds:
+        logger.info("embeddings rows shufflesd")
+
+    # vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
+    # n_discarded = len(mask) - mask.sum()
+    # log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
+    # log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
+
+    latent = None
+    # Train, save model
+    latent = trainvae_n2v(
+        vae_options=vae_options,
+        training_options=vae_training_options,
+        vamb_options=vamb_options,
+        embeddings_options=embeddings_options,
+        lrate=training_options.lrate,
+        alpha=encoder_options.alpha,
+        data_loader=data_loader,
+    )
+    comp_metadata = composition.metadata
+    del composition, abundance
+
+    assert latent is not None
+    assert comp_metadata.nseqs == len(latent)
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vae_clusters")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        latent,
+        comp_metadata.identifiers,  # type:ignore
+        comp_metadata.lengths,  # type:ignore
+    )
+    del latent
+    np.savez(vamb_options.out_dir.joinpath("embeddings.npz"), embeddings)
+    logger.infor(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.")
 
 
 def parse_taxonomy(
