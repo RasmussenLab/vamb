@@ -210,8 +210,9 @@ class EmbeddingsOptions:
 
         if neighs_object_path is not None:
             assert (
-                embeddings_mask_path is not None
-                and embeddings_processed_path is not None
+                embeddings_mask_path
+                is not None
+                # and embeddings_processed_path is not None
             )
             self.neighs_object_path = neighs_object_path  # np.load(neighs_object_path,allow_pickle=True)["arr_0"]
             self.embeddings_mask_path = embeddings_mask_path
