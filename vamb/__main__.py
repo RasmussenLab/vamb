@@ -1311,9 +1311,13 @@ def load_composition_and_abundance_and_embeddings(
         logger.info(f"\nEmbeddings processed in {time_generating_embedds} seconds.")
     else:
         logger.info(f"\nLoading neighs from  {embeddings_options.neighs_object_path}.")
-        embeddings_2k_complete = np.load(embeddings_options.embeddings_processed_path)[
-            "arr_0"
-        ]
+
+        if embeddings_options.embeddings_processed_path != None:
+            embeddings_2k_complete = np.load(
+                embeddings_options.embeddings_processed_path
+            )["arr_0"]
+        else:
+            embeddings_2k_complete = np.zeros((len(composition["identifiers"]), 32))
         contigs_2k_complete_w_neighs_mask = np.load(
             embeddings_options.embeddings_mask_path
         )["arr_0"]
