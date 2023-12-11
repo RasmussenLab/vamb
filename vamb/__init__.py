@@ -15,6 +15,7 @@ from . import hloss_misc
 from . import taxvamb_encode
 from . import reclustering
 from . import encode_n2v_asimetric
+from . import encode_n2v
 
 from loguru import logger
 
@@ -32,4 +33,5 @@ __all__ = [
     "hloss_misc",
     "reclustering",
     "encode_n2v_asimetric",
+    "encode_n2v",
 ]

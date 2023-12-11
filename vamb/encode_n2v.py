@@ -260,6 +260,7 @@ class VAE(_nn.Module):
         dropout: Optional[float] = 0.2,
         cuda: bool = False,
         seed: int = 0,
+        embeds_loss: str = "cos",
     ):
         if nlatent < 1:
             raise ValueError(f"Minimum 1 latent neuron, not {nlatent}")
@@ -298,6 +299,7 @@ class VAE(_nn.Module):
         self.usecuda = cuda
         self.nsamples = nsamples
         self.n_embedding = n_embedding
+        self.embeds_loss = embeds_loss
 
         self.ntnf = 103
         self.alpha = alpha
@@ -333,7 +335,7 @@ class VAE(_nn.Module):
 
         # Reconstruction (output) layer
         self.outputlayer = _nn.Linear(
-            self.nhiddens[0], self.nsamples + self.ntnf + self.n_embedding
+            self.nhiddens[0], self.nsamples + self.ntnf + self.n_embedding + 1
         )
 
         # Activation functions
@@ -424,8 +426,6 @@ class VAE(_nn.Module):
         abundance_out: Tensor,
         mu: Tensor,
         weights: Tensor,
-        warmup: bool,
-        emb_loss: str = "cos",
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
         # Add 1e-9 to depths_out to avoid numerical instability.
@@ -449,31 +449,21 @@ class VAE(_nn.Module):
         weighed_sse = sse * sse_weight
         weighed_kld = kld * kld_weight
 
-        if emb_loss == "cos":
+        if self.embeds_loss == "cos":
             loss_emb, loss_emb_unpop = self.cosine_loss(emb_out, emb_in, emb_mask)
-        elif emb_loss == "sse":
+        elif self.embeds_loss == "sse":
             loss_emb = (emb_out - emb_in).pow(2).sum(dim=1) * emb_mask
             loss_emb_unpop = (emb_out - emb_in).pow(2).sum(dim=1) * (1 - emb_mask)
 
         else:
-            print("Embedding loss not defined, (either cos or sse)")
+            raise ValueError("Embedding loss not defined, (either cos or sse)")
 
-        if warmup:
-            reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
-        else:
-            reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
+        reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
 
-            reconstruction_loss = (
-                ce * ce_weight + sse * sse_weight + loss_emb * self.gamma
-            )
+        reconstruction_loss = ce * ce_weight + sse * sse_weight
 
         kld_loss = kld * kld_weight
-        loss = (reconstruction_loss + kld_loss) * weights
-
-        if warmup:
-            loss = loss
-        else:
-            loss = loss + loss_emb * self.gamma
+        loss = (reconstruction_loss + kld_loss) * weights + loss_emb * self.gamma
 
         return (
             loss.mean(),
@@ -491,8 +481,6 @@ class VAE(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
-        warmup: bool = False,
-        emb_loss: str = "cos",
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]]:
         self.train()
 
@@ -539,8 +527,6 @@ class VAE(_nn.Module):
                 abundance_out,
                 mu,
                 weights,
-                warmup=warmup,
-                emb_loss=emb_loss,
             )
 
             loss.backward()
@@ -548,7 +534,7 @@ class VAE(_nn.Module):
             # print(emb_loss.shape, emb_loss_unpop.shape, "\n")
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
-            epoch_absseloss += (ab_sse.data.item(),)
+            epoch_absseloss += ab_sse.data.item()
             epoch_sseloss += sse.data.item()
             epoch_celoss += ce.data.item()
             epoch_embloss += loss_emb.item()  # .data.item()
@@ -676,10 +662,7 @@ class VAE(_nn.Module):
         nepochs: int = 500,
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
-        logfile: Optional[IO[str]] = None,
         modelfile: Union[None, str, Path, IO[bytes]] = None,
-        warmup: bool = False,
-        emb_loss: str = "cos",
     ):
         """Train the autoencoder from depths array and tnf array.
 
@@ -688,7 +671,6 @@ class VAE(_nn.Module):
             nepochs: Train for this many epochs before encoding [500]
             lrate: Starting learning rate for the optimizer [0.001]
             batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
-            logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
 
         Output: None
@@ -726,46 +708,29 @@ class VAE(_nn.Module):
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape  # type: ignore
-        n_embedding = dataloader.dataset.tensors[2].shape[1]  # type: ignore
+        n_embedding = dataloader.dataset.tensors[3].shape[1]  # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
-        if warmup:
-            # Warm-up schedule: linearly increase the learning rate from 0 to initial_lr over 10 epochs
-            warmup_epochs = 10
-            initial_lr = lrate
 
-            # Lambda function to compute the learning rate multiplier
-            lr_lambda = (
-                lambda epoch: (epoch + 1) / warmup_epochs
-                if epoch < warmup_epochs
-                else 1
-            )
-
-            # Create a learning rate scheduler
-            scheduler = LambdaLR(optimizer, lr_lambda)
-
-        if logfile is not None:
-            print("\tNetwork properties:", file=logfile)
-            print("\tCUDA:", self.usecuda, file=logfile)
-            print("\tAlpha:", self.alpha, file=logfile)
-            print("\tBeta:", self.beta, file=logfile)
-            print("\tDropout:", self.dropout, file=logfile)
-            print("\tWarmup:", warmup, file=logfile)
-            print("\tN hidden:", ", ".join(map(str, self.nhiddens)), file=logfile)
-            print("\tN latent:", self.nlatent, file=logfile)
-            print("\n\tTraining properties:", file=logfile)
-            print("\tN epochs:", nepochs, file=logfile)
-            print("\tStarting batch size:", dataloader.batch_size, file=logfile)
-            batchsteps_string = (
-                ", ".join(map(str, sorted(batchsteps_set)))
-                if batchsteps_set
-                else "None"
-            )
-            print("\tBatchsteps:", batchsteps_string, file=logfile)
-            print("\tLearning rate:", lrate, file=logfile)
-            print("\tN sequences:", ncontigs, file=logfile)
-            print("\tN samples:", nsamples, file=logfile)
-            print("\tEmbedding size:", n_embedding, file=logfile)
-            print("\tEmbedding loss:", emb_loss, file=logfile, end="\n\n")
+        logger.info(f"\tNetwork properties:")
+        logger.info(f"\tCUDA: {self.usecuda}")
+        logger.info(f"\tAlpha: {self.alpha}")
+        logger.info(f"\tBeta: {self.beta}")
+        logger.info(f"\tDropout: {self.dropout}")
+        # logger.info(f"\tN hidden: {", ".join(map(str,self.nhiddens))}")
+        logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
+        logger.info(f"\tN latent: {self.nlatent}")
+        logger.info(f"\n\tTraining properties:")
+        logger.info(f"\tN epochs: {nepochs}")
+        logger.info(f"\tStarting batch size:  {dataloader.batch_size}")
+        batchsteps_string = (
+            ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
+        )
+        logger.info(f"\tBatchsteps: {batchsteps_string}")
+        logger.info(f"\tLearning rate: {lrate}")
+        logger.info(f"\tN sequences: {ncontigs}")
+        logger.info(f"\tN samples: {nsamples}")
+        logger.info(f"\tEmbedding size:{ n_embedding}")
+        logger.info(f"\tEmbedding loss: Symmetric {self.embeds_loss}\n\n")
 
         # Train
         for epoch in range(nepochs):
@@ -774,13 +739,7 @@ class VAE(_nn.Module):
                 epoch,
                 optimizer,
                 sorted(batchsteps_set),
-                logfile,
-                warmup=False if (warmup == False or epoch >= warmup_epochs) else True,
-                emb_loss=emb_loss,
             )
-            if warmup:
-                scheduler.step()
-
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:
             try:

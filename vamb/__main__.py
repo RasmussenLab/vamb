@@ -177,7 +177,7 @@ class EmbeddingsOptions:
         "embeddedcontigspath",
         "shuffle_embeds",
         "embeds_loss",
-        "radius",
+        "radius_neighs",
         "gamma",
         "neighs_object_path",
         "embeddings_mask_path",
@@ -193,7 +193,7 @@ class EmbeddingsOptions:
         embeddedcontigspath: Path,
         shuffle_embeds: bool,
         embeds_loss: str,
-        radius: float,
+        radius_neighs: float,
         gamma: float,
         neighs_object_path: Optional[Path],
         embeddings_mask_path: Optional[Path],
@@ -205,18 +205,22 @@ class EmbeddingsOptions:
         assert isinstance(embeddingspath, (Path, type(None)))
 
         self.embeds_loss = embeds_loss
-        self.radius = radius
-        self.gamma = gamma
         self.symmetry = symmetry
 
-        self.margin = margin
-        self.radius_clustering = radius_clustering
-        self.neighs_object_path = neighs_object_path
+        if self.symmetry == False:
+            self.margin = margin
+            self.radius_clustering = radius_clustering
+            self.neighs_object_path = neighs_object_path
+
+        else:
+            self.embeddings_processed_path = embeddings_processed_path
+            self.path = EmbeddingsPath(embeddingspath)
+            self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
+
         self.embeddings_mask_path = embeddings_mask_path
-        self.embeddings_processed_path = embeddings_processed_path
-        self.path = EmbeddingsPath(embeddingspath)
         self.shuffle_embeds = shuffle_embeds
-        self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
+        self.radius_neighs = radius_neighs
+        self.gamma = gamma
 
 
 class VAEOptions:
@@ -800,7 +804,7 @@ def trainvae_n2v(
         "\nCreating and training VAE with graph embeddings as part of the input"
     )
 
-    n_embedding = data_loader.dataset.tensors[2].shape[1]
+    n_embedding = data_loader.dataset.tensors[3].shape[1]
     nsamples = data_loader.dataset.tensors[0].shape[1]
     vae = vamb.encode_n2v.VAE(
         nsamples,
@@ -813,6 +817,7 @@ def trainvae_n2v(
         dropout=vae_options.dropout,
         cuda=vamb_options.cuda,
         seed=vamb_options.seed,
+        embeds_loss=embeddings_options.embeds_loss,
     )
 
     logger.info("Created VAE with embeddings as part of the input")
@@ -823,8 +828,6 @@ def trainvae_n2v(
         lrate=lrate,
         batchsteps=training_options.batchsteps,
         modelfile=modelpath,
-        warmup=training_options.warmup,
-        emb_loss=embeddings_options.embeds_loss,
     )
 
     logger.info("Encoding to latent representation")
@@ -1129,34 +1132,6 @@ def load_composition_and_abundance(
     return (composition, abundance)
 
 
-# def find_neighbours(
-#     embeddings,
-#     radius=0.2,
-# ):
-#     # Compute pairwise cosine distances
-#     #cosine_distances = cdist(embeddings, embeddings, metric="cosine")
-
-#     # Set the diagonal to a value greater than the threshold to avoid self-selection
-#     np.fill_diagonal(cosine_distances, 1)
-
-#     # Find the indices of rows that are closer than the threshold in cosine distance
-#     # closer_indices = np.where(cosine_distances < radius)
-
-#     # Print pairs of indices
-#     idxs_with_neighs = []
-
-#     neighs = list()
-#     for i in range(len(cosine_distances)):
-#         neighs_i = list()
-#         for j in range(len(cosine_distances)):
-#             if cosine_distances[i, j] < radius:
-#                 neighs_i.append(j)
-#         neighs.append(neighs_i)
-#         if len(neighs_i) > 0:
-#             idxs_with_neighs.append(i)
-#     return neighs, idxs_with_neighs
-
-
 def find_neighbours(
     cosine_distances,
     idxs_without_neighs,
@@ -1290,7 +1265,7 @@ def load_composition_and_abundance_and_embeddings(
             neighs, idxs_with_neighs = find_neighbours(
                 cosine_distances,
                 np.where(mask_embeddings_binning == False)[0],
-                radius=embeddings_options.radius,
+                radius=embeddings_options.radius_neighs,
                 sort=True,
             )
             neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
@@ -1300,7 +1275,7 @@ def load_composition_and_abundance_and_embeddings(
                 % (
                     len(idxs_with_neighs),
                     len(composition.metadata.identifiers),
-                    embeddings_options.radius,
+                    embeddings_options.radius_neighs,
                 )
             )
             time_generating_embedds = round(time.time() - begintime, 2)
@@ -1333,7 +1308,7 @@ def load_composition_and_abundance_and_embeddings(
     elif embeddings_options.symmetry == True:
         if embeddings_options.embeddings_processed_path is not None:
             logger.info(
-                f"\nLoading embeddings processed already from {embeddings_options.embeddings_processed_path}"
+                f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
             )
             embeddings_binning = np.load(embeddings_options.embeddings_processed_path)[
                 "arr_0"
@@ -1351,9 +1326,11 @@ def load_composition_and_abundance_and_embeddings(
                 ],
                 dtype=bool,
             )
-
+            neighs = np.array(
+                [[] for c in composition.metadata.identifiers], dtype=object
+            )
         else:
-            logger.info(f"\nProcessing embeddings from {embeddings_options.path}")
+            logger.info(f"Processing embeddings from {embeddings_options.path}")
             embeddings = np.load(embeddings_options.path)["arr_0"]
             contigs_embedded_all = np.loadtxt(
                 embeddings_options.embeddedcontigspath, dtype=object
@@ -1372,17 +1349,17 @@ def load_composition_and_abundance_and_embeddings(
             )
             for i, c in enumerate(composition.metadata.identifiers):
                 if mask_embeddings[i]:
-                    embeddings_binning = embeddings[
+                    embeddings_binning[i, :] = embeddings[
                         np.where(contigs_embedded_all == c)[0][0], :
                     ]
-
+            logger.info("Computing n2v embeddings' cosine distances")
             cosine_distances = cdist(
                 embeddings_binning, embeddings_binning, metric="cosine"
             )
-            neighs, idxs_with_neighs = find_neighbours(
+            _, idxs_with_neighs = find_neighbours(
                 cosine_distances,
-                np.where(mask_embeddings_binning == False)[0],
-                radius=embeddings_options.radius,
+                np.where(mask_embeddings == False)[0],
+                radius=embeddings_options.radius_neighs,
                 sort=False,
             )
 
@@ -1393,6 +1370,9 @@ def load_composition_and_abundance_and_embeddings(
             mask_embeddings_binning[idxs_with_neighs] = True
 
             logger.info(f"\nContigs with neighs {len(idxs_with_neighs)}.")
+            neighs = np.array(
+                [[] for c in composition.metadata.identifiers], dtype=object
+            )
 
     if embeddings_options.shuffle_embeds == True:
         logger.info("Embeddings/neighbours shuffled.")
@@ -1401,7 +1381,7 @@ def load_composition_and_abundance_and_embeddings(
             abundance,
             np.random.shuffle(embeddings_binning),
             mask_embeddings_binning,
-            np.random.shuffle(embeddings_binning),
+            np.random.shuffle(neighs),
         )
 
     else:
@@ -1564,6 +1544,9 @@ def run_n2v(
         destroy=True,
         cuda=vamb_options.cuda,
     )
+    np.savez(vamb_options.out_dir.joinpath("embeddings.npz"), embeddings)
+    np.savez(vamb_options.out_dir.joinpath("embeddings_mask.npz"), embeddings_mask)
+
     # composition.metadata.filter_mask(mask)
 
     logger.info("Created dataloader and mask (including embeddings)")
@@ -1602,8 +1585,8 @@ def run_n2v(
         comp_metadata.lengths,  # type:ignore
     )
     del latent
-    np.savez(vamb_options.out_dir.joinpath("embeddings.npz"), embeddings)
-    logger.infor(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.")
+
+    logger.info(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.")
 
 
 def parse_taxonomy(
@@ -2903,7 +2886,7 @@ class VAEASYarguments(BinnerArguments):
             embeddedcontigspath=args.contigs_embedded,
             shuffle_embeds=args.shuffle_embeds,
             embeds_loss=args.embeds_loss,
-            radius=args.R,
+            radius_neighs=args.R,
             gamma=args.gamma,
             neighs_object_path=args.neighs,
             embeddings_mask_path=args.embeds_mask,
@@ -2950,13 +2933,12 @@ class VAESYarguments(BinnerArguments):
             embeddedcontigspath=args.contigs_embedded,
             shuffle_embeds=args.shuffle_embeds,
             embeds_loss=args.embeds_loss,
-            radius=args.R,
-            gamma=args.gamma,
-            neighs_object_path=args.neighs,
             embeddings_mask_path=args.embeds_mask,
             embeddings_processed_path=args.embeds_processed,
-            margin=args.margin,
             symmetry=True,
+            gamma=args.gamma,
+            radius_neighs=args.R,
+            neighs_object_path=None,
         )
 
         self.training_options = TrainingOptions(
@@ -3157,8 +3139,6 @@ def add_vae_arguments(subparser):
     )
     return subparser
 
-
-def add_vae_n2v_asy_arguments(subparser):
     # Embeddings arguments
     vae_asy_os = subparser.add_argument_group(title="Asymmetric vae arguments")
     vae_asy_os.add_argument(
@@ -3257,7 +3237,7 @@ def add_vae_n2v_arguments(subparser):
         "-R",
         help="radius neighbours embeddings",
         type=float,
-        default=0.2,
+        default=0.1,
     )
     vae_sy_os.add_argument(
         "--embeds_processed",
@@ -3278,12 +3258,6 @@ def add_vae_n2v_arguments(subparser):
         help="Weight for the embeddings contrastive losss",
         type=float,
         default=0.1,
-    )
-    vae_sy_os.add_argument(
-        "--margin",
-        help="Margin where cosine distances stop being penalized",
-        type=float,
-        default=0.01,
     )
     return subparser
 
@@ -3584,7 +3558,7 @@ def add_vae_n2v_asy_arguments(subparser):
         "-R",
         help="radius neighbours embeddings",
         type=float,
-        default=0.2,
+        default=0.1,
     )
     vae_asy_os.add_argument(
         "--embeds_processed",
@@ -3770,7 +3744,7 @@ def main():
             AVAMB: VAEAAEArguments,
             TAXVAMB: VAEVAEArguments,
             VAMB_ASY: VAEASYarguments,
-            VAMB_SY: VAEASYarguments,
+            VAMB_SY: VAESYarguments,
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:

@@ -882,7 +882,7 @@ class VAE(_nn.Module):
         logger.info(f"\tN sequences: {ncontigs}")
         logger.info(f"\tN samples: {nsamples}")
         logger.info(f"\tEmbedding size: {n_embedding}")
-        logger.info(f"\tEmbedding loss: Asymetric {self.embs_loss}\n\n")
+        logger.info(f"\tEmbedding loss: Asymmetric {self.embs_loss}\n\n")
 
         # Train
         for epoch in range(nepochs):
