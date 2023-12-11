@@ -1,6 +1,7 @@
 from typing import Optional, IO, Union
 from pathlib import Path
 import vamb.vambtools as _vambtools
+from vamb.cluster import _normalize, _calc_distances
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
 from torch.nn.functional import softmax as _softmax
@@ -330,7 +331,9 @@ class VAE(_nn.Module):
         self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         # Object where I will store the mu s , so we update after training
-        self.mu_container = _torch.randn(self.ncontigs, self.nlatent)
+        self.mu_container = _torch.randn(
+            self.ncontigs, self.nlatent, dtype=_torch.float32
+        )
 
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
@@ -455,7 +458,6 @@ class VAE(_nn.Module):
                 preds_idxs,
                 emb_mask,
             )
-
         loss_emb_cat = _torch.cat(
             (
                 loss_emb.unsqueeze(0) - self.margin,
@@ -480,7 +482,7 @@ class VAE(_nn.Module):
         loss_emb_pop = loss_emb[emb_mask]
         loss_emb_pop_std = loss_emb_std[emb_mask]
         # loss_emb_unpop = loss_emb[~emb_mask]
-
+        # print(loss_emb_pop)
         return (
             loss.mean(),
             weighed_ab.mean(),
@@ -496,36 +498,30 @@ class VAE(_nn.Module):
 
     def cosinesimilarity_loss(self, mu, idxs_preds, emb_mask):
         avg_cosine_distances = []
-        median_cosine_distances = []
         std_cosine_distances = []
 
         for mu_i, idx_pred, emb_mask_i in zip(mu, idxs_preds, emb_mask):
-            if (
-                len(self.neighs[idx_pred]) == 0 or emb_mask_i == False
-            ):  # if it has no neighbours
+            if len(self.neighs[idx_pred]) == 0 or not emb_mask_i:
+                # If it has no neighbors or emb_mask_i is False
+                cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
+                avg_cosine_distance = cosine_distances
+                std_cosine_distance = _torch.tensor(0.0)
+            else:
+                # Select the neighbors
+                mus_neighs = self.mu_container[self.neighs[idx_pred]]
+                # Compute cosine distances
                 cosine_distances = 1 - F.cosine_similarity(
-                    mu_i.unsqueeze(0), mu_i.unsqueeze(0), dim=-1
+                    mu_i.unsqueeze(0), mus_neighs, dim=-1
                 )
-                avg_cosine_distances.append(cosine_distances.mean())
-                median_cosine_distances.append(cosine_distances.median())
-                std_cosine_distances.append(cosine_distances.std(unbiased=False))
-                continue
-            assert len(self.neighs[idx_pred]) != 0
-            # Select the neighs
+                # print(cosine_distances)
 
-            mus_neighs = self.mu_container[self.neighs[idx_pred]]
-            # Compute cosine distance
-            cosine_distances = 1 - F.cosine_similarity(
-                mu_i.unsqueeze(0), mus_neighs, dim=-1
-            )
-            avg_cosine_distance = cosine_distances.mean()
-            median_cosine_distance = cosine_distances.median()
-            std_cosine_distance = cosine_distances.std(unbiased=False)
+                # Compute statistics for cosine distances
+                avg_cosine_distance = cosine_distances.mean()
 
-            # Compute the average cosine distance for the specific batch item
+                std_cosine_distance = cosine_distances.std(unbiased=False)
 
+            # Append to the result lists
             avg_cosine_distances.append(avg_cosine_distance)
-            median_cosine_distances.append(median_cosine_distance)
             std_cosine_distances.append(std_cosine_distance)
 
         return (
