@@ -197,7 +197,7 @@ class EmbeddingsOptions:
         gamma: float,
         neighs_object_path: Optional[Path],
         embeddings_mask_path: Optional[Path],
-        embeddings_processed_path: Optional[Path],
+        embeddings_processed_path: None,
         margin: float = 0.01,
         radius_clustering: float = 0.01,
         symmetry: bool = False,
@@ -213,10 +213,11 @@ class EmbeddingsOptions:
             self.neighs_object_path = neighs_object_path
 
         else:
-            self.embeddings_processed_path = embeddings_processed_path
+            # self.embeddings_processed_path = embeddings_processed_path
             self.path = EmbeddingsPath(embeddingspath)
             self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
 
+        self.embeddings_processed_path = embeddings_processed_path
         self.embeddings_mask_path = embeddings_mask_path
         self.shuffle_embeds = shuffle_embeds
         self.radius_neighs = radius_neighs
