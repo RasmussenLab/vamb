@@ -411,7 +411,7 @@ class VAE(_nn.Module):
             epoch_absseloss += ab_sse.data.item()
 
         logger.info(
-            "\t\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e}  KLD: {:.5e}  Batchsize: {}".format(
+            "\t\tEpoch: {:>3}  Loss: {:.5e}  CE: {:.5e}  AB: {:.5e}  SSE: {:.5e}  KLD: {:.5e}  Batchsize: {:>4}".format(
                 epoch + 1,
                 epoch_loss / len(data_loader),
                 epoch_celoss / len(data_loader),

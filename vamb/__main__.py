@@ -610,6 +610,7 @@ def calc_rpkm(
     else:
         assert isinstance(path, list)
         logger.info(f"\tParsing {len(path)} BAM files with {nthreads} threads")
+        logger.info(f"\tMin identity: {abundance_options.min_alignment_id}")
 
         abundance = vamb.parsebam.Abundance.from_files(
             path,
@@ -621,10 +622,9 @@ def calc_rpkm(
         )
         abundance.save(outdir.joinpath("abundance.npz"))
 
-        logger.info(f"\tMin identity: {abundance.minid}")
         logger.info("\tOrder of columns is:")
-        for samplename in abundance.samplenames:
-            logger.info(f"\t\t{samplename}")
+        for i, samplename in enumerate(abundance.samplenames):
+            logger.info(f"\t{i:>6}: {samplename}")
 
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tProcessed RPKM in {elapsed} seconds.\n")
