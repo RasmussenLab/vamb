@@ -44,7 +44,7 @@ class Markers:
 
     def __init__(
         self,
-        markers: list[Optional[np.ndarray]],
+        markers: list[Optional[list[tuple[MarkerID, float]]]],
         # Some IDs map to multiple names, if they act as the same SCG in the cell
         marker_names: list[list[MarkerName]],
         refhash: bytes,
@@ -82,7 +82,7 @@ class Markers:
 
     def save(self, io: Union[Path, str, IO[str]]):
         representation = {
-            "markers": [i if i is None else i.tolist() for i in self.markers],
+            "markers": self.markers,
             "marker_names": self.marker_names,
             "refhash": self.refhash.hex(),
         }
@@ -111,12 +111,8 @@ class Markers:
                 target_name=None,
                 identifiers=None,
             )
-        markers_as_arrays = [
-            i if i is None else np.array(i, dtype=np.uint8)
-            for i in representation["markers"]
-        ]
 
-        return cls(markers_as_arrays, representation["marker_names"], observed_refhash)
+        return cls(representation["markers"], representation["marker_names"], observed_refhash)
 
     @classmethod
     def from_files(
@@ -179,7 +175,7 @@ class Markers:
                 refhash, target_refhash, "Markers FASTA file", None, None
             )
 
-        marker_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
+        marker_list: list[Optional[list[tuple[MarkerID, float]]]] = [None] * sum(fasta_entry_mask)
         with Pool(n_processes) as pool:
             for sub_result in pool.imap_unordered(
                 work_per_process,
@@ -243,12 +239,12 @@ def process_chunk(
     hmms: list[pyhmmer.plan7.HMM],
     name_to_id: dict[MarkerName, MarkerID],
     finder: pyrodigal.GeneFinder,
-) -> list[tuple[ContigID, np.ndarray]]:
+) -> list[tuple[ContigID, list[tuple[MarkerID, float]]]]:
     # We temporarily store them as sets in order to deduplicate. While single contigs
     # may have duplicate markers, it makes no sense to count this as contamination,
     # because we are not about to second-guess the assembler's job of avoiding
     # chimeric sequences.
-    markers: defaultdict[ContigID, set[MarkerID]] = defaultdict(set)
+    markers: defaultdict[ContigID, list[tuple[MarkerID, float]]] = defaultdict(list)
     alphabet = pyhmmer.easel.Alphabet.amino()
     digitized: list[pyhmmer.easel.DigitalSequence] = []
     for record in chunk:
@@ -266,11 +262,11 @@ def process_chunk(
         score_cutoff = hmm.cutoffs.trusted1
         assert score_cutoff is not None
         for hit in top_hits:
-            if hit.score >= score_cutoff:
-                markers[ContigID(int(hit.name.decode()))].add(marker_id)
+            if hit.score >= score_cutoff - 5.0:
+                markers[ContigID(int(hit.name.decode()))].append((marker_id, hit.score))
 
     return [
-        (name, np.array(list(ids), dtype=np.uint8)) for (name, ids) in markers.items()
+        (name, ids) for (name, ids) in markers.items()
     ]
 
 
@@ -279,7 +275,7 @@ def process_chunk(
 # The return type here is optimised for a small memory footprint.
 def work_per_process(
     args: tuple[Path, Path, dict[MarkerName, MarkerID]]
-) -> list[tuple[ContigID, np.ndarray]]:
+) -> list[tuple[ContigID, list[tuple[MarkerID, float]]]]:
     (contig_path, hmmpath, name_to_id) = args
     with open(hmmpath, "rb") as file:
         hmms = list(pyhmmer.plan7.HMMFile(file))
@@ -287,12 +283,12 @@ def work_per_process(
     # Chunk up the FASTA file for memory efficiency reasons, while still
     # allowing pyhmmer to scan multiple sequences at once for speed
     chunk: list[FastaEntry] = []
-    result: list[tuple[ContigID, np.ndarray]] = []
+    result: list[tuple[ContigID, list[tuple[MarkerID, float]]]] = []
     finder = pyrodigal.GeneFinder(meta=True)
     with open(contig_path, "rb") as file:
         for record in byte_iterfasta(file):
             chunk.append(record)
-            if len(chunk) == 2048:
+            if len(chunk) == 256:
                 result.extend(process_chunk(chunk, hmms, name_to_id, finder))
                 chunk.clear()
         result.extend(process_chunk(chunk, hmms, name_to_id, finder))
