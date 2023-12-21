@@ -40,7 +40,7 @@ def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta
                     marker_list.extend(contig_to_marker[contig])
                 if len(marker_list) == 0:
                     continue
-                recall = len(set(marker_list)) / 107
+                recall = len(set(marker_list)) / 104
                 contamination = (len(marker_list) - len(set(marker_list))) / len(
                     marker_list
                 )
