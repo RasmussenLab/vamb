@@ -715,6 +715,7 @@ class VAE(_nn.Module):
         logger.info(f"\tCUDA: {self.usecuda}")
         logger.info(f"\tAlpha: {self.alpha}")
         logger.info(f"\tBeta: {self.beta}")
+        logger.info(f"\tGamma: {self.gamma}")
         logger.info(f"\tDropout: {self.dropout}")
         # logger.info(f"\tN hidden: {", ".join(map(str,self.nhiddens))}")
         logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")

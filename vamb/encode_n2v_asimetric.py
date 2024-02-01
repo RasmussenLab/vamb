@@ -441,11 +441,8 @@ class VAE(_nn.Module):
         weighed_sse = sse * sse_weight
         weighed_kld = kld * kld_weight
 
-        # reconstruction_loss = ce * ce_weight + sse * sse_weight
-        # kld_loss = kld * kld_weight
-        # loss = (reconstruction_loss + kld_loss) * weights
-
         # embedding loss
+
         if self.embs_loss == "cos":
             loss_emb, loss_emb_std = self.cosinesimilarity_loss(
                 mu,
@@ -465,7 +462,6 @@ class VAE(_nn.Module):
             ),
             dim=0,
         )
-        # print(loss_emb_cat, _torch.max(loss_emb_cat, dim=0)[0])
 
         if warmup:
             reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
@@ -481,8 +477,6 @@ class VAE(_nn.Module):
         )[0] * self.gamma
         loss_emb_pop = loss_emb[emb_mask]
         loss_emb_pop_std = loss_emb_std[emb_mask]
-        # loss_emb_unpop = loss_emb[~emb_mask]
-        # print(loss_emb_pop)
         return (
             loss.mean(),
             weighed_ab.mean(),

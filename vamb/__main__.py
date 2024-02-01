@@ -1302,9 +1302,10 @@ def load_composition_and_abundance_and_embeddings(
             neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
                 "arr_0"
             ]
-            contigs_with_neighs_n = np.sum([1 for neighs in neighs if len(neighs) > 0])
-
+            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+            total_neighs = np.sum([len(ns) for ns in neighs])
             logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
+            logger.info(f"Total redundant neighs {total_neighs}")
 
     elif embeddings_options.symmetry == True:
         if embeddings_options.embeddings_processed_path is not None:
@@ -2894,6 +2895,7 @@ class VAEASYarguments(BinnerArguments):
             embeddings_processed_path=args.embeds_processed,
             margin=args.margin,
             symmetry=False,
+            radius_clustering=args.Rc,
         )
 
         self.training_options = TrainingOptions(
@@ -3557,10 +3559,17 @@ def add_vae_n2v_asy_arguments(subparser):
 
     vae_asy_os.add_argument(
         "-R",
-        help="radius neighbours embeddings",
+        help="radius neighbours n2v embeddings",
         type=float,
         default=0.1,
     )
+    vae_asy_os.add_argument(
+        "--Rc",
+        help="radius clustering within radius",
+        type=float,
+        default=0.01,
+    )
+
     vae_asy_os.add_argument(
         "--embeds_processed",
         metavar="",
