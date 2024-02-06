@@ -1080,44 +1080,44 @@ def write_clusters_and_bins(
         )
 
     # Open unsplit clusters and split them
-    if binsplitter.splitter is not None:
-        split_path = Path(base_clusters_name + "_split.tsv")
-        clusters = dict(binsplitter.binsplit(clusters.items()))
-        with open(split_path, "w") as file:
-            (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file, clusters.items()
-            )
-        msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
-    else:
-        msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+    # if binsplitter.splitter is not None:
+    #     split_path = Path(base_clusters_name + "_split.tsv")
+    #     clusters = dict(binsplitter.binsplit(clusters.items()))
+    #     with open(split_path, "w") as file:
+    #         (n_split_clusters, _) = vamb.vambtools.write_clusters(
+    #             file, clusters.items()
+    #         )
+    #     msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    # else:
+    #     msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
 
-    logger.info(msg)
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+    # logger.info(msg)
+    # elapsed = round(time.time() - begintime, 2)
+    # logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
-    # Write bins, if necessary
-    if vamb_options.min_fasta_output_size is not None:
-        starttime = time.time()
-        filtered_clusters: dict[str, set[str]] = dict()
-        assert len(sequence_lens) == len(sequence_names)
-        sizeof = dict(zip(sequence_names, sequence_lens))
-        for binname, contigs in clusters.items():
-            if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
-                filtered_clusters[binname] = contigs
+    # # Write bins, if necessary
+    # if vamb_options.min_fasta_output_size is not None:
+    #     starttime = time.time()
+    #     filtered_clusters: dict[str, set[str]] = dict()
+    #     assert len(sequence_lens) == len(sequence_names)
+    #     sizeof = dict(zip(sequence_names, sequence_lens))
+    #     for binname, contigs in clusters.items():
+    #         if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
+    #             filtered_clusters[binname] = contigs
 
-        with vamb.vambtools.Reader(fasta_catalogue) as file:
-            vamb.vambtools.write_bins(
-                bins_dir,
-                filtered_clusters,
-                file,
-                None,
-            )
-        elapsed = round(time.time() - starttime, 2)
-        n_bins = len(filtered_clusters)
-        n_contigs = sum(len(v) for v in filtered_clusters.values())
-        logger.info(
-            f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
-        )
+    #     with vamb.vambtools.Reader(fasta_catalogue) as file:
+    #         vamb.vambtools.write_bins(
+    #             bins_dir,
+    #             filtered_clusters,
+    #             file,
+    #             None,
+    #         )
+    #     elapsed = round(time.time() - starttime, 2)
+    #     n_bins = len(filtered_clusters)
+    #     n_contigs = sum(len(v) for v in filtered_clusters.values())
+    #     logger.info(
+    #         f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
+    #     )
 
 
 def load_composition_and_abundance(
