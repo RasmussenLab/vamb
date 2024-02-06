@@ -185,6 +185,7 @@ class EmbeddingsOptions:
         "margin",
         "radius_clustering",
         "symmetry",
+        "top_neighbours",
     ]
 
     def __init__(
@@ -201,6 +202,7 @@ class EmbeddingsOptions:
         margin: float = 0.01,
         radius_clustering: float = 0.01,
         symmetry: bool = False,
+        top_neighbours: int = 50,
     ):
         assert isinstance(embeddingspath, (Path, type(None)))
 
@@ -222,6 +224,7 @@ class EmbeddingsOptions:
         self.shuffle_embeds = shuffle_embeds
         self.radius_neighs = radius_neighs
         self.gamma = gamma
+        self.top_neighbours = top_neighbours
 
 
 class VAEOptions:
@@ -1226,7 +1229,6 @@ def load_composition_and_abundance_and_embeddings(
                     embeddings_options.embeddedcontigspath, dtype=object
                 )
                 # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-
                 mask_embeddings_binning = np.array(
                     [
                         1 if c in contigs_embedded_all else 0
@@ -1304,9 +1306,24 @@ def load_composition_and_abundance_and_embeddings(
             ]
             contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
             total_neighs = np.sum([len(ns) for ns in neighs])
+            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
             logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
-            logger.info(f"Total redundant neighs {total_neighs}")
+            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+            logger.info(f"Total redundant neighs {total_neighs}.")
 
+        # now that we have the neighbours per contig, only consider the top_closest_neighbours
+        logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
+        
+        for i in range(len(neighs)):
+            if len(neighs[i]) <= embeddings_options.top_neighbours:
+                continue 
+            neighs[i] = neighs[i][:embeddings_options.top_neighbours]
+        total_neighs= np.sum([len(ns) for ns in neighs])
+        
+        logger.info(f"{total_neighs} total neighbours after applying restrictions.")
+        
+        
     elif embeddings_options.symmetry == True:
         if embeddings_options.embeddings_processed_path is not None:
             logger.info(
@@ -1328,6 +1345,7 @@ def load_composition_and_abundance_and_embeddings(
                 ],
                 dtype=bool,
             )
+            # neighs will not be used, embeddings are part of the input and attempted to reconstruct by the decoder
             neighs = np.array(
                 [[] for c in composition.metadata.identifiers], dtype=object
             )
@@ -2896,6 +2914,7 @@ class VAEASYarguments(BinnerArguments):
             margin=args.margin,
             symmetry=False,
             radius_clustering=args.Rc,
+            top_neighbours=args.top_neighbours
         )
 
         self.training_options = TrainingOptions(
@@ -3139,72 +3158,6 @@ def add_vae_arguments(subparser):
         type=float,
         default=1e-3,
         help="learning rate [0.001]",
-    )
-    return subparser
-
-    # Embeddings arguments
-    vae_asy_os = subparser.add_argument_group(title="Asymmetric vae arguments")
-    vae_asy_os.add_argument(
-        "--embeds",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings ",
-    )
-    vae_asy_os.add_argument(
-        "--contigs_embedded",
-        metavar="",
-        type=Path,
-        help="paths to contigs that were embedded",
-    )
-    vae_asy_os.add_argument(
-        "--shuffle_embeds",
-        help="shuffle embeddings [False]",
-        action="store_true",
-    )
-    vae_asy_os.add_argument(
-        "--embeds_loss",
-        help="Reconstruction loss for the embeddings [cos]",
-        type=str,
-        default="cos",
-    )
-
-    vae_asy_os.add_argument(
-        "-R",
-        help="radius neighbours embeddings",
-        type=float,
-        default=0.2,
-    )
-    vae_asy_os.add_argument(
-        "--embeds_processed",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings already proprocessed, so they match the contigs dimeniosn",
-    )
-
-    vae_asy_os.add_argument(
-        "--embeds_mask",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings mask so True if contig has neighbour within radious ",
-    )
-    vae_asy_os.add_argument(
-        "--neighs",
-        metavar="",
-        type=Path,
-        help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
-    )
-
-    vae_asy_os.add_argument(
-        "--gamma",
-        help="Weight for the embeddings contrastive losss",
-        type=float,
-        default=0.1,
-    )
-    vae_asy_os.add_argument(
-        "--margin",
-        help="Margin where cosine distances stop being penalized",
-        type=float,
-        default=0.01,
     )
     return subparser
 
@@ -3559,17 +3512,24 @@ def add_vae_n2v_asy_arguments(subparser):
 
     vae_asy_os.add_argument(
         "-R",
-        help="radius neighbours n2v embeddings",
+        help="radius neighbours n2v embeddings [0.1]",
         type=float,
         default=0.1,
     )
     vae_asy_os.add_argument(
         "--Rc",
-        help="radius clustering within radius",
+        help="radius clustering within radius  [0.01]",
         type=float,
         default=0.01,
     )
 
+    vae_asy_os.add_argument(
+        "--top_neighbours",
+        help="only consider n closest contigs in embedding space as neighbours [50]",
+        type=int,
+        default=50,
+    )
+    
     vae_asy_os.add_argument(
         "--embeds_processed",
         metavar="",
@@ -3592,13 +3552,13 @@ def add_vae_n2v_asy_arguments(subparser):
 
     vae_asy_os.add_argument(
         "--gamma",
-        help="Weight for the embeddings contrastive losss",
+        help="Weight for the embeddings contrastive losss  [0.1]",
         type=float,
         default=0.1,
     )
     vae_asy_os.add_argument(
         "--margin",
-        help="Margin where cosine distances stop being penalized",
+        help="Margin where cosine distances stop being penalized  [0.01]",
         type=float,
         default=0.01,
     )
