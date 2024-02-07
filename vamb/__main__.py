@@ -1366,7 +1366,7 @@ def load_composition_and_abundance_and_embeddings(
         neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
         max_nbhd_len = np.std(neighbourhoods_lens)*4
         neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len]
-        print(neighs[:5])
+        #print(neighs[:5])
         for nn in neighbourhoods_to_remove:
             cs_nn = neighbourhoods_cs_d[nn]
             
@@ -1376,13 +1376,13 @@ def load_composition_and_abundance_and_embeddings(
                     c_j_idx = c_idx_d[c_j]
                     #print(c_j_idx,type(neighs[c_i_idx]),neighs[c_i_idx])
                     
-                    if neighs[c_i_idx] is not None:
-                        if c_j_idx in neighs[c_i_idx]:
-                            neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx) 
+                    #if neighs[c_i_idx] is not None:
+                    if c_j_idx in neighs[c_i_idx]:
+                        neighs[c_i_idx].remove(c_j_idx) 
                     
-                    if neighs[c_j_idx] is not None:
-                        if c_i_idx in neighs[c_j_idx]:
-                            neighs[c_j_idx] = neighs[c_j_idx].remove(c_i_idx)
+                    #if neighs[c_j_idx] is not None:
+                    if c_i_idx in neighs[c_j_idx]:
+                        neighs[c_j_idx].remove(c_i_idx)
                 
         total_neighs= np.sum([len(ns) for ns in neighs])                
         logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods")        
