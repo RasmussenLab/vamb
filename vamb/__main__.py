@@ -1386,8 +1386,21 @@ def load_composition_and_abundance_and_embeddings(
                 
         total_neighs= np.sum([len(ns) for ns in neighs])                
         logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods")        
-    
-    
+
+        for c_idx,neighs_c in enumerate(neighs):
+            if len(neighs_c) == 0:
+                mask_embeddings_binning[c_idx]=False
+        
+
+        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+        total_neighs = np.sum([len(ns) for ns in neighs])
+        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+
+        logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
+        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+        logger.info(f"Total redundant neighs {total_neighs}.")
+
     elif embeddings_options.symmetry == True:
         if embeddings_options.embeddings_processed_path is not None:
             logger.info(
