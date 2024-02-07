@@ -1362,39 +1362,24 @@ def load_composition_and_abundance_and_embeddings(
         neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
         neighbourhoods_cs_d = split_neighbourhoods_by_sample(neighbourhoods_cs_d)
         
-        cs_neighbourhoods_d = { c:n_i for n_i,cs in neighbourhoods_cs_d.items() for c in cs}
+        #cs_neighbourhoods_d = { c:n_i for n_i,cs in neighbourhoods_cs_d.items() for c in cs}
         print(neighbourhoods_cs_d)
         neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
         
         max_nbhd_len = np.std(neighbourhoods_lens)*4
         neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len]
-        neighbours_to_remove = np.sum([len(cs) for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len])
+        neighbours_to_remove = [c for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len for c in cs]
         
-        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {neighbours_to_remove} contigs")
+        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
         #print(neighs[:5])
-        for nn in neighbourhoods_to_remove:
-            cs_nn = neighbourhoods_cs_d[nn]
-            
-            for c_i in cs_nn:
-                c_i_idx = c_idx_d[c_i]
-                for c_j in cs_nn-set(c_i):
-                    c_j_idx = c_idx_d[c_j]
-                    #print(c_j_idx,type(neighs[c_i_idx]),neighs[c_i_idx])
-                    
-                    #if neighs[c_i_idx] is not None:
-                    if c_j_idx in neighs[c_i_idx]:
-                        neighs[c_i_idx].remove(c_j_idx) 
-                    
-                    #if neighs[c_j_idx] is not None:
-                    if c_i_idx in neighs[c_j_idx]:
-                        neighs[c_j_idx].remove(c_i_idx)
+        for c in neighbours_to_remove:
+            c_idx = c_idx_d[c]
+            neighs[c_idx]=[]
+            mask_embeddings_binning[c_idx]=False            
                 
         total_neighs= np.sum([len(ns) for ns in neighs])                
         logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods")        
 
-        for c_idx,neighs_c in enumerate(neighs):
-            if len(neighs_c) == 0:
-                mask_embeddings_binning[c_idx]=False
         
 
         contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
