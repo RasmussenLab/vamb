@@ -344,7 +344,7 @@ class ReclusteringOptions:
         assert isinstance(clusters_path, Path)
         assert isinstance(hmmout_path, Path)
 
-        for path in [latent_path, clusters_path, hmmout_path]:
+        for path in [latent_path, clusters_path]:
             if not path.is_file():
                 raise FileNotFoundError(path)
 
