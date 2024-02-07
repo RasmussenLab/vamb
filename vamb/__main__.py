@@ -1189,6 +1189,30 @@ def find_neighbours(
         return neighs, idxs_with_neighs
 
 
+
+
+def split_neighbourhoods_by_sample(neighbourhoods):
+    nbhds_split = dict()
+    for i,(nbhd_id, nbhd_cs) in enumerate(neighbourhoods.items()):
+        samples_in_nbhd = set([ c.split("C")[0] for c in nbhd_cs ])
+        
+        nbhd_S_d = { S:set() for S in samples_in_nbhd}
+
+        for c in nbhd_cs:
+            nbhd_S_d[c.split("C")[0]].add(c)
+
+        # remove 1 contig neighbourhoods
+        nbhd_S_clean_d = { S:cs for S,cs in nbhd_S_d.items() if len(cs) > 1 }
+        
+
+
+        for S,cs in nbhd_S_clean_d.items():
+            nbhds_split["%i_%s"%(nbhd_id,S)] = cs
+        
+    return nbhds_split
+
+
+
 def load_composition_and_abundance_and_embeddings(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
@@ -1321,9 +1345,41 @@ def load_composition_and_abundance_and_embeddings(
             neighs[i] = neighs[i][:embeddings_options.top_neighbours]
         total_neighs= np.sum([len(ns) for ns in neighs])
         
-        logger.info(f"{total_neighs} total neighbours after applying restrictions.")
+        logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.")
         
+        logger.info(f"Only neighbourhoods below 4 std of the distribution of neighbourhood lengths are considered")
+        # remove neighbours if they belong to a too large neighbourhood        
+        neighbourhoods_g = nx.Graph()
+        for i,neigh_idxs in enumerate(neighs): 
+            c = composition.metadata.identifiers[i]
+            for neigh_idx in neigh_idxs:
+                c_neigh = composition.metadata.identifiers[neigh_idx]
+                if  c_neigh == c:
+                    continue 
+                neighbourhoods_g.add_edge(c_neigh,c)
         
+        neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+        neighbourhoods_cs_d = split_neighbourhoods_by_sample(neighbourhoods_cs_d)
+        
+        cs_neighbourhoods_d = { c:n_i for n_i,cs in neighbourhoods_cs_d.items() for c in cs}
+        neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
+        max_nbhd_len = np.std(neighbourhoods_lens)*4
+        neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len]
+        
+        for nn in neighbourhoods_to_remove:
+            cs_nn = neighbourhoods_cs_d[nn]
+            
+            for c_idx_i in cs_nn:
+                for c_idx_j in cs_nn-set(c_idx_i):
+                    if c_idx_j in neighs[c_idx_i]:
+                        neighs[c_idx_i] = neighs[c_idx_i].remove(c_idx_j)
+                    if c_idx_i in neighs[c_idx_j]:
+                        neighs[c_idx_j] = neighs[c_idx_j].remove(c_idx_i)
+                
+        total_neighs= np.sum([len(ns) for ns in neighs])                
+        logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods")        
+    
+    
     elif embeddings_options.symmetry == True:
         if embeddings_options.embeddings_processed_path is not None:
             logger.info(
