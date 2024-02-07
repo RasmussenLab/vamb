@@ -336,13 +336,13 @@ class ReclusteringOptions:
         self,
         latent_path: Path,
         clusters_path: Path,
-        hmmout_path: Path,
         binsplit_separator: Optional[str],
         algorithm: str,
+        hmmout_path: Path = "",
     ):
         assert isinstance(latent_path, Path)
         assert isinstance(clusters_path, Path)
-        assert isinstance(hmmout_path, Path)
+        #assert isinstance(hmmout_path, Path)
 
         for path in [latent_path, clusters_path]:
             if not path.is_file():
