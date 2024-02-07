@@ -1349,6 +1349,7 @@ def load_composition_and_abundance_and_embeddings(
         
         logger.info(f"Only neighbourhoods below 4 std of the distribution of neighbourhood lengths are considered")
         # remove neighbours if they belong to a too large neighbourhood        
+        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
         neighbourhoods_g = nx.Graph()
         for i,neigh_idxs in enumerate(neighs): 
             c = composition.metadata.identifiers[i]
@@ -1369,12 +1370,14 @@ def load_composition_and_abundance_and_embeddings(
         for nn in neighbourhoods_to_remove:
             cs_nn = neighbourhoods_cs_d[nn]
             
-            for c_idx_i in cs_nn:
-                for c_idx_j in cs_nn-set(c_idx_i):
-                    if c_idx_j in neighs[c_idx_i]:
-                        neighs[c_idx_i] = neighs[c_idx_i].remove(c_idx_j)
-                    if c_idx_i in neighs[c_idx_j]:
-                        neighs[c_idx_j] = neighs[c_idx_j].remove(c_idx_i)
+            for c_i in cs_nn:
+                c_i_idx = c_idx_d[c_i]
+                for c_j in cs_nn-set(c_i):
+                    c_j_idx = c_idx_d[c_j]
+                    if c_j_idx in neighs[c_i_idx]:
+                        neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx)
+                    if c_i_idx in neighs[c_j_idx]:
+                        neighs[c_j_idx] = neighs[c_j_idx].remove(c_i_idx)
                 
         total_neighs= np.sum([len(ns) for ns in neighs])                
         logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods")        
