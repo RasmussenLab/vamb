@@ -1374,10 +1374,10 @@ def load_composition_and_abundance_and_embeddings(
                 c_i_idx = c_idx_d[c_i]
                 for c_j in cs_nn-set(c_i):
                     c_j_idx = c_idx_d[c_j]
-                    #print(c_j_idx,type(neighs[c_i_idx]),neighs[c_i_idx])
+                    print(c_j_idx,type(neighs[c_i_idx]),neighs[c_i_idx])
                     if neighs[c_i_idx] is not None:
                         if c_j_idx in neighs[c_i_idx]:
-                            neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx)
+                            neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx) 
                     
                     if neighs[c_j_idx] is not None:
                         if c_i_idx in neighs[c_j_idx]:
