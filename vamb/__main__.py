@@ -1378,7 +1378,7 @@ def load_composition_and_abundance_and_embeddings(
                     
                     if neighs[c_i_idx] is not None:
                         if c_j_idx in neighs[c_i_idx]:
-                            neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx) if len()
+                            neighs[c_i_idx] = neighs[c_i_idx].remove(c_j_idx) 
                     
                     if neighs[c_j_idx] is not None:
                         if c_i_idx in neighs[c_j_idx]:
