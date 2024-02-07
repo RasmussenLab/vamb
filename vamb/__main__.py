@@ -1368,6 +1368,9 @@ def load_composition_and_abundance_and_embeddings(
         max_nbhd_len = np.std(neighbourhoods_lens)*4
         logger.info(f"Max neighbourhood length: {max_nbhd_len}")
         neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len]
+        neighbours_to_remove = np.sum([len(cs) for nn,cs in neighbourhoods_cs_d.items() if len(cs) > max_nbhd_len])
+        
+        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {neighbours_to_remove} contigs")
         #print(neighs[:5])
         for nn in neighbourhoods_to_remove:
             cs_nn = neighbourhoods_cs_d[nn]
