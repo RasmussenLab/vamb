@@ -1968,7 +1968,7 @@ def run_reclustering(
 
     logger.info(f"{len(composition.metadata.identifiers)} contig names after filtering")
     logger.info("mmseqs taxonomy predictions are provided")
-    predictions_path = taxonomy_options.taxonomy_predictions_path
+    predictions_path = taxonomy_options.taxonomy_path
 
     reclustered = vamb.reclustering.recluster_bins(
         reclustering_options.clusters_path,
