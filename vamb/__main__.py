@@ -1308,6 +1308,66 @@ def load_composition_and_abundance_and_embeddings(
             time_generating_embedds = round(time.time() - begintime, 2)
 
             logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
+
+            # remove neighbours if they belong to a the largest neighbourhood 
+
+            logger.info(f"Outlier largest neighbourhood will be excluded.")
+            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+            neighbourhoods_g = nx.Graph()
+            for i,neigh_idxs in enumerate(neighs): 
+                c = composition.metadata.identifiers[i]
+                for neigh_idx in neigh_idxs:
+                    c_neigh = composition.metadata.identifiers[neigh_idx]
+                    if  c_neigh == c:
+                        continue 
+                    neighbourhoods_g.add_edge(c_neigh,c)
+            
+            neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+            
+            
+            neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
+            
+            #max_nbhd_len = np.std(neighbourhoods_lens)*4
+            max_nbhd_len = np.max(neighbourhoods_lens)
+            neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
+            neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
+            
+            logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
+            #print(neighs[:5])
+            for c in neighbours_to_remove:
+                c_idx = c_idx_d[c]
+                neighs[c_idx]=[]
+                mask_embeddings_binning[c_idx]=False            
+                    
+            total_neighs= np.sum([len(ns) for ns in neighs])                
+            logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
+
+            
+
+            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+            total_neighs = np.sum([len(ns) for ns in neighs])
+            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+
+            logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
+            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+            logger.info(f"Total redundant neighs {total_neighs}.")
+
+            # now that we have the neighbours per contig, only consider the top_closest_neighbours
+            logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
+            
+            for i in range(len(neighs)):
+                if len(neighs[i]) <= embeddings_options.top_neighbours:
+                    continue 
+                neighs[i] = neighs[i][:embeddings_options.top_neighbours]
+            total_neighs= np.sum([len(ns) for ns in neighs])
+            
+            logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
+
+
+
+
+
         else:
             logger.info(
                 f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
@@ -1335,61 +1395,6 @@ def load_composition_and_abundance_and_embeddings(
             logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
             logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
             logger.info(f"Total redundant neighs {total_neighs}.")
-
-        # remove neighbours if they belong to a the largest neighbourhood 
-
-        logger.info(f"Outlier largest neighbourhood will be excluded.")
-        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-        neighbourhoods_g = nx.Graph()
-        for i,neigh_idxs in enumerate(neighs): 
-            c = composition.metadata.identifiers[i]
-            for neigh_idx in neigh_idxs:
-                c_neigh = composition.metadata.identifiers[neigh_idx]
-                if  c_neigh == c:
-                    continue 
-                neighbourhoods_g.add_edge(c_neigh,c)
-        
-        neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
-        
-        
-        neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
-        
-        #max_nbhd_len = np.std(neighbourhoods_lens)*4
-        max_nbhd_len = np.max(neighbourhoods_lens)
-        neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
-        neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
-        
-        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
-        #print(neighs[:5])
-        for c in neighbours_to_remove:
-            c_idx = c_idx_d[c]
-            neighs[c_idx]=[]
-            mask_embeddings_binning[c_idx]=False            
-                
-        total_neighs= np.sum([len(ns) for ns in neighs])                
-        logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
-
-        
-
-        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-        total_neighs = np.sum([len(ns) for ns in neighs])
-        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-
-        logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
-        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-        logger.info(f"Total redundant neighs {total_neighs}.")
-
-        # now that we have the neighbours per contig, only consider the top_closest_neighbours
-        logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
-        
-        for i in range(len(neighs)):
-            if len(neighs[i]) <= embeddings_options.top_neighbours:
-                continue 
-            neighs[i] = neighs[i][:embeddings_options.top_neighbours]
-        total_neighs= np.sum([len(ns) for ns in neighs])
-        
-        logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
         
 
     elif embeddings_options.symmetry == True:
