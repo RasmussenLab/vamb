@@ -331,7 +331,7 @@ class AAE_ASY(nn.Module):
         for y_i, idx_pred, emb_mask_i in zip(y, idxs_preds, emb_mask):
             if len(self.neighs[idx_pred]) == 0 or not emb_mask_i:
                 # If it has no neighbors or emb_mask_i is False
-                cat_CE_distance = torch.tensor(0.0)  # A single value of 1.0
+                cat_CE = torch.tensor(0.0)  # A single value of 1.0
 
             else:
                 # Select the neighbors
