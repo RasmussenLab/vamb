@@ -3115,7 +3115,7 @@ def run_aae_n2v(
     abundance_options: AbundanceOptions,
     embeddings_options: EmbeddingsOptions,
     encoder_options: Encodern2vOptions,
-    training_options: TrainingOptions,
+    training_options: AAETrainingOptions,# TrainingOptions,
     cluster_options: ClusterOptions,
 ):
     # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
@@ -3626,7 +3626,7 @@ class AAEASYarguments(BinnerArguments):
             abundance_options=self.abundance_options,
             embeddings_options=self.embeddings_options,
             encoder_options=self.encoder_options,
-            training_options=self.training_options,
+            training_options=self.aae_training_options,
             cluster_options=self.cluster_options,
         )
 
