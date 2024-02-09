@@ -102,7 +102,7 @@ class AAE_ASY(nn.Module):
         self.nsamples = nsamples
         self.ncontigs = ncontigs
         self.n_embeddings= n_embeddings
-        input_len = self.ntnf + self.nsamples + self.n_embeddings
+        input_len = self.ntnf + self.nsamples + self.n_embeddings +1 
         self.h_n = nhiddens
         self.ld = nlatent_l
         self.y_len = nlatent_y
@@ -189,7 +189,7 @@ class AAE_ASY(nn.Module):
         return z
 
     ## Encoder
-    def _encode(self, depths, tnfs,ab,embs):
+    def _encode(self, depths, tnfs,embs,ab):
         _input = torch.cat((depths, tnfs,embs,ab), 1)
         x = self.encoder(_input)
         mu = self.mu(x)
