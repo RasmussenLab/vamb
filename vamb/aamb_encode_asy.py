@@ -191,7 +191,7 @@ class AAE_ASY(nn.Module):
     ## Encoder
     def _encode(self, depths, tnfs,embs,ab):
         _input = torch.cat((depths, tnfs,embs,ab), 1)
-        print(_input.shape)
+        #print(_input.shape)
         x = self.encoder(_input)
         mu = self.mu(x)
         logvar = self.logvar(x)
@@ -311,7 +311,7 @@ class AAE_ASY(nn.Module):
         )
 
     def cat_CE_similarity(self,one_hot_vectors):
-        print(one_hot_vectors.shape)
+        #print(one_hot_vectors.shape)
         num_samples = len(one_hot_vectors)
         total_loss = 0.0
         for i in range(num_samples):
@@ -445,7 +445,7 @@ class AAE_ASY(nn.Module):
             # everything used 
             
             for depths_in, tnfs_in,abundance_in, emb_in,emb_mask, weighs,idx_preds in data_loader:
-                print(abundance_in.shape,emb_in.shape)
+                
                 nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
