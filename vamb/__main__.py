@@ -1615,10 +1615,17 @@ def load_composition_and_abundance_and_embeddings_aae(
     else:
         logger.info(f"Processing embeddings from {embeddings_options.path}")
         embeddings = np.load(embeddings_options.path)["arr_0"]
+        logger.info(
+            f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
+        )
+
         contigs_embedded_all = np.loadtxt(
             embeddings_options.embeddedcontigspath, dtype=object
         )
         # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
+        logger.info(
+            f"Creating embeddings mask."
+        )
 
         mask_embeddings_binning = np.array(
             [
@@ -1636,125 +1643,11 @@ def load_composition_and_abundance_and_embeddings_aae(
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
         logger.info(f"Embeddings processed.")
-        
-        if embeddings_options.neighs_object_path is None:
-            logger.info("\nComputing contig embedding neighbours")
-
-            cosine_distances = cdist(
-                embeddings_binning, embeddings_binning, metric="cosine"
-            )
-
-            neighs, idxs_with_neighs = find_neighbours(
-                cosine_distances,
-                np.where(mask_embeddings_binning == False)[0],
-                radius=embeddings_options.radius_neighs,
-                sort=True,
-            )
-            neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
-
-            logger.info(
-                "%i/%i contigs have neighbours within %.2f "
-                % (
-                    len(idxs_with_neighs),
-                    len(composition.metadata.identifiers),
-                    embeddings_options.radius_neighs,
-                )
-            )
-            time_generating_embedds = round(time.time() - begintime, 2)
-
-            logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
-
-            # remove neighbours if they belong to a the largest neighbourhood 
-
-            logger.info(f"Outlier largest neighbourhood will be excluded.")
-            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-            neighbourhoods_g = nx.Graph()
-            for i,neigh_idxs in enumerate(neighs): 
-                c = composition.metadata.identifiers[i]
-                for neigh_idx in neigh_idxs:
-                    c_neigh = composition.metadata.identifiers[neigh_idx]
-                    if  c_neigh == c:
-                        continue 
-                    neighbourhoods_g.add_edge(c_neigh,c)
-            
-            neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
-            
-            
-            neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
-            
-            #max_nbhd_len = np.std(neighbourhoods_lens)*4
-            max_nbhd_len = np.max(neighbourhoods_lens)
-            neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
-            neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
-            
-            logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
-            #print(neighs[:5])
-            for c in neighbours_to_remove:
-                c_idx = c_idx_d[c]
-                neighs[c_idx]=[]
-                mask_embeddings_binning[c_idx]=False            
-                    
-            total_neighs= np.sum([len(ns) for ns in neighs])                
-            logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
-
-            
-
-            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-            total_neighs = np.sum([len(ns) for ns in neighs])
-            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-
-            logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
-            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-            logger.info(f"Total redundant neighs {total_neighs}.")
-
-            # now that we have the neighbours per contig, only consider the top_closest_neighbours
-            logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
-            
-            for i in range(len(neighs)):
-                if len(neighs[i]) <= embeddings_options.top_neighbours:
-                    continue 
-                neighs[i] = neighs[i][:embeddings_options.top_neighbours]
-            total_neighs= np.sum([len(ns) for ns in neighs])
-            
-            logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
-
-
-        else:
-            logger.info(
-                f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
-            )
-
-            if embeddings_options.embeddings_processed_path != None:
-                logger.info(
-                    f"\nLoading embeddings processed from  {embeddings_options.embeddings_processed_path}."
-                )
-                    
-                embeddings_binning = np.load(
-                    embeddings_options.embeddings_processed_path
-                )["arr_0"]
-            else:
-                embeddings_binning = np.zeros(
-                    (len(composition.metadata.identifiers), 32)
-                )
-            mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
-                "arr_0"
-            ]
-
-            neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
-                "arr_0"
-            ]
-            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-            total_neighs = np.sum([len(ns) for ns in neighs])
-            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-            logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
-            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-            logger.info(f"Total redundant neighs {total_neighs}.")
-        
-     # LOAD OR GENERATE NEIGHBOURS
+    
+    # LOAD OR GENERATE NEIGHBOURS    
     if embeddings_options.neighs_object_path == None:
         logger.info("\nComputing contig embedding neighbours")
+
         cosine_distances = cdist(
             embeddings_binning, embeddings_binning, metric="cosine"
         )
@@ -1833,24 +1726,12 @@ def load_composition_and_abundance_and_embeddings_aae(
         total_neighs= np.sum([len(ns) for ns in neighs])
         
         logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
+
     
     else:
         logger.info(
             f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
         )
-
-        # assert embeddings_options.embeddings_processed_path != None, "If neighbours provided, processed embeddings should be provided as well"
-        # embeddings_binning = np.load(
-        #     embeddings_options.embeddings_processed_path
-        # )["arr_0"]
-        # # else:
-        # #     embeddings_binning = np.zeros(
-        # #         (len(composition.metadata.identifiers), 32)
-        # #     )
-
-        # mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
-        #     "arr_0"
-        # ]
 
         neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
             "arr_0"
@@ -1862,6 +1743,7 @@ def load_composition_and_abundance_and_embeddings_aae(
         logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
         logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
         logger.info(f"Total redundant neighs {total_neighs}.")
+        
 
 
     if embeddings_options.shuffle_embeds == True:
