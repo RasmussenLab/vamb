@@ -405,6 +405,7 @@ class AAE_ASY(nn.Module):
     def Y_neighs_accuracy(self):
         accuracies = 0
         contigs_with_neighs = 0
+        labels_used = set()
         for neigh_idxs in self.neighs:
             if len(neigh_idxs) == 0:
                 continue
@@ -413,6 +414,7 @@ class AAE_ASY(nn.Module):
                 labels.append(torch.argmax(self.y_container[neigh_idx]).item())
                 
             unique_labels = set(labels)
+            labels_used = unique_labels.union(labels_used)
             max_count = 0
             for label in unique_labels:
                 count = labels.count(label)
@@ -422,7 +424,7 @@ class AAE_ASY(nn.Module):
             accuracies +=  max_count / len(labels)
             contigs_with_neighs += 1 
         
-        return accuracies/contigs_with_neighs
+        return accuracies/contigs_with_neighs,len(labels_used)
 
     def Y_neighbourhoods_accuracy(self):
         accuracies = 0
@@ -669,13 +671,13 @@ class AAE_ASY(nn.Module):
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
-            accuracy_neighs = self.Y_neighs_accuracy()
+            accuracy_neighs,ys_used_n = self.Y_neighs_accuracy()
             accuracy_hoods = self.Y_neighbourhoods_accuracy()
             
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tBs: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}Ys_used: {}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -688,6 +690,7 @@ class AAE_ASY(nn.Module):
                     #epoch_d_y_loss/ len(data_loader),
                     accuracy_neighs,                    
                     accuracy_hoods,                    
+                    ys_used_n,
                     data_loader.batch_size,
                 )
             )
