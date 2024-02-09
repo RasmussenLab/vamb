@@ -16,6 +16,7 @@ from . import taxvamb_encode
 from . import reclustering
 from . import encode_n2v_asimetric
 from . import encode_n2v
+from . import aamb_encode_asy
 
 from loguru import logger
 
@@ -34,4 +35,5 @@ __all__ = [
     "reclustering",
     "encode_n2v_asimetric",
     "encode_n2v",
+    "aamb_encode_asy",
 ]
