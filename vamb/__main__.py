@@ -1403,7 +1403,7 @@ def load_composition_and_abundance_and_embeddings(
             # remove neighbours if they belong to a the largest neighbourhood 
 
             logger.info(f"Outlier largest neighbourhood will be excluded.")
-            #c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
             neighbourhoods_g = nx.Graph()
             for i,neigh_idxs in enumerate(neighs): 
                 c = composition.metadata.identifiers[i]
@@ -1426,7 +1426,7 @@ def load_composition_and_abundance_and_embeddings(
             logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
             #print(neighs[:5])
             for c in neighbours_to_remove:
-                c_idx = #c_idx_d[c]
+                c_idx = c_idx_d[c]
                 neighs[c_idx]=[]
                 mask_embeddings_binning[c_idx]=False            
                     
@@ -1710,8 +1710,9 @@ def load_composition_and_abundance_and_embeddings_aae(
         
         logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
         #print(neighs[:5])
+        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
         for c in neighbours_to_remove:
-            c_idx = #c_idx_d[c]
+            c_idx = c_idx_d[c]
             neighs[c_idx]=[]
             mask_embeddings_binning[c_idx]=False            
                 
@@ -1750,7 +1751,7 @@ def load_composition_and_abundance_and_embeddings_aae(
             "arr_0"
         ]
 
-        #c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
         neighbourhoods_cs_d = find_neighbourhoods(composition.metadata.identifiers,neighs)
 
         contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
