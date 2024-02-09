@@ -295,7 +295,7 @@ class AAE_ASY(nn.Module):
         weighed_ce = ce * ce_weight
         weighed_sse = sse * sse_weight
         weighed_emb = loss_emb * self.gamma
-        weighed_contrastive = contrastive_loss_y * self.delta
+        weighed_contrastive = contrastive_loss_y * ce_weight # * self.delta
 
 
         reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_emb + weighed_contrastive
