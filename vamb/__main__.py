@@ -996,6 +996,7 @@ def train_aae_n2v(
         embeddings_options.delta,
         _cuda=vamb_options.cuda,
         seed=vamb_options.seed,
+        embeds_loss=embeddings_options.embeds_loss,
     )
 
     logger.info("\tCreated AAE_asy")

@@ -69,6 +69,8 @@ class AAE_ASY(nn.Module):
         delta:float,
         _cuda: bool,
         seed: int,
+        embeds_loss: str = "cos",
+
     ):
         for variable, name in [
             (nsamples, "nsamples"),
@@ -102,6 +104,7 @@ class AAE_ASY(nn.Module):
         self.nsamples = nsamples
         self.ncontigs = ncontigs
         self.n_embeddings= n_embeddings
+        self.embeds_loss = embeds_loss
         input_len = self.ntnf + self.nsamples + self.n_embeddings +1 
         self.h_n = nhiddens
         self.ld = nlatent_l
@@ -500,7 +503,7 @@ class AAE_ASY(nn.Module):
                     #d_y_latent,
                 ) = self(depths_in, tnfs_in,emb_in,abundance_in)           
 
-                rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,loss_emb_unpop = self.calc_loss(
+                rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,_ = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weighs,y_latent_one_hot,idx_preds
                 )
                 g_loss_adv_z = adversarial_loss(
@@ -525,7 +528,7 @@ class AAE_ASY(nn.Module):
                 # ----------------------
 
                 optimizer_D_z.zero_grad()
-                mu, logvar = self._encode(depths_in, tnfs_in,embs_in,abundance_in)[:2]
+                mu, logvar = self._encode(depths_in, tnfs_in,emb_in,abundance_in)[:2]
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_loss_prior = adversarial_loss(
@@ -544,7 +547,7 @@ class AAE_ASY(nn.Module):
                 # ----------------------
 
                 optimizer_D_y.zero_grad()
-                y_latent = self._encode(depths_in, tnfs_in,embs_in,abundance_in)[2]
+                y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)[2]
                 d_y_loss_prior = adversarial_loss(
                     self._discriminator_y(y_prior), labels_prior
                 )
@@ -577,8 +580,6 @@ class AAE_ASY(nn.Module):
                 
 
 
-            time_epoch_1 = time.time()
-            time_e = np.round((time_epoch_1 - time_epoch_0) / 60, 3)
             logger.info(
                 "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
                     epoch_i + 1,
