@@ -148,7 +148,7 @@ class AAE_ASY(nn.Module):
         self.cosine_loss = CosineSimilarityLoss()
 
 
-        self.one_hot_transform = OneHotTransform(self.h_n)
+        self.one_hot_transform = OneHotTransform(self.y_len)
         
         # encoder
         self.encoder = nn.Sequential(
