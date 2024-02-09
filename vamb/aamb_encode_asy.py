@@ -371,6 +371,7 @@ class AAE_ASY(nn.Module):
         z_latent = self._reparameterization(mu, logvar)
         y_latent_one_hot = y_latent # self._y_argmax(y_latent)
         depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
+        print(y_latent[0,:])
         #d_z_latent = self._discriminator_z(z_latent)
         #d_y_latent = self._discriminator_y(y_latent)
 
