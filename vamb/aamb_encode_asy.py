@@ -225,9 +225,9 @@ class AAE_ASY(nn.Module):
         # Decompose reconstruction to depths and tnf signal
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
-        emb_out = reconstruction.narrow(1, self.ntnf + self.nsamples, self.n_embedding)
+        emb_out = reconstruction.narrow(1, self.ntnf + self.nsamples, self.n_embeddings)
         abundance_out = reconstruction.narrow(
-            1, self.nsamples + self.ntnf + self.n_embedding, 1
+            1, self.nsamples + self.ntnf + self.n_embeddings, 1
         )
         # If multiple samples, apply softmax
         if self.nsamples > 1:            
