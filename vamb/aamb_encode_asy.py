@@ -330,7 +330,7 @@ class AAE_ASY(nn.Module):
 
         else:
             for i in range(len(ys_neighs)):
-                loss = F.binary_cross_entropy(y_i.unsqueeze(0), y_and_ys_neighs[j])
+                loss = F.binary_cross_entropy(y_i.unsqueeze(0), ys_neighs[j])
                 print(loss)
 
         return total_loss
