@@ -718,7 +718,8 @@ class AAE_ASY(nn.Module):
 
         new_data_loader = set_batchsize(data_loader, 256, encode=True)
         
-        depths_array, _, _, _, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _, _, _,_ = new_data_loader.dataset.tensors
+        
         length = len(depths_array)
         latent = np.empty((length, self.ld), dtype=np.float32)
         index_contigname = 0
@@ -727,7 +728,7 @@ class AAE_ASY(nn.Module):
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         with torch.no_grad():
             #for depths, tnfs, emb, ab, _, _ in new_data_loader:
-            for depths, tnfs,ab, emb,_, _,_ in data_loader:
+            for depths, tnfs,ab, emb,_, _,_ in new_data_loader:
                 if self.usecuda:
                     depths_in = depths_in.cuda()
                     tnfs_in = tnfs_in.cuda()
