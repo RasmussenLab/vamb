@@ -371,7 +371,7 @@ class AAE_ASY(nn.Module):
         z_latent = self._reparameterization(mu, logvar)
         y_latent_one_hot = y_latent # self._y_argmax(y_latent)
         depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
-        print(y_latent[0,:])
+        
         #d_z_latent = self._discriminator_z(z_latent)
         #d_y_latent = self._discriminator_y(y_latent)
 
@@ -532,14 +532,14 @@ class AAE_ASY(nn.Module):
                 g_loss_adv_z = adversarial_loss(
                     self._discriminator_z(z_latent), labels_prior
                 )
-                g_loss_adv_y = adversarial_loss(
-                    self._discriminator_y(y_latent), labels_prior
-                )
+                # g_loss_adv_y = adversarial_loss(
+                #     self._discriminator_y(y_latent), labels_prior
+                # )
 
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
-                    + (self.sl * (1 - self.slr)) * g_loss_adv_y
+                    #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
                 ed_loss.backward()
@@ -569,23 +569,23 @@ class AAE_ASY(nn.Module):
                 #  Train Discriminator y
                 # ----------------------
 
-                optimizer_D_y.zero_grad()
-                y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)[2]
-                d_y_loss_prior = adversarial_loss(
-                    self._discriminator_y(y_prior), labels_prior
-                )
-                d_y_loss_latent = adversarial_loss(
-                    self._discriminator_y(y_latent), labels_latent
-                )
-                d_y_loss = 0.5 * (d_y_loss_prior + d_y_loss_latent)
+                # optimizer_D_y.zero_grad()
+                # y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)[2]
+                # d_y_loss_prior = adversarial_loss(
+                #     self._discriminator_y(y_prior), labels_prior
+                # )
+                # d_y_loss_latent = adversarial_loss(
+                #     self._discriminator_y(y_latent), labels_latent
+                # )
+                # d_y_loss = 0.5 * (d_y_loss_prior + d_y_loss_latent)
 
-                d_y_loss.backward()
-                optimizer_D_y.step()
+                # d_y_loss.backward()
+                # optimizer_D_y.step()
 
                 ED_loss_e += float(ed_loss.item())
                 V_loss_e += float(rec_and_contr_loss.item())
                 D_z_loss_e += float(d_z_loss.item())
-                D_y_loss_e += float(d_y_loss.item())
+                #D_y_loss_e += float(d_y_loss.item())
                 CE_e += float(ce.item())
                 SSE_e += float(sse.item())
 
@@ -599,12 +599,13 @@ class AAE_ASY(nn.Module):
                 epoch_contrastive_loss += contrastive_loss_y.item()
                 epoch_embloss_pop += loss_emb_pop.item()  # .data.item()
                 epoch_d_z_loss += float(d_z_loss.item())
-                epoch_d_y_loss += float(d_y_loss.item())
+                #epoch_d_y_loss += float(d_y_loss.item())
                 
 
 
             logger.info(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
+                #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tBatchsize: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -614,7 +615,7 @@ class AAE_ASY(nn.Module):
                     epoch_embloss_pop / len(data_loader),
                     epoch_contrastive_loss / len(data_loader),
                     epoch_d_z_loss/ len(data_loader),
-                    epoch_d_y_loss/ len(data_loader),                    
+                    #epoch_d_y_loss/ len(data_loader),                    
                     data_loader.batch_size,
                 )
             )
@@ -627,7 +628,7 @@ class AAE_ASY(nn.Module):
                         "optimizer_E": optimizer_E.state_dict(),
                         "optimizer_D": optimizer_D.state_dict(),
                         "optimizer_D_z": optimizer_D_z.state_dict(),
-                        "optimizer_D_y": optimizer_D_y.state_dict(),
+                        #"optimizer_D_y": optimizer_D_y.state_dict(),
                         "nsamples": self.num_samples,
                         "alpha": self.alpha,
                         "gamma": self.gamma,
