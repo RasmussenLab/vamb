@@ -3115,7 +3115,7 @@ def run_aae_n2v(
     abundance_options: AbundanceOptions,
     embeddings_options: EmbeddingsOptions,
     encoder_options: Encodern2vOptions,
-    training_options: AAETrainingOptions,# TrainingOptions,
+    training_options: TrainingOptions,
     cluster_options: ClusterOptions,
 ):
     # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
@@ -3125,7 +3125,7 @@ def run_aae_n2v(
     #vae_options = encoder_options.vae_options
     aae_options = encoder_options.aae_options
     #vae_training_options = training_options.vae_options
-    aae_training_options = training_options.aae_options
+    aae_training_options = training_options.aae_training_options
 
     begintime = time.time()
 
@@ -3614,7 +3614,7 @@ class AAEASYarguments(BinnerArguments):
         self.training_options = TrainingOptions(
             encoder_options=self.encoder_options,
             vae_options=self.vae_training_options,
-            aae_options=self.aae_options,
+            aae_options=self.aae_training_options,
             lrate=self.args.lrate,
         )
 
@@ -3626,7 +3626,7 @@ class AAEASYarguments(BinnerArguments):
             abundance_options=self.abundance_options,
             embeddings_options=self.embeddings_options,
             encoder_options=self.encoder_options,
-            training_options=self.aae_training_options,
+            training_options=self.training_options,
             cluster_options=self.cluster_options,
         )
 
