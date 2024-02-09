@@ -179,6 +179,7 @@ class EmbeddingsOptions:
         "embeds_loss",
         "radius_neighs",
         "gamma",
+        "delta",
         "neighs_object_path",
         "embeddings_mask_path",
         "embeddings_processed_path",
@@ -203,6 +204,7 @@ class EmbeddingsOptions:
         radius_clustering: float = 0.01,
         symmetry: bool = False,
         top_neighbours: int = 50,
+        delta: float = 1.0,
     ):
         assert isinstance(embeddingspath, (Path, type(None)))
 
@@ -224,6 +226,7 @@ class EmbeddingsOptions:
         self.shuffle_embeds = shuffle_embeds
         self.radius_neighs = radius_neighs
         self.gamma = gamma
+        self.delta = delta
         self.top_neighbours = top_neighbours
 
 
@@ -950,6 +953,65 @@ def trainaae(
 
     return latent, clusters_y_dict
 
+def train_aae_n2v(
+    data_loader: DataLoader,
+    aae_options: AAEOptions,
+    training_options: AAETrainingOptions,
+    vamb_options: VambOptions,
+    embeddings_options: EmbeddingsOptions,
+    lrate: float,
+    alpha: Optional[float],  # set automatically if None
+    contignames: Sequence[str],
+    neighs_object: np.ndarray,
+    
+    
+) -> tuple[np.ndarray, dict[str, set[str]]]:
+    begintime = time.time()
+    logger.info("Creating and training AAE_asy")
+    n_embedding = data_loader.dataset.tensors[2].shape[1]
+    nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
+
+    aae = vamb.aamb_encode_asy.AAE_ASY(
+        nsamples,
+        n_embedding,
+        neighs_object,
+        aae_options.nhiddens,
+        aae_options.nlatent_z,
+        aae_options.nlatent_y,
+        aae_options.sl,
+        aae_options.slr,
+        alpha,
+        embeddings_options.gamma,
+        embeddings_options.delta,
+        _cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
+    )
+
+    logger.info("\tCreated AAE_asy")
+    modelpath = os.path.join(vamb_options.out_dir, "aae_asy_model.pt")
+    aae.trainmodel(
+        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
+        training_options.nepochs,
+        training_options.batchsteps,
+        training_options.temp,
+        lrate,
+        modelpath,
+    )
+
+    logger.info("\tEncoding to latent representation")
+    clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
+    vamb.vambtools.write_npz(
+        os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
+    )
+
+    del aae  # Needed to free "latent" array's memory references?
+
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"\tTrained AAE and encoded in {elapsed} seconds.\n")
+
+    return latent, clusters_y_dict
+
+
 
 def cluster_and_write_files(
     vamb_options: VambOptions,
@@ -1190,7 +1252,6 @@ def find_neighbours(
 
 
 
-
 def split_neighbourhoods_by_sample(neighbourhoods):
     nbhds_split = dict()
     for i,(nbhd_id, nbhd_cs) in enumerate(neighbourhoods.items()):
@@ -1365,9 +1426,6 @@ def load_composition_and_abundance_and_embeddings(
             logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
 
 
-
-
-
         else:
             logger.info(
                 f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
@@ -1485,6 +1543,323 @@ def load_composition_and_abundance_and_embeddings(
             mask_embeddings_binning,
             neighs,
         )
+
+
+
+def load_composition_and_abundance_and_embeddings_aae(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    embeddings_options: EmbeddingsOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
+) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance, np.ndarray]:
+    logger.info(
+        "Starting Aamb (with node2vec embeddings and y contrastive) version "
+        + ".".join(map(str, vamb.__version__))
+    )
+    logger.info("Date and time is " + str(datetime.datetime.now()))
+    begintime = time.time()
+
+    composition = calc_tnf(comp_options, vamb_options.out_dir, binsplitter)
+    abundance = calc_rpkm(
+        abundance_options,
+        vamb_options.out_dir,
+        composition.metadata,
+        vamb_options.n_threads,
+    )
+
+    time_generating_input = round(time.time() - begintime, 2)
+    logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")
+
+    if embeddings_options.embeddings_processed_path is not None:
+        logger.info(
+            f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
+        )
+        embeddings_binning = np.load(
+            embeddings_options.embeddings_processed_path
+        )["arr_0"]
+
+        contigs_embedded_all = np.loadtxt(
+            embeddings_options.embeddedcontigspath, dtype=object
+        )
+        # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
+        mask_embeddings_binning = np.array(
+            [
+                1 if c in contigs_embedded_all else 0
+                for c in composition.metadata.identifiers
+            ],
+            dtype=bool,
+        )
+
+    else:
+        logger.info(f"Processing embeddings from {embeddings_options.path}")
+        embeddings = np.load(embeddings_options.path)["arr_0"]
+        contigs_embedded_all = np.loadtxt(
+            embeddings_options.embeddedcontigspath, dtype=object
+        )
+        # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
+
+        mask_embeddings_binning = np.array(
+            [
+                1 if c in contigs_embedded_all else 0
+                for c in composition.metadata.identifiers
+            ],
+            dtype=bool,
+        )
+        embeddings_binning = np.zeros(
+            (len(composition.metadata.identifiers), embeddings.shape[1])
+        )
+        for i, c in enumerate(composition.metadata.identifiers):
+            if mask_embeddings_binning[i]:
+                embeddings_binning = embeddings[
+                    np.where(contigs_embedded_all == c)[0][0], :
+                ]
+    
+        if embeddings_options.neighs_object_path is None:
+            logger.info("\nComputing contig embedding neighbours")
+
+            cosine_distances = cdist(
+                embeddings_binning, embeddings_binning, metric="cosine"
+            )
+
+            neighs, idxs_with_neighs = find_neighbours(
+                cosine_distances,
+                np.where(mask_embeddings_binning == False)[0],
+                radius=embeddings_options.radius_neighs,
+                sort=True,
+            )
+            neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
+
+            logger.info(
+                "%i/%i contigs have neighbours within %.2f "
+                % (
+                    len(idxs_with_neighs),
+                    len(composition.metadata.identifiers),
+                    embeddings_options.radius_neighs,
+                )
+            )
+            time_generating_embedds = round(time.time() - begintime, 2)
+
+            logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
+
+            # remove neighbours if they belong to a the largest neighbourhood 
+
+            logger.info(f"Outlier largest neighbourhood will be excluded.")
+            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+            neighbourhoods_g = nx.Graph()
+            for i,neigh_idxs in enumerate(neighs): 
+                c = composition.metadata.identifiers[i]
+                for neigh_idx in neigh_idxs:
+                    c_neigh = composition.metadata.identifiers[neigh_idx]
+                    if  c_neigh == c:
+                        continue 
+                    neighbourhoods_g.add_edge(c_neigh,c)
+            
+            neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+            
+            
+            neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
+            
+            #max_nbhd_len = np.std(neighbourhoods_lens)*4
+            max_nbhd_len = np.max(neighbourhoods_lens)
+            neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
+            neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
+            
+            logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
+            #print(neighs[:5])
+            for c in neighbours_to_remove:
+                c_idx = c_idx_d[c]
+                neighs[c_idx]=[]
+                mask_embeddings_binning[c_idx]=False            
+                    
+            total_neighs= np.sum([len(ns) for ns in neighs])                
+            logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
+
+            
+
+            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+            total_neighs = np.sum([len(ns) for ns in neighs])
+            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+
+            logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
+            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+            logger.info(f"Total redundant neighs {total_neighs}.")
+
+            # now that we have the neighbours per contig, only consider the top_closest_neighbours
+            logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
+            
+            for i in range(len(neighs)):
+                if len(neighs[i]) <= embeddings_options.top_neighbours:
+                    continue 
+                neighs[i] = neighs[i][:embeddings_options.top_neighbours]
+            total_neighs= np.sum([len(ns) for ns in neighs])
+            
+            logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
+
+
+
+
+
+        else:
+            logger.info(
+                f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
+            )
+
+            if embeddings_options.embeddings_processed_path != None:
+                embeddings_binning = np.load(
+                    embeddings_options.embeddings_processed_path
+                )["arr_0"]
+            else:
+                embeddings_binning = np.zeros(
+                    (len(composition.metadata.identifiers), 32)
+                )
+            mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
+                "arr_0"
+            ]
+
+            neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
+                "arr_0"
+            ]
+            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+            total_neighs = np.sum([len(ns) for ns in neighs])
+            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+            logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
+            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+            logger.info(f"Total redundant neighs {total_neighs}.")
+        
+
+    if embeddings_options.neighs_object_path is None:
+        logger.info("\nComputing contig embedding neighbours")
+        cosine_distances = cdist(
+            embeddings_binning, embeddings_binning, metric="cosine"
+        )
+
+        neighs, idxs_with_neighs = find_neighbours(
+            cosine_distances,
+            np.where(mask_embeddings_binning == False)[0],
+            radius=embeddings_options.radius_neighs,
+            sort=True,
+        )
+        neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
+
+        logger.info(
+            "%i/%i contigs have neighbours within %.2f "
+            % (
+                len(idxs_with_neighs),
+                len(composition.metadata.identifiers),
+                embeddings_options.radius_neighs,
+            )
+        )
+        time_generating_embedds = round(time.time() - begintime, 2)
+
+        logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
+
+        # remove neighbours if they belong to a the largest neighbourhood 
+
+        logger.info(f"Outlier largest neighbourhood will be excluded.")
+        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+        neighbourhoods_g = nx.Graph()
+        for i,neigh_idxs in enumerate(neighs): 
+            c = composition.metadata.identifiers[i]
+            for neigh_idx in neigh_idxs:
+                c_neigh = composition.metadata.identifiers[neigh_idx]
+                if  c_neigh == c:
+                    continue 
+                neighbourhoods_g.add_edge(c_neigh,c)
+        
+        neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+        
+        
+        neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
+        
+        #max_nbhd_len = np.std(neighbourhoods_lens)*4
+        max_nbhd_len = np.max(neighbourhoods_lens)
+        neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
+        neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
+        
+        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
+        #print(neighs[:5])
+        for c in neighbours_to_remove:
+            c_idx = c_idx_d[c]
+            neighs[c_idx]=[]
+            mask_embeddings_binning[c_idx]=False            
+                
+        total_neighs= np.sum([len(ns) for ns in neighs])                
+        logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
+
+        
+
+        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+        total_neighs = np.sum([len(ns) for ns in neighs])
+        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+
+        logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
+        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+        logger.info(f"Total redundant neighs {total_neighs}.")
+
+        # now that we have the neighbours per contig, only consider the top_closest_neighbours
+        logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
+        
+        for i in range(len(neighs)):
+            if len(neighs[i]) <= embeddings_options.top_neighbours:
+                continue 
+            neighs[i] = neighs[i][:embeddings_options.top_neighbours]
+        total_neighs= np.sum([len(ns) for ns in neighs])
+        
+        logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
+    
+    else:
+        logger.info(
+            f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
+        )
+
+        if embeddings_options.embeddings_processed_path != None:
+            embeddings_binning = np.load(
+                embeddings_options.embeddings_processed_path
+            )["arr_0"]
+        else:
+            embeddings_binning = np.zeros(
+                (len(composition.metadata.identifiers), 32)
+            )
+        mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
+            "arr_0"
+        ]
+
+        neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
+            "arr_0"
+        ]
+        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+        total_neighs = np.sum([len(ns) for ns in neighs])
+        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+        logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
+        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+        logger.info(f"Total redundant neighs {total_neighs}.")
+
+
+    if embeddings_options.shuffle_embeds == True:
+        logger.info("Embeddings/neighbours shuffled.")
+        return (
+            composition,
+            abundance,
+            np.random.shuffle(embeddings_binning),
+            mask_embeddings_binning,
+            np.random.shuffle(neighs),
+        )
+
+    else:
+        return (
+            composition,
+            abundance,
+            embeddings_binning,
+            mask_embeddings_binning,
+            neighs,
+        )
+
+
 
 
 def run(
@@ -2717,6 +3092,126 @@ def cluster_neighs_based_2(
     )
 
 
+
+def run_aae_n2v(
+    vamb_options: VambOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    embeddings_options: EmbeddingsOptions,
+    encoder_options: Encodern2vOptions,
+    training_options: TrainingOptions,
+    cluster_options: ClusterOptions,
+):
+    # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
+    # I ALSO HAVE TO IMPLEMENT A FUNCTION THAT GENERATES AN OBJECT INDICATING THE NEIGHBOURS OF EACH CONTIG
+    # BAED ON EMBEDDING SPACE AND radius DISTANCE
+
+    vae_options = encoder_options.vae_options
+    aae_options = encoder_options.aae_options
+    vae_training_options = training_options.vae_options
+    aae_training_options = training_options.aae_options
+
+    begintime = time.time()
+
+    (
+        composition,
+        abundance,
+        embeddings,
+        embeddings_mask,
+        neighs_object,
+    ) = load_composition_and_abundance_and_embeddings(
+        vamb_options=vamb_options,
+        comp_options=comp_options,
+        abundance_options=abundance_options,
+        embeddings_options=embeddings_options,
+        binsplitter=cluster_options.binsplitter,
+    )
+
+    # Write contignames and contiglengths needed for dereplication purposes
+    np.savetxt(
+        vamb_options.out_dir.joinpath("contignames"),
+        composition.metadata.identifiers,
+        fmt="%s",
+    )
+    np.savez(vamb_options.out_dir.joinpath("lengths.npz"), composition.metadata.lengths)
+    vamb.vambtools.write_npz(
+        vamb_options.out_dir.joinpath("embeddings.npz"), embeddings
+    )
+    vamb.vambtools.write_npz(
+        vamb_options.out_dir.joinpath("embeddings_mask.npz"), embeddings_mask
+    )
+    vamb.vambtools.write_npz(
+        vamb_options.out_dir.joinpath("neighs_object.npz"),
+        neighs_object,
+    )
+
+    logger.info(
+        "Creating dataloader and mask (including embeddings and neighbours objects)"
+    )
+
+    (
+        data_loader,
+        neighs_object_after_dataloader,
+    ) = vamb.encode_n2v_asimetric.make_dataloader_n2v(
+        abundance.matrix.astype(np.float32),
+        composition.matrix.astype(np.float32),
+        embeddings.astype(np.float32),
+        embeddings_mask.astype(np.float32),
+        neighs_object,
+        composition.metadata.lengths,
+        256,  # dummy value - we change this before using the actual loader
+        destroy=True,
+        cuda=vamb_options.cuda,
+    )
+    clusters_y_dict = None
+    latent_z = None
+
+
+    # Train, save model
+    latent_z, clusters_y_dict = train_aae_n2v(
+        data_loader=data_loader,
+        aae_options=aae_options,
+        vamb_options=vamb_options,
+        training_options=aae_training_options,
+        lrate=training_options.lrate,
+        alpha=encoder_options.alpha,
+        contignames=composition.metadata.identifiers,  # type:ignore
+        neighs_object=neighs_object_after_dataloader
+    )
+
+    # Free up memory
+    comp_metadata = composition.metadata
+    del composition, abundance
+
+
+    assert latent_z is not None
+    assert clusters_y_dict is not None
+    assert comp_metadata.nseqs == len(latent_z)
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("aae_z_clusters")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        latent_z,
+        comp_metadata.identifiers,  # type:ignore
+        comp_metadata.lengths,  # type:ignore
+    )
+    del latent_z
+    # We enforce this in the VAEAAEOptions constructor, see comment there
+    assert cluster_options.max_clusters is None
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("aae_y_clusters")),
+        vamb_options.out_dir.joinpath("bins"),
+        comp_options.path,
+        clusters_y_dict,
+        comp_metadata.identifiers,  # type:ignore
+        comp_metadata.lengths,  # type:ignore
+    )
+
+
 class BasicArguments(object):
     LOGS_PATH = "log.txt"
 
@@ -3049,6 +3544,65 @@ class VAESYarguments(BinnerArguments):
 
     def run_inner(self):
         run_n2v(
+            vamb_options=self.vamb_options,
+            comp_options=self.comp_options,
+            abundance_options=self.abundance_options,
+            embeddings_options=self.embeddings_options,
+            encoder_options=self.encoder_options,
+            training_options=self.training_options,
+            cluster_options=self.cluster_options,
+        )
+
+
+class AAEASYarguments(BinnerArguments):
+    def __init__(self, args):
+        super(AAEASYarguments, self).__init__(args)
+
+        self.aae_options = AAEOptions(
+            nhiddens=args.nhiddens_aae,
+            nlatent_z=args.nlatent_aae_z,
+            nlatent_y=args.nlatent_aae_y,
+            sl=args.sl,
+            slr=args.slr,
+        )
+        self.aae_training_options = AAETrainingOptions(
+            nepochs=args.nepochs_aae,
+            batchsize=args.batchsize_aae,
+            batchsteps=args.batchsteps_aae,
+            temp=args.temp,
+        )
+
+        self.encoder_options = EncoderOptions(
+            vae_options=self.vae_options,
+            aae_options=self.aae_options,
+            alpha=self.args.alpha,
+        )
+
+        self.embeddings_options = EmbeddingsOptions(
+            embeddingspath=args.embeds,
+            embeddedcontigspath=args.contigs_embedded,
+            shuffle_embeds=args.shuffle_embeds,
+            embeds_loss=args.embeds_loss,
+            radius_neighs=args.R,
+            gamma=args.gamma,
+            neighs_object_path=args.neighs,
+            embeddings_mask_path=args.embeds_mask,
+            embeddings_processed_path=args.embeds_processed,
+            symmetry=True,
+            top_neighbours=args.top_neighbours,
+            delta=args.delta,
+        )
+
+        self.training_options = TrainingOptions(
+            encoder_options=self.encoder_options,
+            vae_options=self.vae_training_options,
+            aae_options=self.aae_options,
+            lrate=self.args.lrate,
+        )
+
+
+    def run_inner(self):
+        run_aae_n2v(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
             abundance_options=self.abundance_options,
@@ -3638,6 +4192,86 @@ def add_vae_n2v_asy_arguments(subparser):
     return subparser
 
 
+def add_aae_n2v_asy_arguments(subparser):
+    # Embeddings arguments
+    aae_asy_os = subparser.add_argument_group(title="Asymmetric aae arguments")
+    aae_asy_os.add_argument(
+        "--embeds",
+        metavar="",
+        type=Path,
+        help="paths to graph embeddings ",
+    )
+    aae_asy_os.add_argument(
+        "--contigs_embedded",
+        metavar="",
+        type=Path,
+        help="paths to contigs that were embedded",
+    )
+    aae_asy_os.add_argument(
+        "--shuffle_embeds",
+        help="shuffle embeddings [False]",
+        action="store_true",
+    )
+    aae_asy_os.add_argument(
+        "--embeds_loss",
+        help="Reconstruction loss for the embeddings [cos]",
+        type=str,
+        default="cos",
+    )
+
+    aae_asy_os.add_argument(
+        "-R",
+        help="radius neighbours n2v embeddings [0.1]",
+        type=float,
+        default=0.1,
+    )
+
+    aae_asy_os.add_argument(
+        "--top_neighbours",
+        help="only consider n closest contigs in embedding space as neighbours [50]",
+        type=int,
+        default=50,
+    )
+    
+    aae_asy_os.add_argument(
+        "--embeds_processed",
+        metavar="",
+        type=Path,
+        help="paths to graph embeddings already proprocessed, so they match the contigs dimeniosn",
+    )
+
+    aae_asy_os.add_argument(
+        "--embeds_mask",
+        metavar="",
+        type=Path,
+        help="paths to graph embeddings mask so True if contig has neighbour within radious ",
+    )
+    aae_asy_os.add_argument(
+        "--neighs",
+        metavar="",
+        type=Path,
+        help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
+    )
+
+    aae_asy_os.add_argument(
+        "--gamma",
+        help="Weight for the embeddings reconstruction loss [0.1]",
+        type=float,
+        default=0.1,
+    )
+
+    aae_asy_os.add_argument(
+        "--delta",
+        help="Weight for the Y contrastive losss [1.0]",
+        type=float,
+        default=1.0,
+    )
+
+
+    return subparser
+
+
+
 def main():
     doc = f"""
     Version: {'.'.join([str(i) for i in vamb.__version__])}
@@ -3677,11 +4311,12 @@ def main():
     RECLUSTER = "recluster"
     VAMB_ASY = "vae_asy"
     VAMB_SY = "vae_sy"
+    AAMB_ASY = "aae_asy"
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
         help="""
-        VAMB, TaxVAMB, AVAMB binners
+        VAMB, TaxVAMB, AVAMB,VAMB_ASY,VAMB_SY,AAMB_ASY binners
         """,
     )
     subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
@@ -3772,6 +4407,21 @@ def main():
     add_vae_n2v_arguments(vae_sy_parser)
     add_clustering_arguments(vae_sy_parser)
 
+
+    aae_asy_parser = subparsers_model.add_parser(
+        AAMB_ASY,
+        help="""
+        Adversarial Autoencoder binner that besides coabundances and TNF also leverages
+        assembly graph information by applying a contrastive loss on Y.
+        """,
+    )
+    add_input_output_arguments(aae_asy_parser)
+    #add_vae_arguments(aae_asy_parser)
+    add_aae_arguments(aae_asy_parser)
+    add_aae_n2v_asy_arguments(aae_asy_parser)
+    add_clustering_arguments(aae_asy_parser)
+
+
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -3788,6 +4438,7 @@ def main():
             TAXVAMB: VAEVAEArguments,
             VAMB_ASY: VAEASYarguments,
             VAMB_SY: VAESYarguments,
+            AAMB_ASY: AAEASYarguments,
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:
