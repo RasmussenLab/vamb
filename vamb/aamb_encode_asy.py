@@ -331,9 +331,9 @@ class AAE_ASY(nn.Module):
         else:
             for i in range(len(ys_neighs)):
                 loss = F.binary_cross_entropy(y_i, ys_neighs[i])
-                print(loss)
+                total_loss += loss 
 
-        return total_loss
+        return total_loss/len(ys_neighs)
 
 
     def y_contrastive_loss(self, y, idxs_preds, emb_mask):
