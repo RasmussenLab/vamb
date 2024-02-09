@@ -390,9 +390,10 @@ class AAE_ASY(nn.Module):
     def forward(self, depths_in, tnfs_in,emb_in, abundance_in):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)
         z_latent = self._reparameterization(mu, logvar)
-        print(torch.argmax(y_latent,dim=1),y_latent)
+        
+        #print(torch.argmax(y_latent,dim=1),y_latent)
         y_latent_one_hot = self.one_hot_transform(y_latent)
-        print(torch.argmax(y_latent_one_hot,dim=1),y_latent_one_hot)
+        #print(torch.argmax(y_latent_one_hot,dim=1),y_latent_one_hot)
         #y_latent_one_hot = y_latent # self._y_argmax(y_latent)
         depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
         
