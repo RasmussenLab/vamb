@@ -191,6 +191,7 @@ class AAE_ASY(nn.Module):
     ## Encoder
     def _encode(self, depths, tnfs,embs,ab):
         _input = torch.cat((depths, tnfs,embs,ab), 1)
+        print(_input.shape)
         x = self.encoder(_input)
         mu = self.mu(x)
         logvar = self.logvar(x)
