@@ -311,6 +311,7 @@ class AAE_ASY(nn.Module):
         )
 
     def cat_CE_similarity(self,one_hot_vectors):
+        print(one_hot_vectors.shape)
         num_samples = len(one_hot_vectors)
         total_loss = 0.0
         for i in range(num_samples):
