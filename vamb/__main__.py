@@ -197,8 +197,8 @@ class EmbeddingsOptions:
         embeds_loss: str,
         radius_neighs: float,
         gamma: float,
-        neighs_object_path: Optional[Path],
-        embeddings_mask_path: Optional[Path],
+        neighs_object_path: Optional[Path]=None,
+        embeddings_mask_path: Optional[Path]=None,
         embeddings_processed_path: None,
         margin: float = 0.01,
         radius_clustering: float = 0.01,
@@ -214,12 +214,15 @@ class EmbeddingsOptions:
         if self.symmetry == False:
             self.margin = margin
             self.radius_clustering = radius_clustering
+            
             self.neighs_object_path = neighs_object_path
 
         else:
             # self.embeddings_processed_path = embeddings_processed_path
             self.path = EmbeddingsPath(embeddingspath)
             self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
+            if self.neighs_object_path != None:
+                self.neighs_object_path = neighs_object_path
 
         self.embeddings_processed_path = embeddings_processed_path
         self.embeddings_mask_path = embeddings_mask_path
@@ -1696,9 +1699,6 @@ def load_composition_and_abundance_and_embeddings_aae(
             total_neighs= np.sum([len(ns) for ns in neighs])
             
             logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
-
-
-
 
 
         else:
