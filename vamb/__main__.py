@@ -4416,7 +4416,7 @@ def main():
         """,
     )
     add_input_output_arguments(aae_asy_parser)
-    #add_vae_arguments(aae_asy_parser)
+    add_vae_arguments(aae_asy_parser)
     add_aae_arguments(aae_asy_parser)
     add_aae_n2v_asy_arguments(aae_asy_parser)
     add_clustering_arguments(aae_asy_parser)
