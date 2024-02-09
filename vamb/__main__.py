@@ -1581,7 +1581,9 @@ def load_composition_and_abundance_and_embeddings_aae(
     time_generating_input = round(time.time() - begintime, 2)
     logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")
 
-    if embeddings_options.embeddings_processed_path is not None:
+
+    # LOAD EMBEDDINGS AND PRCESS THEM IF NECESSARY
+    if embeddings_options.embeddings_processed_path != None:
         logger.info(
             f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
         )
@@ -1634,6 +1636,7 @@ def load_composition_and_abundance_and_embeddings_aae(
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
         logger.info(f"Embeddings processed.")
+        
         if embeddings_options.neighs_object_path is None:
             logger.info("\nComputing contig embedding neighbours")
 
@@ -1723,6 +1726,10 @@ def load_composition_and_abundance_and_embeddings_aae(
             )
 
             if embeddings_options.embeddings_processed_path != None:
+                logger.info(
+                    f"\nLoading embeddings processed from  {embeddings_options.embeddings_processed_path}."
+                )
+                    
                 embeddings_binning = np.load(
                     embeddings_options.embeddings_processed_path
                 )["arr_0"]
@@ -1745,8 +1752,8 @@ def load_composition_and_abundance_and_embeddings_aae(
             logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
             logger.info(f"Total redundant neighs {total_neighs}.")
         
-
-    if embeddings_options.neighs_object_path is None:
+     # LOAD OR GENERATE NEIGHBOURS
+    if embeddings_options.neighs_object_path == None:
         logger.info("\nComputing contig embedding neighbours")
         cosine_distances = cdist(
             embeddings_binning, embeddings_binning, metric="cosine"
@@ -1832,17 +1839,18 @@ def load_composition_and_abundance_and_embeddings_aae(
             f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
         )
 
-        if embeddings_options.embeddings_processed_path != None:
-            embeddings_binning = np.load(
-                embeddings_options.embeddings_processed_path
-            )["arr_0"]
-        else:
-            embeddings_binning = np.zeros(
-                (len(composition.metadata.identifiers), 32)
-            )
-        mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
-            "arr_0"
-        ]
+        # assert embeddings_options.embeddings_processed_path != None, "If neighbours provided, processed embeddings should be provided as well"
+        # embeddings_binning = np.load(
+        #     embeddings_options.embeddings_processed_path
+        # )["arr_0"]
+        # # else:
+        # #     embeddings_binning = np.zeros(
+        # #         (len(composition.metadata.identifiers), 32)
+        # #     )
+
+        # mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
+        #     "arr_0"
+        # ]
 
         neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
             "arr_0"
