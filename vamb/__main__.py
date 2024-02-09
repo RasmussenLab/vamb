@@ -1597,7 +1597,7 @@ def load_composition_and_abundance_and_embeddings_aae(
         logger.info(
             f"Creating embeddings mask."
         )
-        binning_contigs_embedded = set(contigs_embedded_all).inersection(set(composition.metadata.identifiers))
+        binning_contigs_embedded = set(contigs_embedded_all).intersection(set(composition.metadata.identifiers))
         
         # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
         mask_embeddings_binning = np.array(
