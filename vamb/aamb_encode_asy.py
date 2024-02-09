@@ -313,14 +313,26 @@ class AAE_ASY(nn.Module):
             (loss_emb_unpop.sum(dim=0) / torch.sum((1 - emb_mask))) * self.gamma,
         )
 
-    def cat_CE_similarity(self,one_hot_vectors):
+    def cat_CE_similarity(self,y_i,ys_neighs,exhaustive=False):
         #print(one_hot_vectors.shape)
-        num_samples = len(one_hot_vectors)
+        
         total_loss = 0.0
-        for i in range(num_samples):
-            for j in range(i + 1, num_samples):
-                loss = F.binary_cross_entropy(one_hot_vectors[i], one_hot_vectors[j])
-                total_loss += loss / len(one_hot_vectors[i])  # Normalize the loss
+        
+        if exhaustive:
+            
+            y_and_ys_neighs = torch.cat((y_i.unsqueeze(0),ys_neighs),0)
+            num_samples = len(y_and_ys_neighs)
+            
+            for i in range(num_samples):
+                for j in range(i + 1, num_samples):
+                    loss = F.binary_cross_entropy(y_and_ys_neighs[i], y_and_ys_neighs[j])
+                    total_loss += loss / len(y_and_ys_neighs[i])  # Normalize the loss
+
+        else:
+            for i in range(len(ys_neighs)):
+                loss = F.binary_cross_entropy(y_i.unsqueeze(0), y_and_ys_neighs[j])
+                print(loss)
+
         return total_loss
 
 
@@ -337,12 +349,13 @@ class AAE_ASY(nn.Module):
                 # Select the neighbors
                 
                 ys_neighs = self.y_container[self.neighs[idx_pred]]
-                y_and_ys_neighs = torch.cat((y_i.unsqueeze(0),ys_neighs),0)
+                
                 #print(y_and_ys_neighs.shape,y_i.shape,ys_neighs.shape)
                 # Compute cat_CE distances
                 cat_CE = self.cat_CE_similarity(
-                    y_and_ys_neighs
-                )
+                    y_i,
+                    ys_neighs
+                    )
                 
 
             # Append to the result lists
