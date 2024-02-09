@@ -1642,7 +1642,7 @@ def load_composition_and_abundance_and_embeddings_aae(
         )
         for i, c in enumerate(composition.metadata.identifiers):
             if mask_embeddings_binning[i]:
-                embeddings_binning = embeddings[
+                embeddings_binning[i,:] = embeddings[
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
         logger.info(f"shape embeddings {embeddings_binning.shape}")
