@@ -300,7 +300,8 @@ class AAE_ASY(nn.Module):
 
         reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_emb + weighed_contrastive
         
-        loss = reconstruction_loss * weights
+        #loss = reconstruction_loss * weights
+        loss = contrastive_loss_y
         
         #return loss, ce, sse
         return (
