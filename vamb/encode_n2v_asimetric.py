@@ -102,7 +102,7 @@ def make_dataloader_n2v(
 
     if batchsize < 1:
         raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
-
+    print(rpkm.shape,tnf.shape,embeddings.shape,lengths.shape,embeddings_mask.shape,neighs.shape)
     if (
         len(rpkm) != len(tnf)
         or len(tnf) != len(lengths)

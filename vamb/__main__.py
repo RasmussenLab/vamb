@@ -977,7 +977,7 @@ def train_aae_n2v(
 ) -> tuple[np.ndarray, dict[str, set[str]]]:
     begintime = time.time()
     logger.info("Creating and training AAE_asy")
-    n_embedding = data_loader.dataset.tensors[2].shape[1]
+    n_embedding = data_loader.dataset.tensors[3].shape[1]
     nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
     ncontigs = data_loader.dataset.tensors[0].shape[0]
 
