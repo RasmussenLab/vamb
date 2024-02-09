@@ -42,6 +42,20 @@ class CosineSimilarityLoss(nn.Module):
         # print("\n")
         return loss.unsqueeze(1), loss_unpop.unsqueeze(1)
 
+class OneHotTransform(nn.Module):
+    def __init__(self, input_size):
+        super(OneHotTransform, self).__init__()
+        self.input_size = input_size
+        self.output_size = self.input_size
+
+    def forward(self, x):
+        _, max_indices = torch.max(x, dim=1)
+        one_hot = torch.zeros(x.size(0), self.output_size, device=x.device)
+        one_hot.scatter_(1, max_indices.unsqueeze(1), 1)
+        return one_hot
+
+
+
 def random_one_hot_vector(size):
     index = random.randint(0, size - 1)
     vector = torch.zeros(size)
@@ -133,7 +147,9 @@ class AAE_ASY(nn.Module):
 
         self.cosine_loss = CosineSimilarityLoss()
 
-    
+
+        self.one_hot_transform = OneHotTransform(self.h_n, self.h_n)
+        
         # encoder
         self.encoder = nn.Sequential(
             nn.Linear(self.input_len, self.h_n),
@@ -374,7 +390,8 @@ class AAE_ASY(nn.Module):
     def forward(self, depths_in, tnfs_in,emb_in, abundance_in):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)
         z_latent = self._reparameterization(mu, logvar)
-        y_latent_one_hot = y_latent # self._y_argmax(y_latent)
+        y_latent_one_hot = self.one_hot_transform(y_latent)
+        #y_latent_one_hot = y_latent # self._y_argmax(y_latent)
         depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
         
         #d_z_latent = self._discriminator_z(z_latent)
