@@ -199,7 +199,7 @@ class EmbeddingsOptions:
         gamma: float,
         neighs_object_path: Optional[Path]=None,
         embeddings_mask_path: Optional[Path]=None,
-        embeddings_processed_path: None,
+        embeddings_processed_path:Optional[Path]= None,
         margin: float = 0.01,
         radius_clustering: float = 0.01,
         symmetry: bool = False,
@@ -1617,7 +1617,7 @@ def load_composition_and_abundance_and_embeddings_aae(
                 embeddings_binning = embeddings[
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
-    
+        
         if embeddings_options.neighs_object_path is None:
             logger.info("\nComputing contig embedding neighbours")
 
