@@ -443,6 +443,7 @@ class AAE_ASY(nn.Module):
             # everything used 
             
             for depths_in, tnfs_in,abundance_in, emb_in,emb_mask, weighs,idx_preds in data_loader:
+                print(abundance_in.shape,emb_in.shape)
                 nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
