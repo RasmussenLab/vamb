@@ -1616,6 +1616,8 @@ def load_composition_and_abundance_and_embeddings_aae(
     else:
         logger.info(f"Processing embeddings from {embeddings_options.path}")
         embeddings = np.load(embeddings_options.path)["arr_0"]
+        logger.info(f"shape embeddings {embeddings.shape}")
+
         logger.info(
             f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
         )
