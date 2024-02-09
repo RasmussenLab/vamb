@@ -439,9 +439,9 @@ class AAE_ASY(nn.Module):
             total_batches_inthis_epoch = len(data_loader)
             time_epoch_0 = time.time()
 
-            # weights, abundances currently unused here
+            # everything used 
             
-            for depths_in, tnfs_in, emb, ab, _, _ in data_loader:
+            for depths_in, tnfs_in,abundance_in, emb_in,emb_mask, weighs,idx_preds in data_loader:
                 nrows, _ = depths_in.shape
 
                 # Adversarial ground truths
@@ -497,7 +497,7 @@ class AAE_ASY(nn.Module):
                 ) = self(depths_in, tnfs_in,emb_in,abundance_in)           
 
                 rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,loss_emb_unpop = self.calc_loss(
-                    depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weights,y_latent_one_hot,idx_preds
+                    depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weighs,y_latent_one_hot,idx_preds
                 )
                 g_loss_adv_z = adversarial_loss(
                     self._discriminator_z(z_latent), labels_prior
