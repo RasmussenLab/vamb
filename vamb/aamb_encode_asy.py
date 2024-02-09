@@ -300,8 +300,8 @@ class AAE_ASY(nn.Module):
 
         reconstruction_loss = weighed_ce + weighed_ab + weighed_sse + weighed_emb + weighed_contrastive
         
-        #loss = reconstruction_loss * weights
-        loss = contrastive_loss_y
+        loss = reconstruction_loss * weights
+        
         
         #return loss, ce, sse
         return (
@@ -520,6 +520,7 @@ class AAE_ASY(nn.Module):
                 rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,_ = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weighs,y_latent_one_hot,idx_preds
                 )
+                print(contrastive_loss_y)
                 g_loss_adv_z = adversarial_loss(
                     self._discriminator_z(z_latent), labels_prior
                 )
