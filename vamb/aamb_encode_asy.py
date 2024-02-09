@@ -677,7 +677,7 @@ class AAE_ASY(nn.Module):
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}Ys_used: {}\tBs: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tYs_used: {}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
