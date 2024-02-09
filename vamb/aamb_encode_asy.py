@@ -334,8 +334,8 @@ class AAE_ASY(nn.Module):
                 # Select the neighbors
                 
                 ys_neighs = self.y_container[self.neighs[idx_pred]]
-                y_and_ys_neighs = torch.cat((y_i,self.y_container[idx_pred]),0)
-                print(y_and_ys_neighs.shape)
+                y_and_ys_neighs = torch.cat((y_i,ys_neighs),0)
+                print(y_and_ys_neighs.shape,y_i.shape,ys_neighs.shape)
                 # Compute cat_CE distances
                 cat_CE_distances = self.cat_CE_similarity(
                     y_and_ys_neighs
