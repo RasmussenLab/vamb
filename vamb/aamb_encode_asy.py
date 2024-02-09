@@ -387,15 +387,19 @@ class AAE_ASY(nn.Module):
         return torch.stack(cat_CEs)  
 
 
-    def forward(self, depths_in, tnfs_in,emb_in, abundance_in):
+    def forward(self, depths_in, tnfs_in,emb_in, abundance_in,warmup=False):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)
         z_latent = self._reparameterization(mu, logvar)
         
         #print(torch.argmax(y_latent,dim=1),y_latent)
+        
         y_latent_one_hot = self.one_hot_transform(y_latent)
         #print(torch.argmax(y_latent_one_hot,dim=1),y_latent_one_hot)
         #y_latent_one_hot = y_latent # self._y_argmax(y_latent)
-        depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
+        if warmup == True:
+            depths_out, tnfs_out, emb_out, abundance_out = self._decode(torch.zeros_like(z_latent), y_latent_one_hot)
+        else:
+            depths_out, tnfs_out, emb_out, abundance_out = self._decode(z_latent, y_latent_one_hot)
         
         #d_z_latent = self._discriminator_z(z_latent)
         #d_y_latent = self._discriminator_y(y_latent)
@@ -589,7 +593,7 @@ class AAE_ASY(nn.Module):
                     y_latent_one_hot,
                     #d_z_latent,
                     #d_y_latent,
-                ) = self(depths_in, tnfs_in,emb_in,abundance_in)           
+                ) = self(depths_in, tnfs_in,emb_in,abundance_in,warmup= True if epoch_i < 5 else False )           
 
                 # Here, if epoch > 1, I need to update the self.mu_obj, maybe even if it is not epoch > 1
                 self.y_container[idx_preds] = self._y_argmax(y_latent_one_hot.detach()) 
