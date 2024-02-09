@@ -1590,6 +1590,7 @@ def load_composition_and_abundance_and_embeddings_aae(
         embeddings_binning = np.load(
             embeddings_options.embeddings_processed_path
         )["arr_0"]
+        logger.info(f"shape embeddings {embeddings_binning.shape}")
         logger.info(
             f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
         )
