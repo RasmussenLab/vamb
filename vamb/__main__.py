@@ -1645,6 +1645,7 @@ def load_composition_and_abundance_and_embeddings_aae(
                 embeddings_binning = embeddings[
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
+        logger.info(f"shape embeddings {embeddings_binning.shape}")
         logger.info(f"Embeddings processed.")
     
     # LOAD OR GENERATE NEIGHBOURS    
