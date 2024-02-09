@@ -1586,10 +1586,18 @@ def load_composition_and_abundance_and_embeddings_aae(
         embeddings_binning = np.load(
             embeddings_options.embeddings_processed_path
         )["arr_0"]
+        logger.info(
+            f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
+        )
 
         contigs_embedded_all = np.loadtxt(
             embeddings_options.embeddedcontigspath, dtype=object
         )
+
+        logger.info(
+            f"Creating embeddings mask."
+        )
+
         # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
         mask_embeddings_binning = np.array(
             [
