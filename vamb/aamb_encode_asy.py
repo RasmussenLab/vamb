@@ -523,7 +523,7 @@ class AAE_ASY(nn.Module):
                 ) = self(depths_in, tnfs_in,emb_in,abundance_in)           
 
                 # Here, if epoch > 1, I need to update the self.mu_obj, maybe even if it is not epoch > 1
-                self.y_container[idx_preds] = y_latent_one_hot.detach()
+                self.y_container[idx_preds] = self._y_argmax(y_latent_one_hot.detach()) 
                 
                 rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,_ = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weighs,y_latent_one_hot,idx_preds
