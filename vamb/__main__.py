@@ -972,6 +972,7 @@ def train_aae_n2v(
     alpha: Optional[float],  # set automatically if None
     contignames: Sequence[str],
     neighs_object: np.ndarray,
+    neighbourhoods_object: dict[int, set[int]],
     
     
 ) -> tuple[np.ndarray, dict[str, set[str]]]:
@@ -986,6 +987,7 @@ def train_aae_n2v(
         ncontigs,
         n_embedding,
         neighs_object,
+        neighbourhoods_object,
         aae_options.nhiddens,
         aae_options.nlatent_z,
         aae_options.nlatent_y,
@@ -1262,6 +1264,23 @@ def find_neighbours(
         return neighs, idxs_with_neighs
 
 
+def find_neighbourhoods(contignames,neighs):
+    
+    neighbourhoods_g = nx.Graph()
+    for i,neigh_idxs in enumerate(neighs): 
+        c = contignames[i]
+        for neigh_idx in neigh_idxs:
+            c_neigh = contignames[neigh_idx]
+            if  c_neigh == c:
+                continue 
+            #neighbourhoods_g.add_edge(c_neigh,c)
+            neighbourhoods_g.add_edge(neigh_idx,i)
+    
+    neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+    
+    return neighbourhoods_cs_d
+
+
 
 def split_neighbourhoods_by_sample(neighbourhoods):
     nbhds_split = dict()
@@ -1384,7 +1403,7 @@ def load_composition_and_abundance_and_embeddings(
             # remove neighbours if they belong to a the largest neighbourhood 
 
             logger.info(f"Outlier largest neighbourhood will be excluded.")
-            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+            #c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
             neighbourhoods_g = nx.Graph()
             for i,neigh_idxs in enumerate(neighs): 
                 c = composition.metadata.identifiers[i]
@@ -1407,7 +1426,7 @@ def load_composition_and_abundance_and_embeddings(
             logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
             #print(neighs[:5])
             for c in neighbours_to_remove:
-                c_idx = c_idx_d[c]
+                c_idx = #c_idx_d[c]
                 neighs[c_idx]=[]
                 mask_embeddings_binning[c_idx]=False            
                     
@@ -1680,17 +1699,6 @@ def load_composition_and_abundance_and_embeddings_aae(
         # remove neighbours if they belong to a the largest neighbourhood 
 
         logger.info(f"Outlier largest neighbourhood will be excluded.")
-        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-        neighbourhoods_g = nx.Graph()
-        for i,neigh_idxs in enumerate(neighs): 
-            c = composition.metadata.identifiers[i]
-            for neigh_idx in neigh_idxs:
-                c_neigh = composition.metadata.identifiers[neigh_idx]
-                if  c_neigh == c:
-                    continue 
-                neighbourhoods_g.add_edge(c_neigh,c)
-        
-        neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
         
         
         neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
@@ -1703,7 +1711,7 @@ def load_composition_and_abundance_and_embeddings_aae(
         logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
         #print(neighs[:5])
         for c in neighbours_to_remove:
-            c_idx = c_idx_d[c]
+            c_idx = #c_idx_d[c]
             neighs[c_idx]=[]
             mask_embeddings_binning[c_idx]=False            
                 
@@ -1741,24 +1749,33 @@ def load_composition_and_abundance_and_embeddings_aae(
         neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
             "arr_0"
         ]
+
+        #c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
+        neighbourhoods_cs_d = find_neighbourhoods(composition.metadata.identifiers,neighs)
+
         contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
         total_neighs = np.sum([len(ns) for ns in neighs])
         mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
         std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-        logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
+        logger.info(f"Contigs with neighs {contigs_with_neighs_n}.")
         logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
         logger.info(f"Total redundant neighs {total_neighs}.")
+        logger.info(f"Total neighbourhoods {len(neighbourhoods_cs_d.keys())}.")
         
 
 
     if embeddings_options.shuffle_embeds == True:
         logger.info("Embeddings/neighbours shuffled.")
+        neighs_shuffled = np.random.shuffle(neighs),
         return (
             composition,
             abundance,
             np.random.shuffle(embeddings_binning),
             mask_embeddings_binning,
-            np.random.shuffle(neighs),
+            neighs_shuffled,
+            find_neighbourhoods(composition.metadata.identifiers,neighs_shuffled)
+            
+            
         )
 
     else:
@@ -1768,6 +1785,7 @@ def load_composition_and_abundance_and_embeddings_aae(
             embeddings_binning,
             mask_embeddings_binning,
             neighs,
+            neighbourhoods_cs_d,
         )
 
 
@@ -3030,6 +3048,7 @@ def run_aae_n2v(
         embeddings,
         embeddings_mask,
         neighs_object,
+        neighbourhoods_cs_d,
     ) = load_composition_and_abundance_and_embeddings_aae(
         vamb_options=vamb_options,
         comp_options=comp_options,
@@ -3089,6 +3108,7 @@ def run_aae_n2v(
         alpha=encoder_options.alpha,
         contignames=composition.metadata.identifiers,  # type:ignore
         neighs_object=neighs_object_after_dataloader,
+        neighbourhoods_object= neighbourhoods_cs_d,
         
     )
 

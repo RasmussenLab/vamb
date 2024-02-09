@@ -59,6 +59,7 @@ class AAE_ASY(nn.Module):
         ncontigs:int,
         n_embeddings:int,
         neighs_object: np.ndarray,
+        neighbourhoods_object: dict[int, set[int]],
         nhiddens: int,
         nlatent_l: int,
         nlatent_y: int,
@@ -121,6 +122,10 @@ class AAE_ASY(nn.Module):
 
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
+        
+        # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
+        self.neighbourhoods = neighbourhoods_object
+        
 
         # Object where I will store the y s , so we update after training
         self.y_container = generate_random_one_hot_vectors_tensor(self.ncontigs, self.y_len)
@@ -398,6 +403,27 @@ class AAE_ASY(nn.Module):
             contigs_with_neighs += 1 
         
         return accuracies/contigs_with_neighs
+
+    def Y_neighbourhoods_accuracy(self):
+        accuracies = 0
+            
+        for hood_idxs in self.neighbourhoods.values():
+            labels = []
+            for hood_idx in hood_idxs:
+                labels.append(torch.argmax(self.y_container[hood_idx]).item())
+                
+            unique_labels = set(labels)
+            max_count = 0
+            for label in unique_labels:
+                count = labels.count(label)
+                if count > max_count:
+                    max_count = count
+        
+            accuracies +=  max_count / len(labels)
+            
+        
+        return accuracies/len(self.neighbourhoods.keys())
+
     # ----------
     #  Training
     # ----------
@@ -623,12 +649,13 @@ class AAE_ASY(nn.Module):
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
-            accuracy = self.Y_neighs_accuracy()
+            accuracy_neighs = self.Y_neighs_accuracy()
+            accuracy_hoods = self.Y_neighbourhoods_accuracy()
             
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tBatchsize: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -639,7 +666,8 @@ class AAE_ASY(nn.Module):
                     epoch_contrastive_loss / len(data_loader),
                     epoch_d_z_loss/ len(data_loader),
                     #epoch_d_y_loss/ len(data_loader),
-                    accuracy,                    
+                    accuracy_neighs,                    
+                    accuracy_hoods,                    
                     data_loader.batch_size,
                 )
             )
