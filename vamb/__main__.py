@@ -3122,9 +3122,9 @@ def run_aae_n2v(
     # I ALSO HAVE TO IMPLEMENT A FUNCTION THAT GENERATES AN OBJECT INDICATING THE NEIGHBOURS OF EACH CONTIG
     # BAED ON EMBEDDING SPACE AND radius DISTANCE
 
-    vae_options = encoder_options.vae_options
+    #vae_options = encoder_options.vae_options
     aae_options = encoder_options.aae_options
-    vae_training_options = training_options.vae_options
+    #vae_training_options = training_options.vae_options
     aae_training_options = training_options.aae_options
 
     begintime = time.time()
