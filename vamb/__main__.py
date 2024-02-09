@@ -979,9 +979,11 @@ def train_aae_n2v(
     logger.info("Creating and training AAE_asy")
     n_embedding = data_loader.dataset.tensors[2].shape[1]
     nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
+    ncontigs = data_loader.dataset.tensors[0].shape[0]
 
     aae = vamb.aamb_encode_asy.AAE_ASY(
         nsamples,
+        ncontigs,
         n_embedding,
         neighs_object,
         aae_options.nhiddens,

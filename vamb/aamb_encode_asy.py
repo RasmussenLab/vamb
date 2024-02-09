@@ -56,6 +56,7 @@ class AAE_ASY(nn.Module):
     def __init__(
         self,
         nsamples: int,
+        ncontigs:int,
         n_embeddings:int,
         neighs_object: np.ndarray,
         nhiddens: int,
@@ -99,6 +100,7 @@ class AAE_ASY(nn.Module):
 
         self.ntnf = 103
         self.nsamples = nsamples
+        self.ncontigs = ncontigs
         self.n_embeddings= n_embeddings
         input_len = self.ntnf + self.nsamples + self.n_embeddings
         self.h_n = nhiddens
