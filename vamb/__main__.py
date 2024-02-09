@@ -1015,7 +1015,6 @@ def train_aae_n2v(
     return latent, clusters_y_dict
 
 
-
 def cluster_and_write_files(
     vamb_options: VambOptions,
     cluster_options: ClusterOptions,
@@ -1617,7 +1616,7 @@ def load_composition_and_abundance_and_embeddings_aae(
                 embeddings_binning = embeddings[
                     np.where(contigs_embedded_all == c)[0][0], :
                 ]
-        
+        logger.info(f"Embeddings processed.")
         if embeddings_options.neighs_object_path is None:
             logger.info("\nComputing contig embedding neighbours")
 
@@ -3172,11 +3171,13 @@ def run_aae_n2v(
         data_loader=data_loader,
         aae_options=aae_options,
         vamb_options=vamb_options,
+        embeddings_options=embeddings_options,
         training_options=aae_training_options,
         lrate=training_options.lrate,
         alpha=encoder_options.alpha,
         contignames=composition.metadata.identifiers,  # type:ignore
-        neighs_object=neighs_object_after_dataloader
+        neighs_object=neighs_object_after_dataloader,
+        
     )
 
     # Free up memory
