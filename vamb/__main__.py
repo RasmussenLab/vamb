@@ -219,13 +219,14 @@ class EmbeddingsOptions:
 
         else:
             # self.embeddings_processed_path = embeddings_processed_path
-            self.path = EmbeddingsPath(embeddingspath)
+            
             
             if neighs_object_path != None:
                 self.neighs_object_path = neighs_object_path
             
             if embeddings_processed_path == None:    
                 self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
+                self.path = EmbeddingsPath(embeddingspath)
 
         self.embeddings_processed_path = embeddings_processed_path
         self.embeddings_mask_path = embeddings_mask_path
