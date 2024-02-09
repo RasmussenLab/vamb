@@ -3119,7 +3119,7 @@ def run_aae_n2v(
         embeddings,
         embeddings_mask,
         neighs_object,
-    ) = load_composition_and_abundance_and_embeddings(
+    ) = load_composition_and_abundance_and_embeddings_aae(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
