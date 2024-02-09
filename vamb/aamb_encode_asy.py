@@ -322,8 +322,8 @@ class AAE_ASY(nn.Module):
 
 
     def y_contrastive_loss(self, y, idxs_preds, emb_mask):
-        cat_CE_distances = []
-        cat_CE_distances = []
+        
+        cat_CEs = []
 
         for y_i, idx_pred, emb_mask_i in zip(y, idxs_preds, emb_mask):
             if len(self.neighs[idx_pred]) == 0 or not emb_mask_i:
@@ -335,18 +335,18 @@ class AAE_ASY(nn.Module):
                 
                 ys_neighs = self.y_container[self.neighs[idx_pred]]
                 y_and_ys_neighs = torch.cat((y_i.unsqueeze(0),ys_neighs),0)
-                print(y_and_ys_neighs.shape,y_i.shape,ys_neighs.shape)
+                #print(y_and_ys_neighs.shape,y_i.shape,ys_neighs.shape)
                 # Compute cat_CE distances
-                cat_CE_distances = self.cat_CE_similarity(
+                cat_CE = self.cat_CE_similarity(
                     y_and_ys_neighs
                 )
-                print(cat_CE_distances)
+                
 
             # Append to the result lists
-            cat_CE_distances.append(cat_CE_distance)
-            cat_CE_distances.append(cat_CE_distance)
+            cat_CEs.append(cat_CE)
+            
 
-        return torch.stack(cat_CE_distances)  
+        return torch.stack(cat_CEs)  
 
 
     def forward(self, depths_in, tnfs_in,emb_in, abundance_in):
