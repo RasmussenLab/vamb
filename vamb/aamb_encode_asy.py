@@ -377,6 +377,27 @@ class AAE_ASY(nn.Module):
 
         return mu, depths_out, tnfs_out,emb_out,abundance_out, z_latent, y_latent,y_latent_one_hot#, d_z_latent, d_y_latent
 
+    def Y_neighs_accuracy(self):
+        accuracies = 0
+        contigs_with_neighs = 0
+        for neigh_idxs in self.neighs:
+            if len(neigh_idxs) == 0:
+                continue
+            labels = []
+            for neigh_idx in neigh_idxs:
+                labels.append(torch.argmax(self.y_container[neigh_idx]).item())
+                
+            unique_labels = set(labels)
+            max_count = 0
+            for label in unique_labels:
+                count = labels.count(label)
+                if count > max_count:
+                    max_count = count
+        
+            accuracies +=  max_count / len(labels)
+            contigs_with_neighs += 1 
+        
+        return accuracies/contigs_with_neighs
     # ----------
     #  Training
     # ----------
@@ -602,10 +623,12 @@ class AAE_ASY(nn.Module):
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
-
+            accuracy = self.Y_neighs_accuracy()
+            
+            
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tBatchsize: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tBatchsize: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -615,7 +638,8 @@ class AAE_ASY(nn.Module):
                     epoch_embloss_pop / len(data_loader),
                     epoch_contrastive_loss / len(data_loader),
                     epoch_d_z_loss/ len(data_loader),
-                    #epoch_d_y_loss/ len(data_loader),                    
+                    #epoch_d_y_loss/ len(data_loader),
+                    accuracy,                    
                     data_loader.batch_size,
                 )
             )
