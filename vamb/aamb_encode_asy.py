@@ -726,7 +726,8 @@ class AAE_ASY(nn.Module):
         clust_y_dict: dict[str, set[str]] = dict()
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
         with torch.no_grad():
-            for depths, tnfs, emb, ab, _, _ in new_data_loader:
+            #for depths, tnfs, emb, ab, _, _ in new_data_loader:
+            for depths, tnfs,ab, emb,_, _,_ in data_loader:
                 if self.usecuda:
                     depths_in = depths_in.cuda()
                     tnfs_in = tnfs_in.cuda()
