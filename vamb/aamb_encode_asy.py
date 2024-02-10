@@ -668,15 +668,15 @@ class AAE_ASY(nn.Module):
                 #     self._discriminator_y(y_latent), labels_prior
                 # )
 
-                #g_loss_adv_z_neighs = adversarial_hoods_loss(
-                #    self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
-                #)
+                g_loss_adv_z_hood = adversarial_hoods_loss(
+                    self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                )
 
 
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
-                    #+ (self.sl * (1 - self.slr)) * g_loss_adv_z_neighs
+                    #+ (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
@@ -718,7 +718,7 @@ class AAE_ASY(nn.Module):
                 
                 d_z_hood_loss.backward()
                 
-                optimizer_D_z_hood.step()
+                #optimizer_D_z_hood.step()
 
 
 
@@ -758,7 +758,7 @@ class AAE_ASY(nn.Module):
                 epoch_d_z_loss += float(d_z_loss.item())
                 epoch_d_z_hood_loss += float(d_z_hood_loss.item())
                 epoch_d_z_adv_loss += float(g_loss_adv_z.item())
-                epoch_d_z_adv_hood_loss += float(g_loss_adv_z_neighs.item())
+                epoch_d_z_adv_hood_loss += float(g_loss_adv_z_hood.item())
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
