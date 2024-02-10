@@ -215,7 +215,7 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.h_n, int(self.h_n / 2)),
             nn.LeakyReLU(),
             nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Softmax(),
+            nn.Softmax(dim=1),
         )
 
         # discriminator_z Y, can you guess which Y_class it belongs to?
@@ -767,7 +767,7 @@ class AAE_ASY(nn.Module):
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.2f}\tRec: {:.2f}\tCE: {:.2f}\tAB:{:.2e}\tSSE: {:.2f}\tembloss_pop: {:.3f}\ty_contr: {:.3f}\tDz: {:.2f}\tDz_adv: {:.2f}\tDz_hood: {:.2f}\tDz_hood_adv: {:.2f}\tAcc_y_neighs: {:.2f}\tAcc_y_hoods: {:.2f}\tYs_used: {}\tBs: {}".format(
+                "\tEp: {}\tLoss: {:.2f}\tRec: {:.2f}\tCE: {:.2f}\tAB:{:.2e}\tSSE: {:.2f}\tembloss_pop: {:.3f}\ty_contr: {:.3f}\tDz: {:.2f}\tDz_adv: {:.6f}\tDz_hood: {:.6f}\tDz_hood_adv: {:.2f}\tAcc_y_neighs: {:.2f}\tAcc_y_hoods: {:.2f}\tYs_used: {}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
