@@ -65,6 +65,9 @@ def random_one_hot_vector(size):
 def generate_random_one_hot_vectors_tensor(num_vectors, size):
     return torch.stack([random_one_hot_vector(size) for _ in range(num_vectors)])
 
+
+
+
 ############################################################################# MODEL ###########################################################
 class AAE_ASY(nn.Module):
     def __init__(
@@ -138,8 +141,20 @@ class AAE_ASY(nn.Module):
         self.neighs = neighs_object
         
         # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
-        self.neighbourhoods = neighbourhoods_object
+        # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values())}
         
+        self.n_hoods = len(self.neighbourhoods.keys())
+        assert (self.n_hoods -1)  == np.max(self.neighbourhoods.keys())
+        
+        # get the hood if I give you the c_idx
+        self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
+        # get the hood in onehot if I give you the c_idx
+        self.idx_OHhood_d = { idx: torch.eye(self.n_hoods)[i] for i,idxs in self.neighbourhoods.items() for idx in idxs }
+
+
+        
+        self.n_hoods = len(self.neighbourhoods.keys())
 
         # Object where I will store the y s , so we update after training
         self.y_container = generate_random_one_hot_vectors_tensor(self.ncontigs, self.y_len)
@@ -185,6 +200,27 @@ class AAE_ASY(nn.Module):
             nn.Linear(int(self.h_n / 2), 1),
             nn.Sigmoid(),
         )
+
+        # discriminator_z hood, can you guess which neighbourhood it belongs to?
+        self.discriminator_z_hood = nn.Sequential(
+            nn.Linear(self.ld, self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, int(self.h_n / 2)),
+            nn.LeakyReLU(),
+            nn.Linear(int(self.h_n / 2), self.n_hoods),
+            nn.Softmax(),
+        )
+
+        # discriminator_z Y, can you guess which Y_class it belongs to?
+        self.discriminator_z_y = nn.Sequential(
+            nn.Linear(self.ld, self.h_n),
+            nn.LeakyReLU(),
+            nn.Linear(self.h_n, int(self.h_n / 2)),
+            nn.LeakyReLU(),
+            nn.Linear(int(self.h_n / 2), self.y_len),
+            nn.Softmax(),
+        )
+
 
         # discriminator Y
         self.discriminator_y = nn.Sequential(
@@ -263,6 +299,11 @@ class AAE_ASY(nn.Module):
     ## Discriminator Z space (continuous latent space defined by mu and sigma layers)
     def _discriminator_z(self, z):
         return self.discriminator_z(z)
+
+    ## Discriminator Z space for hoods (continuous latent space defined by mu and sigma layers)
+    def _discriminator_z_hood(self, z):
+        return self.discriminator_z_hood(z)
+
 
     ## Discriminator Y space (categorical latent space defined by Y layer)
 
@@ -489,6 +530,7 @@ class AAE_ASY(nn.Module):
         # we need to separate the paramters due to the adversarial training
 
         disc_z_params = []
+        disc_z_hood_params = []
         disc_y_params = []
         enc_params = []
         dec_params = []
@@ -504,14 +546,17 @@ class AAE_ASY(nn.Module):
 
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
+        adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
         if self.usecuda:
             adversarial_loss.cuda()
+            adversarial_hoods_loss.cuda()
 
         #### Optimizers
         optimizer_E = torch.optim.Adam(enc_params, lr=lr)
         optimizer_D = torch.optim.Adam(dec_params, lr=lr)
 
         optimizer_D_z = torch.optim.Adam(disc_z_params, lr=lr)
+        optimizer_D_z_hood = torch.optim.Adam(disc_z_hood_params, lr=lr)
         optimizer_D_y = torch.optim.Adam(disc_y_params, lr=lr)
 
         for epoch_i in range(nepochs):
@@ -523,25 +568,19 @@ class AAE_ASY(nn.Module):
             (
                 ED_loss_e,
                 D_z_loss_e,
+                D_z_hood_loss_e,
                 D_y_loss_e,
                 V_loss_e,
                 CE_e,
                 SSE_e,
-            ) = (0, 0, 0, 0, 0, 0)
-            (epoch_loss, epoch_rec_and_contr_loss, epoch_absseloss, epoch_celoss, epoch_sseloss, epoch_contrastive_loss, epoch_embloss_pop, epoch_d_z_loss, epoch_d_y_loss) = (0, 0, 0, 0, 0, 0, 0,0, 0)
+            ) = (0, 0, 0, 0, 0, 0,0)
+            (epoch_loss, epoch_rec_and_contr_loss, epoch_absseloss, epoch_celoss, epoch_sseloss, epoch_contrastive_loss, epoch_embloss_pop, epoch_d_z_loss,epoch_d_z_hood_loss, epoch_d_y_loss) = (0, 0, 0, 0, 0, 0, 0,0, 0,0)
             
-            total_batches_inthis_epoch = len(data_loader)
-            time_epoch_0 = time.time()
-
             # everything used 
             
             for depths_in, tnfs_in,abundance_in, emb_in,emb_mask, weighs,idx_preds in data_loader:
                 
                 nrows, _ = depths_in.shape
-
-                
-                
-
 
                 # Adversarial ground truths
 
@@ -552,6 +591,9 @@ class AAE_ASY(nn.Module):
                     Tensor(nrows, 1).fill_(0.0), requires_grad=False
                 )
 
+                labels_hood = Variable(Tensor([ self.idx_OHhood_d[idx] for idx in idx_preds ]), requires_grad=False)
+                print(labels_hood)
+                
                 # Sample noise as discriminator Z,Y ground truth
 
                 if self.usecuda:
@@ -609,9 +651,15 @@ class AAE_ASY(nn.Module):
                 #     self._discriminator_y(y_latent), labels_prior
                 # )
 
+                g_loss_adv_z_neighs = adversarial_hoods_loss(
+                    self._discriminator_z_hood(z_latent), labels_hood
+                )
+
+
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
+                    + (self.sl * (1 - self.slr)) * g_loss_adv_z_neighs
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
@@ -639,6 +687,24 @@ class AAE_ASY(nn.Module):
                 optimizer_D_z.step()
 
                 # ----------------------
+                #  Train Discriminator z_hood
+                # ----------------------
+
+                optimizer_D_z_hood.zero_grad()
+                mu, logvar = self._encode(depths_in, tnfs_in,emb_in,abundance_in)[:2]
+                z_latent = self._reparameterization(mu, logvar)
+
+                d_z_hood_loss = adversarial_hoods_loss(
+                    self._discriminator_z_hood(z_latent), labels_hood
+                )
+                
+
+                d_z_hood_loss.backward()
+                optimizer_D_z_hood.step()
+
+
+
+                # ----------------------
                 #  Train Discriminator y
                 # ----------------------
 
@@ -655,12 +721,12 @@ class AAE_ASY(nn.Module):
                 # d_y_loss.backward()
                 # optimizer_D_y.step()
 
-                ED_loss_e += float(ed_loss.item())
-                V_loss_e += float(rec_and_contr_loss.item())
-                D_z_loss_e += float(d_z_loss.item())
-                #D_y_loss_e += float(d_y_loss.item())
-                CE_e += float(ce.item())
-                SSE_e += float(sse.item())
+                # ED_loss_e += float(ed_loss.item())
+                # V_loss_e += float(rec_and_contr_loss.item())
+                # D_z_loss_e += float(d_z_loss.item())
+                # #D_y_loss_e += float(d_y_loss.item())
+                # CE_e += float(ce.item())
+                # SSE_e += float(sse.item())
 
                 epoch_loss += ed_loss.data.item()
                 
@@ -672,6 +738,7 @@ class AAE_ASY(nn.Module):
                 epoch_contrastive_loss += contrastive_loss_y.item()
                 epoch_embloss_pop += loss_emb_pop.item()  # .data.item()
                 epoch_d_z_loss += float(d_z_loss.item())
+                epoch_d_z_hood_loss += float(d_z_hood_loss.item())
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
@@ -681,7 +748,7 @@ class AAE_ASY(nn.Module):
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tYs_used: {}\tBs: {}".format(
+                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tDz_hood: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tYs_used: {}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -691,6 +758,7 @@ class AAE_ASY(nn.Module):
                     epoch_embloss_pop / len(data_loader),
                     epoch_contrastive_loss / len(data_loader),
                     epoch_d_z_loss/ len(data_loader),
+                    epoch_d_z_hood_loss/ len(data_loader),
                     #epoch_d_y_loss/ len(data_loader),
                     accuracy_neighs,                    
                     accuracy_hoods,                    
@@ -707,6 +775,7 @@ class AAE_ASY(nn.Module):
                         "optimizer_E": optimizer_E.state_dict(),
                         "optimizer_D": optimizer_D.state_dict(),
                         "optimizer_D_z": optimizer_D_z.state_dict(),
+                        "optimizer_D_z_hood": optimizer_D_z_hood.state_dict(),
                         #"optimizer_D_y": optimizer_D_y.state_dict(),
                         "nsamples": self.num_samples,
                         "alpha": self.alpha,
