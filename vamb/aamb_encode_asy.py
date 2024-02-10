@@ -607,7 +607,7 @@ class AAE_ASY(nn.Module):
                 )
                 for i,idx_pred in enumerate(idx_preds):
                     if emb_mask[i]:
-                        labels_hood[i,self.idx_hood_d[idx_pred]] = 1.0
+                        labels_hood[i,self.idx_hood_d[idx_pred.item()]] = 1.0
                 
                 
                 
