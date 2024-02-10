@@ -1,3 +1,4 @@
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [project]
 dynamic = ["version"]
 name = "vamb"
@@ -16,6 +17,15 @@ dependencies = [
 # to build pycoverm from source, but will not get the deps required for that.
 requires-python = "<3.12,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
+
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx-book-theme",
+  "myst-nb",
+  "ipywidgets",
+  "sphinx-new-tab-link",
+]
 
 [metadata]
 authors = [
