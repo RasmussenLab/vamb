@@ -1737,7 +1737,13 @@ def load_composition_and_abundance_and_embeddings_aae(
             if len(neighs[i]) <= embeddings_options.top_neighbours:
                 continue 
             neighs[i] = neighs[i][:embeddings_options.top_neighbours]
+            
         total_neighs= np.sum([len(ns) for ns in neighs])
+        
+        # update mask_embeddings_binning
+        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
+        print("contigs with neighs ", contigs_with_neighs_n)
+        print("embs_mask_sum ", np.sum(mask_embeddings_binning))
         
         logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
 
@@ -1750,6 +1756,13 @@ def load_composition_and_abundance_and_embeddings_aae(
         neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
             "arr_0"
         ]
+        mask_embeddings_binning = np.array(
+            [
+                1 if  len(neighs[i]) > 0 else 0
+                for i,c in enumerate(composition.metadata.identifiers)
+            ],
+            dtype=bool,
+        )
 
         c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
         neighbourhoods_cs_d = find_neighbourhoods(composition.metadata.identifiers,neighs)
