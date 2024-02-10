@@ -605,9 +605,9 @@ class AAE_ASY(nn.Module):
                 labels_hood = Variable(
                     Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
                 )
-                for idx_pred in idx_preds:
-                    if emb_mask[idx_pred]:
-                        labels_hood[idx_pred,self.idx_hood_d[idx_pred]] = 1.0
+                for i,idx_pred in enumerate(idx_preds):
+                    if emb_mask[i]:
+                        labels_hood[i,self.idx_hood_d[idx_pred]] = 1.0
                 
                 
                 
