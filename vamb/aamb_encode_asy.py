@@ -542,7 +542,7 @@ class AAE_ASY(nn.Module):
         enc_params = []
         dec_params = []
         for name, param in self.named_parameters():
-            if "discriminator_z" in name:
+            if "discriminator_z" in name and "hood" not in name:
                 disc_z_params.append(param)
             elif "discriminator_z_hood" in name:
                 disc_z_hood_params.append(param)
