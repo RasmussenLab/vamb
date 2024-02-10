@@ -1,6 +1,7 @@
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [project]
-name = "vamb"
 dynamic = ["version"]
+name = "vamb"
 dependencies = [
     "numpy == 1.26.4",
     "torch == 2.3.1",
@@ -17,16 +18,25 @@ dependencies = [
 requires-python = "<3.13,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx-book-theme",
+  "myst-nb",
+  "ipywidgets",
+  "sphinx-new-tab-link!=0.2.2",
+]
+
 [metadata]
 authors = [
-    {name="Jakob Nybo Nissen", email="jakobnybonissen@gmail.com"},
-    {name="Pau Piera", email="pau.piera@cpr.ku.dk"},
-    {name="Simon Rasmussen", email="simon.rasmussen@cpr.ku.dk"}
+  {name = "Jakob Nybo Nissen", email = "jakobnybonissen@gmail.com"},
+  {name = "Pau Piera", email = "pau.piera@cpr.ku.dk"},
+  {name = "Simon Rasmussen", email = "simon.rasmussen@cpr.ku.dk"},
 ]
-url = "https://github.com/RasmussenLab/vamb"
 description = "Variational and Adversarial autoencoders for Metagenomic Binning"
 license = "MIT"
 readme = {file = "README.md"}
+url = "https://github.com/RasmussenLab/vamb"
 
 [build-system]
 requires = [

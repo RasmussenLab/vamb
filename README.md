@@ -1,4 +1,5 @@
 # Vamb
+[![Read the Docs](https://readthedocs.org/projects/vamb/badge/?version=latest)](https://vamb.readthedocs.io/en/latest/)
 
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark and Novo Nordisk Foundation Center for Protein Research, University of Copenhagen.
 
