@@ -215,7 +215,7 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.h_n, int(self.h_n / 2)),
             nn.LeakyReLU(),
             nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Softmax(),
+            nn.Softmax(dim=self.y_len),
         )
 
         # discriminator_z Y, can you guess which Y_class it belongs to?
@@ -225,7 +225,7 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.h_n, int(self.h_n / 2)),
             nn.LeakyReLU(),
             nn.Linear(int(self.h_n / 2), self.y_len),
-            nn.Softmax(),
+            nn.Softmax(dim= self.y_len),
         )
 
 
@@ -585,7 +585,7 @@ class AAE_ASY(nn.Module):
                 CE_e,
                 SSE_e,
             ) = (0, 0, 0, 0, 0, 0,0)
-            (epoch_loss, epoch_rec_and_contr_loss, epoch_absseloss, epoch_celoss, epoch_sseloss, epoch_contrastive_loss, epoch_embloss_pop, epoch_d_z_loss,epoch_d_z_hood_loss, epoch_d_y_loss) = (0, 0, 0, 0, 0, 0, 0,0, 0,0)
+            (epoch_loss, epoch_rec_and_contr_loss, epoch_absseloss, epoch_celoss, epoch_sseloss, epoch_contrastive_loss, epoch_embloss_pop, epoch_d_z_loss,epoch_d_z_hood_loss,epoch_d_z_adv_loss,epoch_d_z_adv_hood_loss, epoch_d_y_loss) = (0, 0, 0, 0, 0, 0, 0,0, 0,0,0,0)
             
             # everything used 
             
@@ -652,7 +652,7 @@ class AAE_ASY(nn.Module):
                     y_latent_one_hot,
                     #d_z_latent,
                     #d_y_latent,
-                ) = self(depths_in, tnfs_in,emb_in,abundance_in,warmup= True if epoch_i < 5 else False )           
+                ) = self(depths_in, tnfs_in,emb_in,abundance_in,warmup= True if epoch_i < 0 else False )           
 
                 # Here, if epoch > 1, I need to update the self.mu_obj, maybe even if it is not epoch > 1
                 self.y_container[idx_preds] = self._y_argmax(y_latent_one_hot.detach()) 
@@ -660,7 +660,7 @@ class AAE_ASY(nn.Module):
                 rec_and_contr_loss,ab_sse, ce, sse,contrastive_loss_y,loss_emb_pop,_ = self.calc_loss(
                     depths_in, depths_out, tnfs_in, tnfs_out,emb_in,emb_out,emb_mask,abundance_in,abundance_out,weighs,y_latent_one_hot,idx_preds
                 )
-                
+
                 g_loss_adv_z = adversarial_loss(
                     self._discriminator_z(z_latent), labels_prior
                 )
@@ -756,6 +756,8 @@ class AAE_ASY(nn.Module):
                 epoch_embloss_pop += loss_emb_pop.item()  # .data.item()
                 epoch_d_z_loss += float(d_z_loss.item())
                 epoch_d_z_hood_loss += float(d_z_hood_loss.item())
+                epoch_d_z_adv_loss += float(g_loss_adv_z.item())
+                epoch_d_z_adv_hood_loss += float(g_loss_adv_z_neighs.item())
                 #epoch_d_y_loss += float(d_y_loss.item())
                 
 
@@ -765,7 +767,7 @@ class AAE_ASY(nn.Module):
             
             logger.info(
                 #"\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ty_contr: {:.6f}\tDz: {:.4f}\tDy: {:.4f}\tBatchsize: {}".format(
-                "\tEp: {}\tLoss: {:.6f}\tRec: {:.6f}\tCE: {:.4f}\tAB:{:.5e}\tSSE: {:.4f}\tembloss_pop: {:.4f}\ty_contr: {:.3f}\tDz: {:.4f}\tDz_hood: {:.4f}\tAcc_y_neighs: {:.3f}\tAcc_y_hoods: {:.3f}\tYs_used: {}\tBs: {}".format(
+                "\tEp: {}\tLoss: {:.2f}\tRec: {:.2f}\tCE: {:.2f}\tAB:{:.2e}\tSSE: {:.2f}\tembloss_pop: {:.3f}\ty_contr: {:.3f}\tDz: {:.2f}\tDz_adv: {:.2f}\tDz_hood: {:.2f}\tDz_hood_adv: {:.2f}\tAcc_y_neighs: {:.2f}\tAcc_y_hoods: {:.2f}\tYs_used: {}\tBs: {}".format(
                     epoch_i + 1,
                     epoch_loss / len(data_loader),
                     epoch_rec_and_contr_loss / len(data_loader),
@@ -775,7 +777,9 @@ class AAE_ASY(nn.Module):
                     epoch_embloss_pop / len(data_loader),
                     epoch_contrastive_loss / len(data_loader),
                     epoch_d_z_loss/ len(data_loader),
+                    epoch_d_z_adv_loss/ len(data_loader),
                     epoch_d_z_hood_loss/ len(data_loader),
+                    epoch_d_z_adv_hood_loss / len(data_loader),
                     #epoch_d_y_loss/ len(data_loader),
                     accuracy_neighs,                    
                     accuracy_hoods,                    
