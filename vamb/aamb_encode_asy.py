@@ -546,7 +546,7 @@ class AAE_ASY(nn.Module):
                 disc_z_hood_params.append(param)
 
 
-            elif "discriminator_z" in name:
+            elif "discriminator_z" in name and "discriminator_z_hood" not in name:
                 disc_z_params.append(param)
 
 
