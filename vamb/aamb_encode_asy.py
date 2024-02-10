@@ -5,10 +5,16 @@ import numpy as np
 from math import log, isfinite
 import time
 from torch.autograd import Variable
+from torch.utils.data.dataset import TensorDataset as _TensorDataset
+
+from torch.utils.data import DataLoader as _DataLoader
+
 from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 import torch
+
 from vamb.encode import set_batchsize
 
 from collections.abc import Sequence
@@ -151,7 +157,7 @@ class AAE_ASY(nn.Module):
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
         # get the hood in onehot if I give you the c_idx
-        self.idx_OHhood_d = { idx: torch.eye(self.n_hoods)[i] for i,idxs in self.neighbourhoods.items() for idx in idxs }
+        #self.idx_OHhood_d = { idx: torch.eye(self.n_hoods)[i] for i,idxs in self.neighbourhoods.items() for idx in idxs }
 
 
         
@@ -592,8 +598,14 @@ class AAE_ASY(nn.Module):
                     Tensor(nrows, 1).fill_(0.0), requires_grad=False
                 )
 
-                labels_hood = Variable(Tensor([ self.idx_OHhood_d[idx] for idx in idx_preds ]), requires_grad=False)
-                print(labels_hood)
+                labels_hood = Variable(
+                    Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
+                )
+                for idx_pred in idx_preds:
+                    if emb_mask[idx_pred]:
+                        labels_hood[idx_pred,self.idx_hood_d[idx_pred]] = 1.0
+                
+                
                 
                 # Sample noise as discriminator Z,Y ground truth
 
@@ -696,7 +708,7 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_hood_loss = adversarial_hoods_loss(
-                    self._discriminator_z_hood(z_latent), labels_hood
+                   self._discriminator_z_hood(z_latent[emb_mask]), labels_hood
                 )
                 
 
