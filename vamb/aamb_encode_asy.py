@@ -145,8 +145,8 @@ class AAE_ASY(nn.Module):
         self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values())}
         
         self.n_hoods = len(self.neighbourhoods.keys())
-        print(self.n_hoods,np.max(self.neighbourhoods.keys()))
-        assert (self.n_hoods -1)  == np.max(self.neighbourhoods.keys())
+        
+        assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
         
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
