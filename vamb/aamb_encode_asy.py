@@ -669,7 +669,7 @@ class AAE_ASY(nn.Module):
                 # )
 
                 g_loss_adv_z_neighs = adversarial_hoods_loss(
-                    self._discriminator_z_hood(z_latent), labels_hood
+                    self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                 )
 
 
@@ -712,7 +712,7 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_hood_loss = adversarial_hoods_loss(
-                   self._discriminator_z_hood(z_latent[emb_mask]), labels_hood
+                   self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                 )
                 
 
