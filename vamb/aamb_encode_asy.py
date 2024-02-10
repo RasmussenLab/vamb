@@ -715,11 +715,9 @@ class AAE_ASY(nn.Module):
                    self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                 )
                 
-                # Check gradients
-                for name, param in self._discriminator_z_hood.named_parameters():
-                    print(f'Parameter: {name}, Gradient norm: {param.grad.norm()}')
-
+                
                 d_z_hood_loss.backward()
+                print(self._discriminator_z_hood.weight.grad)
                 optimizer_D_z_hood.step()
 
 
