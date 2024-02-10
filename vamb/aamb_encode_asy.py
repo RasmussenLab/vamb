@@ -209,7 +209,7 @@ class AAE_ASY(nn.Module):
         )
 
         # discriminator_z hood, can you guess which neighbourhood it belongs to?
-        self.discriminator_z_hood = nn.Sequential(
+        self.discriminator_hood = nn.Sequential(
             nn.Linear(self.ld, self.h_n),
             nn.LeakyReLU(),
             nn.Linear(self.h_n, int(self.h_n / 2)),
@@ -308,8 +308,8 @@ class AAE_ASY(nn.Module):
         return self.discriminator_z(z)
 
     ## Discriminator Z space for hoods (continuous latent space defined by mu and sigma layers)
-    def _discriminator_z_hood(self, z):
-        return self.discriminator_z_hood(z)
+    def _discriminator_hood(self, z):
+        return self.discriminator_hood(z)
 
 
     ## Discriminator Y space (categorical latent space defined by Y layer)
@@ -542,11 +542,11 @@ class AAE_ASY(nn.Module):
         enc_params = []
         dec_params = []
         for name, param in self.named_parameters():
-            if "discriminator_z_hood" in name:
+            if "discriminator_hood" in name:
                 disc_z_hood_params.append(param)
 
 
-            elif "discriminator_z" in name and "discriminator_z_hood" not in name:
+            elif "discriminator_z" in name :
                 disc_z_params.append(param)
 
 
@@ -671,7 +671,7 @@ class AAE_ASY(nn.Module):
                 # )
 
                 g_loss_adv_z_hood = adversarial_hoods_loss(
-                    self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                    self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                 )
 
 
@@ -714,7 +714,7 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_hood_loss = adversarial_hoods_loss(
-                   self._discriminator_z_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                   self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                 )
                 
                 
