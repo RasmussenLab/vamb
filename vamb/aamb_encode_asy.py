@@ -215,7 +215,7 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.h_n, int(self.h_n / 2)),
             nn.LeakyReLU(),
             nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Softmax(dim=self.y_len),
+            nn.Softmax(dim=self.n_hoods),
         )
 
         # discriminator_z Y, can you guess which Y_class it belongs to?
