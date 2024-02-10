@@ -544,6 +544,10 @@ class AAE_ASY(nn.Module):
         for name, param in self.named_parameters():
             if "discriminator_z" in name:
                 disc_z_params.append(param)
+            elif "discriminator_z_hood" in name:
+                disc_z_hood_params.append(param)
+
+
             elif "discriminator_y" in name:
                 disc_y_params.append(param)
             elif "encoder" in name:
