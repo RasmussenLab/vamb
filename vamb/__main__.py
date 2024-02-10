@@ -3057,7 +3057,7 @@ def run_aae_n2v(
         embeddings_options=embeddings_options,
         binsplitter=cluster_options.binsplitter,
     )
-
+    assert np.sum([ len(idxs) for idxs in neighbourhoods_cs_d.values()]) == np.sum(embeddings_mask)
     # Write contignames and contiglengths needed for dereplication purposes
     np.savetxt(
         vamb_options.out_dir.joinpath("contignames"),
