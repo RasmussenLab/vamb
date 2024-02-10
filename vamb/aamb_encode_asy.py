@@ -537,13 +537,13 @@ class AAE_ASY(nn.Module):
         # we need to separate the paramters due to the adversarial training
 
         disc_z_params = []
-        disc_z_hood_params = []
+        disc_hood_params = []
         disc_y_params = []
         enc_params = []
         dec_params = []
         for name, param in self.named_parameters():
-            if "discriminator_hood" in name:
-                disc_z_hood_params.append(param)
+            if "hood" in name:
+                disc_hood_params.append(param)
 
 
             elif "discriminator_z" in name :
@@ -556,7 +556,7 @@ class AAE_ASY(nn.Module):
                 enc_params.append(param)
             else:
                 dec_params.append(param)
-        print(disc_z_hood_params,disc_z_params)
+        print(len(disc_hood_params),len(disc_z_params))
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
@@ -569,7 +569,7 @@ class AAE_ASY(nn.Module):
         optimizer_D = torch.optim.Adam(dec_params, lr=lr)
 
         optimizer_D_z = torch.optim.Adam(disc_z_params, lr=lr)
-        optimizer_D_z_hood = torch.optim.Adam(disc_z_hood_params, lr=lr)
+        optimizer_D_z_hood = torch.optim.Adam(disc_hood_params, lr=lr)
         optimizer_D_y = torch.optim.Adam(disc_y_params, lr=lr)
 
         for epoch_i in range(nepochs):
@@ -671,7 +671,8 @@ class AAE_ASY(nn.Module):
                 # )
 
                 g_loss_adv_z_hood = adversarial_hoods_loss(
-                    self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                    #self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                    self._discriminator_hood(z_latent), labels_hood
                 )
 
 
@@ -714,7 +715,8 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_hood_loss = adversarial_hoods_loss(
-                   self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                   #self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
+                   self._discriminator_hood(z_latent), labels_hood
                 )
                 
                 
