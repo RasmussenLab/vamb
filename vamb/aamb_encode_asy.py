@@ -678,8 +678,8 @@ class AAE_ASY(nn.Module):
 
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
-                    + (self.sl * self.slr) * g_loss_adv_z
-                    #+ (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
+                    #+ (self.sl * self.slr) * g_loss_adv_z
+                    + (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
@@ -704,7 +704,7 @@ class AAE_ASY(nn.Module):
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
                 d_z_loss.backward()
-                optimizer_D_z.step()
+                #optimizer_D_z.step()
 
                 # ----------------------
                 #  Train Discriminator z_hood
