@@ -381,15 +381,15 @@ class AAE_ASY(nn.Module):
             nn.Softmax(dim=1),
         )
 
-        # discriminator_z Y, can you guess which Y_class it belongs to?
-        self.discriminator_z_y = nn.Sequential(
-            nn.Linear(self.ld, self.h_n),
-            nn.LeakyReLU(),
-            nn.Linear(self.h_n, int(self.h_n / 2)),
-            nn.LeakyReLU(),
-            nn.Linear(int(self.h_n / 2), self.y_len),
-            nn.Softmax(),
-        )
+        # # discriminator_z Y, can you guess which Y_class it belongs to?
+        # self.discriminator_z_y = nn.Sequential(
+        #     nn.Linear(self.ld, self.h_n),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(self.h_n, int(self.h_n / 2)),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(int(self.h_n / 2), self.y_len),
+        #     nn.Softmax(),
+        # )
 
 
         # discriminator Y
@@ -707,11 +707,8 @@ class AAE_ASY(nn.Module):
         for name, param in self.named_parameters():
             if "hood" in name:
                 disc_hood_params.append(param)
-
-
             elif "discriminator_z" in name :
                 disc_z_params.append(param)
-
 
             elif "discriminator_y" in name:
                 disc_y_params.append(param)
@@ -719,11 +716,13 @@ class AAE_ASY(nn.Module):
                 enc_params.append(param)
             else:
                 dec_params.append(param)
+        
         print(len(disc_hood_params),len(disc_z_params),len(enc_params))
         initial_params_hood = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" in name}
         initial_params_z = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" not in name if "discriminator_z" in name} 
         initial_params_encoder = {name: param.clone().detach() for name, param in self.named_parameters() if "encoder" in name} 
         print(initial_params_hood.keys(),initial_params_z.keys(),initial_params_encoder.keys())
+        
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
@@ -845,7 +844,7 @@ class AAE_ASY(nn.Module):
 
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
-                    #+ (self.sl * self.slr) * g_loss_adv_z
+                    + (self.sl * self.slr) * g_loss_adv_z
                     + (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
@@ -871,7 +870,8 @@ class AAE_ASY(nn.Module):
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
                 d_z_loss.backward()
-                #optimizer_D_z.step()
+                optimizer_D_z.step()
+                
 
                 # ----------------------
                 #  Train Discriminator z_hood
@@ -891,8 +891,18 @@ class AAE_ASY(nn.Module):
                 
                 optimizer_D_z_hood.step()
 
+                parameters_changed = False
+                for name, param in self.named_parameters():
+                    if "hood" not in name:
+                        continue
+                    if not torch.allclose(param, initial_params_hood[name]):
+                        parameters_changed = True
+                        break
 
-
+                if parameters_changed:
+                    print("Parameters changed during training.")
+                else:
+                    print("Parameters did not change during training.")
                 # ----------------------
                 #  Train Discriminator y
                 # ----------------------
