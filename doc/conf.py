@@ -35,7 +35,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
-    "sphinx_new_tab_link",
+    # "sphinx_new_tab_link",
     "myst_nb",
 ]
 
@@ -62,12 +62,14 @@ templates_path = ["_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", ".npz", "tutoral_files"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", ".npz",]
 
 
 # Intersphinx options
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/stable/index.html", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
     # "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     # "scikit-learn": ("https://scikit-learn.org/stable/", None),
     # "matplotlib": ("https://matplotlib.org/stable/", None),
@@ -84,8 +86,8 @@ html_theme = "sphinx_book_theme"
 # html_logo = "_static/logo-wide.svg"
 # html_favicon = "_static/logo-square.svg"
 html_theme_options = {
-    "github_url": "https://github.com/RasmussenLab/python_package",
-    "repository_url": "https://github.com/RasmussenLab/python_package",
+    "github_url": "https://github.com/RasmussenLab/vamb",
+    "repository_url": "https://github.com/RasmussenLab/vamb",
     "repository_branch": "main",
     "home_page_in_toc": True,
     "path_to_docs": "docs",

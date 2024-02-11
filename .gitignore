@@ -14,3 +14,6 @@ TODO.md
 build/
 dist/
 **.vscode
+# doc
+doc/_build
+doc/reference
