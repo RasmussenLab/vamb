@@ -374,10 +374,10 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.ld, int(self.h_n*3)),
             nn.LeakyReLU(),
             #nn.Linear(self.h_n, int(self.h_n / 2)),
-            nn.Linear(self.ld, int(self.h_n*3)),
+            nn.Linear(int(self.h_n*3), int(self.h_n*3)),
             nn.LeakyReLU(),
             #nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Linear(self.ld, int(self.h_n*3)),
+            nn.Linear(int(self.h_n*3), self.n_hoods),
             nn.Softmax(dim=1),
         )
 
