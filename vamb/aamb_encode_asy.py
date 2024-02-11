@@ -311,12 +311,12 @@ class AAE_ASY(nn.Module):
         
         # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
         # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
-        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 200}
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 100}
         self.neighbourhoods = { i:idxs for i,idxs in enumerate(self.neighbourhoods.values())}
         self.n_hoods = len(self.neighbourhoods.keys())
         
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
-        
+        print("# hoods",self.n_hoods)
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
         # get the hood in onehot if I give you the c_idx
