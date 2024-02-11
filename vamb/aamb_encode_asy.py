@@ -856,8 +856,8 @@ class AAE_ASY(nn.Module):
                 #print(self._discriminator_hood(z_latent[hood_mask.bool()]).shape, labels_hood[hood_mask.bool()].shape,self._discriminator_hood(z_latent)[hood_mask.bool()], labels_hood[hood_mask.bool()])
                 #print(self._discriminator_hood(z_latent[emb_mask.bool()]).shape, labels_hood[emb_mask.bool()].shape,self._discriminator_hood(z_latent)[emb_mask.bool()], labels_hood[emb_mask.bool()])
 
-                print("adv_z_loss",g_loss_adv_z.item())
-                print("adv_z_hood_loss",g_loss_adv_z_hood.item())
+                #print("adv_z_loss",g_loss_adv_z.item())
+                #print("adv_z_hood_loss",g_loss_adv_z_hood.item())
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
@@ -887,7 +887,7 @@ class AAE_ASY(nn.Module):
 
                 d_z_loss.backward()
                 #optimizer_D_z.step()
-                print("d_z_loss",d_z_loss.item())
+                #print("d_z_loss",d_z_loss.item())
 
                 # ----------------------
                 #  Train Discriminator z_hood
@@ -908,7 +908,7 @@ class AAE_ASY(nn.Module):
                 
                 optimizer_D_z_hood.step()
                 
-                print("d_z_hood_loss",d_z_hood_loss.item(),"\n")
+                #print("d_z_hood_loss",d_z_hood_loss.item(),"\n")
                 # parameters_changed = False
                 # for name, param in self.named_parameters():
                 #     if "hood" not in name:
