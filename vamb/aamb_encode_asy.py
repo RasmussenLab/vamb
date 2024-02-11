@@ -780,19 +780,15 @@ class AAE_ASY(nn.Module):
                 )
 
                 labels_hood = Variable(
-                    Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
+                    Tensor(nrows, 1).fill_(0.0), requires_grad=False
                 )
                 #hood_mask = torch.zeros(nrows)          
                 #print(idx_preds)      
                 for i,idx_pred in enumerate(idx_preds):
                     #if idx_pred in self.idx_hood_d.keys():
                     if emb_mask[i]:
-                        labels_hood[i,self.idx_hood_d[idx_pred.item()]] = 1.0
+                        labels_hood[i] = self.idx_hood_d[idx_pred.item()]
                         #hood_mask[i]=1.0
-                print(torch.sum(labels_hood),torch.sum(emb_mask))
-                if torch.sum(labels_hood) == 0 :
-                    continue
-                print(torch.sum(labels_hood),torch.sum(emb_mask))
                 # Sample noise as discriminator Z,Y ground truth
 
                 if self.usecuda:
