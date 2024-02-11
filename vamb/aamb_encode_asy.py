@@ -13,9 +13,11 @@ from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import torch
 
 from vamb.encode import set_batchsize
+import vamb.vambtools as _vambtools
 
 from collections.abc import Sequence
 from typing import Optional, IO, Union
@@ -23,6 +25,167 @@ from numpy.typing import NDArray
 from loguru import logger
 from math import log as _log
 import random
+
+
+
+
+
+def make_dataloader_n2v(
+    rpkm: np.ndarray,
+    tnf: np.ndarray,
+    embeddings: np.ndarray,
+    embeddings_mask: np.ndarray,
+    neighs: np.ndarray,
+    lengths: np.ndarray,
+    batchsize: int = 256,
+    destroy: bool = False,
+    cuda: bool = False,
+) -> tuple[_DataLoader[tuple[Tensor, Tensor, Tensor, Tensor]], np.ndarray]:
+    """Create a DataLoader and a contig mask from RPKM and TNF.
+
+    The dataloader is an object feeding minibatches of contigs to the VAE.
+    The data are normalized versions of the input datasets, with zero-contigs,
+    i.e. contigs where a row in either TNF or RPKM are all zeros, removed.
+    The mask is a boolean mask designating which contigs have been kept.
+
+    Inputs:
+        rpkm: RPKM matrix (N_contigs x N_samples)
+        tnf: TNF matrix (N_contigs x N_TNF)
+        embeddings: embeddings matrix (N_contigs x embedding_size)
+        embeddings_mask: boolean vector of len == N_contigs, where True if
+        contig has neighs withing distance on embedding space and if contig had neighbours in the graph.
+        neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices.
+        lenghts: contig lenghts
+        batchsize: Starting size of minibatches for dataloader
+        destroy: Mutate rpkm and tnf array in-place instead of making a copy.
+        cuda: Pagelock memory of dataloader (use when using GPU acceleration)
+
+    Outputs:
+        DataLoader: An object feeding data to the VAE
+        mask: A boolean mask of which contigs are kept
+    """
+
+    if (
+        not isinstance(rpkm, np.ndarray)
+        or not isinstance(tnf, np.ndarray)
+        or not isinstance(embeddings, np.ndarray)
+        or not isinstance(embeddings_mask, np.ndarray)
+        # or not isinstance(neighs, np.ndarray)
+    ):
+        raise ValueError(
+            "TNF, RPKM, Embedding, Embedding mask, and neighs must be Numpy arrays"
+        )
+
+    if batchsize < 1:
+        raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
+
+    if (
+        len(rpkm) != len(tnf)
+        or len(tnf) != len(lengths)
+        or len(embeddings) != len(lengths)
+        or len(embeddings_mask) != len(lengths)
+        or len(neighs) != len(lengths)
+    ):
+        raise ValueError(
+            "Lengths of TNF, RPKM, Embedding, Embedding mask,neighs, and lengths arrays must be the same"
+        )
+
+    if not (
+        rpkm.dtype
+        == tnf.dtype
+        == embeddings.dtype
+        == embeddings_mask.dtype
+        == np.float32
+    ):
+        raise ValueError(
+            "TNF, RPKM, Embedding, and Embedding mask must be Numpy arrays of dtype float32"
+        )
+
+    ### Copy arrays and mask them ###
+    # Copy if not destroy - this way we can have all following operations in-place
+    # for simplicity
+    if not destroy:
+        rpkm = rpkm.copy()
+        tnf = tnf.copy()
+        embeddings = embeddings.copy()
+        embeddings_mask = embeddings_mask.copy()
+        # neighs = neighs.copy()
+
+    # Normalize samples to have same depth
+    sample_depths_sum = rpkm.sum(axis=0)
+    if np.any(sample_depths_sum == 0):
+        raise ValueError(
+            "One or more samples have zero depth in all sequences, so cannot be depth normalized"
+        )
+    rpkm *= 1_000_000 / sample_depths_sum
+
+    zero_tnf = tnf.sum(axis=1) == 0
+    smallest_index = np.argmax(zero_tnf)
+    if zero_tnf[smallest_index]:
+        raise ValueError(
+            f"TNF row at index {smallest_index} is all zeros. "
+            + "This implies that the sequence contained no 4-mers of A, C, G, T or U, "
+            + "making this sequence uninformative. This is probably a mistake. "
+            + "Verify that the sequence contains usable information (e.g. is not all N's)"
+        )
+
+    total_abundance = rpkm.sum(axis=1)
+
+    # Normalize rpkm to sum to 1
+    n_samples = rpkm.shape[1]
+    zero_total_abundance = total_abundance == 0
+    rpkm[zero_total_abundance] = 1 / n_samples
+    nonzero_total_abundance = total_abundance.copy()
+    nonzero_total_abundance[zero_total_abundance] = 1.0
+    rpkm /= nonzero_total_abundance.reshape((-1, 1))
+
+    # Normalize TNF and total abundance to make SSE loss work better
+    total_abundance = np.log(total_abundance.clip(min=0.001))
+    _vambtools.zscore(total_abundance, inplace=True)
+    _vambtools.zscore(tnf, axis=0, inplace=True)
+    total_abundance.shape = (len(total_abundance), 1)
+
+    # Create weights
+    lengths = (lengths).astype(np.float32)
+    weights = np.log(lengths).astype(np.float32) - 5.0
+    weights[weights < 2.0] = 2.0
+    weights *= len(weights) / weights.sum()
+    weights.shape = (len(weights), 1)
+    indices = np.arange(tnf.shape[0])
+
+    ### Create final tensors and dataloader ###
+    depthstensor = torch.from_numpy(rpkm)  # this is a no-copy operation
+    tnftensor = torch.from_numpy(tnf)
+    total_abundance_tensor = torch.from_numpy(total_abundance)
+    weightstensor = torch.from_numpy(weights)
+    embeddingstensor = torch.from_numpy(embeddings)
+    embeddings_masktensor = torch.from_numpy(embeddings_mask)
+    indicestensor = torch.from_numpy(indices)
+
+    n_workers = 4 if cuda else 1
+    dataset = _TensorDataset(
+        depthstensor,
+        tnftensor,
+        total_abundance_tensor,
+        embeddingstensor,
+        embeddings_masktensor,
+        weightstensor,
+        indicestensor,
+    )
+
+    dataloader = _DataLoader(
+        dataset=dataset,
+        batch_size=batchsize,
+        drop_last=False,
+        shuffle=True,
+        num_workers=n_workers,
+        pin_memory=cuda,
+    )
+
+    return dataloader, neighs
+
+
+
 
 class CosineSimilarityLoss(nn.Module):
     def __init__(self):
@@ -557,6 +720,8 @@ class AAE_ASY(nn.Module):
             else:
                 dec_params.append(param)
         print(len(disc_hood_params),len(disc_z_params),len(enc_params))
+        initial_params = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" in name}
+        print(initial_params.keys())
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
