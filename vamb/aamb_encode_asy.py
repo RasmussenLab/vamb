@@ -847,7 +847,7 @@ class AAE_ASY(nn.Module):
                     #self._discriminator_z(z_latent), labels_prior
                     
                 )
-                print(self._discriminator_hood(z_latent[hood_mask.bool()]).shape, labels_hood[hood_mask.bool()].shape,self._discriminator_hood(z_latent)[hood_mask.bool()][0,:], labels_hood[hood_mask.bool()][0,:])
+                print(self._discriminator_hood(z_latent[hood_mask.bool()]).shape, labels_hood[hood_mask.bool()].shape,self._discriminator_hood(z_latent)[hood_mask.bool()], labels_hood[hood_mask.bool()])
 
                 print("adv_z_loss",g_loss_adv_z.item())
                 print("adv_z_hood_loss",g_loss_adv_z_hood.item())
