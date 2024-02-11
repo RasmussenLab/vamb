@@ -847,7 +847,7 @@ class AAE_ASY(nn.Module):
                 #     self._discriminator_y(y_latent), labels_prior
                 # )
                 #print(z_latent[emb_mask.bool()].shape,labels_hood[emb_mask.bool()].shape)
-                indices_rnd = torch.randperm(np.sum(emb_mask))
+                indices_rnd = torch.randperm(emb_mask.sum())
                 g_loss_adv_z_hood = adversarial_hoods_loss(
                     self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()][indices_rnd]
                     #self._discriminator_hood(z_latent[hood_mask.bool()]), labels_hood[hood_mask.bool()]
