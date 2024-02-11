@@ -471,7 +471,7 @@ class AAE_ASY(nn.Module):
     ## Discriminator Z space for hoods (continuous latent space defined by mu and sigma layers)
     def _discriminator_hood(self, z):
         predictions = self.discriminator_hood(z)
-        print(predictions.shape)
+        print(predictions[0,:])
         return predictions
 
 
