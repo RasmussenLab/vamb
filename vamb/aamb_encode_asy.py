@@ -779,10 +779,10 @@ class AAE_ASY(nn.Module):
                     Tensor(nrows, 1).fill_(0.0), requires_grad=False
                 )
 
-                labels_hood = Variable(
-                    Tensor(nrows).fill_(0), requires_grad=False
-                )
-                #labels_hood =  torch.empty(nrows, dtype=torch.long)
+                #labels_hood = Variable(
+                #    Tensor(nrows).fill_(0), requires_grad=False
+                #)
+                labels_hood =  torch.empty(nrows, dtype=torch.long)
                 #hood_mask = torch.zeros(nrows)          
                 #print(idx_preds)      
                 for i,idx_pred in enumerate(idx_preds):
