@@ -720,8 +720,10 @@ class AAE_ASY(nn.Module):
             else:
                 dec_params.append(param)
         print(len(disc_hood_params),len(disc_z_params),len(enc_params))
-        initial_params = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" in name}
-        print(initial_params.keys())
+        initial_params_hood = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" in name}
+        initial_params_z = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" not in name if "discriminator_z" in name} 
+        initial_params_encoder = {name: param.clone().detach() for name, param in self.named_parameters() if "encoder" in name} 
+        print(initial_params_hood.keys(),initial_params_z.keys(),initial_params_encoder.keys())
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
