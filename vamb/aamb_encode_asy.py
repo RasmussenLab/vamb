@@ -311,7 +311,8 @@ class AAE_ASY(nn.Module):
         
         # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
         # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
-        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values())}
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 200}
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(self.neighbourhoods.values())}
         self.n_hoods = len(self.neighbourhoods.keys())
         
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
@@ -776,8 +777,8 @@ class AAE_ASY(nn.Module):
                     Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
                 )
                 for i,idx_pred in enumerate(idx_preds):
-                    #if idx_pred in self.idx_hood_d.keys():
-                    if emb_mask[i]:
+                    if idx_pred in self.idx_hood_d.keys():
+                    #if emb_mask[i]:
                         labels_hood[i,self.idx_hood_d[idx_pred.item()]] = 1.0
                 
                 
