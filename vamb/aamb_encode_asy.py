@@ -377,14 +377,14 @@ class AAE_ASY(nn.Module):
 
         # discriminator_z hood, can you guess which neighbourhood it belongs to?
         self.discriminator_hood = nn.Sequential(
-            #nn.Linear(self.ld, self.h_n),
-            nn.Linear(self.ld, int(self.h_n*10)),
+            nn.Linear(self.ld, self.h_n),
+            #nn.Linear(self.ld, int(self.h_n*10)),
             nn.LeakyReLU(),
-            #nn.Linear(self.h_n, int(self.h_n / 2)),
-            nn.Linear(int(self.h_n*10), int(self.h_n*10)),
+            nn.Linear(self.h_n, int(self.h_n / 2)),
+            #nn.Linear(int(self.h_n*10), int(self.h_n*10)),
             nn.LeakyReLU(),
-            #nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Linear(int(self.h_n*10), self.n_hoods),
+            nn.Linear(int(self.h_n / 2), self.n_hoods),
+            #nn.Linear(int(self.h_n*10), self.n_hoods),
             #nn.Softmax(dim=1),
         )
 
@@ -854,7 +854,7 @@ class AAE_ASY(nn.Module):
                     
                 )
                 #print(self._discriminator_hood(z_latent[hood_mask.bool()]).shape, labels_hood[hood_mask.bool()].shape,self._discriminator_hood(z_latent)[hood_mask.bool()], labels_hood[hood_mask.bool()])
-                print(self._discriminator_hood(z_latent[emb_mask.bool()]).shape, labels_hood[emb_mask.bool()].shape,self._discriminator_hood(z_latent)[emb_mask.bool()], labels_hood[emb_mask.bool()])
+                #print(self._discriminator_hood(z_latent[emb_mask.bool()]).shape, labels_hood[emb_mask.bool()].shape,self._discriminator_hood(z_latent)[emb_mask.bool()], labels_hood[emb_mask.bool()])
 
                 print("adv_z_loss",g_loss_adv_z.item())
                 print("adv_z_hood_loss",g_loss_adv_z_hood.item())
@@ -886,7 +886,7 @@ class AAE_ASY(nn.Module):
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
                 d_z_loss.backward()
-                optimizer_D_z.step()
+                #optimizer_D_z.step()
                 print("d_z_loss",d_z_loss.item())
 
                 # ----------------------
