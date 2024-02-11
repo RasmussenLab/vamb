@@ -311,14 +311,16 @@ class AAE_ASY(nn.Module):
         
         # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
         # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
-        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 100}
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 50}
         self.neighbourhoods = { i:idxs for i,idxs in enumerate(self.neighbourhoods.values())}
         self.n_hoods = len(self.neighbourhoods.keys())
         
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
-        print("# hoods",self.n_hoods)
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
+        assert np.sum([len(idxs) for idxs in self.neighbourhoods.values()]) == len(self.idx_hood_d.keys())
+
+        print("# hoods",self.n_hoods,"# contigs in hoods", len(self.idx_hood_d.keys()))
         # get the hood in onehot if I give you the c_idx
         #self.idx_OHhood_d = { idx: torch.eye(self.n_hoods)[i] for i,idxs in self.neighbourhoods.items() for idx in idxs }
 
@@ -783,7 +785,8 @@ class AAE_ASY(nn.Module):
                         labels_hood[i,self.idx_hood_d[idx_pred.item()]] = 1.0
                         hood_mask[i]=1.0
                 
-                
+                if torch.sum(hood_mask) == 0 :
+                    continue
                 # Sample noise as discriminator Z,Y ground truth
 
                 if self.usecuda:
