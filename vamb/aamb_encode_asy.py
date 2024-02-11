@@ -311,10 +311,9 @@ class AAE_ASY(nn.Module):
         
         # dictionary i:{idx_a,idx_c,} , where the set of indices indicates contains all contigs that belong to the same neighbourhoods
         # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
-        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 100}
-        self.neighbourhoods = { i:idxs for i,idxs in enumerate(self.neighbourhoods.values())}
+        self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values())}
         self.n_hoods = len(self.neighbourhoods.keys())
-        print("# hoods when min len hoods is 100", self.n_hoods)
+        
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
         
         # get the hood if I give you the c_idx
@@ -371,11 +370,14 @@ class AAE_ASY(nn.Module):
 
         # discriminator_z hood, can you guess which neighbourhood it belongs to?
         self.discriminator_hood = nn.Sequential(
-            nn.Linear(self.ld, self.h_n),
+            #nn.Linear(self.ld, self.h_n),
+            nn.Linear(self.ld, int(self.h_n*3)),
             nn.LeakyReLU(),
-            nn.Linear(self.h_n, int(self.h_n / 2)),
+            #nn.Linear(self.h_n, int(self.h_n / 2)),
+            nn.Linear(self.ld, int(self.h_n*3)),
             nn.LeakyReLU(),
-            nn.Linear(int(self.h_n / 2), self.n_hoods),
+            #nn.Linear(int(self.h_n / 2), self.n_hoods),
+            nn.Linear(self.ld, int(self.h_n*3)),
             nn.Softmax(dim=1),
         )
 
@@ -846,7 +848,7 @@ class AAE_ASY(nn.Module):
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
-                    + (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
+                    #+ (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
