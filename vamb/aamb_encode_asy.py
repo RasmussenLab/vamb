@@ -896,6 +896,7 @@ class AAE_ASY(nn.Module):
                     if "hood" not in name:
                         continue
                     if not torch.allclose(param, initial_params_hood[name]):
+                        print(name, param[:20],initial_params_hood[name])
                         parameters_changed = True
                         break
 
