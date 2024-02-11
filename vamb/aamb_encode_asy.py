@@ -874,7 +874,7 @@ class AAE_ASY(nn.Module):
 
                 d_z_loss.backward()
                 optimizer_D_z.step()
-                
+                print("d_z_loss",d_z_loss.item())
 
                 # ----------------------
                 #  Train Discriminator z_hood
@@ -893,7 +893,8 @@ class AAE_ASY(nn.Module):
                 d_z_hood_loss.backward()
                 
                 optimizer_D_z_hood.step()
-                print(d_z_hood_loss.item())
+                
+                print("d_z_loss",d_z_hood_loss.item())
                 # parameters_changed = False
                 # for name, param in self.named_parameters():
                 #     if "hood" not in name:
