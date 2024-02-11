@@ -846,7 +846,7 @@ class AAE_ASY(nn.Module):
                 # g_loss_adv_y = adversarial_loss(
                 #     self._discriminator_y(y_latent), labels_prior
                 # )
-                print(z_latent[emb_mask.bool()].shape,labels_hood[emb_mask.bool()].shape)
+                #print(z_latent[emb_mask.bool()].shape,labels_hood[emb_mask.bool()].shape)
                 g_loss_adv_z_hood = adversarial_hoods_loss(
                     self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
                     #self._discriminator_hood(z_latent[hood_mask.bool()]), labels_hood[hood_mask.bool()]
