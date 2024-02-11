@@ -313,7 +313,7 @@ class AAE_ASY(nn.Module):
         # ensuring the keys are sequential and wo gaps , i.e. 0,1,2,3,4,..., so last key == len(keys)-1
         self.neighbourhoods = { i:idxs for i,idxs in enumerate(neighbourhoods_object.values()) if len(idxs) > 100}
         
-        self.n_hoods = len(self.neighbourhoods.keys())
+        #self.n_hoods = len(self.neighbourhoods.keys())
         print("# hoods when min len hoods is 100", self.n_hoods)
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
         
@@ -323,8 +323,6 @@ class AAE_ASY(nn.Module):
         #self.idx_OHhood_d = { idx: torch.eye(self.n_hoods)[i] for i,idxs in self.neighbourhoods.items() for idx in idxs }
 
 
-        
-        self.n_hoods = len(self.neighbourhoods.keys())
 
         # Object where I will store the y s , so we update after training
         self.y_container = generate_random_one_hot_vectors_tensor(self.ncontigs, self.y_len)
