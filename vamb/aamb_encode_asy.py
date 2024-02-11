@@ -318,6 +318,7 @@ class AAE_ASY(nn.Module):
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
+        print(self.idx_hood_d.values())
         assert np.sum([len(idxs) for idxs in self.neighbourhoods.values()]) == len(self.idx_hood_d.keys())
 
         print("# hoods",self.n_hoods,"# contigs in hoods", len(self.idx_hood_d.keys()))
@@ -778,7 +779,8 @@ class AAE_ASY(nn.Module):
                 labels_hood = Variable(
                     Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
                 )
-                hood_mask = torch.zeros(nrows)                
+                hood_mask = torch.zeros(nrows)          
+                print(idx_preds)      
                 for i,idx_pred in enumerate(idx_preds):
                     if idx_pred in self.idx_hood_d.keys():
                     #if emb_mask[i]:
