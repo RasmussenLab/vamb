@@ -350,8 +350,8 @@ class AAE_ASY(nn.Module):
             nn.LeakyReLU(),
         )
         # latent layers
-        self.mu = self.dropoutlayer(nn.Linear(self.h_n, self.ld))
-        self.logvar = self.dropoutlayer(nn.Linear(self.h_n, self.ld))
+        self.mu = nn.Linear(self.h_n, self.ld)
+        self.logvar = nn.Linear(self.h_n, self.ld)
         self.y_vector = nn.Linear(self.h_n, self.y_len)
         
 
@@ -611,7 +611,7 @@ class AAE_ASY(nn.Module):
     def forward(self, depths_in, tnfs_in,emb_in, abundance_in,warmup=False):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)
         z_latent = self._reparameterization(mu, logvar)
-        
+        z_latent = self.dropoutlayer(z_latent)
         #print(torch.argmax(y_latent,dim=1),y_latent)
         
         y_latent_one_hot = self.one_hot_transform(y_latent)
