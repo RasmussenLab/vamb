@@ -436,7 +436,7 @@ class AAE_ASY(nn.Module):
         _y = self.y_vector(x)
         y = F.softmax(_y, dim=1)
 
-        return mu, logvar, y
+        return mu, self.dropoutlayer(logvar), self.dropoutlayer(y)
 
     def y_length(self):
         return self.y_len
@@ -611,7 +611,6 @@ class AAE_ASY(nn.Module):
     def forward(self, depths_in, tnfs_in,emb_in, abundance_in,warmup=False):
         mu, logvar, y_latent = self._encode(depths_in, tnfs_in,emb_in,abundance_in)
         z_latent = self._reparameterization(mu, logvar)
-        z_latent = self.dropoutlayer(z_latent)
         #print(torch.argmax(y_latent,dim=1),y_latent)
         
         y_latent_one_hot = self.one_hot_transform(y_latent)
