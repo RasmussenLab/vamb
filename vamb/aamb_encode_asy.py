@@ -556,7 +556,7 @@ class AAE_ASY(nn.Module):
                 enc_params.append(param)
             else:
                 dec_params.append(param)
-        print(len(disc_hood_params),len(disc_z_params),len(encoder))
+        print(len(disc_hood_params),len(disc_z_params),len(enc_params))
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         adversarial_hoods_loss = torch.nn.CrossEntropyLoss()
