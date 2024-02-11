@@ -850,7 +850,7 @@ class AAE_ASY(nn.Module):
                 print("adv_z_hood_loss",g_loss_adv_z_hood.item())
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
-                    + (self.sl * self.slr) * g_loss_adv_z
+                    #+ (self.sl * self.slr) * g_loss_adv_z
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
