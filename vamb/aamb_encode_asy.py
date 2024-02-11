@@ -776,11 +776,12 @@ class AAE_ASY(nn.Module):
                 labels_hood = Variable(
                     Tensor(nrows, self.n_hoods).fill_(0.0), requires_grad=False
                 )
+                hood_mask = torch.zeros(nrows)                
                 for i,idx_pred in enumerate(idx_preds):
                     if idx_pred in self.idx_hood_d.keys():
                     #if emb_mask[i]:
                         labels_hood[i,self.idx_hood_d[idx_pred.item()]] = 1.0
-                
+                        hood_mask[i]=1.0
                 
                 
                 # Sample noise as discriminator Z,Y ground truth
@@ -842,7 +843,7 @@ class AAE_ASY(nn.Module):
                 #print(z_latent[emb_mask.bool()].shape)
                 g_loss_adv_z_hood = adversarial_hoods_loss(
                     #self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
-                    self._discriminator_hood(z_latent), labels_hood
+                    self._discriminator_hood(z_latent[hood_mask.bool()]), labels_hood[hood_mask.bool()]
                     #self._discriminator_z(z_latent), labels_prior
                     
                 )
@@ -891,7 +892,8 @@ class AAE_ASY(nn.Module):
 
                 d_z_hood_loss = adversarial_hoods_loss(
                    #self._discriminator_hood(z_latent[emb_mask.bool()]), labels_hood[emb_mask.bool()]
-                   self._discriminator_hood(z_latent), labels_hood
+                   #self._discriminator_hood(z_latent), labels_hood
+                   self._discriminator_hood(z_latent[hood_mask.bool()]), labels_hood[hood_mask.bool()]
                 )
                 
                 
