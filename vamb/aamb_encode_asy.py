@@ -304,7 +304,8 @@ class AAE_ASY(nn.Module):
         self.delta = delta
         self.usecuda = _cuda
         self.rng = np.random.Generator(np.random.PCG64(seed))
-
+        
+        self.dropoutlayer = nn.Dropout(p=0.2)
 
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
@@ -349,8 +350,8 @@ class AAE_ASY(nn.Module):
             nn.LeakyReLU(),
         )
         # latent layers
-        self.mu = nn.Linear(self.h_n, self.ld)
-        self.logvar = nn.Linear(self.h_n, self.ld)
+        self.mu = self.dropoutlayer(nn.Linear(self.h_n, self.ld))
+        self.logvar = self.dropoutlayer(nn.Linear(self.h_n, self.ld))
         self.y_vector = nn.Linear(self.h_n, self.y_len)
         
 
@@ -887,7 +888,7 @@ class AAE_ASY(nn.Module):
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
                 d_z_loss.backward()
-                #optimizer_D_z.step()
+                optimizer_D_z.step()
                 #print("d_z_loss",d_z_loss.item())
 
                 # ----------------------
