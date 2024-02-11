@@ -321,7 +321,7 @@ class AAE_ASY(nn.Module):
         assert (self.n_hoods -1)  == np.max(list(self.neighbourhoods.keys()))
         # get the hood if I give you the c_idx
         self.idx_hood_d = { idx:i for i,idxs in self.neighbourhoods.items() for idx in idxs }
-        print(self.idx_hood_d.values())
+        #print(self.idx_hood_d.values())
         assert np.sum([len(idxs) for idxs in self.neighbourhoods.values()]) == len(self.idx_hood_d.keys())
 
         print("# hoods",self.n_hoods,"# contigs in hoods", len(self.idx_hood_d.keys()))
@@ -861,7 +861,7 @@ class AAE_ASY(nn.Module):
                 ed_loss = (
                     (1 - self.sl) * rec_and_contr_loss
                     + (self.sl * self.slr) * g_loss_adv_z
-                    - (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
+                    #- (self.sl * (1 - self.slr)) * g_loss_adv_z_hood
                     #+ (self.sl * (1 - self.slr)) * g_loss_adv_y
                 )
 
