@@ -780,7 +780,7 @@ class AAE_ASY(nn.Module):
                 )
 
                 labels_hood = Variable(
-                    Tensor(nrows).fill_(0.0), requires_grad=False
+                    Tensor(nrows).fill_(0), requires_grad=False
                 )
                 #labels_hood =  torch.empty(nrows, dtype=torch.long)
                 #hood_mask = torch.zeros(nrows)          
