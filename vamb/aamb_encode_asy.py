@@ -378,7 +378,7 @@ class AAE_ASY(nn.Module):
             nn.Linear(self.h_n, int(self.h_n / 2)),
             nn.LeakyReLU(),
             nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Softmax(dim=1),
+            nn.Softmax(dim=0),
         )
 
         # # discriminator_z Y, can you guess which Y_class it belongs to?
@@ -717,11 +717,11 @@ class AAE_ASY(nn.Module):
             else:
                 dec_params.append(param)
         
-        print(len(disc_hood_params),len(disc_z_params),len(enc_params))
+        #print(len(disc_hood_params),len(disc_z_params),len(enc_params))
         initial_params_hood = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" in name}
         initial_params_z = {name: param.clone().detach() for name, param in self.named_parameters() if "hood" not in name if "discriminator_z" in name} 
         initial_params_encoder = {name: param.clone().detach() for name, param in self.named_parameters() if "encoder" in name} 
-        print(initial_params_hood.keys(),initial_params_z.keys(),initial_params_encoder.keys())
+        #print(initial_params_hood.keys(),initial_params_z.keys(),initial_params_encoder.keys())
         
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
@@ -890,20 +890,20 @@ class AAE_ASY(nn.Module):
                 d_z_hood_loss.backward()
                 
                 optimizer_D_z_hood.step()
+                print(d_z_hood_loss.item())
+                # parameters_changed = False
+                # for name, param in self.named_parameters():
+                #     if "hood" not in name:
+                #         continue
+                #     if not torch.allclose(param, initial_params_hood[name]):
+                #         print(name, param[:20],initial_params_hood[name])
+                #         parameters_changed = True
+                #         break
 
-                parameters_changed = False
-                for name, param in self.named_parameters():
-                    if "hood" not in name:
-                        continue
-                    if not torch.allclose(param, initial_params_hood[name]):
-                        print(name, param[:20],initial_params_hood[name])
-                        parameters_changed = True
-                        break
-
-                if parameters_changed:
-                    print("Parameters changed during training.")
-                else:
-                    print("Parameters did not change during training.")
+                # if parameters_changed:
+                #     print("Parameters changed during training.")
+                # else:
+                #     print("Parameters did not change during training.")
                 # ----------------------
                 #  Train Discriminator y
                 # ----------------------
