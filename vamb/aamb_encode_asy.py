@@ -833,7 +833,7 @@ class AAE_ASY(nn.Module):
                 )
 
                 g_loss_adv_z = adversarial_loss(
-                    self._discriminator_z(z_latent)[emb_mask.bool()], labels_prior[emb_mask.bool()]
+                    self._discriminator_z(z_latent), labels_prior
                 )
                 # g_loss_adv_y = adversarial_loss(
                 #     self._discriminator_y(y_latent), labels_prior
@@ -845,6 +845,7 @@ class AAE_ASY(nn.Module):
                     #self._discriminator_z(z_latent), labels_prior
                     
                 )
+                print(self._discriminator_hood(z_latent[emb_mask.bool()]).shape, labels_hood[emb_mask.bool()].shape,self._discriminator_hood(z_latent)[emb_mask.bool()][0,:], labels_hood[emb_mask.bool()][0,:])
 
                 print("adv_z_loss",g_loss_adv_z.item())
                 print("adv_z_hood_loss",g_loss_adv_z_hood.item())
@@ -868,10 +869,10 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_loss_prior = adversarial_loss(
-                    self._discriminator_z(z_prior)[emb_mask.bool()], labels_prior[emb_mask.bool()]
+                    self._discriminator_z(z_prior), labels_prior
                 )
                 d_z_loss_latent = adversarial_loss(
-                    self._discriminator_z(z_latent)[emb_mask.bool()], labels_latent[emb_mask.bool()]
+                    self._discriminator_z(z_latent), labels_latent
                 )
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
