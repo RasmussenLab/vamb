@@ -371,13 +371,13 @@ class AAE_ASY(nn.Module):
         # discriminator_z hood, can you guess which neighbourhood it belongs to?
         self.discriminator_hood = nn.Sequential(
             #nn.Linear(self.ld, self.h_n),
-            nn.Linear(self.ld, int(self.h_n*3)),
+            nn.Linear(self.ld, int(self.h_n*10)),
             nn.LeakyReLU(),
             #nn.Linear(self.h_n, int(self.h_n / 2)),
-            nn.Linear(int(self.h_n*3), int(self.h_n*3)),
+            nn.Linear(int(self.h_n*10), int(self.h_n*10)),
             nn.LeakyReLU(),
             #nn.Linear(int(self.h_n / 2), self.n_hoods),
-            nn.Linear(int(self.h_n*3), self.n_hoods),
+            nn.Linear(int(self.h_n*10), self.n_hoods),
             #nn.Softmax(dim=1),
         )
 
@@ -833,7 +833,7 @@ class AAE_ASY(nn.Module):
                 )
 
                 g_loss_adv_z = adversarial_loss(
-                    self._discriminator_z(z_latent), labels_prior
+                    self._discriminator_z(z_latent)[emb_mask.bool()], labels_prior[emb_mask.bool()]
                 )
                 # g_loss_adv_y = adversarial_loss(
                 #     self._discriminator_y(y_latent), labels_prior
@@ -868,10 +868,10 @@ class AAE_ASY(nn.Module):
                 z_latent = self._reparameterization(mu, logvar)
 
                 d_z_loss_prior = adversarial_loss(
-                    self._discriminator_z(z_prior), labels_prior
+                    self._discriminator_z(z_prior)[emb_mask.bool()], labels_prior[emb_mask.bool()]
                 )
                 d_z_loss_latent = adversarial_loss(
-                    self._discriminator_z(z_latent), labels_latent
+                    self._discriminator_z(z_latent)[emb_mask.bool()], labels_latent[emb_mask.bool()]
                 )
                 d_z_loss = 0.5 * (d_z_loss_prior + d_z_loss_latent)
 
