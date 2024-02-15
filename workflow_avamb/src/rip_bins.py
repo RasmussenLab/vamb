@@ -183,9 +183,9 @@ def remove_meaningless_edges_from_pairs(
                     contig_length,
                 )
                 print("Cluster ripped because of a meaningless edge ", cluster_updated)
-                clusters_changed_but_not_intersecting_contigs[
-                    cluster_updated
-                ] = cluster_contigs[cluster_updated]
+                clusters_changed_but_not_intersecting_contigs[cluster_updated] = (
+                    cluster_contigs[cluster_updated]
+                )
 
     components: list[set[str]] = list()
     for component in nx.connected_components(graph_clusters):
@@ -295,9 +295,9 @@ def make_all_components_pair(
                     contig_length,
                 )
                 print("Cluster ripped because of a pairing component ", cluster_updated)
-                clusters_changed_but_not_intersecting_contigs[
-                    cluster_updated
-                ] = cluster_contigs[cluster_updated]
+                clusters_changed_but_not_intersecting_contigs[cluster_updated] = (
+                    cluster_contigs[cluster_updated]
+                )
                 component_len = max(
                     [
                         len(nx.node_connected_component(graph_clusters, node_i))

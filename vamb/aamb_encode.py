@@ -1,6 +1,5 @@
 """Adversarial autoencoders (AAE) for metagenomics binning, this files contains the implementation of the AAE"""
 
-
 import numpy as np
 from math import log, isfinite
 import time

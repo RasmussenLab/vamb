@@ -22,13 +22,13 @@ from loguru import logger
 import pandas as pd
 
 _ncpu = os.cpu_count()
-DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
+DEFAULT_BLAS_THREADS = 16 if _ncpu is None else min(_ncpu, 16)
 
 # These MUST be set before importing numpy
 # I know this is a shitty hack, see https://github.com/numpy/numpy/issues/11826
-os.environ["MKL_NUM_THREADS"] = str(DEFAULT_THREADS)
-os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_THREADS)
-os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
+os.environ["MKL_NUM_THREADS"] = str(DEFAULT_BLAS_THREADS)
+os.environ["NUMEXPR_NUM_THREADS"] = str(DEFAULT_BLAS_THREADS)
+os.environ["OMP_NUM_THREADS"] = str(DEFAULT_BLAS_THREADS)
 
 # Append vamb to sys.path to allow vamb import even if vamb was not installed
 # using pip
@@ -771,9 +771,11 @@ def cluster_and_write_files(
             print(
                 str(i + 1),
                 None if cluster.radius is None else round(cluster.radius, 3),
-                None
-                if cluster.observed_pvr is None
-                else round(cluster.observed_pvr, 2),
+                (
+                    None
+                    if cluster.observed_pvr is None
+                    else round(cluster.observed_pvr, 2)
+                ),
                 cluster.kind_str,
                 sum(sequence_lens[i] for i in cluster.members),
                 len(cluster.members),
@@ -1686,9 +1688,11 @@ def add_input_output_arguments(subparser):
         dest="nthreads",
         metavar="",
         type=int,
-        default=DEFAULT_THREADS,
+        default=vamb.parsebam.DEFAULT_BAM_THREADS,
         help=(
-            "number of threads to use " "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
+            "number of threads to read BAM files [min("
+            + str(vamb.parsebam.DEFAULT_BAM_THREADS)
+            + ", nbamfiles)]"
         ),
     )
     inputos.add_argument(
