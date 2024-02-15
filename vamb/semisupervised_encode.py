@@ -1,6 +1,5 @@
 """Semisupervised multimodal VAEs for metagenomics binning, this files contains the implementation of the VAEVAE for MMSEQ predictions"""
 
-
 __cmd_doc__ = """Encode depths and TNF using a VAE to latent representation"""
 
 import numpy as _np
