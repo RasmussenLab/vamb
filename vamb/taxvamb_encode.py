@@ -1,6 +1,5 @@
 """Hierarchical loss for the labels suggested in https://arxiv.org/abs/2210.10929"""
 
-
 __cmd_doc__ = """Hierarchical loss for the labels"""
 
 

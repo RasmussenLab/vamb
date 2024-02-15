@@ -64,19 +64,17 @@ class CompositionPath(type(Path())):
 
 
 class CompositionOptions:
-    __slots__ = ["path", "min_contig_length", "warn_on_few_seqs"]
+    __slots__ = ["path", "min_contig_length"]
 
     def __init__(
         self,
         fastapath: Optional[Path],
         npzpath: Optional[Path],
         min_contig_length: int,
-        warn_on_few_seqs: bool,
     ):
         assert isinstance(fastapath, (Path, type(None)))
         assert isinstance(npzpath, (Path, type(None)))
         assert isinstance(min_contig_length, int)
-        assert isinstance(warn_on_few_seqs, bool)
 
         if min_contig_length < 250:
             raise argparse.ArgumentTypeError(
@@ -98,7 +96,6 @@ class CompositionOptions:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
         self.min_contig_length = min_contig_length
-        self.warn_on_few_seqs = warn_on_few_seqs
 
 
 class AbundancePath(type(Path())):
@@ -546,17 +543,6 @@ def calc_tnf(
 
     binsplitter.initialize(composition.metadata.identifiers)
 
-    if options.warn_on_few_seqs and composition.nseqs < 20_000:
-        message = (
-            f"Kept only {composition.nseqs} sequences from FASTA file. "
-            "We normally expect 20,000 sequences or more to prevent overfitting. "
-            "As a deep learning model, VAEs are prone to overfitting with too few sequences. "
-            "You may want to  bin more samples as a time, lower the beta parameter, "
-            "or use a different binner altogether.\n"
-        )
-        logger.opt(raw=True).info("\n")
-        logger.warning(message)
-
     # Warn the user if any contigs have been observed, which is smaller
     # than the threshold.
     if not np.all(composition.metadata.mask):
@@ -771,9 +757,11 @@ def cluster_and_write_files(
             print(
                 str(i + 1),
                 None if cluster.radius is None else round(cluster.radius, 3),
-                None
-                if cluster.observed_pvr is None
-                else round(cluster.observed_pvr, 2),
+                (
+                    None
+                    if cluster.observed_pvr is None
+                    else round(cluster.observed_pvr, 2)
+                ),
                 cluster.kind_str,
                 sum(sequence_lens[i] for i in cluster.members),
                 len(cluster.members),
@@ -1384,7 +1372,6 @@ class BasicArguments(object):
             self.args.fasta,
             self.args.composition,
             self.args.minlength,
-            args.warn_on_few_seqs,
         )
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
@@ -2180,10 +2167,8 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
-        args.warn_on_few_seqs = True
         runner = TaxometerArguments(args)
     elif args.subcommand == BIN:
-        args.warn_on_few_seqs = True
         if args.model_subcommand is None:
             vaevae_parserbin_parser.print_help()
             sys.exit(1)
@@ -2194,8 +2179,6 @@ def main():
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:
-        # Uniquely, the reclustering cannot overfit, so we don't need this warning
-        args.warn_on_few_seqs = False
         runner = ReclusteringArguments(args)
     else:
         # There are no more subcommands
