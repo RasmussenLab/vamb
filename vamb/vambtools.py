@@ -617,7 +617,7 @@ def write_bins(
     directory: Path,
     bins: dict[str, set[str]],
     fastaio: Iterable[bytes],
-    maxbins: Optional[int] = 250,
+    maxbins: Optional[int] = 1000,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
 
@@ -625,7 +625,7 @@ def write_bins(
         directory: Directory to create or put files in
         bins: dict[str: set[str]] (can be loaded from clusters.tsv using vamb.cluster.read_clusters)
         fastaio: bytes iterator containing FASTA file with all sequences
-        maxbins: None or else raise an error if trying to make more bins than this [250]
+        maxbins: None or else raise an error if trying to make more bins than this [1000]
     Output: None
     """
 
