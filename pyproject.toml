@@ -1,15 +1,16 @@
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [project]
-name = "vamb"
 dynamic = ["version"]
+name = "vamb"
 dependencies = [
-    "numpy == 1.24.2",
-    "torch == 1.13.1",
-    "pycoverm == 0.6.0",
-    "networkx == 3.1",
-    "scikit-learn == 1.2.2",
-    "pandas == 2.0.0",
-    "dadaptation == 3.0",
-    "loguru == 0.7.2",
+  "numpy == 1.24.2",
+  "torch == 1.13.1",
+  "pycoverm == 0.6.0",
+  "networkx == 3.1",
+  "scikit-learn == 1.2.2",
+  "pandas == 2.0.0",
+  "dadaptation == 3.0",
+  "loguru == 0.7.2",
 ]
 # Currently pycoverm does not have binaries for Python > 3.11.
 # The dependency resolver, will not error on Python 3.11, but attempt
@@ -17,24 +18,33 @@ dependencies = [
 requires-python = "<3.12,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx-book-theme",
+  "myst-nb",
+  "ipywidgets",
+  "sphinx-new-tab-link!=0.2.2",
+]
+
 [metadata]
 authors = [
-    {name="Jakob Nybo Nissen", email="jakobnybonissen@gmail.com"},
-    {name="Pau Piera", email="pau.piera@cpr.ku.dk"},
-    {name="Simon Rasmussen", email="simon.rasmussen@cpr.ku.dk"}
+  {name = "Jakob Nybo Nissen", email = "jakobnybonissen@gmail.com"},
+  {name = "Pau Piera", email = "pau.piera@cpr.ku.dk"},
+  {name = "Simon Rasmussen", email = "simon.rasmussen@cpr.ku.dk"},
 ]
-url = "https://github.com/RasmussenLab/vamb"
 description = "Variational and Adversarial autoencoders for Metagenomic Binning"
 license = "MIT"
 readme = {file = "README.md"}
+url = "https://github.com/RasmussenLab/vamb"
 
 [build-system]
-requires = [
-    "setuptools ~= 64.0",
-    "setuptools-scm >= 8.0",
-    "Cython ~= 0.29.5"
-]
 build-backend = "setuptools.build_meta"
+requires = [
+  "setuptools ~= 64.0",
+  "setuptools-scm >= 8.0",
+  "Cython ~= 0.29.5",
+]
 
 [tool.ruff]
 ignore = ["E722", "E501"]
@@ -42,8 +52,8 @@ ignore = ["E722", "E501"]
 # pyproject.toml
 [tool.pytest.ini_options]
 filterwarnings = [
-    "error",
-    "ignore::UserWarning",
+  "error",
+  "ignore::UserWarning",
 ]
 
 [tool.setuptools_scm]

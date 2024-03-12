@@ -7,14 +7,14 @@ manner, and enables downstream users to pick the best tool for the job.
 In CAMI2, the Vamb (commit fa045c0) results were highly anomalous. In this text,
 I (the first author of Vamb), attempts to interpret the results.
 
-### TL;DR
+## TL;DR
 Vamb's results were poor in CAMI2. This is explained by Vamb being the only binner
 that included preprocessing but no postprocessing. This combination is disaterous,
 and not recommended for any binner, including Vamb. Based on measures
 not affected by postprocessing, Vamb was the best non-ensemble binner. If Vamb's
 best practises had been used (binsplitting), it would presumably be better still.
 
-### Vamb's observed results in CAMI2
+## Vamb's observed results in CAMI2
 In short, here's how the results appears:
 
 * Vamb is - by far - the binner with the lowest mean bin completeness
@@ -30,13 +30,13 @@ than on non-unique, compared to other binners
 * Overall, Vamb is ranked 9/12, 5/7 and 7/10 in the three datasets.
 * Vamb was significantly slower to run than MetaBAT by a factor of ~600 for one dataset.
 
-### So... what happened?
+## So... what happened?
 On the surface, Vamb appears to weigh purity much higher than other binners, which
 leads to poor average performance. However, digging a little deeper, the true
 reason for Vamb's strange results appear - and it turns out that Vamb's results
 are mostly incomparable with the other binners'.
 
-### Unlike the other binners, Vamb's bins were subject to no postprocessing
+## Unlike the other binners, Vamb's bins were subject to no postprocessing
 Unlike other binners, Vamb outputs every single input contig. Contigs that could
 not be binned with other contigs are simply output as a single-contig bin. This means
 that the large majority of bins will be composed of one or a few hard-to-bin contigs.
@@ -59,7 +59,7 @@ This choice is vindicated by CAMI2's result. When binning plasmids, Vamb far
 exceeds all other binners (F1 = 70.8 vs the next best's 12.7).
 Plasmids are simply filtered away by the other binners, but not by Vamb!
 
-### Preprocessing without postprocessing gave the worst of both worlds
+## Preprocessing without postprocessing gave the worst of both worlds
 In the CAMI2 paper, besides precision and recall, the two measures of binners are:
 
 1. ARI: adjusted Rand index, a measure of the similarity between a binner's
@@ -83,7 +83,7 @@ pre- and postprocessing had been applied, it would have done much better at ARI.
 The results in CAMI2, as included, represents the worst possible combination,
 and does not represent any recommended workflow with Vamb.
 
-### Because the input data was co-assembled, binsplitting was not used
+## Because the input data was co-assembled, binsplitting was not used
 Vamb's README recommends users to use _binsplitting_. This simple technique applies
 to binning multiple samples from similar environments. Using it means assembling each
 sample individually, binning all contigs together across samples, splitting the
@@ -97,7 +97,7 @@ was not possible. I suspect this led to poorer performance of Vamb, because Vamb
 by being designed for binsplitting, may be designed to purposefully bin similar
 strains from different together, which would usually be separated by binsplitting.
 
-### What would a more useful comparison look like?
+## What would a more useful comparison look like?
 CAMI2's supplementary material include a table where they count the number of
 high-quality genomes recovered using each binner. Using a >90% recall, <5% contamination
 threshold, and looking at the MEGAHIT assembled input data (more realistic), Vamb
