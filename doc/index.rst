@@ -23,7 +23,7 @@ Variational Autoencoder for Metagenomic Binning (VAMB)
    :maxdepth: 2
    :caption: Python Package:
 
-   reference/modules
+   reference/vamb
 
 .. toctree::
    :caption: Setup Documentation
