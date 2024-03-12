@@ -12,17 +12,18 @@ Variational Autoencoder for Metagenomic Binning (VAMB)
    
    tutorial.md
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   reference/modules
 
 .. toctree::
    :hidden:
    :caption: Comparisons
 
    CAMI2.md
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Python Package:
+
+   reference/modules
 
 .. toctree::
    :caption: Setup Documentation
