@@ -143,6 +143,9 @@ class BinSplitter:
         {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
         """
         for binname, headers in clusters:
+            if "clustername" in binname and "contigname" in headers:
+                continue
+                
             for newbinname, splitheaders in self.split_bin(binname, headers):
                 yield newbinname, splitheaders
 
@@ -555,7 +558,7 @@ def write_clusters(
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
-    #print(CLUSTERS_HEADER, file=io)
+    print(CLUSTERS_HEADER, file=io)
     for cluster_name, contig_names in clusters:
         n_clusters += 1
         n_contigs += len(contig_names)

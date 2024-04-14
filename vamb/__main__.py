@@ -67,7 +67,7 @@ class CompositionPath(type(Path())):
     pass
 
 
-class EmbeddingsPath(type(Path())):
+class NeighsPath(type(Path())):
     pass
 
 
@@ -171,71 +171,34 @@ class AbundanceOptions:
         self.refcheck = refcheck
 
 
-class EmbeddingsOptions:
+class NeighsOptions:
     __slots__ = [
-        "path",
-        "embeddedcontigspath",
-        "shuffle_embeds",
-        "embeds_loss",
-        "radius_neighs",
+        "neighs_path",
         "gamma",
-        "delta",
-        "neighs_object_path",
-        "embeddings_mask_path",
-        "embeddings_processed_path",
         "margin",
         "radius_clustering",
-        "symmetry",
         "top_neighbours",
     ]
 
     def __init__(
-        self,
-        embeddingspath: Path,
-        embeddedcontigspath: Path,
-        shuffle_embeds: bool,
-        embeds_loss: str,
-        radius_neighs: float,
-        gamma: float,
-        neighs_object_path: Optional[Path]=None,
-        embeddings_mask_path: Optional[Path]=None,
-        embeddings_processed_path:Optional[Path]= None,
+        self,           
+        neighs_path: Path,
+        gamma: float ,
         margin: float = 0.01,
         radius_clustering: float = 0.01,
-        symmetry: bool = False,
         top_neighbours: int = 50,
-        delta: float = 1.0,
     ):
-        assert isinstance(embeddingspath, (Path, type(None)))
-
-        self.embeds_loss = embeds_loss
-        self.symmetry = symmetry
-
-        if self.symmetry == False:
-            self.margin = margin
-            self.radius_clustering = radius_clustering
-            
-            self.neighs_object_path = neighs_object_path
-
-        else:
-            # self.embeddings_processed_path = embeddings_processed_path
-            
-            
-            if neighs_object_path != None:
-                self.neighs_object_path = neighs_object_path
-            
-            if embeddings_processed_path == None:    
-                
-                self.path = EmbeddingsPath(embeddingspath)
-            
-            self.embeddedcontigspath = EmbeddingsPath(embeddedcontigspath)
         
-        self.embeddings_processed_path = embeddings_processed_path
-        self.embeddings_mask_path = embeddings_mask_path
-        self.shuffle_embeds = shuffle_embeds
-        self.radius_neighs = radius_neighs
+        assert isinstance(neighs_path, Path)
+        assert isinstance(gamma, float)
+        assert isinstance(margin, float)
+        assert isinstance(radius_clustering, float)
+        assert isinstance(top_neighbours, int)
+
+        self.margin = margin
+        self.radius_clustering = radius_clustering
+        self.neighs_path = NeighsPath(neighs_path)
         self.gamma = gamma
-        self.delta = delta
         self.top_neighbours = top_neighbours
 
 
@@ -559,37 +522,6 @@ class ClusterOptions:
         self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
-class DBSCluster_Options:
-    __slots__ = [
-        "min_samples",
-        "epsilon",
-        "metric",
-        "binsplit_separator",
-    ]
-
-    def __init__(
-        self,
-        binsplit_separator: Optional[str],
-        min_samples: int = 1,
-        epsilon: float = 0.001,
-        metric: str = "cosine",
-    ):
-        assert isinstance(min_samples, int)
-        assert isinstance(epsilon, float)
-        assert isinstance(metric, str)
-        assert isinstance(binsplit_separator, (str, type(None)))
-
-        self.min_samples = min_samples
-        self.epsilon = epsilon
-        self.metric = metric
-
-        if binsplit_separator is not None and len(binsplit_separator) == 0:
-            raise argparse.ArgumentTypeError(
-                "Binsplit separator cannot be an empty string"
-            )
-        self.binsplit_separator = binsplit_separator
-
-
 class VambOptions:
     __slots__ = [
         "out_dir",
@@ -806,101 +738,46 @@ def trainvae(
     return latent
 
 
-def trainvae_n2v(
-    vae_options: VAEOptions,
-    training_options: VAETrainingOptions,
-    vamb_options: VambOptions,
-    embeddings_options: EmbeddingsOptions,
-    lrate: float,
-    alpha: Optional[float],
-    data_loader: DataLoader,
-) -> np.ndarray:
-    begintime = time.time()
-    logger.info(
-        "\nCreating and training VAE with graph embeddings as part of the input"
-    )
-
-    n_embedding = data_loader.dataset.tensors[3].shape[1]
-    nsamples = data_loader.dataset.tensors[0].shape[1]
-    vae = vamb.encode_n2v.VAE(
-        nsamples,
-        n_embedding,
-        nhiddens=vae_options.nhiddens,
-        nlatent=vae_options.nlatent,
-        alpha=alpha,
-        beta=vae_options.beta,
-        gamma=embeddings_options.gamma,
-        dropout=vae_options.dropout,
-        cuda=vamb_options.cuda,
-        seed=vamb_options.seed,
-        embeds_loss=embeddings_options.embeds_loss,
-    )
-
-    logger.info("Created VAE with embeddings as part of the input")
-    modelpath = vamb_options.out_dir.joinpath("model.pt")
-    vae.trainmodel(
-        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
-        nepochs=training_options.nepochs,
-        lrate=lrate,
-        batchsteps=training_options.batchsteps,
-        modelfile=modelpath,
-    )
-
-    logger.info("Encoding to latent representation")
-    latent = vae.encode(data_loader)
-    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
-    del vae  # Needed to free "latent" array's memory references?
-
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"Trained VAE and encoded in {elapsed} seconds.")
-
-    return latent
-
-
 def trainvae_n2v_asimetric(
     vae_options: VAEOptions,
     training_options: VAETrainingOptions,
     vamb_options: VambOptions,
-    embeddings_options: EmbeddingsOptions,
+    neighs_options: NeighsOptions,
     lrate: float,
     alpha: Optional[float],
     data_loader: DataLoader,
     neighs_object: np.ndarray,
 ) -> np.ndarray:
     begintime = time.time()
-    logger.info("Creating and training VAE")
+    logger.info("Creating and training contrastive-VAE")
 
-    n_embedding = data_loader.dataset.tensors[2].shape[1]
     nsamples = data_loader.dataset.tensors[0].shape[1]
     ncontigs = data_loader.dataset.tensors[0].shape[0]
 
     vae = vamb.encode_n2v_asimetric.VAE(
         nsamples,
         ncontigs,
-        n_embedding,
         neighs_object,
         nhiddens=vae_options.nhiddens,
         nlatent=vae_options.nlatent,
         alpha=alpha,
         beta=vae_options.beta,
-        gamma=embeddings_options.gamma,
+        gamma=neighs_options.gamma,
         dropout=vae_options.dropout,
         cuda=vamb_options.cuda,
         seed=vamb_options.seed,
-        margin=embeddings_options.margin,
-        embs_loss=embeddings_options.embeds_loss,
+        margin=neighs_options.margin,
     )
 
-    logger.info("\nCreated VAE with embeddings")
+    logger.info("\nCreated contrastive-VAE")
     modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(data_loader, training_options.batchsize),
         nepochs=training_options.nepochs,
         lrate=lrate,
         batchsteps=training_options.batchsteps,
-        modelfile=modelpath,
-        # warmup=training_options.warmup,
-    )
+        modelfile=modelpath    
+        )
 
     logger.info("\nEncoding to latent representation")
     latent = vae.encode(data_loader)
@@ -908,7 +785,7 @@ def trainvae_n2v_asimetric(
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\nTrained VAE and encoded in {elapsed} seconds.")
+    logger.info(f"\nTrained contrastive-VAE and encoded in {elapsed} seconds.")
 
     return latent
 
@@ -961,70 +838,6 @@ def trainaae(
     logger.info(f"\tTrained AAE and encoded in {elapsed} seconds.\n")
 
     return latent, clusters_y_dict
-
-def train_aae_n2v(
-    data_loader: DataLoader,
-    aae_options: AAEOptions,
-    training_options: AAETrainingOptions,
-    vamb_options: VambOptions,
-    embeddings_options: EmbeddingsOptions,
-    lrate: float,
-    alpha: Optional[float],  # set automatically if None
-    contignames: Sequence[str],
-    neighs_object: np.ndarray,
-    neighbourhoods_object: dict[int, set[int]],
-    
-    
-) -> tuple[np.ndarray, dict[str, set[str]]]:
-    begintime = time.time()
-    logger.info("Creating and training AAE_asy")
-    n_embedding = data_loader.dataset.tensors[3].shape[1]
-    nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
-    ncontigs = data_loader.dataset.tensors[0].shape[0]
-
-    aae = vamb.aamb_encode_asy.AAE_ASY(
-        nsamples,
-        ncontigs,
-        n_embedding,
-        neighs_object,
-        neighbourhoods_object,
-        aae_options.nhiddens,
-        aae_options.nlatent_z,
-        aae_options.nlatent_y,
-        aae_options.sl,
-        aae_options.slr,
-        alpha,
-        embeddings_options.gamma,
-        embeddings_options.delta,
-        _cuda=vamb_options.cuda,
-        seed=vamb_options.seed,
-        embeds_loss=embeddings_options.embeds_loss,
-    )
-
-    logger.info("\tCreated AAE_asy")
-    modelpath = os.path.join(vamb_options.out_dir, "aae_asy_model.pt")
-    aae.trainmodel(
-        vamb.encode.set_batchsize(data_loader, training_options.batchsize),
-        training_options.nepochs,
-        training_options.batchsteps,
-        training_options.temp,
-        lrate,
-        modelpath,
-    )
-
-    logger.info("\tEncoding to latent representation")
-    clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
-    vamb.vambtools.write_npz(
-        os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
-    )
-
-    del aae  # Needed to free "latent" array's memory references?
-
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tTrained AAE and encoded in {elapsed} seconds.\n")
-
-    return latent, clusters_y_dict
-
 
 def cluster_and_write_files(
     vamb_options: VambOptions,
@@ -1096,46 +909,6 @@ def cluster_and_write_files(
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
 
-def cluster_dbs(
-    dbs_cluster_options: DBSCluster_Options,
-    clusterspath: Path,
-    latent: np.ndarray,
-    contignames: Sequence[str],
-) -> None:
-    begintime = time.time()
-
-    logger.info("\nClustering with DBSCAN")
-    logger.info(f"Min_samples : {dbs_cluster_options.min_samples}")
-    logger.info(f"Epsilon: {dbs_cluster_options.epsilon}")
-    logger.info(
-        "Separator: {}".format(
-            None
-            if dbs_cluster_options.binsplit_separator is None
-            else ('"' + dbs_cluster_options.binsplit_separator + '"')
-        )
-    )
-    db = DBSCAN(
-        min_samples=dbs_cluster_options.min_samples,
-        eps=dbs_cluster_options.epsilon,
-        metric="cosine",
-    )
-    db.fit(latent)
-
-    print(db.labels_)
-
-    np.savetxt(
-        clusterspath,
-        np.array([db.labels_, contignames], dtype=object).T,
-        delimiter="\t",
-        fmt="%s",
-    )
-
-    logger.info(f"Clustered {len(contignames)} contigs in {len(set(db.labels_))} bins")
-
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"Clustered contigs in {elapsed} seconds with DBSCAN.")
-
-
 def write_clusters_and_bins(
     vamb_options: VambOptions,
     binsplitter: vamb.vambtools.BinSplitter,
@@ -1150,49 +923,49 @@ def write_clusters_and_bins(
     begintime = time.time()
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
     with open(unsplit_path, "w") as file:
+        #file.write("clustername\tcontigname\n")
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
             file, clusters.items()
         )
+    #Open unsplit clusters and split them
+    if binsplitter.splitter is not None:
+        split_path = Path(base_clusters_name + "_split.tsv")
+        clusters = dict(binsplitter.binsplit(clusters.items()))
+        with open(split_path, "w") as file:
+            (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items()
+            )
+        msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    else:
+        msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
 
-    # Open unsplit clusters and split them
-    # if binsplitter.splitter is not None:
-    #     split_path = Path(base_clusters_name + "_split.tsv")
-    #     clusters = dict(binsplitter.binsplit(clusters.items()))
-    #     with open(split_path, "w") as file:
-    #         (n_split_clusters, _) = vamb.vambtools.write_clusters(
-    #             file, clusters.items()
-    #         )
-    #     msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
-    # else:
-    #     msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+    logger.info(msg)
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
-    # logger.info(msg)
-    # elapsed = round(time.time() - begintime, 2)
-    # logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+    # Write bins, if necessary
+    if vamb_options.min_fasta_output_size is not None:
+        starttime = time.time()
+        filtered_clusters: dict[str, set[str]] = dict()
+        assert len(sequence_lens) == len(sequence_names)
+        sizeof = dict(zip(sequence_names, sequence_lens))
+        for binname, contigs in clusters.items():
+            if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
+                filtered_clusters[binname] = contigs
 
-    # # Write bins, if necessary
-    # if vamb_options.min_fasta_output_size is not None:
-    #     starttime = time.time()
-    #     filtered_clusters: dict[str, set[str]] = dict()
-    #     assert len(sequence_lens) == len(sequence_names)
-    #     sizeof = dict(zip(sequence_names, sequence_lens))
-    #     for binname, contigs in clusters.items():
-    #         if sum(sizeof[c] for c in contigs) >= vamb_options.min_fasta_output_size:
-    #             filtered_clusters[binname] = contigs
-
-    #     with vamb.vambtools.Reader(fasta_catalogue) as file:
-    #         vamb.vambtools.write_bins(
-    #             bins_dir,
-    #             filtered_clusters,
-    #             file,
-    #             None,
-    #         )
-    #     elapsed = round(time.time() - starttime, 2)
-    #     n_bins = len(filtered_clusters)
-    #     n_contigs = sum(len(v) for v in filtered_clusters.values())
-    #     logger.info(
-    #         f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
-    #     )
+        with vamb.vambtools.Reader(fasta_catalogue) as file:
+            vamb.vambtools.write_bins(
+                bins_dir,
+                filtered_clusters,
+                file,
+                None,
+            )
+        elapsed = round(time.time() - starttime, 2)
+        n_bins = len(filtered_clusters)
+        n_contigs = sum(len(v) for v in filtered_clusters.values())
+        logger.info(
+            f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
+        )
 
 
 def load_composition_and_abundance(
@@ -1217,7 +990,7 @@ def find_neighbours(
     radius=0.02,
     sort=True,
 ):
-    logger.info("Neighbour if within %.3f cosine distance" % radius)
+    logger.info("Neighbour if within %s cosine distance" % str(radius))
 
     # Set the diagonal to a value greater than the threshold to avoid self-selection
     np.fill_diagonal(cosine_distances, 1)
@@ -1225,11 +998,7 @@ def find_neighbours(
     # Use NumPy operations for faster neighbor finding
     mask = cosine_distances < radius
     idxs_with_neighs = np.any(mask, axis=1)
-
-    # idxs_without_neighs = set(np.arange(cosine_distances.shape[0])) - set(
-    #     idxs_with_neighs
-    # )
-
+    
     neighs = [
         []
         if i in set(idxs_without_neighs)
@@ -1264,6 +1033,51 @@ def find_neighbours(
         return neighs, idxs_with_neighs
 
 
+def find_looners_and_expand_neighs(
+    cosine_distances,
+    contig_idxs_with_neighs,
+    neighs_g,
+    contignames,
+    radius_looner=0.05,
+    radius_neigh = 0.01,
+    
+):
+    logger.info("Neighbour if within %.3f cosine distance" % radius_neigh)
+    logger.info("Looner if no contigs within %.3f cosine distance" % radius_looner)
+
+    c2idx = { c:i for i,c in enumerate(contignames)}
+    # Set the diagonal to a value greater than the threshold to avoid self-selection
+    np.fill_diagonal(cosine_distances, 1)
+    mask_looners  = np.zeros(len(cosine_distances),dtype=bool)
+    neighs_g = nx.Graph()
+    looner_contigs = set()
+    for c_idx in range(len(cosine_distances)):
+        if np.min(cosine_distances[c_idx]) > radius_looner and c_idx not in contig_idxs_with_neighs:
+            looner_contigs.add(contignames[c_idx])
+            mask_looners[c_idx]=True
+            
+            continue 
+        idxs_neighs = np.where(cosine_distances[c_idx] < 0.01)[0]
+        for idx_neigh in idxs_neighs:
+            neighs_g.add_edge(contignames[c_idx],contignames[idx_neigh])
+            
+        
+    hoods_with_looners_cs_d = {
+        "hood_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(neighs_g))
+    }
+    for i,c in enumerate(looner_contigs):
+        hoods_with_looners_cs_d["looner_%i"%(i)]=set([c])
+    
+    mask_neighs  = np.zeros(len(cosine_distances),dtype=bool)
+    mask_neighs[[c2idx[c]  for c in neighs_g ]]=True
+    
+    
+
+
+    return looner_contigs,neighs_g,hoods_with_looners_cs_d,mask_looners, mask_neighs
+
+
 def find_neighbourhoods(contignames,neighs):
     
     neighbourhoods_g = nx.Graph()
@@ -1274,7 +1088,7 @@ def find_neighbourhoods(contignames,neighs):
             if  c_neigh == c:
                 continue 
             #neighbourhoods_g.add_edge(c_neigh,c)
-            neighbourhoods_g.add_edge(neigh_idx,i)
+            neighbourhoods_g.add_edge(c,c_neigh)
     
     neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
     
@@ -1304,15 +1118,15 @@ def split_neighbourhoods_by_sample(neighbourhoods):
 
 
 
-def load_composition_and_abundance_and_embeddings(
+def load_composition_and_abundance_and_neighs(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    embeddings_options: EmbeddingsOptions,
+    neighs_options: NeighsOptions,
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance, np.ndarray]:
     logger.info(
-        "Starting Vamb (with node2vec embeddings) version "
+        "Starting contrastive-Vamb version "
         + ".".join(map(str, vamb.__version__))
     )
     logger.info("Date and time is " + str(datetime.datetime.now()))
@@ -1327,482 +1141,32 @@ def load_composition_and_abundance_and_embeddings(
     )
 
     time_generating_input = round(time.time() - begintime, 2)
-    logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")
-
-    if embeddings_options.symmetry == False:
-        if embeddings_options.neighs_object_path is None:
-            logger.info("\nComputing contig embedding neighbours")
-            if embeddings_options.embeddings_processed_path is not None:
-                logger.info(
-                    f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
-                )
-                embeddings_binning = np.load(
-                    embeddings_options.embeddings_processed_path
-                )["arr_0"]
-
-                contigs_embedded_all = np.loadtxt(
-                    embeddings_options.embeddedcontigspath, dtype=object
-                )
-                # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-                mask_embeddings_binning = np.array(
-                    [
-                        1 if c in contigs_embedded_all else 0
-                        for c in composition.metadata.identifiers
-                    ],
-                    dtype=bool,
-                )
-
-            else:
-                logger.info(f"Processing embeddings from {embeddings_options.path}")
-                embeddings = np.load(embeddings_options.path)["arr_0"]
-                contigs_embedded_all = np.loadtxt(
-                    embeddings_options.embeddedcontigspath, dtype=object
-                )
-                # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-
-                mask_embeddings_binning = np.array(
-                    [
-                        1 if c in contigs_embedded_all else 0
-                        for c in composition.metadata.identifiers
-                    ],
-                    dtype=bool,
-                )
-                embeddings_binning = np.zeros(
-                    (len(composition.metadata.identifiers), embeddings.shape[1])
-                )
-                for i, c in enumerate(composition.metadata.identifiers):
-                    if mask_embeddings_binning[i]:
-                        embeddings_binning = embeddings[
-                            np.where(contigs_embedded_all == c)[0][0], :
-                        ]
-
-            cosine_distances = cdist(
-                embeddings_binning, embeddings_binning, metric="cosine"
-            )
-
-            neighs, idxs_with_neighs = find_neighbours(
-                cosine_distances,
-                np.where(mask_embeddings_binning == False)[0],
-                radius=embeddings_options.radius_neighs,
-                sort=True,
-            )
-            neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
-
-            logger.info(
-                "%i/%i contigs have neighbours within %.2f "
-                % (
-                    len(idxs_with_neighs),
-                    len(composition.metadata.identifiers),
-                    embeddings_options.radius_neighs,
-                )
-            )
-            time_generating_embedds = round(time.time() - begintime, 2)
-
-            logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
-
-            # remove neighbours if they belong to a the largest neighbourhood 
-
-            logger.info(f"Outlier largest neighbourhood will be excluded.")
-            c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-            neighbourhoods_g = nx.Graph()
-            for i,neigh_idxs in enumerate(neighs): 
-                c = composition.metadata.identifiers[i]
-                for neigh_idx in neigh_idxs:
-                    c_neigh = composition.metadata.identifiers[neigh_idx]
-                    if  c_neigh == c:
-                        continue 
-                    neighbourhoods_g.add_edge(c_neigh,c)
-            
-            neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
-            
-            
-            neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
-            
-            #max_nbhd_len = np.std(neighbourhoods_lens)*4
-            max_nbhd_len = np.max(neighbourhoods_lens)
-            neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
-            neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
-            
-            logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
-            #print(neighs[:5])
-            for c in neighbours_to_remove:
-                c_idx = c_idx_d[c]
-                neighs[c_idx]=[]
-                mask_embeddings_binning[c_idx]=False            
-                    
-            total_neighs= np.sum([len(ns) for ns in neighs])                
-            logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
-
-            
-
-            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-            total_neighs = np.sum([len(ns) for ns in neighs])
-            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-
-            logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
-            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-            logger.info(f"Total redundant neighs {total_neighs}.")
-
-            # now that we have the neighbours per contig, only consider the top_closest_neighbours
-            logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
-            
-            for i in range(len(neighs)):
-                if len(neighs[i]) <= embeddings_options.top_neighbours:
-                    continue 
-                neighs[i] = neighs[i][:embeddings_options.top_neighbours]
-            total_neighs= np.sum([len(ns) for ns in neighs])
-            
-            logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
-
-
-        else:
-            logger.info(
-                f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
-            )
-
-            if embeddings_options.embeddings_processed_path != None:
-                embeddings_binning = np.load(
-                    embeddings_options.embeddings_processed_path
-                )["arr_0"]
-            else:
-                embeddings_binning = np.zeros(
-                    (len(composition.metadata.identifiers), 32)
-                )
-            mask_embeddings_binning = np.load(embeddings_options.embeddings_mask_path)[
-                "arr_0"
-            ]
-
-            neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
-                "arr_0"
-            ]
-            contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-            total_neighs = np.sum([len(ns) for ns in neighs])
-            mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-            std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-            logger.info(f"Contigs with neighs   {contigs_with_neighs_n}.")
-            logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-            logger.info(f"Total redundant neighs {total_neighs}.")
-        
-
-    elif embeddings_options.symmetry == True:
-        if embeddings_options.embeddings_processed_path is not None:
-            logger.info(
-                f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
-            )
-            embeddings_binning = np.load(embeddings_options.embeddings_processed_path)[
-                "arr_0"
-            ]
-
-            contigs_embedded_all = np.loadtxt(
-                embeddings_options.embeddedcontigspath, dtype=object
-            )
-            # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-
-            mask_embeddings_binning = np.array(
-                [
-                    1 if c in contigs_embedded_all else 0
-                    for c in composition.metadata.identifiers
-                ],
-                dtype=bool,
-            )
-            # neighs will not be used, embeddings are part of the input and attempted to reconstruct by the decoder
-            neighs = np.array(
-                [[] for c in composition.metadata.identifiers], dtype=object
-            )
-        else:
-            logger.info(f"Processing embeddings from {embeddings_options.path}")
-            embeddings = np.load(embeddings_options.path)["arr_0"]
-            contigs_embedded_all = np.loadtxt(
-                embeddings_options.embeddedcontigspath, dtype=object
-            )
-            # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-
-            mask_embeddings = np.array(
-                [
-                    1 if c in contigs_embedded_all else 0
-                    for c in composition.metadata.identifiers
-                ],
-                dtype=bool,
-            )
-            embeddings_binning = np.zeros(
-                (len(composition.metadata.identifiers), embeddings.shape[1])
-            )
-            for i, c in enumerate(composition.metadata.identifiers):
-                if mask_embeddings[i]:
-                    embeddings_binning[i, :] = embeddings[
-                        np.where(contigs_embedded_all == c)[0][0], :
-                    ]
-            logger.info("Computing n2v embeddings' cosine distances")
-            cosine_distances = cdist(
-                embeddings_binning, embeddings_binning, metric="cosine"
-            )
-            _, idxs_with_neighs = find_neighbours(
-                cosine_distances,
-                np.where(mask_embeddings == False)[0],
-                radius=embeddings_options.radius_neighs,
-                sort=False,
-            )
-
-            mask_embeddings_binning = np.zeros(
-                len(composition.metadata.identifiers), dtype=bool
-            )
-
-            mask_embeddings_binning[idxs_with_neighs] = True
-
-            logger.info(f"\nContigs with neighs {len(idxs_with_neighs)}.")
-            neighs = np.array(
-                [[] for c in composition.metadata.identifiers], dtype=object
-            )
-
-    if embeddings_options.shuffle_embeds == True:
-        logger.info("Embeddings/neighbours shuffled.")
-        return (
-            composition,
-            abundance,
-            np.random.shuffle(embeddings_binning),
-            mask_embeddings_binning,
-            np.random.shuffle(neighs),
-        )
-
-    else:
-        return (
-            composition,
-            abundance,
-            embeddings_binning,
-            mask_embeddings_binning,
-            neighs,
-        )
-
-
-
-def load_composition_and_abundance_and_embeddings_aae(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
-    embeddings_options: EmbeddingsOptions,
-    binsplitter: vamb.vambtools.BinSplitter,
-) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance, np.ndarray]:
+    logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")    
+    
     logger.info(
-        "Starting Aamb (with node2vec embeddings and y contrastive) version "
-        + ".".join(map(str, vamb.__version__))
-    )
-    logger.info("Date and time is " + str(datetime.datetime.now()))
-    begintime = time.time()
-
-    composition = calc_tnf(comp_options, vamb_options.out_dir, binsplitter)
-    abundance = calc_rpkm(
-        abundance_options,
-        vamb_options.out_dir,
-        composition.metadata,
-        vamb_options.n_threads,
+        f"\nLoading contig neighs from {neighs_options.neighs_path}."
     )
 
-    time_generating_input = round(time.time() - begintime, 2)
-    logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")
+    neighs = np.load(
+        neighs_options.neighs_path,allow_pickle=True
+    )["arr_0"]
 
-
-    # LOAD EMBEDDINGS AND PRCESS THEM IF NECESSARY
-    if embeddings_options.embeddings_processed_path != None:
-        logger.info(
-            f"Loading embeddings processed already from {embeddings_options.embeddings_processed_path}"
-        )
-        embeddings_binning = np.load(
-            embeddings_options.embeddings_processed_path
-        )["arr_0"]
-        logger.info(f"shape embeddings {embeddings_binning.shape}")
-        logger.info(
-            f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
-        )
-
-        contigs_embedded_all = np.loadtxt(
-            embeddings_options.embeddedcontigspath, dtype=object
-        )
-
-        logger.info(
-            f"Creating embeddings mask."
-        )
-        binning_contigs_embedded = set(contigs_embedded_all).intersection(set(composition.metadata.identifiers))
-        
-        # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-        mask_embeddings_binning = np.array(
-            [
-                1 if c in binning_contigs_embedded else 0
-                for c in composition.metadata.identifiers
-            ],
-            dtype=bool,
-        )
-
-    else:
-        logger.info(f"Processing embeddings from {embeddings_options.path}")
-        embeddings = np.load(embeddings_options.path)["arr_0"]
-        logger.info(f"shape embeddings {embeddings.shape}")
-
-        logger.info(
-            f"Loading embedded contig ids from {embeddings_options.embeddedcontigspath}"
-        )
-
-        contigs_embedded_all = np.loadtxt(
-            embeddings_options.embeddedcontigspath, dtype=object
-        )
-        # first mask embeddings and contigs_embedded by the contigs that used for binningcomposition.metadata.identifiers
-        logger.info(
-            f"Creating embeddings mask."
-        )
-
-        mask_embeddings_binning = np.array(
-            [
-                1 if c in contigs_embedded_all else 0
-                for c in composition.metadata.identifiers
-            ],
-            dtype=bool,
-        )
-        embeddings_binning = np.zeros(
-            (len(composition.metadata.identifiers), embeddings.shape[1])
-        )
-        for i, c in enumerate(composition.metadata.identifiers):
-            if mask_embeddings_binning[i]:
-                embeddings_binning[i,:] = embeddings[
-                    np.where(contigs_embedded_all == c)[0][0], :
-                ]
-        logger.info(f"shape embeddings {embeddings_binning.shape}")
-        logger.info(f"Embeddings processed.")
+    neighs_mask = np.array([ len(lst) > 0 for lst in neighs])
     
-    # LOAD OR GENERATE NEIGHBOURS    
-    if embeddings_options.neighs_object_path == None:
-        logger.info("\nComputing contig embedding neighbours")
-
-        cosine_distances = cdist(
-            embeddings_binning, embeddings_binning, metric="cosine"
-        )
-
-        neighs, idxs_with_neighs = find_neighbours(
-            cosine_distances,
-            np.where(mask_embeddings_binning == False)[0],
-            radius=embeddings_options.radius_neighs,
-            sort=True,
-        )
-        neighs = np.array([ns for i, ns in enumerate(neighs)], dtype=object)
-
-        logger.info(
-            "%i/%i contigs have neighbours within %.2f "
-            % (
-                len(idxs_with_neighs),
-                len(composition.metadata.identifiers),
-                embeddings_options.radius_neighs,
-            )
-        )
-        time_generating_embedds = round(time.time() - begintime, 2)
-
-        logger.info(f"Embeddings processed in {time_generating_embedds} seconds.")
-
-        # remove neighbours if they belong to a the largest neighbourhood 
-
-        logger.info(f"Outlier largest neighbourhood will be excluded.")
+    contigs_with_neighs_n = np.sum(neighs_mask)
+    total_neighs = np.sum([len(ns) for ns in neighs])
+    mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+    std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+    logger.info(f"Contigs with neighs {contigs_with_neighs_n}.")
+    logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+    logger.info(f"Total neigh connections {total_neighs}.")
         
-        
-        neighbourhoods_lens = [ len(cs) for cs in  neighbourhoods_cs_d.values()]
-        
-        #max_nbhd_len = np.std(neighbourhoods_lens)*4
-        max_nbhd_len = np.max(neighbourhoods_lens)
-        neighbourhoods_to_remove = [nn for nn,cs in neighbourhoods_cs_d.items() if len(cs) >= max_nbhd_len]
-        neighbours_to_remove = [c for cs in neighbourhoods_cs_d.values() if len(cs) > max_nbhd_len for c in cs]
-        
-        logger.info(f"Max neighbourhood length: {max_nbhd_len}, removing {len(neighbourhoods_to_remove)} with {len(neighbours_to_remove)} contigs")
-        #print(neighs[:5])
-        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-        for c in neighbours_to_remove:
-            c_idx = c_idx_d[c]
-            neighs[c_idx]=[]
-            mask_embeddings_binning[c_idx]=False            
-                
-        total_neighs= np.sum([len(ns) for ns in neighs])                
-        logger.info(f"{total_neighs} total neighbours after applying restrictions for outlier neighbourhoods.")        
-
-        
-
-        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-        total_neighs = np.sum([len(ns) for ns in neighs])
-        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-
-        logger.info(f"Contigs with neighs after cleaning  {contigs_with_neighs_n}.")
-        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-        logger.info(f"Total redundant neighs {total_neighs}.")
-
-        # now that we have the neighbours per contig, only consider the top_closest_neighbours
-        logger.info(f"Only the closest {embeddings_options.top_neighbours} neighbours per contig will be considered, {total_neighs} total neighbours before applying restrictions.")
-        
-        for i in range(len(neighs)):
-            if len(neighs[i]) <= embeddings_options.top_neighbours:
-                continue 
-            neighs[i] = neighs[i][:embeddings_options.top_neighbours]
-            
-        total_neighs= np.sum([len(ns) for ns in neighs])
-        
-        # update mask_embeddings_binning
-        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-        print("contigs with neighs ", contigs_with_neighs_n)
-        print("embs_mask_sum ", np.sum(mask_embeddings_binning))
-        
-        logger.info(f"{total_neighs} total neighbours after applying top closest restrictions.\n")
-
-    
-    else:
-        logger.info(
-            f"\nLoading neighs from  {embeddings_options.neighs_object_path}."
-        )
-
-        neighs = np.load(embeddings_options.neighs_object_path, allow_pickle=True)[
-            "arr_0"
-        ]
-        mask_embeddings_binning = np.array(
-            [
-                1 if  len(neighs[i]) > 0 else 0
-                for i,c in enumerate(composition.metadata.identifiers)
-            ],
-            dtype=bool,
-        )
-
-        c_idx_d = { c:i for i,c in enumerate(composition.metadata.identifiers) }
-        neighbourhoods_cs_d = find_neighbourhoods(composition.metadata.identifiers,neighs)
-
-        contigs_with_neighs_n = np.sum([1 for ns in neighs if len(ns) > 0])
-        total_neighs = np.sum([len(ns) for ns in neighs])
-        mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
-        std_neighs_per_contig = np.std([len(ns) for ns in neighs])
-        logger.info(f"Contigs with neighs {contigs_with_neighs_n}.")
-        logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
-        logger.info(f"Total redundant neighs {total_neighs}.")
-        logger.info(f"Total neighbourhoods {len(neighbourhoods_cs_d.keys())}.")
-        
-
-
-    if embeddings_options.shuffle_embeds == True:
-        logger.info("Embeddings/neighbours shuffled.")
-        neighs_shuffled = np.random.shuffle(neighs),
-        return (
-            composition,
-            abundance,
-            np.random.shuffle(embeddings_binning),
-            mask_embeddings_binning,
-            neighs_shuffled,
-            find_neighbourhoods(composition.metadata.identifiers,neighs_shuffled)
-            
-            
-        )
-
-    else:
-        return (
-            composition,
-            abundance,
-            embeddings_binning,
-            mask_embeddings_binning,
-            neighs,
-            neighbourhoods_cs_d,
-        )
-
-
+    return (
+        composition,
+        abundance,
+        neighs,
+        neighs_mask
+    )
 
 
 def run(
@@ -1916,88 +1280,6 @@ def run(
             comp_metadata.lengths,  # type:ignore
         )
 
-
-def run_n2v(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
-    embeddings_options: EmbeddingsOptions,
-    encoder_options: Encodern2vOptions,
-    training_options: TrainingOptions,
-    cluster_options: ClusterOptions,
-):
-    vae_options = encoder_options.vae_options
-    vae_training_options = training_options.vae_options
-
-    begintime = time.time()
-
-    (
-        composition,
-        abundance,
-        embeddings,
-        embeddings_mask,
-        _,
-    ) = load_composition_and_abundance_and_embeddings(
-        vamb_options=vamb_options,
-        comp_options=comp_options,
-        abundance_options=abundance_options,
-        embeddings_options=embeddings_options,
-        binsplitter=cluster_options.binsplitter,
-    )
-
-    data_loader = vamb.encode_n2v.make_dataloader_n2v(
-        abundance.matrix.astype(np.float32),
-        composition.matrix.astype(np.float32),
-        embeddings.astype(np.float32),
-        embeddings_mask.astype(np.float32),
-        composition.metadata.lengths,
-        256,  # dummy value - we change this before using the actual loader
-        destroy=True,
-        cuda=vamb_options.cuda,
-    )
-    np.savez(vamb_options.out_dir.joinpath("embeddings.npz"), embeddings)
-    np.savez(vamb_options.out_dir.joinpath("embeddings_mask.npz"), embeddings_mask)
-
-    # composition.metadata.filter_mask(mask)
-
-    logger.info("Created dataloader and mask (including embeddings)")
-    if embeddings_options.shuffle_embeds:
-        logger.info("embeddings rows shufflesd")
-
-    # vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
-    # n_discarded = len(mask) - mask.sum()
-    # log(f"Number of sequences unsuitable for encoding: {n_discarded}", logfile, 1)
-    # log(f"Number of sequences remaining: {len(mask) - n_discarded}", logfile, 1)
-
-    latent = None
-    # Train, save model
-    latent = trainvae_n2v(
-        vae_options=vae_options,
-        training_options=vae_training_options,
-        vamb_options=vamb_options,
-        embeddings_options=embeddings_options,
-        lrate=training_options.lrate,
-        alpha=encoder_options.alpha,
-        data_loader=data_loader,
-    )
-    comp_metadata = composition.metadata
-    del composition, abundance
-
-    assert latent is not None
-    assert comp_metadata.nseqs == len(latent)
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters")),
-        vamb_options.out_dir.joinpath("bins"),
-        comp_options.path,
-        latent,
-        comp_metadata.identifiers,  # type:ignore
-        comp_metadata.lengths,  # type:ignore
-    )
-    del latent
-
-    logger.info(f"\nCompleted Vamb in {round(time.time() - begintime, 2)} seconds.")
 
 
 def parse_taxonomy(
@@ -2396,11 +1678,10 @@ def run_n2v_asimetric(
     vamb_options: VambOptions,
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
-    embeddings_options: EmbeddingsOptions,
+    neighs_options: NeighsOptions,
     encoder_options: Encodern2vOptions,
     training_options: TrainingOptions,
     cluster_options: ClusterOptions,
-    dbs_cluster_options: DBSCluster_Options,
 ):
     # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
     # I ALSO HAVE TO IMPLEMENT A FUNCTION THAT GENERATES AN OBJECT INDICATING THE NEIGHBOURS OF EACH CONTIG
@@ -2408,19 +1689,16 @@ def run_n2v_asimetric(
     vae_options = encoder_options.vae_options
     vae_training_options = training_options.vae_options
 
-    begintime = time.time()
-
     (
         composition,
         abundance,
-        embeddings,
-        embeddings_mask,
         neighs_object,
-    ) = load_composition_and_abundance_and_embeddings(
+        neighs_mask,
+    ) = load_composition_and_abundance_and_neighs(
         vamb_options=vamb_options,
         comp_options=comp_options,
         abundance_options=abundance_options,
-        embeddings_options=embeddings_options,
+        neighs_options=neighs_options,
         binsplitter=cluster_options.binsplitter,
     )
 
@@ -2431,48 +1709,23 @@ def run_n2v_asimetric(
         fmt="%s",
     )
     np.savez(vamb_options.out_dir.joinpath("lengths.npz"), composition.metadata.lengths)
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("embeddings.npz"), embeddings
-    )
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("embeddings_mask.npz"), embeddings_mask
-    )
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("neighs_object.npz"),
-        neighs_object,
-    )
 
     logger.info(
-        "Creating dataloader and mask (including embeddings and neighbours objects)"
+        "Creating dataloader"
     )
-
     (
         data_loader,
         neighs_object_after_dataloader,
-        # mask,
     ) = vamb.encode_n2v_asimetric.make_dataloader_n2v(
         abundance.matrix.astype(np.float32),
         composition.matrix.astype(np.float32),
-        embeddings.astype(np.float32),
-        embeddings_mask.astype(np.float32),
+        neighs_mask.astype(np.float32),
         neighs_object,
         composition.metadata.lengths,
         256,  # dummy value - we change this before using the actual loader
         destroy=True,
         cuda=vamb_options.cuda,
     )
-    # composition.metadata.filter_mask(mask)
-
-    # logger.info(
-    #     "Created dataloader and mask (including embeddings and neighbours objects)"
-    # )
-    # if embeddings_options.shuffle_embeds:
-    #     logger.info("embeddings rows shuffled")
-
-    # vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("mask.npz"), mask)
-    # n_discarded = len(mask) - mask.sum()
-    # logger.info(f"Number of sequences unsuitable for encoding: {n_discarded}")
-    # logger.info(f"Number of sequences remaining: {len(mask) - n_discarded}")
 
     latent = None
     # Train, save model
@@ -2480,7 +1733,7 @@ def run_n2v_asimetric(
         vae_options=vae_options,
         training_options=vae_training_options,
         vamb_options=vamb_options,
-        embeddings_options=embeddings_options,
+        neighs_options=neighs_options,
         lrate=training_options.lrate,
         alpha=encoder_options.alpha,
         data_loader=data_loader,
@@ -2491,672 +1744,377 @@ def run_n2v_asimetric(
     comp_metadata = composition.metadata
     del composition, abundance
 
-    del embeddings
-
     assert latent is not None
     assert comp_metadata.nseqs == len(latent)
-    # Cluster with DBSCAN, save tsv file
-    # clusterspath = vamb_options.out_dir.joinpath("vae_dbscan_clusters.tsv")
-    # cluster_dbs(
-    #     dbs_cluster_options,
-    #     clusterspath,
-    #     latent,
-    #     comp_metadata.identifiers,
-    # )
 
     # Cluster first contigs within the neighbourhoods margins
     logger.info("Computing cosine distances")
 
-    cosine_latent_distances = cdist(latent, latent, metric="cosine")
+    ## This step must be optimized
+    cosine_latent_distances = cdist(latent, latent, metric="cosine") ## USED FOR ALMOST ALL CLUSTERING APPROACHES BELOW
+    
+    ## Connect contigs if within 0.01 distance in vamb's latent space 
+    logger.info("Finding community neighbours on the latent space")
 
-    logger.info("Finding network neighbours on the latent space")
-
-    # idxs_without_neighs = [
-    #     i for i, nn in enumerate(neighs_object_after_dataloader) if len(nn) == 0
-    # ]
-
+    ## from vamb's latent space, find contigs that are within 0.01 cosine distance
     latent_neighs, _ = find_neighbours(
-        cosine_latent_distances, [], embeddings_options.radius_clustering, sort=False
+        cosine_latent_distances, [], neighs_options.radius_clustering, sort=False
     )
-
     (
-        neighbourhoods_graph,
+        neighbourhood_cs_d,
         withinradiusclusters_cs_d,
+        withinradiusclusters_g,
         mask_contigs_in_neighbourhoods,
         mask_contigs_withinR_neighbourhoods,
-    ) = cluster_neighs_based_2(neighs_object, comp_metadata.identifiers, latent_neighs)
+    ) = neighs_within_radius(neighs_object, comp_metadata.identifiers, latent_neighs)
 
     ############ NEIGHBOURHOOD BASED
     # save clusters based only in neihbourhoods ONLY THERE WILL BE MISSING CONTIGS HERE
-    logger.info("Straegy 1: Clustering based on neighbourhoods")
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods.tsv")
+    if True:
+        logger.info("Straegy 1: Clustering based on neighbourhoods")
+        
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods")),
+            vamb_options.out_dir.joinpath("bins_neighbourhoods"),
+            comp_options.path,
+            neighbourhood_cs_d,
+            comp_metadata.identifiers[mask_contigs_in_neighbourhoods],
+            comp_metadata.lengths[mask_contigs_in_neighbourhoods],
+        )
 
-    neighbourhood_cs_d = {
-        "neighs_%i" % i: cs
-        for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
-        if len(cs) >= 2
-    }
+        # now cluster the remaining contigs not within margins
+        logger.info("\tClustering remaining contigs not in neighbourhoods with vamb's default clustering algorithm")
+        cluster_and_write_files(
+            vamb_options,
+            cluster_options,
+            str(vamb_options.out_dir.joinpath("vae_clusters_outside_neighbourhoods")),
+            vamb_options.out_dir.joinpath("bins_outside_neighbourhoods"),
+            comp_options.path,
+            latent.copy()[~mask_contigs_in_neighbourhoods],
+            comp_metadata.identifiers[~mask_contigs_in_neighbourhoods],  # type:ignore
+            comp_metadata.lengths[~mask_contigs_in_neighbourhoods],  # type:ignore
+        )
+        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+        clusterspath = vamb_options.out_dir.joinpath(
+            "vae_clusters_outside_neighbourhoods_unsplit.tsv"
+        )
+        merged_cl_cs_d = neighbourhood_cs_d.copy()
+        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+        for cl in set(cl_c_ar[:, 0]):
+            merged_cl_cs_d[cl] = set()
 
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods")),
-        vamb_options.out_dir.joinpath("bins_neighbourhoods"),
-        comp_options.path,
-        neighbourhood_cs_d,
-        comp_metadata.identifiers[mask_contigs_in_neighbourhoods],
-        comp_metadata.lengths[mask_contigs_in_neighbourhoods],
-    )
+        for cl, c in cl_c_ar:
+            merged_cl_cs_d[cl].add(c)
+        
+        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+            comp_metadata.identifiers
+        )
+        # save clusters within margins and outside margins
 
-    # now cluster the remaining contigs not within margins
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_outside_neighbourhoods.tsv"
-    )
-    logger.info("\tClustering remaining contigs not in neighbourhoods")
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters_outside_neighbourhoods")),
-        vamb_options.out_dir.joinpath("bins_outside_neighbourhoods"),
-        comp_options.path,
-        latent.copy()[~mask_contigs_in_neighbourhoods],
-        comp_metadata.identifiers[~mask_contigs_in_neighbourhoods],  # type:ignore
-        comp_metadata.lengths[~mask_contigs_in_neighbourhoods],  # type:ignore
-    )
-    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_outside_neighbourhoods_unsplit.tsv"
-    )
-    merged_cl_cs_d = neighbourhood_cs_d.copy()
-    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
-    for cl in set(cl_c_ar[:, 0]):
-        merged_cl_cs_d[cl] = set()
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete")),
+            vamb_options.out_dir.joinpath("bins_neighbourhoods_complete"),
+            comp_options.path,
+            merged_cl_cs_d,
+            comp_metadata.identifiers,
+            comp_metadata.lengths,
+        )          
+    ## STRATEGY 2: First, taking the neighbourhoods_g, connect contis that are withiin 0.01 cosine distance in VAMB's latent space if not already connected, which automatically will merge hoods if within this distance. 
+    ## Also, set as looners contigs that are not connected, and that they have no contigs within 0.05 distance in VAMB'S latent space. 
+    ## Extracting looners and connecting contigs if within 0.01 latent space cosine distance
+    if True:
+        logger.info("Extracting looners, i.e. contigs that have no neighbours and no contigs within 0.05 cosine distance in vamb's latent space, and expanding neighs if within 0.01")
+        logger.info("%i (%i) hoods (contigs) in hoods before merging n2v hoods neighs and vamb neighs (contigs closet than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_d.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_d.values()])))
+        looner_contigs,_,withinradiusclusters_cs_g_updated_with_looners,mask_looners,mask_contigs_in_hoods = find_looners_and_expand_neighs(
+            cosine_latent_distances,
+            np.array([ i for i,neighs in enumerate(neighs_object) if len(neighs) > 0 ],dtype=bool),
+            withinradiusclusters_g,
+            comp_metadata.identifiers,
+            )
+        logger.info("%i (%i) hoods (contigs) in hoods after merging n2v hoods neighs and vamb neighs (contigs closet than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_g_updated_with_looners.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_g_updated_with_looners.values()])))
+        logger.info("%i looners extracted"%len(looner_contigs))
 
-    for cl, c in cl_c_ar:
-        merged_cl_cs_d[cl].add(c)
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01")),
+            vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01"),
+            comp_options.path,
+            withinradiusclusters_cs_g_updated_with_looners,
+            comp_metadata.identifiers[
+                mask_looners | mask_contigs_in_hoods
+            ],
+            comp_metadata.lengths[
+                mask_looners | mask_contigs_in_hoods
+            ],
+        )
+        # now cluster the remaining contigs not within radius
+        logger.info(
+            "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
+        )
 
-    # assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-    #    comp_metadata.identifiers
-    # )
+        cluster_and_write_files(
+            vamb_options,
+            cluster_options,
+            str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius_merged_hoods_0.01")),
+            vamb_options.out_dir.joinpath("bins_outside_radius_merged_hoods_0.01"),
+            comp_options.path,
+            latent.copy()[
+                ~(mask_contigs_in_hoods | mask_looners)
+            ],
+            comp_metadata.identifiers[
+                ~(mask_contigs_in_hoods | mask_looners)
+            ],  # type:ignore
+            comp_metadata.lengths[
+                ~(mask_contigs_in_hoods | mask_looners)
+            ],  # type:ignore
+        )
 
-    # save clusters within margins and outside margins
+        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+        clusterspath = vamb_options.out_dir.joinpath(
+            "vae_clusters_outside_radius_merged_hoods_0.01.tsv"
+        )
+        merged_cl_cs_d = withinradiusclusters_cs_g_updated_with_looners.copy()
+        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+        for cl in set(cl_c_ar[:, 0]):
+            merged_cl_cs_d[cl] = set()
 
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_neighbourhoods_complete.tsv"
-    )
+        for cl, c in cl_c_ar:
+            merged_cl_cs_d[cl].add(c)
+        
+        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+            comp_metadata.identifiers
+        )
+        # save clusters within margins and outside margins
 
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete")),
-        vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete"),
-        comp_options.path,
-        merged_cl_cs_d,
-        comp_metadata.identifiers,
-        comp_metadata.lengths,
-    )
-
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01_complete")),
+            vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01_complete"),
+            comp_options.path,
+            merged_cl_cs_d,
+            comp_metadata.identifiers,
+            comp_metadata.lengths,
+        )
+    
     ############ NEIGHBOURHOOD RADIUS BASED
-    logger.info("Straegy 2: Clustering based on radius from neighbourhood members")
-    # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_radius.tsv")
+    if True:   
+        logger.info("Straegy 2: Clustering based on radius from neighbourhood members")
+        # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius")),
+            vamb_options.out_dir.joinpath("bins_within_radius"),
+            comp_options.path,
+            withinradiusclusters_cs_d,
+            comp_metadata.identifiers[
+                mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+            ],
+            comp_metadata.lengths[
+                mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+            ],
+        )
 
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius")),
-        vamb_options.out_dir.joinpath("bins_within_radius"),
-        comp_options.path,
-        withinradiusclusters_cs_d,
-        comp_metadata.identifiers[
-            mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
-        ],
-        comp_metadata.lengths[
-            mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
-        ],
-    )
+        # now cluster the remaining contigs not within radius
+        logger.info(
+            "\tClustering remaining contigs not within a radius distance from neighbourhood members"
+        )
+        clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
+        cluster_and_write_files(
+            vamb_options,
+            cluster_options,
+            str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius")),
+            vamb_options.out_dir.joinpath("bins_outside_radius"),
+            comp_options.path,
+            latent.copy()[
+                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+            ],
+            comp_metadata.identifiers[
+                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+            ],  # type:ignore
+            comp_metadata.lengths[
+                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+            ],  # type:ignore
+        )
 
-    # now cluster the remaining contigs not within radius
-    logger.info(
-        "\tClustering remaining contigs not within a radius distance from neighbourhood members"
-    )
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius")),
-        vamb_options.out_dir.joinpath("bins_outside_radius"),
-        comp_options.path,
-        latent.copy()[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-        ],
-        comp_metadata.identifiers[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-        ],  # type:ignore
-        comp_metadata.lengths[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-        ],  # type:ignore
-    )
+        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+        clusterspath = vamb_options.out_dir.joinpath(
+            "vae_clusters_outside_radius_unsplit.tsv"
+        )
+        merged_cl_cs_d = withinradiusclusters_cs_d.copy()
+        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+        for cl in set(cl_c_ar[:, 0]):
+            merged_cl_cs_d[cl] = set()
 
-    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_outside_radius_unsplit.tsv"
-    )
-    merged_cl_cs_d = withinradiusclusters_cs_d.copy()
-    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
-    for cl in set(cl_c_ar[:, 0]):
-        merged_cl_cs_d[cl] = set()
+        for cl, c in cl_c_ar:
+            merged_cl_cs_d[cl].add(c)
+        
+        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+            comp_metadata.identifiers
+        )
+        # save clusters within margins and outside margins
+        clusterspath = vamb_options.out_dir.joinpath(
+            "vae_clusters_within_radius_complete.tsv"
+        )
 
-    for cl, c in cl_c_ar:
-        merged_cl_cs_d[cl].add(c)
+        write_clusters_and_bins(
+            vamb_options,
+            cluster_options.binsplitter,
+            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete")),
+            vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete"),
+            comp_options.path,
+            merged_cl_cs_d,
+            comp_metadata.identifiers,
+            comp_metadata.lengths,
+        )
 
-    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-        comp_metadata.identifiers
-    )
-    # save clusters within margins and outside margins
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_within_radius_complete.tsv"
-    )
+    ############ NEIGHBOURHOOD RADIUS BASED, 2ND ITERATION (considering the )
+    #if False:
+        # logger.info("Straegy 3: Clustering based on radius from neighbourhood members")
+        # # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
+        
 
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete")),
-        vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete"),
-        comp_options.path,
-        merged_cl_cs_d,
-        comp_metadata.identifiers,
-        comp_metadata.lengths,
-    )
+        # latent_neighs, _ = find_neighbours(
+        #     cosine_latent_distances, [], neighs_options.radius_clustering/2, sort=False
+        # )
+        # new_neighs_object = [[] for i in enumerate(comp_metadata.identifiers)]
+        # c2idx = { c:i for i,c in enumerate(comp_metadata.identifiers)}
+        # for cs in  withinradiusclusters_cs_d.values():
+        #     for c in cs:
+        #         new_neighs_object[c2idx[c]] = [ c2idx[c_] for c_ in cs-set([c])]
+                
+        # new_neighs_objec = np.array(new_neighs_object,dtype=object)
+        # (
+        #     neighbourhoods_graph,
+        #     withinradiusclusters_cs_d,
+        #     withinradiusclusters_g,
+        #     mask_contigs_in_neighbourhoods,
+        #     mask_contigs_withinR_neighbourhoods,
+        # ) = neighs_within_radius(new_neighs_object, comp_metadata.identifiers, latent_neighs)
+        # write_clusters_and_bins(
+        #     vamb_options,
+        #     cluster_options.binsplitter,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_2nditer_walfRc_within_radius")),
+        #     vamb_options.out_dir.joinpath("bins_2nditer_within_radius"),
+        #     comp_options.path,
+        #     withinradiusclusters_cs_d,
+        #     comp_metadata.identifiers[
+        #         mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+        #     ],
+        #     comp_metadata.lengths[
+        #         mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+        #     ],
+        # )
 
-    ############ NEIGHBOURHOOD LIMIT BASED
-    # Cluster first contigs within the neighbourhoods margins
-    logger.info("Straegy 3: Clustering based on neighbourhoods' margins")
-
-    (
-        _,
-        withinmarginclusters_cs_d,
-        _,
-        _,
-        mask_contigs_within_neighbourhoods,
-    ) = cluster_neighs_based(
-        neighs_object=neighs_object,
-        latents=latent,
-        contignames=comp_metadata.identifiers,
-        neighbourhoods_graph=neighbourhoods_graph,
-        mask_contigs_in_neighbourhoods=mask_contigs_in_neighbourhoods,
-    )
-
-    # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_within_margins.tsv")
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_margins")),
-        vamb_options.out_dir.joinpath("bins_within_margins"),
-        comp_options.path,
-        withinmarginclusters_cs_d,
-        comp_metadata.identifiers[
-            mask_contigs_in_neighbourhoods | mask_contigs_within_neighbourhoods
-        ],
-        comp_metadata.lengths[
-            mask_contigs_in_neighbourhoods | mask_contigs_within_neighbourhoods
-        ],
-    )
-
-    # now cluster the remaining contigs not within margins
-    logger.info("\tClustering remaining contigs not within the neighbourhood limits")
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_margins.tsv")
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters_outside_margins")),
-        vamb_options.out_dir.joinpath("bins_outside_margins"),
-        comp_options.path,
-        latent.copy()[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_within_neighbourhoods)
-        ],
-        comp_metadata.identifiers[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_within_neighbourhoods)
-        ],  # type:ignore
-        comp_metadata.lengths[
-            ~(mask_contigs_in_neighbourhoods | mask_contigs_within_neighbourhoods)
-        ],  # type:ignore
-    )
-    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_outside_margins_unsplit.tsv"
-    )
-    merged_cl_cs_d = withinmarginclusters_cs_d.copy()
-    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object)
-    for cl in set(cl_c_ar[:, 0]):
-        merged_cl_cs_d[cl] = set()
-
-    for cl, c in cl_c_ar:
-        merged_cl_cs_d[cl].add(c)
-
-    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-        comp_metadata.identifiers
-    )
-    # save clusters within margins and outside margins
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_within_margins_complete.tsv"
-    )
-
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_margins_complete")),
-        vamb_options.out_dir.joinpath("bins_within_margins_complete"),
-        comp_options.path,
-        merged_cl_cs_d,
-        comp_metadata.identifiers,
-        comp_metadata.lengths,
-    )
-
-    # Cluster, save tsv file
-    logger.info("Straegy 4: Clustering latents with vamb")
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters")),
-        vamb_options.out_dir.joinpath("bins"),
-        comp_options.path,
-        latent,
-        comp_metadata.identifiers,  # type:ignore
-        comp_metadata.lengths,  # type:ignore
-    )
+        # # Cluster, save tsv file
+        # logger.info("Straegy 4: Clustering latents with vamb")
+        # clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
+        # cluster_and_write_files(
+        #     vamb_options,
+        #     cluster_options,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters")),
+        #     vamb_options.out_dir.joinpath("bins"),
+        #     comp_options.path,
+        #     latent,
+        #     comp_metadata.identifiers,  # type:ignore
+        #     comp_metadata.lengths,  # type:ignore
+        # )
+    
     del latent
-
-
-def cluster_neighs_based(
-    neighs_object,
-    latents,
-    contignames,
-    neighbourhoods_graph=None,
-    mask_contigs_in_neighbourhoods=None,
-    mode="mean",
-):
-    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
-    idx2c = {i: contigname for i, contigname in enumerate(contignames)}
-
-    mask_contigs_within_neighbourhoods = np.zeros(len(contignames), dtype=bool)
-
-    if neighbourhoods_graph == None:
-        mask_contigs_in_neighbourhoods = np.zeros(len(contignames), dtype=bool)
-
-        neighbourhoods_graph = nx.Graph()
-        contigs_in_neighbourhoods = set()
-        for c_i, neigh_idxs in enumerate(neighs_object):
-            if c_i in neigh_idxs and len(neigh_idxs) == 1:
-                continue
-
-            if c_i not in neigh_idxs and len(neigh_idxs) == 0:
-                continue
-
-            for n_i in neigh_idxs:
-                neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])
-                mask_contigs_in_neighbourhoods[n_i] = True
-                mask_contigs_in_neighbourhoods[c_i] = True
-
-                contigs_in_neighbourhoods.add(idx2c[n_i])
-                contigs_in_neighbourhoods.add(idx2c[c_i])
-    else:
-        try:
-            mask_contigs_in_neighbourhoods
-        except:
-            raise ValueError("mask_contigs_in_neighbourhoods not defined")
-
-        contigs_in_neighbourhoods = set(contignames[mask_contigs_in_neighbourhoods])
-
-    # assert len(contigs_in_neighbourhoods) == len(set(contigs_in_neighbourhoods))
-
-    neighbourhood_cs_d = {
-        "neighs_%i" % i: cs
-        for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
-        if len(cs) >= 2
-    }
-
-    logger.info("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
-
-    n_neighbourhoods = np.sum(
-        [1 for cs in nx.connected_components(neighbourhoods_graph) if len(cs) > 1]
-    )
-
-    logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
-
-    # withinmarginclusters_g = nx.Graph()
-    withinmarginclusters_g = neighbourhoods_graph.copy()
-
-    for cs in nx.connected_components(neighbourhoods_graph):
-        # print(cs)
-        if len(cs) < 2:
-            continue
-        cs_list = list(cs)
-
-        # for i, c_i in enumerate(cs_list):
-        #     for c_j in cs_list[i + 1 :]:
-        #         assert c2idx[c_i] != c2idx[c_j]
-        #         withinmarginclusters_g.add_edge(c_i, c_j)
-
-        for c in cs_list:
-            assert c in withinmarginclusters_g.nodes()
-        for c in cs:
-            assert c in withinmarginclusters_g.nodes()
-
-        idxs_cs = [c2idx[c] for c in cs]
-
-        if mode == "mean":
-            limit_h = np.mean(latents[idxs_cs], axis=0) + np.std(
-                latents[idxs_cs], axis=0
-            )
-            limit_l = np.mean(latents[idxs_cs], axis=0) - np.std(
-                latents[idxs_cs], axis=0
-            )
-
-        elif mode == "median":
-            limit_h = np.median(latents[idxs_cs], axis=0) + np.std(
-                latents[idxs_cs], axis=0
-            )
-            limit_l = np.median(latents[idxs_cs], axis=0) - np.std(
-                latents[idxs_cs], axis=0
-            )
-
-        elif mode == "minmax":
-            limit_h = np.max(latents[idxs_cs], axis=0)
-            limit_l = np.min(latents[idxs_cs], axis=0)
-
-        else:
-            raise (ValueError("No mode specified"))
-
-        limits = [(l, h) for h, l in zip(limit_h, limit_l)]
-
-        idxs_not_cs = set(np.arange(len(contignames))) - set(idxs_cs)
-
-        for idx_not_cs in idxs_not_cs:
-            if all(
-                limits[i][0] <= latents[idx_not_cs][i] <= limits[i][1]
-                for i in range(latents.shape[1])
-            ):
-                extra_contig = contignames[idx_not_cs]
-                withinmarginclusters_g.add_edge(extra_contig, cs_list[-1])
-                mask_contigs_within_neighbourhoods[idx_not_cs] = True
-
-    for c in contignames[mask_contigs_within_neighbourhoods]:
-        assert c in withinmarginclusters_g.nodes()
-
-    withinmarginclusters_cs_d = {
-        "nneighs_%i" % i: cs
-        for i, cs in enumerate(nx.connected_components(withinmarginclusters_g))
-        if len(cs) > 1
-    }
-    # logger.info(
-    #     "Contigs already clustered mask sum %i" % np.sum(mask_contigs_within_neighbourhoods&mask_contigs_in_neighbourhoods)
-    # )
-
-    logger.info(
-        "Contigs within neighbourhoods margins: %i"
-        % (np.sum(mask_contigs_within_neighbourhoods))
-    )
-
-    logger.info(
-        "Aggregated neighbourhoods: %i" % (len(withinmarginclusters_cs_d.keys()))
-    )
-
-    # logger.info(
-    #     "Contigs in withinmargin_d %i, %i, %i"
-    #     % (
-    #         len(set([c for cs in withinmarginclusters_cs_d.values() for c in cs])),
-    #         len([c for cs in withinmarginclusters_cs_d.values() for c in cs]),
-    #         len(withinmarginclusters_g.nodes()),
-    #     )
-    # )
-
-    return (
-        neighbourhood_cs_d,
-        withinmarginclusters_cs_d,
-        neighbourhoods_graph,
-        mask_contigs_in_neighbourhoods,
-        mask_contigs_within_neighbourhoods,
-    )
-
-
-def cluster_neighs_based_2(
+    
+def neighs_within_radius(
     neighs_object,
     contignames,
     latent_neighs,
-    neighbourhoods_graph=None,
-    mask_contigs_in_neighbourhoods=None,
 ):
+    """
+    There are two kind of neighbours, the neighs from the n2v embeddings space, and the ones from vamb's 
+    latent space. Here we merge them.
+    Input:
+        neighs_object: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in n2v embedding space
+        contignames: contig names
+        latent_neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in vamb's latent space
+    """
+    
     c2idx = {contigname: i for i, contigname in enumerate(contignames)}
-    idx2c = {i: contigname for i, contigname in enumerate(contignames)}
-
-    mask_contigs_withinR_neighbourhoods = np.zeros(len(contignames), dtype=bool)
-
-    if neighbourhoods_graph == None:
-        mask_contigs_in_neighbourhoods = np.zeros(len(contignames), dtype=bool)
-
-        neighbourhoods_graph = nx.Graph()
-        contigs_in_neighbourhoods = set()
-        for c_i, neigh_idxs in enumerate(neighs_object):
-            if c_i in neigh_idxs and len(neigh_idxs) == 1:
-                continue
-
-            if c_i not in neigh_idxs and len(neigh_idxs) == 0:
-                continue
-
-            for n_i in neigh_idxs:
-                neighbourhoods_graph.add_edge(idx2c[c_i], idx2c[n_i])
-                mask_contigs_in_neighbourhoods[n_i] = True
-                mask_contigs_in_neighbourhoods[c_i] = True
-
-                contigs_in_neighbourhoods.add(idx2c[n_i])
-                contigs_in_neighbourhoods.add(idx2c[c_i])
-    else:
-        try:
-            mask_contigs_in_neighbourhoods
-        except:
-            raise ValueError("mask_contigs_in_neighbourhoods not defined")
-
-        contigs_in_neighbourhoods = set(contignames[mask_contigs_in_neighbourhoods])
-
-    # assert len(contigs_in_neighbourhoods) == len(set(contigs_in_neighbourhoods))
-
+    mask_contigs_withinR_neighbourhoods = np.zeros(len(contignames), dtype=bool)    
+    mask_contigs_in_neighbourhoods =  np.zeros(len(contignames), dtype=bool)    
+    ## First create the neighbourhoods objects only based upon 
+    neighbourhoods_graph = nx.Graph()
+    contigs_in_neighbourhoods = set()
+    for c_i, neigh_idxs in enumerate(neighs_object):
+        for n_i in neigh_idxs:
+            neighbourhoods_graph.add_edge(contignames[c_i], contignames[n_i])
+            contigs_in_neighbourhoods.add(contignames[n_i])
+            contigs_in_neighbourhoods.add(contignames[c_i])
+            mask_contigs_in_neighbourhoods[c_i] = True
+            mask_contigs_in_neighbourhoods[n_i] = True
+            
     logger.info("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
 
     n_neighbourhoods = np.sum(
         [1 for cs in nx.connected_components(neighbourhoods_graph) if len(cs) > 1]
     )
-
     logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
 
     # withinradiusclusters_g = nx.Graph()
     withinradiusclusters_g = neighbourhoods_graph.copy()
-
+    logger.info("Graph object copied")
+    singleton_contigs_aggregated = set()
     for cs in nx.connected_components(neighbourhoods_graph):
+        break
         # print(cs)
-        if len(cs) < 2:
-            continue
-        # cs_list = list(cs)
+        assert len(cs) > 1, "neighbourhoods should be composed of at least 2 contigs"
+        # define contig indices already part of the neighbourhood        
+        idxs_cs_already_in_hood = [c2idx[c] for c in cs] 
+        
+        # define contig indices not part of the neighbourhood
+        idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
 
-        # for i, c_i in enumerate(cs_list):
-        #     # mask_contigs_already_clustered[c2idx[c_i]] = True
-        #     for c_j in cs_list[i + 1 :]:
-        #         assert c2idx[c_i] != c2idx[c_j]
-        #         withinradiusclusters_g.add_edge(c_i, c_j)
-
-        idxs_cs = [c2idx[c] for c in cs]
-        idxs_not_cs = set(np.arange(len(contignames))) - set(idxs_cs)
-
-        for idx_not_cs in idxs_not_cs:
-            latent_neighs_neighbourhood = set(latent_neighs[idx_not_cs]).intersection(
-                set(idxs_cs)
+        for idx_c_not_in_hood in idxs_cs_not_in_hood:
+            # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
+            latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
+                set(idxs_cs_already_in_hood)
             )
             if len(latent_neighs_neighbourhood) > 0:
-                for l_n_idx in latent_neighs_neighbourhood:
-                    withinradiusclusters_g.add_edge(idx2c[l_n_idx], idx2c[idx_not_cs])
-                    mask_contigs_withinR_neighbourhoods[idx_not_cs] = True
-
-    for c in contignames[mask_contigs_withinR_neighbourhoods]:
-        assert c in withinradiusclusters_g.nodes()
-
+                for latent_neigh_idx in latent_neighs_neighbourhood:
+                    withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
+                    mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
+                    if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
+                        singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
+                        
     withinradiusclusters_cs_d = {
         "nneighs_%i" % i: cs
         for i, cs in enumerate(nx.connected_components(withinradiusclusters_g))
-        if len(cs) > 1
     }
-
-    # print(
-    #     "Contigs already clustered mask sum %i" % np.sum(mask_contigs_withinR_neighbourhoods|mask_contigs_in_neighbourhoods)
-    # )
     logger.info(
-        "Contigs within neighbourhoods radius: %i"
-        % np.sum(mask_contigs_withinR_neighbourhoods)
+        "Collected singleton contigs: %i"
+        % len(singleton_contigs_aggregated)
+    )
+    
+    contigs_in_withinradiusclusters_n = np.sum([len(cs) for cs in withinradiusclusters_cs_d.values() ])
+    logger.info(
+        "Contigs in within neighbourhoods radius clusters: %i"
+        % contigs_in_withinradiusclusters_n
     )
 
     logger.info(
         "Aggregated neighbourhoods: %i" % (len(withinradiusclusters_cs_d.keys()))
     )
-    # assert np.sum(mask_contigs_in_neighbourhoods)
-    # print(
-    #     "Contigs in withinmargin_d %i, %i, %i"
-    #     % (
-    #         len(set([c for cs in withinradiusclusters_cs_d.values() for c in cs])),
-    #         len([c for cs in withinradiusclusters_cs_d.values() for c in cs]),
-    #         len(withinradiusclusters_g.nodes()),
-    #     )
-    # )
     return (
         neighbourhoods_graph,
         withinradiusclusters_cs_d,
         mask_contigs_in_neighbourhoods,
         mask_contigs_withinR_neighbourhoods,
-    )
-
-
-
-def run_aae_n2v(
-    vamb_options: VambOptions,
-    comp_options: CompositionOptions,
-    abundance_options: AbundanceOptions,
-    embeddings_options: EmbeddingsOptions,
-    encoder_options: Encodern2vOptions,
-    training_options: TrainingOptions,
-    cluster_options: ClusterOptions,
-):
-    # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
-    # I ALSO HAVE TO IMPLEMENT A FUNCTION THAT GENERATES AN OBJECT INDICATING THE NEIGHBOURS OF EACH CONTIG
-    # BAED ON EMBEDDING SPACE AND radius DISTANCE
-
-    #vae_options = encoder_options.vae_options
-    aae_options = encoder_options.aae_options
-    #vae_training_options = training_options.vae_options
-    aae_training_options = training_options.aae_options
-
-    begintime = time.time()
-
-    (
-        composition,
-        abundance,
-        embeddings,
-        embeddings_mask,
-        neighs_object,
-        neighbourhoods_cs_d,
-    ) = load_composition_and_abundance_and_embeddings_aae(
-        vamb_options=vamb_options,
-        comp_options=comp_options,
-        abundance_options=abundance_options,
-        embeddings_options=embeddings_options,
-        binsplitter=cluster_options.binsplitter,
-    )
-    print(np.sum([ len(idxs) for idxs in neighbourhoods_cs_d.values()]) , np.sum(embeddings_mask))
-    assert np.sum([ len(idxs) for idxs in neighbourhoods_cs_d.values()]) == np.sum(embeddings_mask)
-    # Write contignames and contiglengths needed for dereplication purposes
-    np.savetxt(
-        vamb_options.out_dir.joinpath("contignames"),
-        composition.metadata.identifiers,
-        fmt="%s",
-    )
-    np.savez(vamb_options.out_dir.joinpath("lengths.npz"), composition.metadata.lengths)
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("embeddings.npz"), embeddings
-    )
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("embeddings_mask.npz"), embeddings_mask
-    )
-    vamb.vambtools.write_npz(
-        vamb_options.out_dir.joinpath("neighs_object.npz"),
-        neighs_object,
-    )
-
-    logger.info(
-        "Creating dataloader and mask (including embeddings and neighbours objects)"
-    )
-
-    (
-        data_loader,
-        neighs_object_after_dataloader,
-    ) = vamb.encode_n2v_asimetric.make_dataloader_n2v(
-        abundance.matrix.astype(np.float32),
-        composition.matrix.astype(np.float32),
-        embeddings.astype(np.float32),
-        embeddings_mask.astype(np.float32),
-        neighs_object,
-        composition.metadata.lengths,
-        256,  # dummy value - we change this before using the actual loader
-        destroy=True,
-        cuda=vamb_options.cuda,
-    )
-    clusters_y_dict = None
-    latent_z = None
-
-
-    # Train, save model
-    latent_z, clusters_y_dict = train_aae_n2v(
-        data_loader=data_loader,
-        aae_options=aae_options,
-        vamb_options=vamb_options,
-        embeddings_options=embeddings_options,
-        training_options=aae_training_options,
-        lrate=training_options.lrate,
-        alpha=encoder_options.alpha,
-        contignames=composition.metadata.identifiers,  # type:ignore
-        neighs_object=neighs_object_after_dataloader,
-        neighbourhoods_object= neighbourhoods_cs_d,
-        
-    )
-
-    # Free up memory
-    comp_metadata = composition.metadata
-    del composition, abundance
-
-
-    assert latent_z is not None
-    assert clusters_y_dict is not None
-    assert comp_metadata.nseqs == len(latent_z)
-    cluster_and_write_files(
-        vamb_options,
-        cluster_options,
-        str(vamb_options.out_dir.joinpath("aae_z_clusters")),
-        vamb_options.out_dir.joinpath("bins"),
-        comp_options.path,
-        latent_z,
-        comp_metadata.identifiers,  # type:ignore
-        comp_metadata.lengths,  # type:ignore
-    )
-    del latent_z
-    # We enforce this in the VAEAAEOptions constructor, see comment there
-    assert cluster_options.max_clusters is None
-    write_clusters_and_bins(
-        vamb_options,
-        cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("aae_y_clusters")),
-        vamb_options.out_dir.joinpath("bins"),
-        comp_options.path,
-        clusters_y_dict,
-        comp_metadata.identifiers,  # type:ignore
-        comp_metadata.lengths,  # type:ignore
     )
 
 
@@ -3308,6 +2266,255 @@ class VAEAAEArguments(BinnerArguments):
         )
 
 
+def neighs_within_radius(
+    neighs_object,
+    contignames,
+    latent_neighs,
+):
+    """
+    There are two kind of neighbours, the neighs from the n2v embeddings space, and the ones from vamb's 
+    latent space. Here we merge them.
+    Input:
+        neighs_object: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in n2v embedding space
+        contignames: contig names
+        latent_neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in vamb's latent space
+    """
+    
+    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
+    mask_contigs_withinR_neighbourhoods = np.zeros(len(contignames), dtype=bool)    
+    mask_contigs_in_neighbourhoods =  np.zeros(len(contignames), dtype=bool)    
+    ## First create the neighbourhoods objects only based upon 
+    neighbourhoods_graph = nx.Graph()
+    contigs_in_neighbourhoods = set()
+    for c_i, neigh_idxs in enumerate(neighs_object):
+        if len(neigh_idxs) == 0: 
+            continue        
+        assert c_i not in neigh_idxs, "a contig cannot be its own neighbour"
+        for n_i in neigh_idxs:
+            neighbourhoods_graph.add_edge(contignames[c_i], contignames[n_i])
+
+            contigs_in_neighbourhoods.add(contignames[n_i])
+            contigs_in_neighbourhoods.add(contignames[c_i])
+            mask_contigs_in_neighbourhoods[c_i] = True
+            mask_contigs_in_neighbourhoods[n_i] = True
+            
+    logger.info("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
+
+    n_neighbourhoods = np.sum(
+        [1 for cs in nx.connected_components(neighbourhoods_graph) if len(cs) > 1]
+    )
+    logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
+    
+    neighbourhood_cs_d = {
+    "neighs_%i" % i: cs
+    for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
+    if len(cs) >= 2
+    }
+
+    # withinradiusclusters_g = nx.Graph()
+    withinradiusclusters_g = neighbourhoods_graph #.copy()
+
+    singleton_contigs_aggregated = set()
+    for cs in nx.connected_components(neighbourhoods_graph):
+        
+        # print(cs)
+        assert len(cs) > 1, "neighbourhoods should be composed of at least 2 contigs"
+        # define contig indices already part of the neighbourhood
+        idxs_cs_already_in_hood = [c2idx[c] for c in cs] 
+        
+        # define contig indices not part of the neighbourhood
+        idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
+
+        for idx_c_not_in_hood in idxs_cs_not_in_hood:
+
+            # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
+            latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
+                set(idxs_cs_already_in_hood)
+            )
+            if len(latent_neighs_neighbourhood) > 0:
+                for latent_neigh_idx in latent_neighs_neighbourhood:
+                    withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
+                    mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
+                    if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
+                        singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
+                        
+
+    withinradiusclusters_cs_d = {
+        "nneighs_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(withinradiusclusters_g))
+    }
+
+    logger.info(
+        "Collected singleton contigs: %i"
+        % len(singleton_contigs_aggregated)
+    )
+
+    logger.info(
+        "Contigs in within neighbourhoods radius clusters: %i"
+        % np.sum([len(cs) for cs in withinradiusclusters_cs_d.values() ])
+    )
+
+    logger.info(
+        "Aggregated neighbourhoods: %i" % (len(withinradiusclusters_cs_d.keys()))
+    )
+    return (
+        neighbourhood_cs_d,
+        withinradiusclusters_cs_d,
+        withinradiusclusters_g,
+        mask_contigs_in_neighbourhoods,
+        mask_contigs_withinR_neighbourhoods,
+    )
+
+
+class BasicArguments(object):
+    LOGS_PATH = "log.txt"
+
+    def __init__(self, args):
+        self.args = args
+        self.comp_options = CompositionOptions(
+            self.args.fasta,
+            self.args.composition,
+            self.args.minlength,
+            args.warn_on_few_seqs,
+        )
+        self.abundance_options = AbundanceOptions(
+            self.args.bampaths,
+            self.args.abundancepath,
+            self.args.min_alignment_id,
+            not self.args.norefcheck,
+        )
+        self.vamb_options = VambOptions(
+            self.args.outdir,
+            self.args.nthreads,
+            self.comp_options,
+            self.args.min_fasta_output_size,
+            self.args.seed,
+            self.args.cuda,
+        )
+
+    def run_inner(self):
+        raise NotImplementedError
+
+    @logger.catch()
+    def run(self):
+        torch.set_num_threads(self.vamb_options.n_threads)
+        try_make_dir(self.vamb_options.out_dir)
+        logger.add(
+            self.vamb_options.out_dir.joinpath(self.LOGS_PATH), format=format_log
+        )
+        logger.add(sys.stderr, format=format_log)
+        begintime = time.time()
+        logger.info("Starting Vamb version " + ".".join(map(str, vamb.__version__)))
+        logger.info("Random seed is " + str(self.vamb_options.seed))
+        self.run_inner()
+        logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
+
+
+class TaxometerArguments(BasicArguments):
+    def __init__(self, args):
+        super(TaxometerArguments, self).__init__(args)
+        self.taxonomy_options = TaxonomyOptions(
+            taxonomy_path=args.taxonomy,
+            no_predictor=False,
+            column_contigs=args.column_contigs,
+            column_taxonomy=args.column_taxonomy,
+            delimiter_taxonomy=args.delimiter_taxonomy,
+        )
+        self.predictor_training_options = PredictorTrainingOptions(
+            nepochs=args.pred_nepochs,
+            batchsize=args.pred_batchsize,
+            batchsteps=[],
+            softmax_threshold=args.pred_softmax_threshold,
+            ploss=args.ploss,
+        )
+
+    def run_inner(self):
+        run_taxonomy_predictor(
+            vamb_options=self.vamb_options,
+            comp_options=self.comp_options,
+            abundance_options=self.abundance_options,
+            taxonomy_options=self.taxonomy_options,
+            predictor_training_options=self.predictor_training_options,
+        )
+
+
+class BinnerArguments(BasicArguments):
+    def __init__(self, args):
+        super(BinnerArguments, self).__init__(args)
+        self.vae_options = VAEOptions(
+            nhiddens=args.nhiddens,
+            nlatent=args.nlatent,
+            beta=args.beta,
+            dropout=args.dropout,
+        )
+        self.vae_training_options = VAETrainingOptions(
+            nepochs=args.nepochs,
+            batchsize=args.batchsize,
+            batchsteps=args.batchsteps,
+        )
+        self.aae_options = None
+        self.aae_training_options = None
+        self.cluster_options = ClusterOptions(
+            args.window_size,
+            args.min_successes,
+            args.max_clusters,
+            args.binsplit_separator,
+        )
+
+
+class VAEAAEArguments(BinnerArguments):
+    def __init__(self, args):
+        super(VAEAAEArguments, self).__init__(args)
+
+        # For the VAE-AAE workflow, we must cluster the full set of sequences,
+        # else the cluster dereplication step makes no sense, as the different
+        # clusterings will contain different sets of clusters.
+        # So, enforce this here
+        if self.cluster_options.max_clusters is not None:
+            raise ValueError(
+                "When using the VAE-AAE model, `max_clusters` (option `-c`) "
+                "must not be set."
+            )
+
+        self.aae_options = AAEOptions(
+            nhiddens=args.nhiddens_aae,
+            nlatent_z=args.nlatent_aae_z,
+            nlatent_y=args.nlatent_aae_y,
+            sl=args.sl,
+            slr=args.slr,
+        )
+        self.aae_training_options = AAETrainingOptions(
+            nepochs=args.nepochs_aae,
+            batchsize=args.batchsize_aae,
+            batchsteps=args.batchsteps_aae,
+            temp=args.temp,
+        )
+
+    def init_encoder_and_training(self):
+        self.encoder_options = EncoderOptions(
+            vae_options=self.vae_options,
+            aae_options=self.aae_options,
+            alpha=self.args.alpha,
+        )
+        self.training_options = TrainingOptions(
+            encoder_options=self.encoder_options,
+            vae_options=self.vae_training_options,
+            aae_options=self.aae_training_options,
+            lrate=self.args.lrate,
+        )
+
+    def run_inner(self):
+        run(
+            vamb_options=self.vamb_options,
+            comp_options=self.comp_options,
+            abundance_options=self.abundance_options,
+            encoder_options=self.encoder_options,
+            training_options=self.training_options,
+            cluster_options=self.cluster_options,
+        )
+
+
+
 class VAEArguments(BinnerArguments):
     def __init__(self, args):
         super(VAEArguments, self).__init__(args)
@@ -3416,19 +2623,11 @@ class VAEASYarguments(BinnerArguments):
             aae_options=None,
             alpha=self.args.alpha,
         )
-
-        self.embeddings_options = EmbeddingsOptions(
-            embeddingspath=args.embeds,
-            embeddedcontigspath=args.contigs_embedded,
-            shuffle_embeds=args.shuffle_embeds,
-            embeds_loss=args.embeds_loss,
-            radius_neighs=args.R,
+    
+        self.neighs_options = NeighsOptions(
+            neighs_path=args.neighs,
             gamma=args.gamma,
-            neighs_object_path=args.neighs,
-            embeddings_mask_path=args.embeds_mask,
-            embeddings_processed_path=args.embeds_processed,
             margin=args.margin,
-            symmetry=False,
             radius_clustering=args.Rc,
             top_neighbours=args.top_neighbours
         )
@@ -3439,122 +2638,13 @@ class VAEASYarguments(BinnerArguments):
             aae_options=None,
             lrate=self.args.lrate,
         )
-
-        self.dbs_cluster_options = DBSCluster_Options(
-            args.binsplit_separator,
-        )
-
+    
     def run_inner(self):
         run_n2v_asimetric(
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
             abundance_options=self.abundance_options,
-            embeddings_options=self.embeddings_options,
-            encoder_options=self.encoder_options,
-            training_options=self.training_options,
-            cluster_options=self.cluster_options,
-            dbs_cluster_options=self.dbs_cluster_options,
-        )
-
-
-class VAESYarguments(BinnerArguments):
-    def __init__(self, args):
-        super(VAESYarguments, self).__init__(args)
-        self.encoder_options = EncoderOptions(
-            vae_options=self.vae_options,
-            aae_options=None,
-            alpha=self.args.alpha,
-        )
-
-        self.embeddings_options = EmbeddingsOptions(
-            embeddingspath=args.embeds,
-            embeddedcontigspath=args.contigs_embedded,
-            shuffle_embeds=args.shuffle_embeds,
-            embeds_loss=args.embeds_loss,
-            embeddings_mask_path=args.embeds_mask,
-            embeddings_processed_path=args.embeds_processed,
-            symmetry=True,
-            gamma=args.gamma,
-            radius_neighs=args.R,
-            neighs_object_path=None,
-        )
-
-        self.training_options = TrainingOptions(
-            encoder_options=self.encoder_options,
-            vae_options=self.vae_training_options,
-            aae_options=None,
-            lrate=self.args.lrate,
-        )
-
-        self.dbs_cluster_options = DBSCluster_Options(
-            args.binsplit_separator,
-        )
-
-    def run_inner(self):
-        run_n2v(
-            vamb_options=self.vamb_options,
-            comp_options=self.comp_options,
-            abundance_options=self.abundance_options,
-            embeddings_options=self.embeddings_options,
-            encoder_options=self.encoder_options,
-            training_options=self.training_options,
-            cluster_options=self.cluster_options,
-        )
-
-
-class AAEASYarguments(BinnerArguments):
-    def __init__(self, args):
-        super(AAEASYarguments, self).__init__(args)
-
-        self.aae_options = AAEOptions(
-            nhiddens=args.nhiddens_aae,
-            nlatent_z=args.nlatent_aae_z,
-            nlatent_y=args.nlatent_aae_y,
-            sl=args.sl,
-            slr=args.slr,
-        )
-        self.aae_training_options = AAETrainingOptions(
-            nepochs=args.nepochs_aae,
-            batchsize=args.batchsize_aae,
-            batchsteps=args.batchsteps_aae,
-            temp=args.temp,
-        )
-
-        self.encoder_options = EncoderOptions(
-            vae_options=self.vae_options,
-            aae_options=self.aae_options,
-            alpha=self.args.alpha,
-        )
-
-        self.embeddings_options = EmbeddingsOptions(
-            embeddingspath=args.embeds,
-            embeddedcontigspath=args.contigs_embedded,
-            shuffle_embeds=args.shuffle_embeds,
-            embeds_loss=args.embeds_loss,
-            radius_neighs=args.R,
-            gamma=args.gamma,
-            neighs_object_path=args.neighs,
-            embeddings_mask_path=args.embeds_mask,
-            embeddings_processed_path=args.embeds_processed,
-            symmetry=True,
-            top_neighbours=args.top_neighbours,
-            delta=args.delta,
-        )
-
-        self.training_options = TrainingOptions(
-            encoder_options=self.encoder_options,
-            vae_options=self.vae_training_options,
-            aae_options=self.aae_training_options,
-            lrate=self.args.lrate,
-        )
-
-
-    def run_inner(self):
-        run_aae_n2v(
-            vamb_options=self.vamb_options,
-            comp_options=self.comp_options,
-            abundance_options=self.abundance_options,
-            embeddings_options=self.embeddings_options,
+            neighs_options=self.neighs_options,
             encoder_options=self.encoder_options,
             training_options=self.training_options,
             cluster_options=self.cluster_options,
@@ -3737,60 +2827,6 @@ def add_vae_arguments(subparser):
     return subparser
 
 
-def add_vae_n2v_arguments(subparser):
-    # Embeddings arguments
-    vae_sy_os = subparser.add_argument_group(title="Symmetric vae arguments")
-    vae_sy_os.add_argument(
-        "--embeds",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings ",
-    )
-    vae_sy_os.add_argument(
-        "--contigs_embedded",
-        metavar="",
-        type=Path,
-        help="paths to contigs that were embedded",
-    )
-    vae_sy_os.add_argument(
-        "--shuffle_embeds",
-        help="shuffle embeddings [False]",
-        action="store_true",
-    )
-    vae_sy_os.add_argument(
-        "--embeds_loss",
-        help="Reconstruction loss for the embeddings [cos]",
-        type=str,
-        default="cos",
-    )
-
-    vae_sy_os.add_argument(
-        "-R",
-        help="radius neighbours embeddings",
-        type=float,
-        default=0.1,
-    )
-    vae_sy_os.add_argument(
-        "--embeds_processed",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings already proprocessed, so they match the contigs dimeniosn",
-    )
-
-    vae_sy_os.add_argument(
-        "--embeds_mask",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings mask so True if contig has neighbour within radious ",
-    )
-
-    vae_sy_os.add_argument(
-        "--gamma",
-        help="Weight for the embeddings contrastive losss",
-        type=float,
-        default=0.1,
-    )
-    return subparser
 
 
 def add_predictor_arguments(subparser):
@@ -4060,64 +3096,19 @@ def add_reclustering_arguments(subparser):
 
 def add_vae_n2v_asy_arguments(subparser):
     # Embeddings arguments
-    vae_asy_os = subparser.add_argument_group(title="Asymmetric vae arguments")
-    vae_asy_os.add_argument(
-        "--embeds",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings ",
-    )
-    vae_asy_os.add_argument(
-        "--contigs_embedded",
-        metavar="",
-        type=Path,
-        help="paths to contigs that were embedded",
-    )
-    vae_asy_os.add_argument(
-        "--shuffle_embeds",
-        help="shuffle embeddings [False]",
-        action="store_true",
-    )
-    vae_asy_os.add_argument(
-        "--embeds_loss",
-        help="Reconstruction loss for the embeddings [cos]",
-        type=str,
-        default="cos",
-    )
-
-    vae_asy_os.add_argument(
-        "-R",
-        help="radius neighbours n2v embeddings [0.1]",
-        type=float,
-        default=0.1,
-    )
+    vae_asy_os = subparser.add_argument_group(title="Contrastive-vae arguments")
     vae_asy_os.add_argument(
         "--Rc",
         help="radius clustering within radius  [0.01]",
         type=float,
         default=0.01,
     )
-
     vae_asy_os.add_argument(
         "--top_neighbours",
         help="only consider n closest contigs in embedding space as neighbours [50]",
         type=int,
         default=50,
-    )
-    
-    vae_asy_os.add_argument(
-        "--embeds_processed",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings already proprocessed, so they match the contigs dimeniosn",
-    )
-
-    vae_asy_os.add_argument(
-        "--embeds_mask",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings mask so True if contig has neighbour within radious ",
-    )
+    )    
     vae_asy_os.add_argument(
         "--neighs",
         metavar="",
@@ -4139,84 +3130,6 @@ def add_vae_n2v_asy_arguments(subparser):
     )
     return subparser
 
-
-def add_aae_n2v_asy_arguments(subparser):
-    # Embeddings arguments
-    aae_asy_os = subparser.add_argument_group(title="Asymmetric aae arguments")
-    aae_asy_os.add_argument(
-        "--embeds",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings ",
-    )
-    aae_asy_os.add_argument(
-        "--contigs_embedded",
-        metavar="",
-        type=Path,
-        help="paths to contigs that were embedded",
-    )
-    aae_asy_os.add_argument(
-        "--shuffle_embeds",
-        help="shuffle embeddings [False]",
-        action="store_true",
-    )
-    aae_asy_os.add_argument(
-        "--embeds_loss",
-        help="Reconstruction loss for the embeddings [cos]",
-        type=str,
-        default="cos",
-    )
-
-    aae_asy_os.add_argument(
-        "-R",
-        help="radius neighbours n2v embeddings [0.1]",
-        type=float,
-        default=0.1,
-    )
-
-    aae_asy_os.add_argument(
-        "--top_neighbours",
-        help="only consider n closest contigs in embedding space as neighbours [50]",
-        type=int,
-        default=50,
-    )
-    
-    aae_asy_os.add_argument(
-        "--embeds_processed",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings already proprocessed, so they match the contigs dimeniosn",
-    )
-
-    aae_asy_os.add_argument(
-        "--embeds_mask",
-        metavar="",
-        type=Path,
-        help="paths to graph embeddings mask so True if contig has neighbour within radious ",
-    )
-    aae_asy_os.add_argument(
-        "--neighs",
-        metavar="",
-        type=Path,
-        help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
-    )
-
-    aae_asy_os.add_argument(
-        "--gamma",
-        help="Weight for the embeddings reconstruction loss [0.1]",
-        type=float,
-        default=0.1,
-    )
-
-    aae_asy_os.add_argument(
-        "--delta",
-        help="Weight for the Y contrastive losss [1.0]",
-        type=float,
-        default=1.0,
-    )
-
-
-    return subparser
 
 
 
@@ -4258,13 +3171,11 @@ def main():
     AVAMB = "avamb"
     RECLUSTER = "recluster"
     VAMB_ASY = "vae_asy"
-    VAMB_SY = "vae_sy"
-    AAMB_ASY = "aae_asy"
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
         help="""
-        VAMB, TaxVAMB, AVAMB,VAMB_ASY,VAMB_SY,AAMB_ASY binners
+        VAMB, TaxVAMB, AVAMB,VAMB_ASY binners
         """,
     )
     subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
@@ -4343,33 +3254,6 @@ def main():
     add_vae_n2v_asy_arguments(vae_asy_parser)
     add_clustering_arguments(vae_asy_parser)
 
-    vae_sy_parser = subparsers_model.add_parser(
-        VAMB_SY,
-        help="""
-        Variational Autoencoder binner that besides coabundances and TNF also leverages
-        assembly graph information symmetric.
-        """,
-    )
-    add_input_output_arguments(vae_sy_parser)
-    add_vae_arguments(vae_sy_parser)
-    add_vae_n2v_arguments(vae_sy_parser)
-    add_clustering_arguments(vae_sy_parser)
-
-
-    aae_asy_parser = subparsers_model.add_parser(
-        AAMB_ASY,
-        help="""
-        Adversarial Autoencoder binner that besides coabundances and TNF also leverages
-        assembly graph information by applying a contrastive loss on Y.
-        """,
-    )
-    add_input_output_arguments(aae_asy_parser)
-    add_vae_arguments(aae_asy_parser)
-    add_aae_arguments(aae_asy_parser)
-    add_aae_n2v_asy_arguments(aae_asy_parser)
-    add_clustering_arguments(aae_asy_parser)
-
-
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -4385,8 +3269,6 @@ def main():
             AVAMB: VAEAAEArguments,
             TAXVAMB: VAEVAEArguments,
             VAMB_ASY: VAEASYarguments,
-            VAMB_SY: VAESYarguments,
-            AAMB_ASY: AAEASYarguments,
         }
         runner = classes_map[args.model_subcommand](args)
     elif args.subcommand == RECLUSTER:
@@ -4401,3 +3283,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,7 +1,7 @@
 from typing import Optional, IO, Union
 from pathlib import Path
 import vamb.vambtools as _vambtools
-from vamb.cluster import _normalize, _calc_distances
+#from vamb.cluster import _normalize, _calc_distances
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
 from torch.nn.functional import softmax as _softmax
@@ -57,14 +57,13 @@ def set_batchsize(
 def make_dataloader_n2v(
     rpkm: _np.ndarray,
     tnf: _np.ndarray,
-    embeddings: _np.ndarray,
-    embeddings_mask: _np.ndarray,
+    neighs_mask: _np.ndarray,
     neighs: _np.ndarray,
     lengths: _np.ndarray,
     batchsize: int = 256,
     destroy: bool = False,
     cuda: bool = False,
-) -> tuple[_DataLoader[tuple[Tensor, Tensor, Tensor, Tensor]], _np.ndarray]:
+) -> tuple[_DataLoader[tuple[Tensor, Tensor, Tensor, Tensor,Tensor,Tensor]], _np.ndarray]:
     """Create a DataLoader and a contig mask from RPKM and TNF.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
@@ -75,10 +74,8 @@ def make_dataloader_n2v(
     Inputs:
         rpkm: RPKM matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x N_TNF)
-        embeddings: embeddings matrix (N_contigs x embedding_size)
-        embeddings_mask: boolean vector of len == N_contigs, where True if
-        contig has neighs withing distance on embedding space and if contig had neighbours in the graph.
-        neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices.
+        neighs_mask: boolean vector of len == N_contigs, where True if contig has neighs withing distance on embedding space and if contig had neighbours in the assembly-alignment graph.
+        neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices
         lenghts: contig lenghts
         batchsize: Starting size of minibatches for dataloader
         destroy: Mutate rpkm and tnf array in-place instead of making a copy.
@@ -92,12 +89,11 @@ def make_dataloader_n2v(
     if (
         not isinstance(rpkm, _np.ndarray)
         or not isinstance(tnf, _np.ndarray)
-        or not isinstance(embeddings, _np.ndarray)
-        or not isinstance(embeddings_mask, _np.ndarray)
-        # or not isinstance(neighs, _np.ndarray)
+        or not isinstance(neighs_mask, _np.ndarray)
+        or not isinstance(neighs, _np.ndarray)
     ):
         raise ValueError(
-            "TNF, RPKM, Embedding, Embedding mask, and neighs must be Numpy arrays"
+            "TNF, RPKM, neighs, and neighs mask must be Numpy arrays"
         )
 
     if batchsize < 1:
@@ -106,23 +102,20 @@ def make_dataloader_n2v(
     if (
         len(rpkm) != len(tnf)
         or len(tnf) != len(lengths)
-        or len(embeddings) != len(lengths)
-        or len(embeddings_mask) != len(lengths)
+        or len(neighs_mask) != len(lengths)
         or len(neighs) != len(lengths)
     ):
         raise ValueError(
-            "Lengths of TNF, RPKM, Embedding, Embedding mask,neighs, and lengths arrays must be the same"
+            "Lengths of TNF, RPKM, neighs, neighs mask, and lengths arrays must be the same"
         )
 
     if not (
         rpkm.dtype
         == tnf.dtype
-        == embeddings.dtype
-        == embeddings_mask.dtype
         == _np.float32
     ):
         raise ValueError(
-            "TNF, RPKM, Embedding, and Embedding mask must be Numpy arrays of dtype float32"
+            "TNF, and RPKM  must be Numpy arrays of dtype float32"
         )
 
     ### Copy arrays and mask them ###
@@ -131,9 +124,8 @@ def make_dataloader_n2v(
     if not destroy:
         rpkm = rpkm.copy()
         tnf = tnf.copy()
-        embeddings = embeddings.copy()
-        embeddings_mask = embeddings_mask.copy()
-        # neighs = neighs.copy()
+        neighs_mask = neighs_mask.copy()
+        neighs = neighs.copy()
 
     # Normalize samples to have same depth
     sample_depths_sum = rpkm.sum(axis=0)
@@ -182,8 +174,7 @@ def make_dataloader_n2v(
     tnftensor = _torch.from_numpy(tnf)
     total_abundance_tensor = _torch.from_numpy(total_abundance)
     weightstensor = _torch.from_numpy(weights)
-    embeddingstensor = _torch.from_numpy(embeddings)
-    embeddings_masktensor = _torch.from_numpy(embeddings_mask)
+    neighs_masktensor = _torch.from_numpy(neighs_mask)
     indicestensor = _torch.from_numpy(indices)
 
     n_workers = 4 if cuda else 1
@@ -191,8 +182,7 @@ def make_dataloader_n2v(
         depthstensor,
         tnftensor,
         total_abundance_tensor,
-        embeddingstensor,
-        embeddings_masktensor,
+        neighs_masktensor,
         weightstensor,
         indicestensor,
     )
@@ -214,12 +204,16 @@ class VAE(_nn.Module):
 
     Instantiate with:
         nsamples: Number of samples in abundance matrix
+        ncontigs: Number of contigs present in the catalog
+        neighs_object: Array of list containing the indexes of the neighbouring contigs
         nhiddens: list of n_neurons in the hidden layers [None=Auto]
         nlatent: Number of neurons in the latent layer [32]
         alpha: Approximate starting TNF/(CE+TNF) ratio in loss. [None = Auto]
         beta: Multiply KLD by the inverse of this value [200]
+        gamma: Weight for the contrastive loss term [1.0]
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
+        seed: Seed set from where to sample random numbers
 
     vae.trainmodel(dataloader, nepochs batchsteps, lrate, logfile, modelfile)
         Trains the model, returning None
@@ -235,7 +229,6 @@ class VAE(_nn.Module):
         self,
         nsamples: int,
         ncontigs: int,
-        n_embedding: int,
         neighs_object: _np.ndarray,
         nhiddens: Optional[list[int]] = None,
         nlatent: int = 32,
@@ -246,7 +239,6 @@ class VAE(_nn.Module):
         cuda: bool = False,
         seed: int = 0,
         margin: float = 0.01,
-        embs_loss: str = "cos",
     ):
         if nlatent < 1:
             raise ValueError(f"Minimum 1 latent neuron, not {nlatent}")
@@ -285,8 +277,6 @@ class VAE(_nn.Module):
         self.usecuda = cuda
         self.nsamples = nsamples
         self.ncontigs = ncontigs
-        self.n_embedding = n_embedding
-        self.embs_loss = embs_loss
 
         self.ntnf = 103
         self.alpha = alpha
@@ -305,7 +295,6 @@ class VAE(_nn.Module):
 
         # Add all other hidden layers
         for nin, nout in zip(
-            # [self.nsamples + self.ntnf + self.n_embedding] + self.nhiddens,
             [self.nsamples + self.ntnf + 1] + self.nhiddens,
             self.nhiddens,
         ):
@@ -334,7 +323,7 @@ class VAE(_nn.Module):
         self.mu_container = _torch.randn(
             self.ncontigs, self.nlatent, dtype=_torch.float32
         )
-
+        
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
 
@@ -388,17 +377,14 @@ class VAE(_nn.Module):
         # If multiple samples, apply softmax
         if self.nsamples > 1:
             depths_out = _softmax(depths_out, dim=1)
-        # print(depths_out.shape,emb_out.shape,tnf_out.shape)
-        return depths_out, tnf_out, abundance_out  # , emb_out
+        return depths_out, tnf_out, abundance_out 
 
     def forward(
-        # self, depths: Tensor, tnf: Tensor, emb_in: Tensor
         self,
         depths: Tensor,
         tnf: Tensor,
         abundance: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        # tensor = _torch.cat((_torch.cat((depths, tnf), 1), emb_in), 1)
         tensor = _torch.cat((depths, tnf, abundance), 1)
         mu = self._encode(tensor)
         latent = self.reparameterize(mu)
@@ -417,9 +403,10 @@ class VAE(_nn.Module):
         mu: Tensor,
         weights: Tensor,
         preds_idxs: Tensor,
-        emb_mask: Tensor,
+        neighs_mask: Tensor,
         warmup: bool,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        
         # If multiple samples, use cross entropy, else use SSE for abundance
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
@@ -442,19 +429,12 @@ class VAE(_nn.Module):
         weighed_kld = kld * kld_weight
 
         # embedding loss
+        loss_emb, loss_emb_std = self.cosinesimilarity_loss(
+            mu,
+            preds_idxs,
+            neighs_mask,
+        )
 
-        if self.embs_loss == "cos":
-            loss_emb, loss_emb_std = self.cosinesimilarity_loss(
-                mu,
-                preds_idxs,
-                emb_mask,
-            )
-        elif self.embs_loss == "euclidean":
-            loss_emb, loss_emb_std = self.euclidean_loss(
-                mu,
-                preds_idxs,
-                emb_mask,
-            )
         loss_emb_cat = _torch.cat(
             (
                 loss_emb.unsqueeze(0) - self.margin,
@@ -463,40 +443,33 @@ class VAE(_nn.Module):
             dim=0,
         )
 
-        if warmup:
-            reconstruction_loss = weighed_ce + weighed_ab + weighed_sse
-        else:
-            reconstruction_loss = (
-                weighed_ce
-                + weighed_ab
-                + weighed_sse
-                # + _torch.max(loss_emb_cat, dim=0)[0] * self.gamma
-            )
+        reconstruction_loss = (
+            weighed_ce
+            + weighed_ab
+            + weighed_sse
+        )
         loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
             loss_emb_cat, dim=0
         )[0] * self.gamma
-        loss_emb_pop = loss_emb[emb_mask]
-        loss_emb_pop_std = loss_emb_std[emb_mask]
+        loss_emb_pop = loss_emb[neighs_mask]
+        loss_emb_pop_std = loss_emb_std[neighs_mask]
         return (
             loss.mean(),
             weighed_ab.mean(),
             weighed_ce.mean(),
             weighed_sse.mean(),
             weighed_kld.mean(),
-            loss_emb_pop.mean(),  # .sum(dim=0) / _torch.sum(emb_mask),  # stil neccesary to averge ???
+            loss_emb_pop.mean(), 
             loss_emb_pop_std.mean()
-            # loss_emb_unpop.mean(),
         )
 
-        # return loss.mean(), ce.mean(), sse.mean(), kld.mean()
+    def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
+        avg_cosine_distances = _torch.empty(len(mu))
+        std_cosine_distances = _torch.empty(len(mu))
 
-    def cosinesimilarity_loss(self, mu, idxs_preds, emb_mask):
-        avg_cosine_distances = []
-        std_cosine_distances = []
-
-        for mu_i, idx_pred, emb_mask_i in zip(mu, idxs_preds, emb_mask):
-            if len(self.neighs[idx_pred]) == 0 or not emb_mask_i:
-                # If it has no neighbors or emb_mask_i is False
+        for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
+            if len(self.neighs[idx_pred]) == 0 or not neighs_mask_i:
+                # If it has no neighbors or neighs_mask_i is False
                 cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
                 avg_cosine_distance = cosine_distances
                 std_cosine_distance = _torch.tensor(0.0)
@@ -515,50 +488,12 @@ class VAE(_nn.Module):
                 std_cosine_distance = cosine_distances.std(unbiased=False)
 
             # Append to the result lists
-            avg_cosine_distances.append(avg_cosine_distance)
-            std_cosine_distances.append(std_cosine_distance)
+            avg_cosine_distances[i] = avg_cosine_distance
+            std_cosine_distances[i] = std_cosine_distance
 
         return (
-            _torch.stack(avg_cosine_distances),
-            _torch.stack(std_cosine_distances),
-        )
-
-    def euclidean_loss(self, mu, idxs_preds, emb_mask):
-        avg_euclidean_distances = []
-        std_euclidean_distances = []
-
-        for mu_i, idx_pred, emb_mask_i in zip(mu, idxs_preds, emb_mask):
-            if (
-                len(self.neighs[idx_pred]) == 0 or emb_mask_i == False
-            ):  # if it has no neighbours
-                euclidean_distances = (mu_i.unsqueeze(0) - mu_i.unsqueeze(0)).pow(2)
-
-                avg_euclidean_distances.append(euclidean_distances.mean())
-                std_euclidean_distances.append(euclidean_distances.std(unbiased=False))
-                # print("avg_euclidean_distance with itself", avg_euclidean_distances[-1])
-                continue
-            assert len(self.neighs[idx_pred]) != 0
-            # Select the neighs
-
-            mus_neighs = self.mu_container[self.neighs[idx_pred]]
-
-            # Compute euclidean distance
-            euclidean_distances = (mu_i.unsqueeze(0) - mus_neighs).pow(2)
-
-            # Compute the average euclidean distance for the specific batch item
-
-            avg_euclidean_distance = euclidean_distances.mean()
-            std_euclidean_distance = euclidean_distances.std(unbiased=False)
-            # print(euclidean_distances, euclidean_distances.std())
-            avg_euclidean_distances.append(avg_euclidean_distance)
-            std_euclidean_distances.append(std_euclidean_distance)
-            # print("avg_euclidean_distance", avg_euclidean_distances[-1])
-
-        # if len(avg_euclidean_distances) == 0:
-        #    return _torch.zeros(mu.shape[0])
-        # print(_torch.stack(avg_euclidean_distances).shape)
-        return _torch.stack(avg_euclidean_distances), _torch.stack(
-            std_euclidean_distances
+            avg_cosine_distances,
+            std_cosine_distances,
         )
 
     def trainepoch(
@@ -569,7 +504,7 @@ class VAE(_nn.Module):
         batchsteps: list[int],
         warmup: bool = False,
         # warmup_only_emb: bool = False,
-    ) -> _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]]:
+    ) -> _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]]:
         self.train()
 
         epoch_loss = 0.0
@@ -578,12 +513,7 @@ class VAE(_nn.Module):
         epoch_celoss = 0.0
         epoch_embloss_pop = 0.0
         epoch_embstd_pop = 0.0
-        # epoch_embloss_unpop = 0.0
         epoch_absseloss = 0.0
-
-        # epoch_embloss_neg_pop = 0.0
-        # epoch_embstd_neg_pop = 0.0
-        # epoch_embloss_neg_unpop = 0.0
 
         if epoch in batchsteps:
             data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
@@ -592,34 +522,28 @@ class VAE(_nn.Module):
             depths_in,
             tnf_in,
             abundance_in,
-            emb_in,
-            emb_mask,
+            neighs_mask,
             weights,
             preds_idxs,
         ) in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
-            emb_in.requires_grad = True
-            # preds_idxs.requires_grad = True
             preds_idxs = preds_idxs.long()
-            emb_mask = emb_mask.bool()
+            neighs_mask = neighs_mask.bool()
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
-                emb_in = emb_in.cuda()
-                emb_mask = emb_mask.cuda()
+                neighs_mask = neighs_mask.cuda()
                 preds_idxs = preds_idxs.cuda()
                 weights = weights.cuda()
                 abundance_in = abundance_in.cuda()
 
             optimizer.zero_grad()
 
-            # depths_out, tnf_out, mu = self(depths_in, tnf_in, emb_in)
             depths_out, tnf_out, abundance_out, mu = self(
                 depths_in, tnf_in, abundance_in
             )
 
-            # Here, if epoch > 1, I need to update the self.mu_obj, maybe even if it is not epoch > 1
             self.mu_container[preds_idxs] = mu.detach()
 
             (
@@ -640,27 +564,20 @@ class VAE(_nn.Module):
                 mu,
                 weights,
                 preds_idxs,
-                emb_mask,
+                neighs_mask,
                 warmup=True if epoch == 0 else warmup,
             )
-            # print(std_emb_pop)
+
             loss.backward()
             optimizer.step()
-            # print(emb_loss.shape, emb_loss_unpop.shape, "\n")
+
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
             epoch_sseloss += sse.data.item()
             epoch_celoss += ce.data.item()
-            epoch_embloss_pop += loss_emb_pop.item()  # .data.item()
+            epoch_embloss_pop += loss_emb_pop.item() 
             epoch_absseloss += ab_sse.data.item()
-            epoch_embstd_pop += loss_emb_pop_std.item()  # .data.item()
-            # epoch_embloss_unpop += loss_emb_unpop.item()  # .data.item()
-
-            # epoch_embloss_neg_pop += loss_emb_neg_pop.item()  # .data.item()
-            # epoch_embstd_neg_pop += std_emb_neg_pop.item()  # .data.item()
-            # epoch_embloss_neg_unpop += loss_emb_neg_unpop.item()  # .data.item()
-
-            # epoch_embloss_unpop += loss_emb_unpop.item()  # .data.item()
+            epoch_embstd_pop += loss_emb_pop_std.item() 
 
         logger.info(
             "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tembloss_std_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
@@ -671,15 +588,11 @@ class VAE(_nn.Module):
                 epoch_sseloss / len(data_loader),
                 epoch_embloss_pop / len(data_loader),
                 epoch_embstd_pop / len(data_loader),
-                # epoch_embloss_neg_pop / len(data_loader),
-                # epoch_embstd_neg_pop / len(data_loader),
                 epoch_kldloss / len(data_loader),
                 data_loader.batch_size,
             )
         )
-
         self.eval()
-
         return data_loader
 
     def encode(self, data_loader) -> _np.ndarray:
@@ -696,7 +609,7 @@ class VAE(_nn.Module):
             data_loader, data_loader.batch_size, encode=True
         )
 
-        depths_array, _, _, _, _, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -706,7 +619,7 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, ab, emb, _, _, _ in new_data_loader:
+            for depths, tnf, ab, _, _, _ in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
@@ -735,11 +648,14 @@ class VAE(_nn.Module):
         """
         state = {
             "nsamples": self.nsamples,
+            "ncontigs": self.ncontigs,
             "alpha": self.alpha,
             "beta": self.beta,
+            "gamma": self.gamma,
             "dropout": self.dropout,
             "nhiddens": self.nhiddens,
             "nlatent": self.nlatent,
+            "margin": self.margin,
             "state": self.state_dict(),
         }
 
@@ -750,7 +666,6 @@ class VAE(_nn.Module):
         cls, path: Union[IO[bytes], str], cuda: bool = False, evaluate: bool = True
     ):
         """Instantiates a VAE from a model file.
-
         Inputs:
             path: Path to model file as created by functions VAE.save or
                   VAE.trainmodel.
@@ -759,7 +674,7 @@ class VAE(_nn.Module):
 
         Output: VAE with weights and parameters matching the saved network.
         """
-
+        
         # Forcably load to CPU even if model was saves as GPU model
         dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
 
@@ -791,7 +706,6 @@ class VAE(_nn.Module):
         lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
         modelfile: Union[None, str, Path, IO[bytes]] = None,
-        warmup: bool = False,
     ):
         """Train the autoencoder from depths array and tnf array.
 
@@ -802,7 +716,7 @@ class VAE(_nn.Module):
             batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
             logfile: Print status updates to this file if not None [None]
             modelfile: Save models to this file if not None [None]
-
+            
         Output: None
         """
 
@@ -838,22 +752,7 @@ class VAE(_nn.Module):
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape  # type: ignore
-        n_embedding = dataloader.dataset.tensors[2].shape[1]  # type: ignore
         optimizer = _Adam(self.parameters(), lr=lrate)
-        if warmup:
-            # Warm-up schedule: linearly increase the learning rate from 0 to initial_lr over 10 epochs
-            warmup_epochs = 10
-            initial_lr = lrate
-
-            # Lambda function to compute the learning rate multiplier
-            lr_lambda = (
-                lambda epoch: (epoch + 1) / warmup_epochs
-                if epoch < warmup_epochs
-                else 1
-            )
-
-            # Create a learning rate scheduler
-            scheduler = LambdaLR(optimizer, lr_lambda)
 
         logger.info(f"\tNetwork properties:")
         logger.info(f"\tCUDA: {self.usecuda}")
@@ -862,7 +761,6 @@ class VAE(_nn.Module):
         logger.info(f"\tGamma: {self.gamma}")
         logger.info(f"\tMargin: {self.margin}")
         logger.info(f"\tDropout: {self.dropout}")
-        logger.info(f"\tWarmup: {warmup}")
         logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
         logger.info(f"\tN latent: {self.nlatent}")
         logger.info(f"\n\tTraining properties:")
@@ -874,9 +772,8 @@ class VAE(_nn.Module):
         logger.info(f"\tBatchsteps: {batchsteps_string}")
         logger.info(f"\tLearning rate: {lrate}")
         logger.info(f"\tN sequences: {ncontigs}")
-        logger.info(f"\tN samples: {nsamples}")
-        logger.info(f"\tEmbedding size: {n_embedding}")
-        logger.info(f"\tEmbedding loss: Asymmetric {self.embs_loss}\n\n")
+        logger.info(f"\tN samples: {nsamples}\n\n")
+        
 
         # Train
         for epoch in range(nepochs):
@@ -885,12 +782,7 @@ class VAE(_nn.Module):
                 epoch,
                 optimizer,
                 sorted(batchsteps_set),
-                warmup=False if (warmup == False or epoch >= warmup_epochs) else True,
-                # emb_loss=emb_loss,
             )
-            if warmup:
-                scheduler.step()
-
         # Save weights - Lord forgive me, for I have sinned when catching all exceptions
         if modelfile is not None:
             try:
