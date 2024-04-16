@@ -207,6 +207,7 @@ class Composition:
         # Convert rest of contigs
         Composition._convert(raw, projected)
         tnfs_arr = projected.take()
+        _vambtools.mask_lower_bits(tnfs_arr, 12)
 
         # Don't use reshape since it creates a new array object with shared memory
         tnfs_arr.shape = (len(tnfs_arr) // 103, 103)
