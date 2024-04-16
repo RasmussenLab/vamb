@@ -294,6 +294,15 @@ def torch_inplace_maskarray(array, mask):
     return array
 
 
+def mask_lower_bits(floats: _np.ndarray, bits: int) -> None:
+    if bits < 0 or bits > 23:
+        raise ValueError("Must mask between 0 and 23 bits")
+
+    mask = ~_np.uint32(2**bits - 1)
+    u = floats.view(_np.uint32)
+    u &= mask
+
+
 class Reader:
     """Use this instead of `open` to open files which are either plain text,
     gzipped, bzip2'd or zipped with LZMA.

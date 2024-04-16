@@ -129,6 +129,7 @@ class Abundance:
                 comp_metadata.identifiers if verify_refhash else None,
                 comp_metadata.mask,
             )
+            vambtools.mask_lower_bits(matrix, 12)
             return cls(matrix, [str(p) for p in paths], minid, refhash)
         # Else, we load it in chunks, then assemble afterwards
         else:
@@ -183,6 +184,7 @@ class Abundance:
         matrix = _np.empty((mask.sum(), len(paths)), dtype=_np.float32)
         for filename, (chunkstart, chunkstop) in zip(filenames, chunks):
             matrix[:, chunkstart:chunkstop] = vambtools.read_npz(filename)
+        vambtools.mask_lower_bits(matrix, 12)
 
         shutil.rmtree(cache_directory)
 

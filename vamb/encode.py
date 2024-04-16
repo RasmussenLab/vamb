@@ -466,6 +466,7 @@ class VAE(_nn.Module):
                 row += len(mu)
 
         assert row == length
+        _vambtools.mask_lower_bits(latent, 12)
         return latent
 
     def save(self, filehandle):
