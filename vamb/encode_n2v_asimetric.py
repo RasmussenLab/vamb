@@ -1,5 +1,6 @@
 from typing import Optional, IO, Union
 from pathlib import Path
+import vamb
 import vamb.vambtools as _vambtools
 #from vamb.cluster import _normalize, _calc_distances
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
@@ -286,6 +287,8 @@ class VAE(_nn.Module):
         self.nlatent = nlatent
         self.dropout = dropout
         self.margin = margin
+        
+
 
         # Initialize lists for holding hidden layers
         self.encoderlayers = _nn.ModuleList()
@@ -429,7 +432,8 @@ class VAE(_nn.Module):
         weighed_kld = kld * kld_weight
 
         # embedding loss
-        loss_emb, loss_emb_std = self.cosinesimilarity_loss(
+        loss_emb = self.cosinesimilarity_loss(
+
             mu,
             preds_idxs,
             neighs_mask,
@@ -451,8 +455,15 @@ class VAE(_nn.Module):
         loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
             loss_emb_cat, dim=0
         )[0] * self.gamma
+
+        # loss = _torch.max(
+        #     loss_emb_cat, dim=0
+        # )[0] * self.gamma
+
+
         loss_emb_pop = loss_emb[neighs_mask]
-        loss_emb_pop_std = loss_emb_std[neighs_mask]
+
+        
         return (
             loss.mean(),
             weighed_ab.mean(),
@@ -460,41 +471,41 @@ class VAE(_nn.Module):
             weighed_sse.mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(), 
-            loss_emb_pop_std.mean()
+
         )
 
     def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
         avg_cosine_distances = _torch.empty(len(mu))
-        std_cosine_distances = _torch.empty(len(mu))
+
 
         for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
-            if len(self.neighs[idx_pred]) == 0 or not neighs_mask_i:
+            if not neighs_mask_i:
+            
                 # If it has no neighbors or neighs_mask_i is False
                 cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
                 avg_cosine_distance = cosine_distances
-                std_cosine_distance = _torch.tensor(0.0)
+
             else:
                 # Select the neighbors
                 mus_neighs = self.mu_container[self.neighs[idx_pred]]
-                # Compute cosine distances
-                cosine_distances = 1 - F.cosine_similarity(
-                    mu_i.unsqueeze(0), mus_neighs, dim=-1
-                )
-                # print(cosine_distances)
-
-                # Compute statistics for cosine distances
+                
+                # Compute distances
+                cosine_distances = 2* self.calc_cosine_distances(mus_neighs, mu_i )
                 avg_cosine_distance = cosine_distances.mean()
-
-                std_cosine_distance = cosine_distances.std(unbiased=False)
 
             # Append to the result lists
             avg_cosine_distances[i] = avg_cosine_distance
-            std_cosine_distances[i] = std_cosine_distance
 
-        return (
-            avg_cosine_distances,
-            std_cosine_distances,
-        )
+        return avg_cosine_distances
+
+    def calc_cosine_distances(self,matrix, vector):
+        "Return vector of cosine distances from rows of normalized matrix to given row."
+        # normalize vector 
+        vector = vector/(vector.norm() * (2**0.5))
+        
+        dists = 0.5 - matrix.matmul(vector)
+        
+        return dists
 
     def trainepoch(
         self,
@@ -544,7 +555,8 @@ class VAE(_nn.Module):
                 depths_in, tnf_in, abundance_in
             )
 
-            self.mu_container[preds_idxs] = mu.detach()
+            self.mu_container[preds_idxs] = vamb.cluster._normalize(mu.detach())
+            #self.mu_container[preds_idxs] = mu.detach()
 
             (
                 loss,
@@ -553,7 +565,6 @@ class VAE(_nn.Module):
                 sse,
                 kld,
                 loss_emb_pop,
-                loss_emb_pop_std,
             ) = self.calc_loss(
                 depths_in,
                 depths_out,
@@ -577,17 +588,15 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
             epoch_embloss_pop += loss_emb_pop.item() 
             epoch_absseloss += ab_sse.data.item()
-            epoch_embstd_pop += loss_emb_pop_std.item() 
 
         logger.info(
-            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tembloss_std_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
+            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ttKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
                 epoch_loss / len(data_loader),
                 epoch_celoss / len(data_loader),
                 epoch_absseloss / len(data_loader),
                 epoch_sseloss / len(data_loader),
                 epoch_embloss_pop / len(data_loader),
-                epoch_embstd_pop / len(data_loader),
                 epoch_kldloss / len(data_loader),
                 data_loader.batch_size,
             )

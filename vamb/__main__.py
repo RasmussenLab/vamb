@@ -994,10 +994,16 @@ def find_neighbours(
 
     # Set the diagonal to a value greater than the threshold to avoid self-selection
     np.fill_diagonal(cosine_distances, 1)
+    logger.info("diagonal_filled")
 
     # Use NumPy operations for faster neighbor finding
     mask = cosine_distances < radius
+    
+    logger.info("mask generated with shape %i, %i"%(mask.shape[0],mask.shape[1]))
+
     idxs_with_neighs = np.any(mask, axis=1)
+    
+    logger.info("idxs_with_neighs generated")
     
     neighs = [
         []
@@ -1007,7 +1013,7 @@ def find_neighbours(
         else []
         for i in range(mask.shape[0])
     ]
-
+    logger.info("neighs found")
     # new part
     if sort == True:
         neighs_sorted = []
@@ -1049,7 +1055,6 @@ def find_looners_and_expand_neighs(
     # Set the diagonal to a value greater than the threshold to avoid self-selection
     np.fill_diagonal(cosine_distances, 1)
     mask_looners  = np.zeros(len(cosine_distances),dtype=bool)
-    neighs_g = nx.Graph()
     looner_contigs = set()
     for c_idx in range(len(cosine_distances)):
         if np.min(cosine_distances[c_idx]) > radius_looner and c_idx not in contig_idxs_with_neighs:
@@ -1747,235 +1752,309 @@ def run_n2v_asimetric(
     assert latent is not None
     assert comp_metadata.nseqs == len(latent)
 
-    # Cluster first contigs within the neighbourhoods margins
-    logger.info("Computing cosine distances")
+    logger.info("Neighbourhoods before aggregation: %i"%len(find_neighbourhoods(comp_metadata.identifiers,neighs_object).keys()))
 
-    ## This step must be optimized
-    cosine_latent_distances = cdist(latent, latent, metric="cosine") ## USED FOR ALMOST ALL CLUSTERING APPROACHES BELOW
+    ## optimized clustering
+    logger.info("Clustering baased on the neigh communities")
     
-    ## Connect contigs if within 0.01 distance in vamb's latent space 
-    logger.info("Finding community neighbours on the latent space")
+    latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask = cluster_hoods_based(latent,neighs_object,comp_metadata.identifiers,neighs_options.radius_clustering)
+    logger.info("Clustering baased on the neigh communities finished")
 
-    ## from vamb's latent space, find contigs that are within 0.01 cosine distance
-    latent_neighs, _ = find_neighbours(
-        cosine_latent_distances, [], neighs_options.radius_clustering, sort=False
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_with_looners")),
+        vamb_options.out_dir.joinpath("bins_within_radius_with_looners"),
+        comp_options.path,
+        latent_communities_cs_d,
+        comp_metadata.identifiers[
+            looner_mask | contigs_in_latent_communities_mask
+        ],
+        comp_metadata.lengths[
+            looner_mask | contigs_in_latent_communities_mask
+        ],
     )
-    (
-        neighbourhood_cs_d,
-        withinradiusclusters_cs_d,
-        withinradiusclusters_g,
-        mask_contigs_in_neighbourhoods,
-        mask_contigs_withinR_neighbourhoods,
-    ) = neighs_within_radius(neighs_object, comp_metadata.identifiers, latent_neighs)
+    logger.info(
+        "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
+    )
+
+    cluster_and_write_files(
+        vamb_options,
+        cluster_options,
+        str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius_with_looners")),
+        vamb_options.out_dir.joinpath("bins_outside_radius_with_looners"),
+        comp_options.path,
+        latent.copy()[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],
+        comp_metadata.identifiers[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],  # type:ignore
+        comp_metadata.lengths[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],  # type:ignore
+    )
+
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    clusterspath = vamb_options.out_dir.joinpath(
+        "vae_clusters_outside_radius_with_looners_unsplit.tsv"
+    )
+    merged_cl_cs_d = latent_communities_cs_d.copy()
+    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+    for cl in set(cl_c_ar[:, 0]):
+        merged_cl_cs_d[cl] = set()
+
+    for cl, c in cl_c_ar:
+        merged_cl_cs_d[cl].add(c)
+    
+    print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        comp_metadata.identifiers
+    )
+    # save clusters within margins and outside margins
+
+    write_clusters_and_bins(
+        vamb_options,
+        cluster_options.binsplitter,
+        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_with_looners_complete")),
+        vamb_options.out_dir.joinpath("bins_within_radius_with_looners_complete"),
+        comp_options.path,
+        merged_cl_cs_d,
+        comp_metadata.identifiers,
+        comp_metadata.lengths,
+    )
+
+
+    # # Cluster first contigs within the neighbourhoods margins
+    # logger.info("Computing cosine distances")
+
+    # ## This step must be optimized
+    # cosine_latent_distances = cdist(latent, latent, metric="cosine") ## USED FOR ALMOST ALL CLUSTERING APPROACHES BELOW
+    
+    # ## Connect contigs if within 0.01 distance in vamb's latent space 
+    # logger.info("Finding community neighbours on the latent space")
+
+    # ## from vamb's latent space, find contigs that are within 0.01 cosine distance
+    # latent_neighs, _ = find_neighbours(
+    #     cosine_latent_distances, [], neighs_options.radius_clustering, sort=False
+    # )
+    # logger.info("Community neighs computed.")
+    # (
+    #     neighbourhood_cs_d,
+    #     withinradiusclusters_cs_d,
+    #     withinradiusclusters_g,
+    #     mask_contigs_in_neighbourhoods,
+    #     mask_contigs_withinR_neighbourhoods,
+    # ) = neighs_within_radius(neighs_object, comp_metadata.identifiers, latent_neighs)
 
     ############ NEIGHBOURHOOD BASED
-    # save clusters based only in neihbourhoods ONLY THERE WILL BE MISSING CONTIGS HERE
-    if True:
+    # save clusters based only in neihbourhoods 
+    if False:
         logger.info("Straegy 1: Clustering based on neighbourhoods")
         
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods")),
-            vamb_options.out_dir.joinpath("bins_neighbourhoods"),
-            comp_options.path,
-            neighbourhood_cs_d,
-            comp_metadata.identifiers[mask_contigs_in_neighbourhoods],
-            comp_metadata.lengths[mask_contigs_in_neighbourhoods],
-        )
+    #     write_clusters_and_bins(
+    #         vamb_options,
+    #         cluster_options.binsplitter,
+    #         str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods")),
+    #         vamb_options.out_dir.joinpath("bins_neighbourhoods"),
+    #         comp_options.path,
+    #         neighbourhood_cs_d,
+    #         comp_metadata.identifiers[mask_contigs_in_neighbourhoods],
+    #         comp_metadata.lengths[mask_contigs_in_neighbourhoods],
+    #     )
 
-        # now cluster the remaining contigs not within margins
-        logger.info("\tClustering remaining contigs not in neighbourhoods with vamb's default clustering algorithm")
-        cluster_and_write_files(
-            vamb_options,
-            cluster_options,
-            str(vamb_options.out_dir.joinpath("vae_clusters_outside_neighbourhoods")),
-            vamb_options.out_dir.joinpath("bins_outside_neighbourhoods"),
-            comp_options.path,
-            latent.copy()[~mask_contigs_in_neighbourhoods],
-            comp_metadata.identifiers[~mask_contigs_in_neighbourhoods],  # type:ignore
-            comp_metadata.lengths[~mask_contigs_in_neighbourhoods],  # type:ignore
-        )
-        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-        clusterspath = vamb_options.out_dir.joinpath(
-            "vae_clusters_outside_neighbourhoods_unsplit.tsv"
-        )
-        merged_cl_cs_d = neighbourhood_cs_d.copy()
-        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
-        for cl in set(cl_c_ar[:, 0]):
-            merged_cl_cs_d[cl] = set()
+    #     # now cluster the remaining contigs not within margins
+    #     logger.info("\tClustering remaining contigs not in neighbourhoods with vamb's default clustering algorithm")
+    #     cluster_and_write_files(
+    #         vamb_options,
+    #         cluster_options,
+    #         str(vamb_options.out_dir.joinpath("vae_clusters_outside_neighbourhoods")),
+    #         vamb_options.out_dir.joinpath("bins_outside_neighbourhoods"),
+    #         comp_options.path,
+    #         latent.copy()[~mask_contigs_in_neighbourhoods],
+    #         comp_metadata.identifiers[~mask_contigs_in_neighbourhoods],  # type:ignore
+    #         comp_metadata.lengths[~mask_contigs_in_neighbourhoods],  # type:ignore
+    #     )
+    #     # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    #     clusterspath = vamb_options.out_dir.joinpath(
+    #         "vae_clusters_outside_neighbourhoods_unsplit.tsv"
+    #     )
+    #     merged_cl_cs_d = neighbourhood_cs_d.copy()
+    #     cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+    #     for cl in set(cl_c_ar[:, 0]):
+    #         merged_cl_cs_d[cl] = set()
 
-        for cl, c in cl_c_ar:
-            merged_cl_cs_d[cl].add(c)
+    #     for cl, c in cl_c_ar:
+    #         merged_cl_cs_d[cl].add(c)
         
-        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
-        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-            comp_metadata.identifiers
-        )
-        # save clusters within margins and outside margins
+    #     print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+    #     assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+    #         comp_metadata.identifiers
+    #     )
+    #     # save clusters within margins and outside margins
 
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete")),
-            vamb_options.out_dir.joinpath("bins_neighbourhoods_complete"),
-            comp_options.path,
-            merged_cl_cs_d,
-            comp_metadata.identifiers,
-            comp_metadata.lengths,
-        )          
+    #     write_clusters_and_bins(
+    #         vamb_options,
+    #         cluster_options.binsplitter,
+    #         str(vamb_options.out_dir.joinpath("vae_clusters_neighbourhoods_complete")),
+    #         vamb_options.out_dir.joinpath("bins_neighbourhoods_complete"),
+    #         comp_options.path,
+    #         merged_cl_cs_d,
+    #         comp_metadata.identifiers,
+    #         comp_metadata.lengths,
+    #     )          
     ## STRATEGY 2: First, taking the neighbourhoods_g, connect contis that are withiin 0.01 cosine distance in VAMB's latent space if not already connected, which automatically will merge hoods if within this distance. 
     ## Also, set as looners contigs that are not connected, and that they have no contigs within 0.05 distance in VAMB'S latent space. 
     ## Extracting looners and connecting contigs if within 0.01 latent space cosine distance
-    if True:
+    if False:
         logger.info("Extracting looners, i.e. contigs that have no neighbours and no contigs within 0.05 cosine distance in vamb's latent space, and expanding neighs if within 0.01")
-        logger.info("%i (%i) hoods (contigs) in hoods before merging n2v hoods neighs and vamb neighs (contigs closet than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_d.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_d.values()])))
-        looner_contigs,_,withinradiusclusters_cs_g_updated_with_looners,mask_looners,mask_contigs_in_hoods = find_looners_and_expand_neighs(
-            cosine_latent_distances,
-            np.array([ i for i,neighs in enumerate(neighs_object) if len(neighs) > 0 ],dtype=bool),
-            withinradiusclusters_g,
-            comp_metadata.identifiers,
-            )
-        logger.info("%i (%i) hoods (contigs) in hoods after merging n2v hoods neighs and vamb neighs (contigs closet than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_g_updated_with_looners.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_g_updated_with_looners.values()])))
-        logger.info("%i looners extracted"%len(looner_contigs))
+        # logger.info("%i (%i) hoods (contigs) in hoods before merging n2v hoods neighs and vamb neighs (contigs closet than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_d.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_d.values()])))
+        # looner_contigs,_,withinradiusclusters_cs_g_updated_with_looners,mask_looners,mask_contigs_in_hoods = find_looners_and_expand_neighs(
+        #     cosine_latent_distances,
+        #     np.array([ i for i,neighs in enumerate(neighs_object) if len(neighs) > 0 ],dtype=bool),
+        #     withinradiusclusters_g,
+        #     comp_metadata.identifiers,
+        #     )
+        # logger.info("%i (%i) hoods (contigs) in hoods after merging n2v hoods neighs and vamb neighs (contigs closer than 0.01 in vamb's lstent space)"%(len(withinradiusclusters_cs_g_updated_with_looners.keys()),np.sum([len(cs) for cs in withinradiusclusters_cs_g_updated_with_looners.values()])))
+        # logger.info("%i looners extracted"%len(looner_contigs))
 
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01")),
-            vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01"),
-            comp_options.path,
-            withinradiusclusters_cs_g_updated_with_looners,
-            comp_metadata.identifiers[
-                mask_looners | mask_contigs_in_hoods
-            ],
-            comp_metadata.lengths[
-                mask_looners | mask_contigs_in_hoods
-            ],
-        )
-        # now cluster the remaining contigs not within radius
-        logger.info(
-            "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
-        )
+        # write_clusters_and_bins(
+        #     vamb_options,
+        #     cluster_options.binsplitter,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01")),
+        #     vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01"),
+        #     comp_options.path,
+        #     withinradiusclusters_cs_g_updated_with_looners,
+        #     comp_metadata.identifiers[
+        #         mask_looners | mask_contigs_in_hoods
+        #     ],
+        #     comp_metadata.lengths[
+        #         mask_looners | mask_contigs_in_hoods
+        #     ],
+        # )
+        # # now cluster the remaining contigs not within radius
+        # logger.info(
+        #     "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
+        # )
 
-        cluster_and_write_files(
-            vamb_options,
-            cluster_options,
-            str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius_merged_hoods_0.01")),
-            vamb_options.out_dir.joinpath("bins_outside_radius_merged_hoods_0.01"),
-            comp_options.path,
-            latent.copy()[
-                ~(mask_contigs_in_hoods | mask_looners)
-            ],
-            comp_metadata.identifiers[
-                ~(mask_contigs_in_hoods | mask_looners)
-            ],  # type:ignore
-            comp_metadata.lengths[
-                ~(mask_contigs_in_hoods | mask_looners)
-            ],  # type:ignore
-        )
+        # cluster_and_write_files(
+        #     vamb_options,
+        #     cluster_options,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius_merged_hoods_0.01")),
+        #     vamb_options.out_dir.joinpath("bins_outside_radius_merged_hoods_0.01"),
+        #     comp_options.path,
+        #     latent.copy()[
+        #         ~(mask_contigs_in_hoods | mask_looners)
+        #     ],
+        #     comp_metadata.identifiers[
+        #         ~(mask_contigs_in_hoods | mask_looners)
+        #     ],  # type:ignore
+        #     comp_metadata.lengths[
+        #         ~(mask_contigs_in_hoods | mask_looners)
+        #     ],  # type:ignore
+        # )
 
-        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-        clusterspath = vamb_options.out_dir.joinpath(
-            "vae_clusters_outside_radius_merged_hoods_0.01.tsv"
-        )
-        merged_cl_cs_d = withinradiusclusters_cs_g_updated_with_looners.copy()
-        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
-        for cl in set(cl_c_ar[:, 0]):
-            merged_cl_cs_d[cl] = set()
+        # # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+        # clusterspath = vamb_options.out_dir.joinpath(
+        #     "vae_clusters_outside_radius_merged_hoods_0.01.tsv"
+        # )
+        # merged_cl_cs_d = withinradiusclusters_cs_g_updated_with_looners.copy()
+        # cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+        # for cl in set(cl_c_ar[:, 0]):
+        #     merged_cl_cs_d[cl] = set()
 
-        for cl, c in cl_c_ar:
-            merged_cl_cs_d[cl].add(c)
+        # for cl, c in cl_c_ar:
+        #     merged_cl_cs_d[cl].add(c)
         
-        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
-        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-            comp_metadata.identifiers
-        )
-        # save clusters within margins and outside margins
+        # print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+        # assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        #     comp_metadata.identifiers
+        # )
+        # # save clusters within margins and outside margins
 
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01_complete")),
-            vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01_complete"),
-            comp_options.path,
-            merged_cl_cs_d,
-            comp_metadata.identifiers,
-            comp_metadata.lengths,
-        )
+        # write_clusters_and_bins(
+        #     vamb_options,
+        #     cluster_options.binsplitter,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_merged_hoods_0.01_complete")),
+        #     vamb_options.out_dir.joinpath("bins_within_radius_merged_hoods_0.01_complete"),
+        #     comp_options.path,
+        #     merged_cl_cs_d,
+        #     comp_metadata.identifiers,
+        #     comp_metadata.lengths,
+        # )
     
     ############ NEIGHBOURHOOD RADIUS BASED
-    if True:   
+    if False:   
         logger.info("Straegy 2: Clustering based on radius from neighbourhood members")
-        # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius")),
-            vamb_options.out_dir.joinpath("bins_within_radius"),
-            comp_options.path,
-            withinradiusclusters_cs_d,
-            comp_metadata.identifiers[
-                mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
-            ],
-            comp_metadata.lengths[
-                mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
-            ],
-        )
+        # # save clusters within margins ONLY THERE WILL BE MISSING CONTIGS HERE
+        # write_clusters_and_bins(
+        #     vamb_options,
+        #     cluster_options.binsplitter,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_within_radius")),
+        #     vamb_options.out_dir.joinpath("bins_within_radius"),
+        #     comp_options.path,
+        #     withinradiusclusters_cs_d,
+        #     comp_metadata.identifiers[
+        #         mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+        #     ],
+        #     comp_metadata.lengths[
+        #         mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods
+        #     ],
+        # )
 
-        # now cluster the remaining contigs not within radius
-        logger.info(
-            "\tClustering remaining contigs not within a radius distance from neighbourhood members"
-        )
-        clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
-        cluster_and_write_files(
-            vamb_options,
-            cluster_options,
-            str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius")),
-            vamb_options.out_dir.joinpath("bins_outside_radius"),
-            comp_options.path,
-            latent.copy()[
-                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-            ],
-            comp_metadata.identifiers[
-                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-            ],  # type:ignore
-            comp_metadata.lengths[
-                ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
-            ],  # type:ignore
-        )
+        # # now cluster the remaining contigs not within radius
+        # logger.info(
+        #     "\tClustering remaining contigs not within a radius distance from neighbourhood members"
+        # )
+        # clusterspath = vamb_options.out_dir.joinpath("vae_clusters_outside_radius.tsv")
+        # cluster_and_write_files(
+        #     vamb_options,
+        #     cluster_options,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius")),
+        #     vamb_options.out_dir.joinpath("bins_outside_radius"),
+        #     comp_options.path,
+        #     latent.copy()[
+        #         ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+        #     ],
+        #     comp_metadata.identifiers[
+        #         ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+        #     ],  # type:ignore
+        #     comp_metadata.lengths[
+        #         ~(mask_contigs_in_neighbourhoods | mask_contigs_withinR_neighbourhoods)
+        #     ],  # type:ignore
+        # )
 
-        # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-        clusterspath = vamb_options.out_dir.joinpath(
-            "vae_clusters_outside_radius_unsplit.tsv"
-        )
-        merged_cl_cs_d = withinradiusclusters_cs_d.copy()
-        cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
-        for cl in set(cl_c_ar[:, 0]):
-            merged_cl_cs_d[cl] = set()
+        # # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+        # clusterspath = vamb_options.out_dir.joinpath(
+        #     "vae_clusters_outside_radius_unsplit.tsv"
+        # )
+        # merged_cl_cs_d = withinradiusclusters_cs_d.copy()
+        # cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
+        # for cl in set(cl_c_ar[:, 0]):
+        #     merged_cl_cs_d[cl] = set()
 
-        for cl, c in cl_c_ar:
-            merged_cl_cs_d[cl].add(c)
+        # for cl, c in cl_c_ar:
+        #     merged_cl_cs_d[cl].add(c)
         
-        print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
-        assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
-            comp_metadata.identifiers
-        )
-        # save clusters within margins and outside margins
-        clusterspath = vamb_options.out_dir.joinpath(
-            "vae_clusters_within_radius_complete.tsv"
-        )
+        # print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+        # assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        #     comp_metadata.identifiers
+        # )
+        # # save clusters within margins and outside margins
+        # clusterspath = vamb_options.out_dir.joinpath(
+        #     "vae_clusters_within_radius_complete.tsv"
+        # )
 
-        write_clusters_and_bins(
-            vamb_options,
-            cluster_options.binsplitter,
-            str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete")),
-            vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete"),
-            comp_options.path,
-            merged_cl_cs_d,
-            comp_metadata.identifiers,
-            comp_metadata.lengths,
-        )
+        # write_clusters_and_bins(
+        #     vamb_options,
+        #     cluster_options.binsplitter,
+        #     str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete")),
+        #     vamb_options.out_dir.joinpath("vae_clusters_within_radius_complete"),
+        #     comp_options.path,
+        #     merged_cl_cs_d,
+        #     comp_metadata.identifiers,
+        #     comp_metadata.lengths,
+        # )
 
     ############ NEIGHBOURHOOD RADIUS BASED, 2ND ITERATION (considering the )
     #if False:
@@ -2030,6 +2109,74 @@ def run_n2v_asimetric(
         # )
     
     del latent
+
+
+def cluster_hoods_based(
+    latent,
+    neighs,
+    contignames,
+    radius_clustering=0.01,
+    radius_looner=0.5,
+    
+):
+    radius = radius_clustering/2
+    looner_radius=radius_looner/2
+    
+    looner_mask = np.zeros(len(latent),dtype=bool)
+    latent_communities_g = nx.Graph()
+    latent_nz = vamb.cluster._normalize(latent)
+
+    #contigs_in_latent_communities_mask = np.zeros(len(contignames),dtype=bool)
+
+    for i in range(len(latent)):
+        distances = vamb.cluster._calc_distances(latent_nz,i)
+        mask_ = torch.ones(len(latent), dtype=torch.bool)
+        mask_[i] = False
+        within_radius = (distances <= radius) & mask_
+        neighs_graph = neighs[i]
+        if torch.sum(within_radius) == len(neighs_graph) == 0: # potentially a loner
+            within_looner_radius = (distances <= looner_radius) & mask_        
+            if torch.sum(within_looner_radius) == 0:
+                looner_mask[i]=True
+                latent_communities_g.add_node(contignames[i])
+        else:
+            for lat_neigh in np.where(within_radius)[0]:
+                latent_communities_g.add_edge(contignames[i],contignames[lat_neigh])
+            
+            for neigh_idx in neighs_graph:
+                latent_communities_g.add_edge(contignames[i],contignames[neigh_idx])
+            #contigs_in_latent_communities_mask[i]=True
+    latent_communities_cs_d = {
+        "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
+        for i, cs in enumerate(nx.connected_components(latent_communities_g))
+    }
+
+    
+    contigs_in_withinradiusclusters_n = np.sum([len(cs) for cs in latent_communities_cs_d.values() if len(cs) > 1 ])
+    logger.info(
+        "Contigs in within neighbourhoods radius clusters: %i"
+        % contigs_in_withinradiusclusters_n
+    )
+    cluster_with_more_contigs = max(latent_communities_cs_d, key=lambda k : len(latent_communities_cs_d[k]) )
+    
+    n_contigs_max_cluster = len(latent_communities_cs_d[cluster_with_more_contigs])
+    
+#    logger.info("Removing within neighbourhoods radius cluster with more aggregated contigs %i"%n_contigs_max_cluster)
+#    latent_communities_g.remove_nodes_from([c  for c in latent_communities_cs_d[cluster_with_more_contigs]])
+#    del latent_communities_cs_d[cluster_with_more_contigs]
+    contigs_in_latent_communities_mask= np.array([ 1 if c in latent_communities_g.nodes() else 0  for c in contignames ],dtype=bool)
+    logger.info(
+        "Looner contigs: %i"
+        % np.sum(looner_mask)
+    )
+
+    logger.info(
+        "Aggregated neighbourhoods: %i" % (len([cl for cl in latent_communities_cs_d.keys() if cl.startswith("nneighs_")]))
+    )
+
+    return latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask
+
+
     
 def neighs_within_radius(
     neighs_object,
@@ -2067,30 +2214,47 @@ def neighs_within_radius(
     logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
 
     # withinradiusclusters_g = nx.Graph()
-    withinradiusclusters_g = neighbourhoods_graph.copy()
+    hood_cs_d = {
+        "hood_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
+    }
+
+    withinradiusclusters_g = neighbourhoods_graph
     logger.info("Graph object copied")
     singleton_contigs_aggregated = set()
+    edges_to_add = []
     for cs in nx.connected_components(neighbourhoods_graph):
-        break
         # print(cs)
         assert len(cs) > 1, "neighbourhoods should be composed of at least 2 contigs"
         # define contig indices already part of the neighbourhood        
         idxs_cs_already_in_hood = [c2idx[c] for c in cs] 
         
-        # define contig indices not part of the neighbourhood
-        idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
-
-        for idx_c_not_in_hood in idxs_cs_not_in_hood:
-            # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
-            latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
-                set(idxs_cs_already_in_hood)
-            )
-            if len(latent_neighs_neighbourhood) > 0:
-                for latent_neigh_idx in latent_neighs_neighbourhood:
-                    withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
-                    mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
-                    if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
-                        singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
+        for idx_c_already_in_hood in idxs_cs_already_in_hood:
+            idxs_latent_neighs_not_in_hood = set(latent_neighs[idx_c_already_in_hood]) - set(idxs_cs_already_in_hood)
+            if len(idxs_latent_neighs_not_in_hood) > 0:
+                for idx_latent_neighs_not_in_hood in idxs_latent_neighs_not_in_hood:
+                    edges_to_add.append((contignames[idx_c_already_in_hood],contignames[idx_latent_neighs_not_in_hood]))
+                    mask_contigs_withinR_neighbourhoods[idx_latent_neighs_not_in_hood] = True
+                    if contignames[idx_latent_neighs_not_in_hood] not in contigs_in_neighbourhoods:
+                        singleton_contigs_aggregated.add(contignames[idx_latent_neighs_not_in_hood])
+    logger.info("merging finished")
+    logger.info("%i (%i) edges (neighbourhoods) before merging"%(len(withinradiusclusters_g.edges()),len(list(nx.connected_components(withinradiusclusters_g)))))
+    withinradiusclusters_g.add_edges_from(edges_to_add)
+    logger.info("%i (%i) edges (neighbourhoods) after merging"%(len(withinradiusclusters_g.edges()),len(list(nx.connected_components(withinradiusclusters_g)))))
+        # # define contig indices not part of the neighbourhood
+        # idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
+        
+        # for idx_c_not_in_hood in idxs_cs_not_in_hood:
+        #     # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
+        #     latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
+        #         set(idxs_cs_already_in_hood)
+        #     )
+        #     if len(latent_neighs_neighbourhood) > 0:
+        #         for latent_neigh_idx in latent_neighs_neighbourhood:
+        #             withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
+        #             mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
+        #             if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
+        #                 singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
                         
     withinradiusclusters_cs_d = {
         "nneighs_%i" % i: cs
@@ -2111,8 +2275,9 @@ def neighs_within_radius(
         "Aggregated neighbourhoods: %i" % (len(withinradiusclusters_cs_d.keys()))
     )
     return (
-        neighbourhoods_graph,
+        hood_cs_d,
         withinradiusclusters_cs_d,
+        withinradiusclusters_g,
         mask_contigs_in_neighbourhoods,
         mask_contigs_withinR_neighbourhoods,
     )
@@ -2264,106 +2429,6 @@ class VAEAAEArguments(BinnerArguments):
             training_options=self.training_options,
             cluster_options=self.cluster_options,
         )
-
-
-def neighs_within_radius(
-    neighs_object,
-    contignames,
-    latent_neighs,
-):
-    """
-    There are two kind of neighbours, the neighs from the n2v embeddings space, and the ones from vamb's 
-    latent space. Here we merge them.
-    Input:
-        neighs_object: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in n2v embedding space
-        contignames: contig names
-        latent_neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in vamb's latent space
-    """
-    
-    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
-    mask_contigs_withinR_neighbourhoods = np.zeros(len(contignames), dtype=bool)    
-    mask_contigs_in_neighbourhoods =  np.zeros(len(contignames), dtype=bool)    
-    ## First create the neighbourhoods objects only based upon 
-    neighbourhoods_graph = nx.Graph()
-    contigs_in_neighbourhoods = set()
-    for c_i, neigh_idxs in enumerate(neighs_object):
-        if len(neigh_idxs) == 0: 
-            continue        
-        assert c_i not in neigh_idxs, "a contig cannot be its own neighbour"
-        for n_i in neigh_idxs:
-            neighbourhoods_graph.add_edge(contignames[c_i], contignames[n_i])
-
-            contigs_in_neighbourhoods.add(contignames[n_i])
-            contigs_in_neighbourhoods.add(contignames[c_i])
-            mask_contigs_in_neighbourhoods[c_i] = True
-            mask_contigs_in_neighbourhoods[n_i] = True
-            
-    logger.info("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
-
-    n_neighbourhoods = np.sum(
-        [1 for cs in nx.connected_components(neighbourhoods_graph) if len(cs) > 1]
-    )
-    logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
-    
-    neighbourhood_cs_d = {
-    "neighs_%i" % i: cs
-    for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
-    if len(cs) >= 2
-    }
-
-    # withinradiusclusters_g = nx.Graph()
-    withinradiusclusters_g = neighbourhoods_graph #.copy()
-
-    singleton_contigs_aggregated = set()
-    for cs in nx.connected_components(neighbourhoods_graph):
-        
-        # print(cs)
-        assert len(cs) > 1, "neighbourhoods should be composed of at least 2 contigs"
-        # define contig indices already part of the neighbourhood
-        idxs_cs_already_in_hood = [c2idx[c] for c in cs] 
-        
-        # define contig indices not part of the neighbourhood
-        idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
-
-        for idx_c_not_in_hood in idxs_cs_not_in_hood:
-
-            # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
-            latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
-                set(idxs_cs_already_in_hood)
-            )
-            if len(latent_neighs_neighbourhood) > 0:
-                for latent_neigh_idx in latent_neighs_neighbourhood:
-                    withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
-                    mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
-                    if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
-                        singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
-                        
-
-    withinradiusclusters_cs_d = {
-        "nneighs_%i" % i: cs
-        for i, cs in enumerate(nx.connected_components(withinradiusclusters_g))
-    }
-
-    logger.info(
-        "Collected singleton contigs: %i"
-        % len(singleton_contigs_aggregated)
-    )
-
-    logger.info(
-        "Contigs in within neighbourhoods radius clusters: %i"
-        % np.sum([len(cs) for cs in withinradiusclusters_cs_d.values() ])
-    )
-
-    logger.info(
-        "Aggregated neighbourhoods: %i" % (len(withinradiusclusters_cs_d.keys()))
-    )
-    return (
-        neighbourhood_cs_d,
-        withinradiusclusters_cs_d,
-        withinradiusclusters_g,
-        mask_contigs_in_neighbourhoods,
-        mask_contigs_withinR_neighbourhoods,
-    )
 
 
 class BasicArguments(object):
