@@ -919,14 +919,6 @@ def run(
     comp_metadata = composition.metadata
     del composition, abundance
 
-    # Write contignames and contiglengths needed for dereplication purposes
-    np.savetxt(
-        vamb_options.out_dir.joinpath("contignames"),
-        comp_metadata.identifiers,
-        fmt="%s",
-    )
-    np.savez(vamb_options.out_dir.joinpath("lengths.npz"), comp_metadata.lengths)
-
     if vae_options is not None:
         assert latent is not None
         assert comp_metadata.nseqs == len(latent)
