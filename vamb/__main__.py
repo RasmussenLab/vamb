@@ -141,7 +141,9 @@ class AbundanceOptions:
             self.path = AbundancePath(abundancepath)
         elif bamdir is not None:
             if not bamdir.is_dir():
-                raise NotADirectoryError(bamdir)
+                raise NotADirectoryError(
+                    f"Directory '{bamdir}' passed with --bamdir is not an existing directory."
+                )
             paths = [p for p in bamdir.iterdir() if p.is_file() and p.suffix == ".bam"]
             if len(paths) == 0:
                 raise ValueError(
@@ -150,6 +152,9 @@ class AbundanceOptions:
                 )
             self.add_existing_bam_paths(paths)
         elif bampaths is not None:
+            logger.warning(
+                "The --bamfiles argument is deprecated. It works, but might be removed in future versions of Vamb. Please use --bamdir instead"
+            )
             for bampath in bampaths:
                 if not bampath.is_file():
                     raise FileNotFoundError(
@@ -1659,19 +1664,21 @@ def add_input_output_arguments(subparser):
     rpkmos = subparser.add_argument_group(
         title="RPKM input (either BAMs or .npz required)"
     )
+    # Note: This argument is deprecated, but we'll keep supporting it for now.
+    # Instead, use --bamdir.
     rpkmos.add_argument(
         "--bamfiles",
         dest="bampaths",
         metavar="",
         type=Path,
-        help="paths to (multiple) BAM files (conflics w. --bamdir)",
+        help=argparse.SUPPRESS,
         nargs="+",
     )
     rpkmos.add_argument(
         "--bamdir",
         metavar="",
         type=Path,
-        help="Dir with .bam files to use (conflicts w. --bamfiles)",
+        help="Dir with .bam files to use",
     )
     rpkmos.add_argument(
         "--rpkm",
@@ -2101,7 +2108,7 @@ def main():
     Version: {vamb.__version_str__}
 
     Default use, good for most datasets:
-    vamb bin default --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
+    vamb bin default --outdir out --fasta my_contigs.fna --bamdir bam_dir -o C
 
     Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
     logger.add(sys.stderr, format=format_log)

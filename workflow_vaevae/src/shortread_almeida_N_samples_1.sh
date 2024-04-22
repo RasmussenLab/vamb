@@ -15,7 +15,7 @@ folder=$(awk -v var="$PBS_ARRAYID" 'NR==var {print; exit}' /home/projects/cpr_10
 vamb bin taxvamb \
     --outdir /home/projects/cpr_10006/people/svekut/almeida_N_samples/data_folders/${folder}/taxvambout \
     --fasta /home/projects/cpr_10006/people/svekut/almeida_N_samples/data_folders/${folder}/contigs.fna.gz \
-    --bamfiles /home/projects/cpr_10006/people/svekut/almeida_N_samples/data_folders/${folder}/bam_files/*.bam \
+    --bamdir /home/projects/cpr_10006/people/svekut/almeida_N_samples/data_folders/${folder}/bam_files \
     --taxonomy /home/projects/cpr_10006/people/svekut/almeida_N_samples/data_folders/${folder}/taxonomy_mmseqs.tsv \
     -l 32 \
     -e 300 \

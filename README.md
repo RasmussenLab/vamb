@@ -102,7 +102,7 @@ minimap2 -t 8 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit /path/to/reads/sa
 4. Run Vamb:
 
 ```
-vamb bin default --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C
+vamb bin default --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamdir /path/to/bams -o C
 ```
 
 5. Apply any desired postprocessing to Vamb's output.
@@ -184,7 +184,7 @@ __5) Run Vamb__
 By default, Vamb does not output any FASTA files of the bins. In the examples below, the option `--minfasta 200000` is set, meaning that all bins with a size of 200 kbp or more will be output as FASTA files.
 Run Vamb with:
 
-`vamb bin default -o SEP --outdir OUT --fasta FASTA --bamfiles BAM1 BAM2 [...] --minfasta 200000`,
+`vamb bin default -o SEP --outdir OUT --fasta FASTA --bamdir /dir/with/bamfiles --minfasta 200000`,
 
 where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
 
@@ -199,8 +199,8 @@ Vamb will bin every input contig. Contigs that cannot be binned with other conti
 The default hyperparameters of Vamb will provide good performance on any dataset. However, since running Vamb is fast (especially using GPUs) it is possible to try to run Vamb with different hyperparameters to see if better performance can be achieved (note that here we measure performance as the number of near-complete bins assessed by CheckM). We recommend to try to increase and decrease the size of the neural network and have used Vamb on datasets where increasing the network resulted in more near-complete bins and other datasets where decreasing the network resulted in more near-complete bins. To do this you can run Vamb as (default for multiple samples is `-l 32 -n 512 512`):
 
 ```
-vamb bin default -l 24 -n 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
-vamb bin default -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam -o C --minfasta 200000
+vamb bin default -l 24 -n 384 384 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamdir /dir/with/bamfiles -o C --minfasta 200000
+vamb bin default -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamdir /dir/with/bamfiles -o C --minfasta 200000
 ```
 
 It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
