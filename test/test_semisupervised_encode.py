@@ -68,6 +68,10 @@ class TestVAEVAE(unittest.TestCase):
         for p, cls in self.classes.items():
             for c in cls:
                 for f in self.phyla:
+                    # Since the taxonomy is generated randomly, we can't guarantee
+                    # that each run will have all the clades.
+                    if any(i not in ind_nodes for i in (p, c, f)):
+                        continue
                     self.assertTrue(ind_nodes.get(f, -666) < ind_nodes.get(c, 666))
                     self.assertTrue(table_parent[ind_nodes[f]] == 1)
                     self.assertTrue(table_parent[ind_nodes[c]] == ind_nodes[p])
