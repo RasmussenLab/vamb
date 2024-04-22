@@ -1398,7 +1398,6 @@ class BasicArguments(object):
         logger.add(
             self.vamb_options.out_dir.joinpath(self.LOGS_PATH), format=format_log
         )
-        logger.add(sys.stderr, format=format_log)
         begintime = time.time()
         logger.info("Starting Vamb version " + vamb.__version_str__)
         logger.info("Random seed is " + str(self.vamb_options.seed))
@@ -2064,6 +2063,8 @@ def main():
     vamb bin default --outdir out --fasta my_contigs.fna --bamfiles *.bam -o C
 
     Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
+    logger.add(sys.stderr, format=format_log)
+
     parser = argparse.ArgumentParser(
         prog="vamb",
         description=doc,
