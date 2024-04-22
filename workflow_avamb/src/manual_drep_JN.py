@@ -17,10 +17,8 @@ BinId = NewType("BinId", int)
 def main(
     # Path to output clusters file. Will error if it already exists
     outpath: Path,
-    # Path to names file of contig names. CHANGED
-    names: Path,
-    # Path to length.npz of contig length. Output by Vamb
-    lengths_npz: Path,
+    # Path to composition.npz
+    composition_path: Path,
     # Path to CheckM2 quality_report.tsv file
     quality_report: dict[str, list],
     # List of paths to clusters.tsv files as output by Vamb.
@@ -36,15 +34,16 @@ def main(
     bins_extension: str,
     min_bin_size: int,
 ) -> None:
-    # Load contig names
-    contig_names: list[str] = list(np.loadtxt(names, dtype=object))
+    # Load contig names and lengths
+    comp = vamb.parsecontigs.Composition.load(composition_path)
 
+    contig_names: list[str] = list(comp.metadata.identifiers)
     assert isinstance(contig_names, list)
     assert isinstance(contig_names[0], str)
 
-    # Load lengths
-    lengths: np.ndarray = vamb.vambtools.read_npz(lengths_npz)
+    lengths = comp.metadata.lengths
     assert len(lengths) == len(contig_names)
+    del comp  # free up memory
 
     # Load CheckM2
     (bin_names, qualities, bin_by_name) = load_checkm2(
@@ -276,8 +275,9 @@ def compute_to_remove(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cs_d", type=str, help="path bins_scores dictionary")
-    parser.add_argument("--names", type=str, help="Contig names txt file path ")
-    parser.add_argument("--lengths", type=str, help="Contig lengths npz file path ")
+    parser.add_argument(
+        "--composition", type=Path, help="Path to the composition.npz file"
+    )
     parser.add_argument(
         "--output",
         type=str,
@@ -308,8 +308,7 @@ if __name__ == "__main__":
 
     main(
         outpath=opt.output,
-        names=opt.names,
-        lengths_npz=opt.lengths,
+        composition_path=opt.composition,
         quality_report=cluster_scores,
         binnings=opt.clusters,
         min_cov=opt.cov,

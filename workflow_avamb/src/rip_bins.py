@@ -1,6 +1,5 @@
 from Bio import SeqIO
 import os
-import numpy as np
 from collections import OrderedDict
 import argparse
 import networkx as nx
@@ -432,8 +431,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--co", type=str, help="path dereplicated clusters without ripped clusters"
     )
-    parser.add_argument("-l", type=str, help="path to contig lengths")
-    parser.add_argument("-n", type=str, help="path to contig names")
+    parser.add_argument("-c", type=str, help="path to composition")
     parser.add_argument("--bp_d", type=str, help="bin_path dictionary path")
     parser.add_argument("--br", type=str, help="path ripped bins")
     parser.add_argument("--bin_separator", type=str, help="path ripped bins")
@@ -459,11 +457,10 @@ if __name__ == "__main__":
     with open(clusters_path) as file:
         cluster_contigs = vamb.vambtools.read_clusters(file)
 
-    contig_lengths_file = opt.l
-    contig_lengths = cast(Sequence[int], np.load(contig_lengths_file)["arr_0"])
-
-    contignames_file = opt.n
-    contig_names = cast(Sequence[str], np.loadtxt(contignames_file, dtype=object))
+    comp = vamb.parsecontigs.Composition.load(opt.c)
+    contig_lengths = cast(Sequence[int], comp.metadata.lengths)
+    contig_names = cast(Sequence[str], comp.metadata.identifiers)
+    del comp  # free memory
 
     path_ripped = cast(str, opt.br)
 
