@@ -114,19 +114,23 @@ class AbundanceOptions:
     def __init__(
         self,
         bampaths: Optional[list[Path]],
+        bamdir: Optional[Path],
         abundancepath: Optional[Path],
         min_alignment_id: Optional[float],
         refcheck: bool,
     ):
         assert isinstance(bampaths, (list, type(None)))
+        assert isinstance(bamdir, (Path, type(None)))
         assert isinstance(abundancepath, (Path, type(None)))
         assert isinstance(min_alignment_id, (float, type(None)))
         assert isinstance(refcheck, bool)
 
         # Make sure only one RPKM input is there
-        if not (bampaths is not None) + (abundancepath is not None) == 1:
+        if (
+            (bampaths is not None) + (abundancepath is not None) + (bamdir is not None)
+        ) != 1:
             raise argparse.ArgumentTypeError(
-                "Must specify exactly one of BAM files or abundance NPZ file input"
+                "Must specify exactly one of BAM files, BAM dir or abundance NPZ file input"
             )
 
         if abundancepath is not None:
@@ -135,16 +139,23 @@ class AbundanceOptions:
                     f'Not an existing non-directory file: "{str(abundancepath)}"'
                 )
             self.path = AbundancePath(abundancepath)
-
+        elif bamdir is not None:
+            if not bamdir.is_dir():
+                raise NotADirectoryError(bamdir)
+            paths = [p for p in bamdir.iterdir() if p.is_file() and p.suffix == ".bam"]
+            if len(paths) == 0:
+                raise ValueError(
+                    f"No `.bam` files found in --bamdir argument {bamdir}. "
+                    "Make sure all BAM files in the directory ends with `.bam`."
+                )
+            self.add_existing_bam_paths(paths)
         elif bampaths is not None:
             for bampath in bampaths:
                 if not bampath.is_file():
                     raise FileNotFoundError(
                         f'Not an existing non-directory file: "{str(bampath)}"'
                     )
-                if not pycoverm.is_bam_sorted(str(bampath)):
-                    raise ValueError(f"Path {bampath} is not sorted by reference.")
-            self.path = bampaths
+            self.add_existing_bam_paths(bampaths)
 
         if min_alignment_id is not None:
             if bampaths is None:
@@ -164,6 +175,12 @@ class AbundanceOptions:
             self.min_alignment_id = 0.0
 
         self.refcheck = refcheck
+
+    def add_existing_bam_paths(self, paths: list[Path]):
+        for bampath in paths:
+            if not pycoverm.is_bam_sorted(str(bampath)):
+                raise ValueError(f"Path {bampath} is not sorted by reference.")
+        self.path = paths
 
 
 class VAEOptions:
@@ -1391,6 +1408,7 @@ class BasicArguments(object):
         )
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
+            self.args.bamdir,
             self.args.abundancepath,
             self.args.min_alignment_id,
             not self.args.norefcheck,
@@ -1417,6 +1435,7 @@ class BasicArguments(object):
         begintime = time.time()
         logger.info("Starting Vamb version " + vamb.__version_str__)
         logger.info("Random seed is " + str(self.vamb_options.seed))
+        logger.info(f"Invoked with CLI args: 'f{' '.join(sys.argv)}'")
         self.run_inner()
         logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
 
@@ -1645,8 +1664,14 @@ def add_input_output_arguments(subparser):
         dest="bampaths",
         metavar="",
         type=Path,
-        help="paths to (multiple) BAM files",
+        help="paths to (multiple) BAM files (conflics w. --bamdir)",
         nargs="+",
+    )
+    rpkmos.add_argument(
+        "--bamdir",
+        metavar="",
+        type=Path,
+        help="Dir with .bam files to use (conflicts w. --bamfiles)",
     )
     rpkmos.add_argument(
         "--rpkm",
