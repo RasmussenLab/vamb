@@ -24,6 +24,12 @@ import pandas as pd
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
 
+# This is the smallest number of sequences that can be accepted.
+# A smaller number than this cause issues either during normalization of the Abundance
+# object, or causes PyTorch to throw dimension errors, as singleton dimensions
+# are treated differently.
+MINIMUM_SEQS = 2
+
 # These MUST be set before importing numpy
 # I know this is a shitty hack, see https://github.com/numpy/numpy/issues/11826
 os.environ["MKL_NUM_THREADS"] = str(DEFAULT_THREADS)
@@ -542,6 +548,16 @@ def calc_tnf(
         composition.save(outdir.joinpath("composition.npz"))
 
     binsplitter.initialize(composition.metadata.identifiers)
+
+    if composition.nseqs < MINIMUM_SEQS:
+        err = (
+            f"Found only {composition.nseqs} contigs, but Vamb currently requires at least "
+            f"{MINIMUM_SEQS} to work correctly. "
+            "If you have this few sequences in a metagenomic assembly, "
+            "it's probably an error somewhere in your workflow."
+        )
+        logger.error(err)
+        raise ValueError(err)
 
     # Warn the user if any contigs have been observed, which is smaller
     # than the threshold.
