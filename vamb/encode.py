@@ -360,6 +360,14 @@ class VAE(_nn.Module):
         optimizer,
         batchsteps: list[int],
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
+        if len(data_loader.dataset.tensors[0]) < 2:
+            raise ValueError(
+                "Cannot train on a dataset with fewer than 2 sequences, but got "
+                f"{len(data_loader.dataset.tensors[0])} sequences. "
+                "If you are trying to fit a DL model to this few sequences, "
+                "something probably went wrong in your pipeline."
+            )
+
         self.train()
 
         epoch_loss = 0.0
