@@ -6,6 +6,8 @@ Vamb is a metagenomic binner which feeds sequence composition information from a
 
 For more information about the implementation, methodological considerations, and advanced usage of Vamb, see [Vamb tutorial](https://github.com/RasmussenLab/vamb/blob/master/doc/tutorial.md).
 
+__New:__ _For benchmarking binnings with a known ground truth, see our tool [BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl)_
+
 ## Programs in Vamb
 The Vamb package contains several programs, including three binners:
 * __Vamb__: The original binner based on variational autoencoders. [Article](https://doi.org/10.1038/s41587-020-00777-4)
@@ -202,3 +204,6 @@ vamb bin default -l 40 -n 768 768 --outdir path/to/outdir --fasta /path/to/catal
 ```
 
 It is possible to try any combination of latent and hidden neurons as well as other sizes of the layers. Number of near-complete bins can be assessed using CheckM and compared between the methods. Potentially see the snakemake folder `workflow` for an automated way to run Vamb with multiple parameters.
+
+## Evaluating metagenomic bins
+When a ground truth is available, you can use our program BinBencher.jl[https://github.com/jakobnissen/BinBencher.jl] to benchmark and evaluate the results of a binner.
