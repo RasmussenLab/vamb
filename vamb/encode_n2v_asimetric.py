@@ -432,37 +432,52 @@ class VAE(_nn.Module):
         weighed_kld = kld * kld_weight
 
         # embedding loss
-        loss_emb = self.cosinesimilarity_loss(
+        if self.gamma > 0.0:
+            loss_emb = self.cosinesimilarity_loss(
 
-            mu,
-            preds_idxs,
-            neighs_mask,
-        )
+                mu,
+                preds_idxs,
+                neighs_mask,
+            )
 
-        loss_emb_cat = _torch.cat(
-            (
-                loss_emb.unsqueeze(0) - self.margin,
-                _torch.zeros_like(loss_emb).unsqueeze(0),
-            ),
-            dim=0,
-        )
+            loss_emb_cat = _torch.cat(
+                (
+                    loss_emb.unsqueeze(0) - self.margin,
+                    _torch.zeros_like(loss_emb).unsqueeze(0),
+                ),
+                dim=0,
+            )
 
-        reconstruction_loss = (
-            weighed_ce
-            + weighed_ab
-            + weighed_sse
-        )
-        loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
-            loss_emb_cat, dim=0
-        )[0] * self.gamma
+            reconstruction_loss = (
+                weighed_ce
+                + weighed_ab
+                + weighed_sse
+            )
+            loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
+                loss_emb_cat, dim=0
+            )[0] * self.gamma
 
-        # loss = _torch.max(
-        #     loss_emb_cat, dim=0
-        # )[0] * self.gamma
+            # loss = _torch.max(
+            #     loss_emb_cat, dim=0
+            # )[0] * self.gamma
 
 
-        loss_emb_pop = loss_emb[neighs_mask]
+            loss_emb_pop = loss_emb[neighs_mask]
+        else:
+            reconstruction_loss = (
+                weighed_ce
+                + weighed_ab
+                + weighed_sse
+            )
+            loss = (reconstruction_loss + weighed_kld) * weights
 
+            # loss = _torch.max(
+            #     loss_emb_cat, dim=0
+            # )[0] * self.gamma
+
+
+            loss_emb_pop = _torch.zeros(len(loss))
+            
         
         return (
             loss.mean(),
