@@ -432,51 +432,51 @@ class VAE(_nn.Module):
         weighed_kld = kld * kld_weight
 
         # embedding loss
-        if self.gamma > 0.0:
-            loss_emb = self.cosinesimilarity_loss(
+#        if self.gamma > 0.0:
+        loss_emb = self.cosinesimilarity_loss(
 
-                mu,
-                preds_idxs,
-                neighs_mask,
-            )
+            mu,
+            preds_idxs,
+            neighs_mask,
+        )
 
-            loss_emb_cat = _torch.cat(
-                (
-                    loss_emb.unsqueeze(0) - self.margin,
-                    _torch.zeros_like(loss_emb).unsqueeze(0),
-                ),
-                dim=0,
-            )
+        loss_emb_cat = _torch.cat(
+            (
+                loss_emb.unsqueeze(0) - self.margin,
+                _torch.zeros_like(loss_emb).unsqueeze(0),
+            ),
+            dim=0,
+        )
 
-            reconstruction_loss = (
-                weighed_ce
-                + weighed_ab
-                + weighed_sse
-            )
-            loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
-                loss_emb_cat, dim=0
-            )[0] * self.gamma
+        reconstruction_loss = (
+            weighed_ce
+            + weighed_ab
+            + weighed_sse
+        )
+        loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
+            loss_emb_cat, dim=0
+        )[0] * self.gamma
 
-            # loss = _torch.max(
-            #     loss_emb_cat, dim=0
-            # )[0] * self.gamma
-
-
-            loss_emb_pop = loss_emb[neighs_mask]
-        else:
-            reconstruction_loss = (
-                weighed_ce
-                + weighed_ab
-                + weighed_sse
-            )
-            loss = (reconstruction_loss + weighed_kld) * weights
-
-            # loss = _torch.max(
-            #     loss_emb_cat, dim=0
-            # )[0] * self.gamma
+        # loss = _torch.max(
+        #     loss_emb_cat, dim=0
+        # )[0] * self.gamma
 
 
-            loss_emb_pop = _torch.zeros(len(loss))
+        loss_emb_pop = loss_emb[neighs_mask]
+        # else:
+        #     reconstruction_loss = (
+        #         weighed_ce
+        #         + weighed_ab
+        #         + weighed_sse
+        #     )
+        #     loss = (reconstruction_loss + weighed_kld) * weights
+
+        #     # loss = _torch.max(
+        #     #     loss_emb_cat, dim=0
+        #     # )[0] * self.gamma
+
+
+        #     loss_emb_pop = _torch.zeros(len(loss))
             
         
         return (
@@ -505,7 +505,7 @@ class VAE(_nn.Module):
                 mus_neighs = self.mu_container[self.neighs[idx_pred]]
                 
                 # Compute distances
-                cosine_distances = 2* self.calc_cosine_distances(mus_neighs, mu_i )
+                cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i )
                 avg_cosine_distance = cosine_distances.mean()
 
             # Append to the result lists
@@ -605,7 +605,7 @@ class VAE(_nn.Module):
             epoch_absseloss += ab_sse.data.item()
 
         logger.info(
-            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\ttKLD: {:.4f}\tBatchsize: {}".format(
+            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
                 epoch_loss / len(data_loader),
                 epoch_celoss / len(data_loader),
