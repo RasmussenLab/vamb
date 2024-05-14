@@ -81,6 +81,15 @@ Columns:
 * __predictions__ - taxonomic annotations predicted by Taxometer
 * __scores__ - assigned scores on each taxonomic level, in the range [0.5, 1]
 
+## Example with data
+
+Taxometer can be tested on the pre-processed data (~4800 contigs from one sample of CAMI2 toy Oral dataset) provided as a part of this repository. After installing Taxometer, run from the current folder:
+
+```
+vamb taxometer --outdir taxometer_test --composition test/data/taxometer_data/composition.npz --rpkm test/data/taxometer_data/abundance.npz --taxonomy test/data/taxometer_data/taxonomy_oral_sample0.tsv
+```
+
+Running this command will take a few minutes on a personal computer. A neural network will be trained from scratch, followed by inference performed and the predictions stored. GPU access is not required to run this example. The `taxometer_test` folder will be created. The predicted taxonomy labels are at `taxometer_test/result_taxometer.csv`. The example output is also at `test/data/taxometer_data/result_taxometer_oral_sample0.csv`, but since the network is trained on the fly, the output can slightly vary between the runs.
 
 ## Links and references
 
@@ -104,3 +113,4 @@ Benchmarked taxonomic classifiers:
 * __Metabuli__ [Article](https://www.biorxiv.org/content/10.1101/2023.05.31.543018v2) [Github](https://github.com/steineggerlab/Metabuli)
 * __Centrifuge__ [Article](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5131823/) [Github](https://github.com/infphilo/centrifuge)
 * __Kraken2__ [Article](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1891-0) [Github](https://github.com/DerrickWood/kraken2)
+* __MetaMaps__ [Article](https://www.nature.com/articles/s41467-019-10934-2) [Github](https://github.com/DiltheyLab/MetaMaps)
