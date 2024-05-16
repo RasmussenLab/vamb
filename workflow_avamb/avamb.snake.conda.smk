@@ -335,8 +335,6 @@ rule run_avamb:
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
-        contignames=os.path.join(OUTDIR,"avamb/contignames"),
-        contiglenghts=os.path.join(OUTDIR,"avamb/lengths.npz")
     params:
         walltime="86400",
         nodes="1",
@@ -471,8 +469,7 @@ rule create_cluster_scores_bin_path_dictionaries:
 rule run_drep_manual_vamb_z_y:
     input:
         cluster_score_dict_path_avamb=os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
-        contignames=os.path.join(OUTDIR,"avamb/contignames"),
-        contiglengths=os.path.join(OUTDIR,"avamb/lengths.npz"),
+        composition=os.path.join(OUTDIR,"avamb/composition.npz"),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv")
@@ -496,8 +493,8 @@ rule run_drep_manual_vamb_z_y:
 
     shell:
         """
-        python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --names {input.contignames}\
-        --lengths {input.contiglengths}  --output {output.clusters_avamb_manual_drep}\
+        python {params.path}  --cs_d  {input.cluster_score_dict_path_avamb} --composition {input.composition}\
+        --output {output.clusters_avamb_manual_drep}\
         --clusters {input.clusters_aae_z} {input.clusters_aae_y} {input.clusters_vamb}\
         --comp {MIN_COMP} --cont {MAX_CONT}  --min_bin_size {MIN_BIN_SIZE} 
         """
@@ -533,8 +530,8 @@ checkpoint create_ripped_bins_avamb:
     shell: 
         """
         python {params.path} -r {OUTDIR}/avamb/ --ci {input.path_avamb_manually_drep_clusters}\
-        --co  {output.path_avamb_manually_drep_clusters_ripped}  -l {OUTDIR}/avamb/lengths.npz\
-        -n {OUTDIR}/avamb/contignames --bp_d {input.bin_path_dict_path} --br {OUTDIR}/tmp/ripped_bins\
+        --co  {output.path_avamb_manually_drep_clusters_ripped}  -c {OUTDIR}/avamb/composition.npz\
+        --bp_d {input.bin_path_dict_path} --br {OUTDIR}/tmp/ripped_bins\
         --bin_separator C --log_nc_ripped_bins {output.name_bins_ripped_file} 
         """
 # If after run_drep_manual_vamb_z_y rule (dereplication rule), there are no contigs present in more than one bin,

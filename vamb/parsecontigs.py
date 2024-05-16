@@ -1,10 +1,3 @@
-__doc__ = """Calculate tetranucleotide frequency from a FASTA file.
-
-Usage:
->>> with open('/path/to/contigs.fna') as filehandle
-...     tnfs, contignames, lengths = read_contigs(filehandle)
-"""
-
 import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
@@ -121,7 +114,7 @@ class Composition:
         )
 
     @classmethod
-    def load(cls, io: Union[str, IO[bytes]]):
+    def load(cls, io: Union[str, IO[bytes], Path]):
         arrs = _np.load(io, allow_pickle=True)
         metadata = CompositionMetaData(
             _vambtools.validate_input_array(arrs["identifiers"]),
