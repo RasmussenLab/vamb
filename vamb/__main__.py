@@ -178,6 +178,7 @@ class NeighsOptions:
         "margin",
         "radius_clustering",
         "top_neighbours",
+        "max_neighs_r",
     ]
 
     def __init__(
@@ -187,6 +188,7 @@ class NeighsOptions:
         margin: float = 0.01,
         radius_clustering: float = 0.01,
         top_neighbours: int = 50,
+        max_neighs_r: float = 0.2,
     ):
         
         assert isinstance(neighs_path, Path)
@@ -194,13 +196,14 @@ class NeighsOptions:
         assert isinstance(margin, float)
         assert isinstance(radius_clustering, float)
         assert isinstance(top_neighbours, int)
-
+        assert isinstance(max_neighs_r, float)
+        
         self.margin = margin
         self.radius_clustering = radius_clustering
         self.neighs_path = NeighsPath(neighs_path)
         self.gamma = gamma
         self.top_neighbours = top_neighbours
-
+        self.max_neighs_r = max_neighs_r
 
 class VAEOptions:
     __slots__ = ["nhiddens", "nlatent", "beta", "dropout"]
@@ -1752,6 +1755,9 @@ def run_n2v_asimetric(
     assert latent is not None
     assert comp_metadata.nseqs == len(latent)
 
+    # clean neighbours using latent space information
+    neighs_object = clean_neighs_with_latents(latent,neighs_object_after_dataloader,neighs_options.max_neighs_r)
+    
     logger.info("Neighbourhoods before aggregation: %i"%len(find_neighbourhoods(comp_metadata.identifiers,neighs_object).keys()))
 
     ## optimized clustering
@@ -1843,6 +1849,38 @@ def run_n2v_asimetric(
     del latent
 
 
+def clean_neighs_with_latents(
+    latent,
+    neighs,
+    max_radius=0.2
+):
+    """
+    Given the contig latents, and the neighs, break neighbour connections if neighbours are furhter than a given cosine distance
+    """
+    neighs_clean=[]
+    latent_nz = vamb.cluster._normalize(latent)
+    total_neighs_removed=0
+    total_neighs_original=0
+    logger.info("Breaking neighbour connections if further than %s normalized cosine distance"%str(max_radius))
+    for c_idx,neigh_idxs in enumerate(neighs):
+        if len(neigh_idxs)==0:
+            neighs_clean.append([])
+            continue
+        distances = vamb.cluster._calc_distances(latent_nz,c_idx)
+        mask_neighs = torch.zeros(len(latent_nz),dtype=bool)
+        mask_neighs[neigh_idxs] = True
+        #print("Neighs before cleaning",neigh_idxs)
+        within_max_radius = (distances <= max_radius) & mask_neighs # keep contigs that are neighbours and are within the max radius on latent space
+        neighs_clean_i = list(np.arange(len(neighs))[within_max_radius])
+        #logger("Neighs after cleaning",neighs_clean_i))
+        neighs_clean.append(neighs_clean_i)
+        total_neighs_removed += len(neigh_idxs)-len(neighs_clean_i)
+        total_neighs_original+= len(neigh_idxs)
+    logger.info("%i neighs before cleaining with latents"%total_neighs_original)
+    logger.info("%i neighs after cleaining with latents"%(total_neighs_original-total_neighs_removed))
+    return neighs_clean                
+        
+        
 def cluster_hoods_based(
     latent,
     neighs,
@@ -1851,6 +1889,10 @@ def cluster_hoods_based(
     radius_looner=0.5,
     
 ):
+    """
+    Given the latent space after training, and the neighs extracted from the n2v alignmnet-assembly graph,
+    expand the communities based on the latent space.
+    """
     radius = radius_clustering/2
     looner_radius=radius_looner/2
     
@@ -1858,8 +1900,7 @@ def cluster_hoods_based(
     latent_communities_g = nx.Graph()
     latent_nz = vamb.cluster._normalize(latent)
 
-    #contigs_in_latent_communities_mask = np.zeros(len(contignames),dtype=bool)
-
+    ## For each contig latent, find the contigs that are within a distance, and link them
     for i in range(len(latent)):
         distances = vamb.cluster._calc_distances(latent_nz,i)
         mask_ = torch.ones(len(latent), dtype=torch.bool)
@@ -1878,6 +1919,7 @@ def cluster_hoods_based(
             for neigh_idx in neighs_graph:
                 latent_communities_g.add_edge(contignames[i],contignames[neigh_idx])
             #contigs_in_latent_communities_mask[i]=True
+    
     latent_communities_cs_d = {
         "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
         for i, cs in enumerate(nx.connected_components(latent_communities_g))
@@ -2426,7 +2468,8 @@ class VAEASYarguments(BinnerArguments):
             gamma=args.gamma,
             margin=args.margin,
             radius_clustering=args.Rc,
-            top_neighbours=args.top_neighbours
+            top_neighbours=args.top_neighbours,
+            max_neighs_r=args.max_neighs_r
         )
 
         self.training_options = TrainingOptions(
@@ -2925,6 +2968,14 @@ def add_vae_n2v_asy_arguments(subparser):
         type=float,
         default=0.01,
     )
+    
+    vae_asy_os.add_argument(
+        "--max_neighs_r",
+        help="Neighbours further than this on latent space will be removed [0.2]",
+        type=float,
+        default=0.2,
+    )
+    
     return subparser
 
 
