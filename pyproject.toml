@@ -6,7 +6,7 @@ dependencies = [
     "torch == 1.13.1",
     "pycoverm == 0.6.0",
     "networkx == 3.1",
-    "scikit-learn == 1.2.2",
+    "scikit-learn == 1.5.0",
     "pandas == 2.0.0",
     "dadaptation == 3.0",
     "loguru == 0.7.2",
