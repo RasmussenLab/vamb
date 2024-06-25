@@ -12,7 +12,6 @@ class TestAAE(unittest.TestCase):
     nlatent_l = 32
     default_args = (14, 256, nlatent_l, 25, 0.5, 0.5, 0.15, False, 0)
     default_temperature = 0.16
-    default_lr = 0.001
 
     # Construction
     def test_bad_args(self):
@@ -60,7 +59,6 @@ class TestAAE(unittest.TestCase):
             nepochs=3,
             batchsteps=[1, 2],
             T=self.default_temperature,
-            lr=self.default_lr,
             modelfile=None,
         )
         mu, do, to, _, _, _, _ = aae(di, ti)

@@ -4,8 +4,8 @@ import vamb.vambtools as _vambtools
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
 from torch.nn.functional import softmax as _softmax
-from torch.optim import Adam as _Adam
 from torch import Tensor
+import dadaptation
 from torch import nn as _nn
 from math import log as _log
 from loguru import logger
@@ -155,7 +155,7 @@ class VAE(_nn.Module):
         dropout: Probability of dropout on forward pass [0.2]
         cuda: Use CUDA (GPU accelerated training) [False]
 
-    vae.trainmodel(dataloader, nepochs batchsteps, lrate, modelfile)
+    vae.trainmodel(dataloader, nepochs batchsteps, modelfile)
         Trains the model, returning None
 
     vae.encode(self, data_loader):
@@ -536,7 +536,6 @@ class VAE(_nn.Module):
         self,
         dataloader: _DataLoader[tuple[Tensor, Tensor, Tensor]],
         nepochs: int = 500,
-        lrate: float = 1e-3,
         batchsteps: Optional[list[int]] = [25, 75, 150, 300],
         modelfile: Union[None, str, Path, IO[bytes]] = None,
     ):
@@ -545,16 +544,11 @@ class VAE(_nn.Module):
         Inputs:
             dataloader: DataLoader made by make_dataloader
             nepochs: Train for this many epochs before encoding [500]
-            lrate: Starting learning rate for the optimizer [0.001]
             batchsteps: None or double batchsize at these epochs [25, 75, 150, 300]
             modelfile: Save models to this file if not None [None]
 
         Output: None
         """
-
-        if lrate < 0:
-            raise ValueError(f"Learning rate must be positive, not {lrate}")
-
         if nepochs < 1:
             raise ValueError("Minimum 1 epoch, not {nepochs}")
 
@@ -573,7 +567,7 @@ class VAE(_nn.Module):
         # Get number of features
         # Following line is un-inferrable due to typing problems with DataLoader
         ncontigs, nsamples = dataloader.dataset.tensors[0].shape  # type: ignore
-        optimizer = _Adam(self.parameters(), lr=lrate)
+        optimizer = dadaptation.DAdaptAdam(self.parameters(), decouple=True)
 
         logger.info("\tNetwork properties:")
         logger.info(f"\tCUDA: {self.usecuda}")
@@ -589,7 +583,6 @@ class VAE(_nn.Module):
             ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
         )
         logger.info(f"\tBatchsteps: {batchsteps_string}")
-        logger.info(f"\tLearning rate: {lrate}")
         logger.info(f"\tN sequences: {ncontigs}")
         logger.info(f"\tN samples: {nsamples}")
 
