@@ -2,7 +2,6 @@
 
 import numpy as np
 from math import log, isfinite
-import time
 from torch.autograd import Variable
 from torch.distributions.relaxed_categorical import RelaxedOneHotCategorical
 import torch.nn as nn
@@ -220,7 +219,7 @@ class AAE(nn.Module):
         logger.info(f"\tAlpha: {self.alpha}")
         logger.info(f"\tY length: {self.y_len}")
         logger.info(f"\tZ length: {self.ld}")
-        logger.info("\n\tTraining properties:")
+        logger.info("\tTraining properties:")
         logger.info(f"\tN epochs: {nepochs}")
         logger.info(f"\tStarting batch size: {data_loader.batch_size}")
         batchsteps_string = (
@@ -274,7 +273,6 @@ class AAE(nn.Module):
             ) = (0, 0, 0, 0, 0, 0)
 
             total_batches_inthis_epoch = len(data_loader)
-            time_epoch_0 = time.time()
 
             # weights, abundances currently unused here
             for depths_in, tnfs_in, _, _ in data_loader:
@@ -392,11 +390,8 @@ class AAE(nn.Module):
                 CE_e += float(ce.item())
                 SSE_e += float(sse.item())
 
-            time_epoch_1 = time.time()
-            time_e = np.round((time_epoch_1 - time_epoch_0) / 60, 3)
-
             logger.info(
-                "\tEpoch: {}\t Loss Enc/Dec: {:.6f}\t Rec. loss: {:.4f}\t CE: {:.4f}\tSSE: {:.4f}\t Dz loss: {:.7f}\t Dy loss: {:.6f}\t Batchsize: {}\t Epoch time(min): {: .4}".format(
+                "\t\tEpoch: {:>3} Loss Enc/Dec: {:.5e} Rec. loss: {:.5e} CE: {:.5e} SSE: {:.5e} Dz loss: {:.5e} Dy loss: {:.5e} Batchsize: {:>4}".format(
                     epoch_i + 1,
                     ED_loss_e / total_batches_inthis_epoch,
                     V_loss_e / total_batches_inthis_epoch,
@@ -405,7 +400,6 @@ class AAE(nn.Module):
                     D_z_loss_e / total_batches_inthis_epoch,
                     D_y_loss_e / total_batches_inthis_epoch,
                     data_loader.batch_size,
-                    time_e,
                 ),
             )
 

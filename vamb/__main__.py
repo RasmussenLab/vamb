@@ -1524,6 +1524,7 @@ class VAEAAEArguments(BinnerArguments):
             batchsteps=args.batchsteps_aae,
             temp=args.temp,
         )
+        self.init_encoder_and_training()
 
     def init_encoder_and_training(self):
         self.encoder_options = EncoderOptions(
