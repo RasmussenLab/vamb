@@ -93,17 +93,17 @@ spades.py --meta /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz
 python concatenate.py /path/to/catalogue.fna.gz /path/to/assemblies/sample1/contigs.fasta /path/to/assemblies/sample2/contigs.fasta  [ ... ]
 ```
 
-3. Use your favorite aligner to map each of your read files back to the FASTA file:
+3. Use your favorite aligner to map each of your read files back to the FASTA file.
+   We recommend using `strobealign` with the `--aemb` flag, since this is extremely fast, and mapping is a significant bottleneck when running Vamb:
 
 ```
-minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
-minimap2 -t 8 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz | samtools view -F 3584 -b --threads 8 > /path/to/bam/sample1.bam
+strobealign -t 8 --aemb /path/to/catalogue.fna.gz /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz > aembdir/sample1.aemb.tsv
 ```
 
 4. Run Vamb:
 
 ```
-vamb bin default --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamdir /path/to/bams -o C
+vamb bin default --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --aemb aembdir
 ```
 
 5. Apply any desired postprocessing to Vamb's output.
@@ -165,29 +165,27 @@ Vamb is fairly memory efficient, and we have run Vamb with 1000 samples and 5.9 
 If you have a dataset too large to fit in RAM and feel the temptation to bin each sample individually, you can instead use a tool like `sourmash` to group similar samples together in smaller batches, bin these batches individually.
 This way, you can still leverage co-abundance, and will get much better results.
 
-__4) Map the reads to the FASTA file to obtain BAM files__
-
-:warning: *Important:* Vamb only accepts BAM files sorted by coordinate. You can sort BAM files with `samtools sort`.
-
-Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together. So your aligner should map reads with the same level of discrimination that you want Vamb to use. Although you can use any aligner that produces a specification-compliant BAM file, we prefer using `minimap2` (though be aware of [this annoying bug in minimap2](https://github.com/lh3/minimap2/issues/15) - see our Snakemake script for how to work around it):
+__4) Map the reads to the FASTA file to obtain abundances__
+Be careful to choose proper parameters for your aligner - in general, if reads from contig A align to contig B, then Vamb will bin A and B together.
+So your aligner should map reads with the same level of discrimination that you want Vamb to use.
+You can use either a mapper that produces a specification-compliant BAM file,
+but we prefer using `strobealign` with the `--aemb` flag, which is insanely fast, and produces abundance estimations directly:
 
 ```
-minimap2 -d catalogue.mmi /path/to/catalogue.fna.gz; # make index
-minimap2 -t 28 -N 5 -ax sr catalogue.mmi --split-prefix mmsplit sample1.forward.fastq.gz sample1.reverse.fastq.gz | samtools view -F 3584 -b --threads 8 > sample1.bam
+strobealign -t 8 --aemb /path/to/catalogue.fna.gz /path/to/reads/sample1.fw.fq.gz /path/to/reads/sample1.rv.fq.gz > aembdir/sample1.aemb.tsv
 ```
 
-:warning: *Important:* Do *not* filter the aligments for mapping quality as specified by the MAPQ field of the BAM file. This field gives the probability that the mapping position is correct, which is influenced by the number of alternative mapping locations. Filtering low MAPQ alignments away removes alignments to homologous sequences which biases the depth estimation.
-
-If you are using BAM files where you do not trust the validity of every alignment in the file, you can filter the alignments for minimum nucleotide identity using the `-z` option.
+:warning: *Important:* If you use BAM files as input instead of the output of `strobealign --aemb`, Vamb needs BAM files sorted by coordinate. You can sort BAM files with `samtools sort`.
 
 __5) Run Vamb__
 
 By default, Vamb does not output any FASTA files of the bins. In the examples below, the option `--minfasta 200000` is set, meaning that all bins with a size of 200 kbp or more will be output as FASTA files.
 Run Vamb with:
 
-`vamb bin default -o SEP --outdir OUT --fasta FASTA --bamdir /dir/with/bamfiles --minfasta 200000`,
+`vamb bin default -o SEP --outdir OUT --fasta FASTA --aemb AEMBDIR`,
 
-where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example, `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `BAM1` the path to the first BAM file. You can also use shell globbing to input multiple BAM files: `my_bamdir/*bam`.
+where `SEP` in the {Separator} chosen in step 3, e.g. `C` in that example (it defaults to 'C'), `OUT` is the name of the output directory to create, `FASTA` the path to the FASTA file and `AEMBDIR` the path to a directory with the .tsv files created by `strobealign` in step 4.
+If you input BAM files, e.g. from a mapper other than `strobealign`, use `--bamdir` instead of `--aemb` to specify the input to Vamb.
 
 Note that if you provide insufficient memory (RAM) to Vamb, it will run very slowly due to [thrashing](https://en.wikipedia.org/wiki/Thrashing_(computer_science)). Make sure you don't run out of RAM!
 

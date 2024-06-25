@@ -1,6 +1,8 @@
 import unittest
 import io
 import numpy as np
+import random
+import tempfile
 
 import vamb
 import testtools
@@ -102,3 +104,60 @@ class TestParseBam(unittest.TestCase):
         self.assertTrue(np.all(abundance2.samplenames == self.abundance.samplenames))
         self.assertEqual(abundance2.refhash, self.abundance.refhash)
         self.assertEqual(abundance2.minid, self.abundance.minid)
+
+    def test_parse_from_aemb(self):
+        abundance = vamb.parsebam.Abundance.from_aemb(
+            testtools.AEMB_FILES, self.comp_metadata
+        )
+
+        self.assertTrue(abundance.refhash == self.comp_metadata.refhash)
+        self.assertTrue(
+            (abundance.samplenames == [str(i) for i in testtools.AEMB_FILES]).all()
+        )
+
+        manual_matrix = []
+        for file in testtools.AEMB_FILES:
+            manual_matrix.append([])
+            with open(file) as f:
+                for line in f:
+                    (_, ab) = line.split()
+                    manual_matrix[-1].append(float(ab))
+        manual_matrix = list(map(list, zip(*manual_matrix)))
+
+        self.assertTrue((np.abs(manual_matrix - abundance.matrix) < 1e-5).all())
+
+        # Good headers, but in other order
+        names = list(self.comp_metadata.identifiers)
+        random.shuffle(names)
+        files = [self.make_aemb_file(names) for i in range(2)]
+        a = vamb.parsebam.Abundance.from_aemb(
+            [f.name for f in files], self.comp_metadata
+        )
+        self.assertIsInstance(a, vamb.parsebam.Abundance)
+
+    def make_aemb_file(self, headers):
+        file = tempfile.NamedTemporaryFile(mode="w+")
+        for header in headers:
+            n = random.random() * 10
+            print(header, "\t", str(n), file=file)
+        file.seek(0)
+        return file
+
+    def test_bad_aemb(self):
+        # One header is wrong
+        names = list(self.comp_metadata.identifiers)
+        names[-4] = names[-4] + "a"
+        files = [self.make_aemb_file(names) for i in range(2)]
+        with self.assertRaises(ValueError):
+            vamb.parsebam.Abundance.from_aemb(
+                [f.name for f in files], self.comp_metadata
+            )
+
+        # Too many headers
+        names = list(self.comp_metadata.identifiers)
+        names.append(names[0])
+        files = [self.make_aemb_file(names) for i in range(2)]
+        with self.assertRaises(ValueError):
+            vamb.parsebam.Abundance.from_aemb(
+                [f.name for f in files], self.comp_metadata
+            )
