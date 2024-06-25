@@ -37,7 +37,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
-ignore = ["E722", "E501"]
+lint.ignore = ["E722", "E501"]
 
 # pyproject.toml
 [tool.pytest.ini_options]
