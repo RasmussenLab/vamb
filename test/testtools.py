@@ -12,6 +12,8 @@ BAM_FILES = sorted(
         for i in os.listdir(os.path.join(DATADIR, "bam"))
     ]
 )
+AEMB_DIR = os.path.join(DATADIR, "aemb")
+AEMB_FILES = sorted([pathlib.Path(AEMB_DIR).joinpath(i) for i in os.listdir(AEMB_DIR)])
 
 BAM_NAMES = [
     "S27C175628",

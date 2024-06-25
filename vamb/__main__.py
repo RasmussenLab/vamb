@@ -108,6 +108,14 @@ class AbundancePath(type(Path())):
     pass
 
 
+class BAMPaths(list):
+    pass
+
+
+class AEMBPaths(list):
+    pass
+
+
 class AbundanceOptions:
     __slots__ = ["path", "min_alignment_id", "refcheck"]
 
@@ -115,22 +123,27 @@ class AbundanceOptions:
         self,
         bampaths: Optional[list[Path]],
         bamdir: Optional[Path],
+        aemb: Optional[Path],
         abundancepath: Optional[Path],
         min_alignment_id: Optional[float],
         refcheck: bool,
     ):
         assert isinstance(bampaths, (list, type(None)))
         assert isinstance(bamdir, (Path, type(None)))
+        assert isinstance(aemb, (Path, type(None)))
         assert isinstance(abundancepath, (Path, type(None)))
         assert isinstance(min_alignment_id, (float, type(None)))
         assert isinstance(refcheck, bool)
 
         # Make sure only one RPKM input is there
         if (
-            (bampaths is not None) + (abundancepath is not None) + (bamdir is not None)
+            (bampaths is not None)
+            + (abundancepath is not None)
+            + (bamdir is not None)
+            + (aemb is not None)
         ) != 1:
             raise argparse.ArgumentTypeError(
-                "Must specify exactly one of BAM files, BAM dir or abundance NPZ file input"
+                "Must specify exactly one of BAM files, BAM dir, AEMB or abundance NPZ file input"
             )
 
         if abundancepath is not None:
@@ -161,6 +174,18 @@ class AbundanceOptions:
                         f'Not an existing non-directory file: "{str(bampath)}"'
                     )
             self.add_existing_bam_paths(bampaths)
+        elif aemb is not None:
+            if not aemb.is_dir():
+                raise NotADirectoryError(
+                    f"Directory '{aemb}' passed with --aemb is not an existing directory."
+                )
+            paths = [p for p in aemb.iterdir() if p.is_file() and p.suffix == ".tsv"]
+            if len(paths) == 0:
+                raise ValueError(
+                    f"No `.tsv` files found in --aemb argument {aemb}. "
+                    "Make sure all TSV files in the directory ends with `.tsv`."
+                )
+            self.path = AEMBPaths(paths)
 
         if min_alignment_id is not None:
             if bampaths is None:
@@ -185,7 +210,7 @@ class AbundanceOptions:
         for bampath in paths:
             if not pycoverm.is_bam_sorted(str(bampath)):
                 raise ValueError(f"Path {bampath} is not sorted by reference.")
-        self.path = paths
+        self.path = BAMPaths(paths)
 
 
 class VAEOptions:
@@ -631,13 +656,12 @@ def calc_rpkm(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
             )
-    else:
-        assert isinstance(path, list)
+    elif isinstance(path, BAMPaths):
         logger.info(f"\tParsing {len(path)} BAM files with {nthreads} threads")
         logger.info(f"\tMin identity: {abundance_options.min_alignment_id}")
 
         abundance = vamb.parsebam.Abundance.from_files(
-            path,
+            list(path),
             outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
             abundance_options.refcheck,
@@ -649,6 +673,20 @@ def calc_rpkm(
         logger.info("\tOrder of columns is:")
         for i, samplename in enumerate(abundance.samplenames):
             logger.info(f"\t{i:>6}: {samplename}")
+    elif isinstance(path, AEMBPaths):
+        paths = list(path)
+        logger.info(f"\tParsing {len(paths)} AEMB TSV files")
+        abundance = vamb.parsebam.Abundance.from_aemb(
+            paths,
+            comp_metadata,
+        )
+        abundance.save(outdir.joinpath("abundance.npz"))
+        logger.info("\tOrder of columns is:")
+        for i, samplename in enumerate(abundance.samplenames):
+            logger.info(f"\t{i:>6}: {samplename}")
+
+    else:
+        assert False
 
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tProcessed RPKM in {elapsed} seconds.\n")
@@ -1408,6 +1446,7 @@ class BasicArguments(object):
         self.abundance_options = AbundanceOptions(
             self.args.bampaths,
             self.args.bamdir,
+            self.args.aemb,
             self.args.abundancepath,
             self.args.min_alignment_id,
             not self.args.norefcheck,
@@ -1674,6 +1713,12 @@ def add_input_output_arguments(subparser):
         metavar="",
         type=Path,
         help="Dir with .bam files to use",
+    )
+    rpkmos.add_argument(
+        "--aemb",
+        metavar="",
+        type=Path,
+        help="Dir with .tsv files from strobealign --aemb",
     )
     rpkmos.add_argument(
         "--rpkm",
