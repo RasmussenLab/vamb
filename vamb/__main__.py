@@ -433,20 +433,20 @@ class TrainingOptions:
         encoder_options: EncoderOptions,
         vae_options: Optional[VAETrainingOptions],
         aae_options: Optional[AAETrainingOptions],
-        lrate: float,
+        lrate: Optional[float],
     ):
-        assert isinstance(lrate, float)
+        assert isinstance(lrate, (type(None), float))
 
         assert (encoder_options.vae_options is None) == (vae_options is None)
         assert (encoder_options.aae_options is None) == (aae_options is None)
 
-        if lrate <= 0.0:
-            raise argparse.ArgumentTypeError("Learning rate must be positive")
-        self.lrate = lrate
+        if lrate is not None:
+            logger.warning(
+                "The --lrate argument is deprecated, and has no effect in Vamb 5 onwards"
+            )
 
         self.vae_options = vae_options
         self.aae_options = aae_options
-        self.lrate = lrate
 
 
 class ClusterOptions:
@@ -660,7 +660,6 @@ def trainvae(
     vae_options: VAEOptions,
     training_options: VAETrainingOptions,
     vamb_options: VambOptions,
-    lrate: float,
     alpha: Optional[float],
     data_loader: DataLoader,
 ) -> np.ndarray:
@@ -684,7 +683,6 @@ def trainvae(
     vae.trainmodel(
         vamb.encode.set_batchsize(data_loader, training_options.batchsize),
         nepochs=training_options.nepochs,
-        lrate=lrate,
         batchsteps=training_options.batchsteps,
         modelfile=modelpath,
     )
@@ -705,7 +703,6 @@ def trainaae(
     aae_options: AAEOptions,
     training_options: AAETrainingOptions,
     vamb_options: VambOptions,
-    lrate: float,
     alpha: Optional[float],  # set automatically if None
     contignames: Sequence[str],
 ) -> tuple[np.ndarray, dict[str, set[str]]]:
@@ -732,7 +729,6 @@ def trainaae(
         training_options.nepochs,
         training_options.batchsteps,
         training_options.temp,
-        lrate,
         modelpath,
     )
 
@@ -933,7 +929,6 @@ def run(
             vae_options=vae_options,
             training_options=vae_training_options,
             vamb_options=vamb_options,
-            lrate=training_options.lrate,
             alpha=encoder_options.alpha,
             data_loader=data_loader,
         )
@@ -948,7 +943,6 @@ def run(
             aae_options=aae_options,
             vamb_options=vamb_options,
             training_options=aae_training_options,
-            lrate=training_options.lrate,
             alpha=encoder_options.alpha,
             contignames=composition.metadata.identifiers,  # type:ignore
         )
@@ -1827,9 +1821,9 @@ def add_vae_arguments(subparser):
         "-r",
         dest="lrate",
         metavar="",
-        type=float,
-        default=1e-3,
-        help="learning rate [0.001]",
+        type=Optional[float],
+        default=None,
+        help=argparse.SUPPRESS,
     )
     return subparser
 

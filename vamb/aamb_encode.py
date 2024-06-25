@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from typing import Optional, IO, Union
 from numpy.typing import NDArray
 from loguru import logger
+import dadaptation
 
 
 ############################################################################# MODEL ###########################################################
@@ -206,7 +207,6 @@ class AAE(nn.Module):
         nepochs: int,
         batchsteps: list[int],
         T,
-        lr: float,
         modelfile: Union[None, str, IO[bytes]] = None,
     ):
         Tensor = torch.cuda.FloatTensor if self.usecuda else torch.FloatTensor
@@ -251,11 +251,11 @@ class AAE(nn.Module):
             adversarial_loss.cuda()
 
         #### Optimizers
-        optimizer_E = torch.optim.Adam(enc_params, lr=lr)
-        optimizer_D = torch.optim.Adam(dec_params, lr=lr)
+        optimizer_E = dadaptation.DAdaptAdam(enc_params, decouple=True)
+        optimizer_D = dadaptation.DAdaptAdam(dec_params, decouple=True)
 
-        optimizer_D_z = torch.optim.Adam(disc_z_params, lr=lr)
-        optimizer_D_y = torch.optim.Adam(disc_y_params, lr=lr)
+        optimizer_D_z = dadaptation.DAdaptAdam(disc_z_params, decouple=True)
+        optimizer_D_y = dadaptation.DAdaptAdam(disc_y_params, decouple=True)
 
         for epoch_i in range(nepochs):
             if epoch_i in batchsteps:
