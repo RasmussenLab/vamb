@@ -14,11 +14,12 @@ from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence, Iterable
 from pathlib import Path
 import shutil
-
-_ncpu = _os.cpu_count()
-DEFAULT_THREADS = 8 if _ncpu is None else _ncpu
+import os
 
 A = TypeVar("A", bound="Abundance")
+
+_ncpu = os.cpu_count()
+DEFAULT_BAM_THREADS = 32 if _ncpu is None else min(_ncpu, 32)
 
 
 class Abundance:
@@ -115,10 +116,10 @@ class Abundance:
 
         chunksize = min(nthreads, len(paths))
 
-        # We cap it to 16 threads, max. This will prevent pycoverm from consuming a huge amount
+        # We cap it to DEFAULT_BAM_THREADS threads, max. This will prevent pycoverm from consuming a huge amount
         # of memory if given a crapload of threads, and most programs will probably be IO bound
-        # when reading 16 files at a time.
-        chunksize = min(chunksize, 16)
+        # when reading DEFAULT_BAM_THREADS files at a time.
+        chunksize = min(chunksize, DEFAULT_BAM_THREADS)
 
         # If it can be done in memory, do so
         if chunksize >= len(paths):
@@ -134,7 +135,7 @@ class Abundance:
         else:
             if cache_directory is None:
                 raise ValueError(
-                    "If min(16, nthreads) < len(paths), cache_directory must not be None"
+                    "If min(DEFAULT_BAM_THREADS, nthreads) < len(paths), cache_directory must not be None"
                 )
             return cls.chunkwise_loading(
                 paths,
