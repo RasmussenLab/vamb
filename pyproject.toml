@@ -2,19 +2,19 @@
 name = "vamb"
 dynamic = ["version"]
 dependencies = [
-    "numpy == 1.24.2",
-    "torch == 1.13.1",
+    "numpy == 1.26.4",
+    "torch == 2.3.1",
     "pycoverm == 0.6.0",
-    "networkx == 3.1",
-    "scikit-learn == 1.2.2",
-    "pandas == 2.0.0",
-    "dadaptation == 3.0",
+    "networkx == 3.2", # 3.3 drops Python 3.9 support
+    "scikit-learn == 1.5.0",
+    "pandas == 2.2.0",
+    "dadaptation == 3.2",
     "loguru == 0.7.2",
 ]
-# Currently pycoverm does not have binaries for Python > 3.11.
-# The dependency resolver, will not error on Python 3.11, but attempt
+# Currently pycoverm does not have binaries for Python > 3.12.
+# The dependency resolver, will not error on Python 3.13, but attempt
 # to build pycoverm from source, but will not get the deps required for that.
-requires-python = "<3.12,>=3.9.0"
+requires-python = "<3.13,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [metadata]
@@ -30,9 +30,9 @@ readme = {file = "README.md"}
 
 [build-system]
 requires = [
-    "setuptools ~= 64.0",
+    "setuptools ~= 70.1",
     "setuptools-scm >= 8.0",
-    "Cython ~= 0.29.5"
+    "Cython ~= 3.0.1"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -43,6 +43,7 @@ ignore = ["E722", "E501"]
 [tool.pytest.ini_options]
 filterwarnings = [
     "error",
+    "ignore::DeprecationWarning",
     "ignore::UserWarning",
 ]
 
