@@ -37,10 +37,21 @@ friendliness.
   	- `vae_clusters_unsplit.tsv`
   And similarly for e.g. `vaevae_clusters_split.tsv`.
   When binsplitting is not used, only the unsplit clusters are output.
-
+* The `benchmark` module of Vamb has been removed, as it is superseded by our
+  new benchmarking tool https://github.com/jakobnissen/BinBencherBackend.jl
+  
 ### Other changes
+* Several details of the clustering algorithm has been rehauled.
+  It now returns more accurate clusters and may be faster in some circumstances.
+  However, GPU clustering may be significantly slower. (#198)
+* Vamb now uses both relative and absolute abundances in the encoder, compared
+  to only the relative ones before. This improves binning, especially when using
+  a low number of samples (#210)
 * Vamb now binsplits with `-o C` by default.
 	- To disable binsplitting, pass `-o` without an argument
+* Instead of passing all BAM files individually on command line with the
+  --bamfiles flag, it is now recommended to pass in a directory with all the
+  BAM files using the --bamdir flag. --bamfiles will still work.
 * Vamb no longer errors when the batch size is too large.
 * Several errors and warnings have been improved:
 	- Vamb now warns the user when running on fewer than 20,000 contigs, since
@@ -58,20 +69,8 @@ friendliness.
   log is now timestamped, and formatted better.
 * Vamb now outputs metadata about the unsplit clusters in the output TSV file
   `vae_clusters_metadata.tsv`.
-
-## v4.2.0
-* Several details of the clustering algorithm has been rehauled.
-  It now returns more accurate clusters and may be faster in some circumstances.
-  However, GPU clustering may be significantly slower. (#198)
-* Vamb now uses both relative and absolute abundances in the encoder, compared
-  to only the relative ones before. This improves binning, especially when using
-  a low number of samples (#210)
 * Vamb now correctly uses a random seed on each invokation (#213)
-* The `benchmark` module of Vamb has been removed, as it is superseded by our
-  new benchmarking tool https://github.com/jakobnissen/VambBenchmarks.jl
-* Improved error message when the reference hash doesn't match (#191)
-* Various bugfixes
-* The printing of epoch losses has been changed (#211)
+* Fixed various bugs and undoubtedly introduced some fresh ones.
 
 ## v4.1.3
 * Fix a bug that resulting in poor clustering results (#179)
