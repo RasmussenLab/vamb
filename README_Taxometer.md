@@ -28,6 +28,7 @@ Some important properties of the input files:
 * BAM files must be sorted by coordinate. You can sort BAM files with `samtools sort`.
 * For the command above, the default taxonomy format follows MMseqs2 output, which means that the file is tab-separated, has no headers, the 1st column contains contigs identifiers and the 9th column contains the taxonomy annotations. Taxonomy annotations are text labels (e.g. "s__Alteromonas hispanica" or "Gammaproteobacteria") on all levels, sorted from domain to species, concatenated with ";". In the paper we benchmarked annotations that use GTDB and NCBI identifiers. 
 
+## Taxonomic labels
 The taxonomic labels do not have to correspond to a particular version of any database, the only thing that is important is that the taxonomy levels are consistent within the dataset. E.g. if one contig has a taxonomic annotation
 ```
 Bacteria;Bacillota;Clostridia;Eubacteriales;Lachnospiraceae;Roseburia;Roseburia hominis
