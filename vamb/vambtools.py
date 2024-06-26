@@ -151,7 +151,7 @@ class BinSplitter:
             if self.splitter is None:
                 return "Explicitly passed as empty (no binsplitting)"
             else:
-                return '"{self.splitter}"'
+                return f'"{self.splitter}"'
         else:
             if self.splitter is None:
                 return "Defaulting to 'C', but disabled due to incompatible identifiers"
