@@ -1783,8 +1783,8 @@ def add_vae_arguments(subparser):
         dest="beta",
         metavar="",
         type=float,
-        default=200.0,
-        help="beta, capacity to learn [200.0]",
+        default=500.0,
+        help="beta, capacity to learn [500.0]",
     )
     vaeos.add_argument(
         "-d",
@@ -1805,8 +1805,8 @@ def add_vae_arguments(subparser):
         dest="batchsize",
         metavar="",
         type=int,
-        default=256,
-        help="starting batch size [256]",
+        default=128,
+        help="starting batch size [128]",
     )
     trainos.add_argument(
         "-q",
