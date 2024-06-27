@@ -184,7 +184,7 @@ class VAE(_nn.Module):
 
         # If only 1 sample, we weigh alpha and nhiddens differently
         if alpha is None:
-            alpha = 0.15 if nsamples > 1 else 0.50
+            alpha = 0.25 if nsamples > 1 else 0.50
 
         if nhiddens is None:
             nhiddens = [512, 512] if nsamples > 1 else [256, 256]
