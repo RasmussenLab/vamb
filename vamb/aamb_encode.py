@@ -260,7 +260,8 @@ class AAE(nn.Module):
         for epoch_i in range(nepochs):
             if epoch_i in batchsteps:
                 data_loader = set_batchsize(
-                    data_loader, data_loader.batch_size * 2  # type:ignore
+                    data_loader,
+                    data_loader.batch_size * 2,  # type:ignore
                 )
 
             (

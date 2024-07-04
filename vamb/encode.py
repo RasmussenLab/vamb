@@ -378,7 +378,8 @@ class VAE(_nn.Module):
 
         if epoch in batchsteps:
             data_loader = set_batchsize(
-                data_loader, data_loader.batch_size * 2  # type:ignore
+                data_loader,
+                data_loader.batch_size * 2,  # type:ignore
             )
 
         for depths_in, tnf_in, abundance_in, weights in data_loader:

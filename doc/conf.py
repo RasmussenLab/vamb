@@ -128,7 +128,7 @@ if os.environ.get("READTHEDOCS") == "True":
 
 #     def run_apidoc(_):
 #         from sphinx.ext import apidoc
-# 
+#
 #         apidoc.main(
 #             [
 #                 "--force",
@@ -142,6 +142,6 @@ if os.environ.get("READTHEDOCS") == "True":
 #                 str(PACKAGE_ROOT / "*.so"),
 #             ]
 #         )
-# 
+#
 #     def setup(app):
 #         app.connect("builder-inited", run_apidoc)
