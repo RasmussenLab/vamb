@@ -32,7 +32,7 @@ A tag unambiguously refers to a commit, and is never removed.
 Ideally, the tagged commit should be the one that updates the version in `vamb/__init__.py`.
 
 #### Testing
-Our CI pipeline currently uses a formatter and a linter to check for issues (currently, the Black and Ruff formatter and linter).
+Our CI pipeline currently uses a formatter and a linter to check for issues (currently, the Ruff formatter and linter).
 To quicken development time, you can install these locally so you can catch these issues before they are caught in CI.
 
 #### Dependencies
@@ -60,11 +60,11 @@ $ git switch -c kmer-compression
 
 Write your code, then test it.
 This requires you to have installed Vamb (preferentially with `pip install -e .`),
-and installed `pytest`, `black` and `ruff`:
+and installed `pytest` and `ruff`:
 ```shell
 $ python -m pytest # test the code
 $ ruff check . # run the linter
-$ black . # run the formatter
+$ ruff format . # run the formatter
 ```
 
 Commit it, then push to `origin`
