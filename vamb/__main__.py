@@ -1688,7 +1688,7 @@ def add_input_output_arguments(subparser):
 
     # RPKM arguments
     rpkmos = subparser.add_argument_group(
-        title="RPKM input (either BAMs or .npz required)"
+        title="RPKM input (exactly one input required)"
     )
     # Note: This argument is deprecated, but we'll keep supporting it for now.
     # Instead, use --bamdir.
@@ -1745,7 +1745,7 @@ def add_input_output_arguments(subparser):
         metavar="",
         type=float,
         default=None,
-        help="ignore reads with nucleotide identity below this [0.0]",
+        help=argparse.SUPPRESS,
     )
     inputos.add_argument(
         "-p",
@@ -1754,7 +1754,7 @@ def add_input_output_arguments(subparser):
         type=int,
         default=DEFAULT_THREADS,
         help=(
-            "number of threads to use " "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
+            "number of threads to use when parsing BAM" "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
         ),
     )
     inputos.add_argument(
@@ -1797,7 +1797,7 @@ def add_vae_arguments(subparser):
         type=int,
         nargs="+",
         default=None,
-        help="hidden neurons [Auto]",
+        help=argparse.SUPPRESS,
     )
     vaeos.add_argument(
         "-l",
@@ -1805,7 +1805,7 @@ def add_vae_arguments(subparser):
         metavar="",
         type=int,
         default=32,
-        help="latent neurons [32]",
+        help=argparse.SUPPRESS,
     )
     vaeos.add_argument(
         "-a",
@@ -1813,7 +1813,7 @@ def add_vae_arguments(subparser):
         metavar="",
         type=float,
         default=None,
-        help="alpha, weight of TNF versus depth loss [Auto]",
+        help=argparse.SUPPRESS,
     )
     vaeos.add_argument(
         "-b",
@@ -1821,7 +1821,7 @@ def add_vae_arguments(subparser):
         metavar="",
         type=float,
         default=200.0,
-        help="beta, capacity to learn [200.0]",
+        help=argparse.SUPPRESS,
     )
     vaeos.add_argument(
         "-d",
@@ -1829,13 +1829,13 @@ def add_vae_arguments(subparser):
         metavar="",
         type=float,
         default=None,
-        help="dropout [Auto]",
+        help=argparse.SUPPRESS,
     )
 
     trainos = subparser.add_argument_group(title="Training options", description=None)
 
     trainos.add_argument(
-        "-e", dest="nepochs", metavar="", type=int, default=300, help="epochs [300]"
+        "-e", dest="nepochs", metavar="", type=int, default=300, help=argparse.SUPPRESS
     )
     trainos.add_argument(
         "-t",
@@ -1843,7 +1843,7 @@ def add_vae_arguments(subparser):
         metavar="",
         type=int,
         default=256,
-        help="starting batch size [256]",
+        help=argparse.SUPPRESS,
     )
     trainos.add_argument(
         "-q",
@@ -1852,7 +1852,7 @@ def add_vae_arguments(subparser):
         type=int,
         nargs="*",
         default=[25, 75, 150, 225],
-        help="double batch size at epochs [25 75 150 225]",
+        help=argparse.SUPPRESS,
     )
     trainos.add_argument(
         "-r",
@@ -1877,7 +1877,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=int,
         default=100,
-        help="taxonomy predictor epochs [100]",
+        help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
         "-pt",
@@ -1885,7 +1885,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=int,
         default=1024,
-        help="batch size for the taxonomy predictor [1024]",
+        help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
         "-pthr",
@@ -1893,7 +1893,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=float,
         default=0.5,
-        help="conditional probability threshold for accepting the taxonomic prediction [0.5]",
+        help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
         "-ploss",
@@ -1901,7 +1901,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=str,
         default="flat_softmax",
-        help='Hierarchical loss (one of flat_softmax, cond_softmax, soft_margin) ["flat_softmax"]',
+        help=argparse.SUPPRESS,
     )
     return subparser
 
@@ -1915,7 +1915,7 @@ def add_clustering_arguments(subparser):
         metavar="",
         type=int,
         default=300,
-        help="size of window to count successes [300]",
+        help=argparse.SUPPRESS,
     )
     clusto.add_argument(
         "-u",
@@ -1923,7 +1923,7 @@ def add_clustering_arguments(subparser):
         metavar="",
         type=int,
         default=15,
-        help="minimum success in window [15]",
+        help=argparse.SUPPRESS,
     )
     clusto.add_argument(
         "-c",
@@ -1943,7 +1943,7 @@ def add_clustering_arguments(subparser):
         default=None,
         const="",
         nargs="?",
-        help="binsplit separator [C] (pass empty string to disable)",
+        help="binsplit separator [C if present] (pass empty string to disable)",
     )
     return subparser
 
@@ -1981,7 +1981,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=int,
         default=547,
-        help="hidden neurons AAE [547]",
+        help=argparse.SUPPRESS,
     )
     aaeos.add_argument(
         "--z_aae",
@@ -1989,7 +1989,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=int,
         default=283,
-        help="latent neurons AAE continuous latent space  [283]",
+        help=argparse.SUPPRESS,
     )
     aaeos.add_argument(
         "--y_aae",
@@ -1997,7 +1997,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=int,
         default=700,
-        help="latent neurons AAE categorical latent space [700]",
+        help=argparse.SUPPRESS,
     )
     aaeos.add_argument(
         "--sl_aae",
@@ -2005,7 +2005,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=float,
         default=0.00964,
-        help="loss scale between reconstruction loss and adversarial losses [0.00964]",
+        help=argparse.SUPPRESS,
     )
     aaeos.add_argument(
         "--slr_aae",
@@ -2013,7 +2013,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=float,
         default=0.5,
-        help="loss scale between reconstruction adversarial losses [0.5] ",
+        help=argparse.SUPPRESS,
     )
     aaeos.add_argument(
         "--aae_temp",
@@ -2021,7 +2021,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=float,
         default=0.1596,
-        help=" Temperature of the softcategorical prior [0.1596]",
+        help=argparse.SUPPRESS,
     )
 
     aaetrainos = subparser.add_argument_group(
@@ -2034,7 +2034,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=int,
         default=70,
-        help="epochs AAE [70]",
+        help=argparse.SUPPRESS,
     )
     aaetrainos.add_argument(
         "--t_aae",
@@ -2042,7 +2042,7 @@ def add_aae_arguments(subparser):
         metavar="",
         type=int,
         default=256,
-        help="starting batch size AAE [256]",
+        help=argparse.SUPPRESS,
     )
     aaetrainos.add_argument(
         "--q_aae",
@@ -2051,7 +2051,7 @@ def add_aae_arguments(subparser):
         type=int,
         nargs="*",
         default=[25, 50],
-        help="double batch size at epochs AAE [25,50]",
+        help=argparse.SUPPRESS,
     )
     return subparser
 
