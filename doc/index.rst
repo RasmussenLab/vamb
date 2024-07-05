@@ -1,4 +1,4 @@
-Variational Autoencoder for Metagenomic Binning (VAMB)
+Variational Autoencoders for Metagenomic Binning (VAMB)
 =======================================================
 
 .. include:: ../README.md
@@ -7,14 +7,27 @@ Variational Autoencoder for Metagenomic Binning (VAMB)
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorial
+   :caption: How to run
    
-   tutorial.md
+   how_to_run.md
 
 .. toctree::
-   :caption: Setup Documentation
+   :maxdepth: 2
+   :caption: Vamb output
+   
+   outputs.md
 
-   README
+.. toctree::
+   :maxdepth: 2
+   :caption: Tips for running Vamb
+   
+   tips.md
+
+.. toctree::
+   :maxdepth: 2
+   :caption: In-depth walkthrough
+   
+   tutorial.md
 
 Indices and tables
 ==================
