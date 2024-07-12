@@ -4,8 +4,6 @@
 Vamb is a metagenomic binner which feeds sequence composition from a FASTA file of contigs, and abundance information from e.g. BAM files into a variational autoencoder and clusters the latent representation.
 It performs excellently with multiple samples, and pretty good on single-sample data.
 
-For more information about the implementation, methodological considerations, and advanced usage of Vamb, see [Vamb tutorial](https://github.com/RasmussenLab/vamb/blob/master/doc/tutorial.md).
-
 * __New:__ _For benchmarking binnings with a known ground truth, see our tool [BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl)_
 * __New:__ _The new semi-supervised [TaxVamb binning mode](TODO) achieves state-of-the-art binning_
 
