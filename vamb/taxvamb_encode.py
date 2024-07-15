@@ -9,7 +9,7 @@ from collections import namedtuple
 from functools import partial
 from math import log as _log
 from pathlib import Path
-from typing import Optional, IO, Union, Iterable
+from typing import Optional, IO, Union, Iterable, Sequence
 import dadaptation
 from loguru import logger
 
@@ -23,25 +23,26 @@ from torch import Tensor
 import vamb.semisupervised_encode as _semisupervised_encode
 import vamb.encode as _encode
 import vamb.hloss_misc as _hloss
+from vamb.vambtools import ContigTaxonomy
 
 
-def make_graph(taxs):
-    table_parent = []
+def make_graph(
+    taxes: Sequence[Optional[ContigTaxonomy]],
+) -> tuple[list[str], dict[str, int], list[int]]:
     G = nx.DiGraph()
-    root = "Domain"
-    for i, row in enumerate(taxs):
-        try:
-            r = row.split(";")
-        except AttributeError:  # ignore non-strings in the input
+    root = "root"
+    for contig_taxonomy in taxes:
+        if contig_taxonomy is None:
             continue
-        if len(r) == 0:
+        if len(contig_taxonomy.ranks) == 0:
             continue
-        G.add_edge(root, r[0])
-        for j in range(1, len(r)):
-            G.add_edge(r[j - 1], r[j])
+        G.add_edge(root, contig_taxonomy.ranks[0])
+        for parent, child in zip(contig_taxonomy.ranks, contig_taxonomy.ranks[1:]):
+            G.add_edge(parent, child)
     edges = nx.bfs_edges(G, root)
-    nodes = [root] + [v for u, v in edges]
+    nodes: list[str] = [root] + [v for _, v in edges]
     ind_nodes = {v: i for i, v in enumerate(nodes)}
+    table_parent: list[int] = []
     for n in nodes:
         if n == root:
             table_parent.append(-1)

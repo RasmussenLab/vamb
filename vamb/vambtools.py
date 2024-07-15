@@ -9,7 +9,7 @@ from vamb._vambtools import _kmercounts, _overwrite_matrix
 import collections as _collections
 from itertools import zip_longest
 from hashlib import md5 as _md5
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Optional, IO, Union
 from pathlib import Path
 from loguru import logger
@@ -216,6 +216,66 @@ class PushArray:
     def clear(self) -> None:
         "Empties the PushArray. Does not clear the underlying memory"
         self.length = 0
+
+
+class ContigTaxonomy:
+    """
+    Hierarchical taxonomy of some contig.
+    If `is_canonical`, the ranks are assumed to be domain, phylum, class,
+    order, family, genus, species, in that order.
+    The taxonomy may be arbitrarily truncated, e.g. ["Eukaryota", "Chordata"]
+    is a valid (canonical) taxonomy for a human.
+    """
+
+    __slots__ = ["is_canonical", "ranks"]
+
+    def __init__(self, ranks: list[str], is_canonical: bool = False):
+        if is_canonical and len(ranks) > 7:
+            raise ValueError(
+                "For a canonical ContigTaxonomy, there must be at most 7 ranks"
+            )
+
+        self.ranks = ranks
+        self.is_canonical = is_canonical
+
+    @classmethod
+    def from_semicolon_sep(cls, s: str, is_canonical: bool = False):
+        return cls(s.split(";"), is_canonical)
+
+    @property
+    def genus(self) -> Optional[str]:
+        if not self.is_canonical:
+            raise ValueError("Taxonomy must be canonical to get genus")
+        if len(self.ranks) < 6:
+            return None
+        return self.ranks[5]
+
+
+def parse_taxonomy(
+    input_file: Path, contignames: Sequence[str], is_canonical: bool
+) -> list[Optional[ContigTaxonomy]]:
+    result: list[Optional[ContigTaxonomy]] = [None] * len(contignames)
+    index_of_contigname = {c: i for (i, c) in enumerate(contignames)}
+    with open(input_file) as file:
+        lines = filter(None, map(str.strip, file))
+        header = next(lines)
+        assert header.startswith("contigs\tpredictions")
+        for line in lines:
+            (contigname, taxonomy, *_) = line.split("\t")
+            index = index_of_contigname.get(contigname)
+            if index is None:
+                raise ValueError(
+                    f'When parsing taxonomy, found contigname "{contigname}", '
+                    "but no sequence of that name is in the FASTA file"
+                )
+            existing = result[index]
+            if existing is not None:
+                raise ValueError(
+                    f'Duplicate contigname when parsing taxonomy: "{contigname}"'
+                )
+            result[index] = ContigTaxonomy.from_semicolon_sep(taxonomy, is_canonical)
+
+    return result
 
 
 def zscore(
