@@ -18,8 +18,9 @@ import shutil
 from collections import defaultdict
 import json
 import numpy as np
+from loguru import logger
 
-MarkerID = NewType("Marker", int)
+MarkerID = NewType("MarkerID", int)
 MarkerName = NewType("MarkerName", str)
 ContigID = NewType("ContigID", int)
 ContigName = NewType("ContigName", str)
@@ -123,9 +124,9 @@ class Markers:
         cls,
         contigs: Path,
         hmm_path: Path,
+        contignames: Sequence[str],
         tmpdir_to_create: Path,
         n_processes: int,
-        fasta_entry_mask: Sequence[bool],
         target_refhash: Optional[bytes],
     ):
         """
@@ -141,37 +142,16 @@ class Markers:
         If the target refhash is not None, and the computed reference hash does not
         match, an exception is thrown. See vamb.vambtools.RefHasher.
         """
-        if n_processes < 1:
-            raise ValueError(f"Must use at least 1 process, not {n_processes}")
-        # Cap processes, because most OSs cap the number of open file handles,
-        # and we need one file per process when splitting FASTA file
-        elif n_processes > 64:
-            print(f"Warning: Processes set to {n_processes}, capping to 64")
-            n_processes = 64
-        name_to_id: dict[MarkerName, MarkerID] = dict()
-
-        # Create the list of marker names, translating those that are the same,
-        # but appear under two marker names
+        n_processes = cap_processes(n_processes)
         with open(hmm_path, "rb") as file:
-            for hmm in pyhmmer.plan7.HMMFile(file):
-                name = hmm.name.decode()
-                if name in NORMALIZE_MARKER_TRANS_DICT:
-                    continue
-                name_to_id[MarkerName(name)] = MarkerID(len(name_to_id))
-        for old_name, new_name in NORMALIZE_MARKER_TRANS_DICT.items():
-            name_to_id[MarkerName(old_name)] = name_to_id[MarkerName(new_name)]
-        id_to_names: defaultdict[MarkerID, list[MarkerName]] = defaultdict(list)
-        for name, id in name_to_id.items():
-            id_to_names[id].append(name)
-        marker_names = [id_to_names[MarkerID(i)] for i in range(len(id_to_names))]
-
-        # For safety: Verify that there are no more than 256 MarkerIDs, such that we can
-        # store them in an uint8 array without overflow (which does not throw errors
-        # in the current version of Numpy)
-        assert len(marker_names) <= 256
+            hmms = list(pyhmmer.plan7.HMMFile(file))
+        (_, marker_names) = get_name_to_id(hmms)
 
         (refhash, paths) = split_file(
-            contigs, tmpdir_to_create, n_processes, fasta_entry_mask
+            contigs,
+            contignames,
+            tmpdir_to_create,
+            n_processes,
         )
 
         if target_refhash is not None:
@@ -179,21 +159,33 @@ class Markers:
                 refhash, target_refhash, "Markers FASTA file", None, None
             )
 
-        marker_list: list[Optional[np.ndarray]] = [None] * sum(fasta_entry_mask)
+        index_of_name = {
+            ContigName(n): ContigID(i) for (i, n) in enumerate(contignames)
+        }
+        marker_list: list[Optional[np.ndarray]] = [None] * len(contignames)
         with Pool(n_processes) as pool:
             for sub_result in pool.imap_unordered(
                 work_per_process,
-                list(
-                    zip(paths, itertools.repeat(hmm_path), itertools.repeat(name_to_id))
-                ),
+                list(zip(paths, itertools.repeat(hmms))),
             ):
-                for contig_id, markers in sub_result:
-                    marker_list[contig_id] = markers
+                for contig_name, markers in sub_result:
+                    marker_list[index_of_name[contig_name]] = markers
 
         shutil.rmtree(tmpdir_to_create)
         markers = cls(marker_list, marker_names, refhash)
 
         return markers
+
+
+def cap_processes(processes: int) -> int:
+    if processes < 1:
+        raise ValueError(f"Must use at least 1 process, not {processes}")
+    # Cap processes, because most OSs cap the number of open file handles,
+    # and we need one file per process when splitting FASTA file
+    elif processes > 64:
+        logger.warning(f"Processes set to {processes}, capping to 64")
+        return 64
+    return processes
 
 
 # Some markers have different names, but should be treated as the same SCG.
@@ -205,31 +197,25 @@ NORMALIZE_MARKER_TRANS_DICT = {
 }
 
 
-def filter_contigs(reader: Reader, mask: Sequence[bool]) -> Iterable[FastaEntry]:
-    for record, keep in itertools.zip_longest(byte_iterfasta(reader), mask):
-        if record is None or keep is None:
-            raise ValueError(
-                "The mask length does not match the length of FASTA records"
-            )
-        if keep:
-            yield record
-
-
 def split_file(
-    input: Path, tmpdir_to_create: Path, n_splits: int, mask: Sequence[bool]
+    input: Path,
+    contignames: Sequence[str],
+    tmpdir_to_create: Path,
+    n_splits: int,
 ) -> tuple[bytes, list[Path]]:
+    names = set(contignames)
     os.mkdir(tmpdir_to_create)
     paths = [tmpdir_to_create.joinpath(str(i)) for i in range(n_splits)]
     filehandles = [open(path, "w") for path in paths]
     refhasher = RefHasher()
     with Reader(input) as infile:
-        records = filter_contigs(infile, mask)
-        # We write the index to the record and store that instead of the name.
         for i, (outfile, record) in enumerate(
-            zip(itertools.cycle(filehandles), records)
+            zip(
+                itertools.cycle(filehandles),
+                filter(lambda x: x.identifier in names, byte_iterfasta(infile)),
+            )
         ):
             refhasher.add_refname(record.identifier)
-            record.identifier = str(i)
             print(record.format(), file=outfile)
 
     for filehandle in filehandles:
@@ -243,12 +229,12 @@ def process_chunk(
     hmms: list[pyhmmer.plan7.HMM],
     name_to_id: dict[MarkerName, MarkerID],
     finder: pyrodigal.GeneFinder,
-) -> list[tuple[ContigID, np.ndarray]]:
+) -> list[tuple[ContigName, np.ndarray]]:
     # We temporarily store them as sets in order to deduplicate. While single contigs
     # may have duplicate markers, it makes no sense to count this as contamination,
     # because we are not about to second-guess the assembler's job of avoiding
     # chimeric sequences.
-    markers: defaultdict[ContigID, set[MarkerID]] = defaultdict(set)
+    markers: defaultdict[ContigName, set[MarkerID]] = defaultdict(set)
     alphabet = pyhmmer.easel.Alphabet.amino()
     digitized: list[pyhmmer.easel.DigitalSequence] = []
     for record in chunk:
@@ -267,27 +253,24 @@ def process_chunk(
         assert score_cutoff is not None
         for hit in top_hits:
             if hit.score >= score_cutoff:
-                markers[ContigID(int(hit.name.decode()))].add(marker_id)
+                markers[ContigName(hit.name.decode())].add(marker_id)
 
     return [
         (name, np.array(list(ids), dtype=np.uint8)) for (name, ids) in markers.items()
     ]
 
 
-# We avoid moving data between processes as much as possible, so each process
-# only needs these two paths, and this marker name dict which we assume to be small.
-# The return type here is optimised for a small memory footprint.
 def work_per_process(
-    args: tuple[Path, Path, dict[MarkerName, MarkerID]],
-) -> list[tuple[ContigID, np.ndarray]]:
-    (contig_path, hmmpath, name_to_id) = args
-    with open(hmmpath, "rb") as file:
-        hmms = list(pyhmmer.plan7.HMMFile(file))
+    args: tuple[Path, list[pyhmmer.plan7.HMM]],
+) -> list[tuple[ContigName, np.ndarray]]:
+    (contig_path, hmms) = args
+
+    (name_to_id, _) = get_name_to_id(hmms)
 
     # Chunk up the FASTA file for memory efficiency reasons, while still
     # allowing pyhmmer to scan multiple sequences at once for speed
     chunk: list[FastaEntry] = []
-    result: list[tuple[ContigID, np.ndarray]] = []
+    result: list[tuple[ContigName, np.ndarray]] = []
     finder = pyrodigal.GeneFinder(meta=True)
     with open(contig_path, "rb") as file:
         for record in byte_iterfasta(file):
@@ -298,3 +281,26 @@ def work_per_process(
         result.extend(process_chunk(chunk, hmms, name_to_id, finder))
 
     return result
+
+
+def get_name_to_id(
+    hmms: list[pyhmmer.plan7.HMM],
+) -> tuple[dict[MarkerName, MarkerID], list[list[MarkerName]]]:
+    name_to_id: dict[MarkerName, MarkerID] = dict()
+    for hmm in hmms:
+        name = hmm.name.decode()
+        if name in NORMALIZE_MARKER_TRANS_DICT:
+            continue
+        name_to_id[MarkerName(name)] = MarkerID(len(name_to_id))
+    for old_name, new_name in NORMALIZE_MARKER_TRANS_DICT.items():
+        name_to_id[MarkerName(old_name)] = name_to_id[MarkerName(new_name)]
+
+    if len(set(name_to_id.values())) > 256:
+        raise ValueError("Maximum 256 marker IDs")
+
+    id_to_names: defaultdict[MarkerID, list[MarkerName]] = defaultdict(list)
+    for n, i in name_to_id.items():
+        id_to_names[i].append(n)
+    marker_names = [id_to_names[MarkerID(i)] for i in range(len(id_to_names))]
+
+    return name_to_id, marker_names
