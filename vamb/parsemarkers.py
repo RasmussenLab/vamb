@@ -278,7 +278,7 @@ def process_chunk(
 # only needs these two paths, and this marker name dict which we assume to be small.
 # The return type here is optimised for a small memory footprint.
 def work_per_process(
-    args: tuple[Path, Path, dict[MarkerName, MarkerID]]
+    args: tuple[Path, Path, dict[MarkerName, MarkerID]],
 ) -> list[tuple[ContigID, np.ndarray]]:
     (contig_path, hmmpath, name_to_id) = args
     with open(hmmpath, "rb") as file:

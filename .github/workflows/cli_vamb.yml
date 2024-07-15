@@ -28,8 +28,8 @@ jobs:
         cache-dependency-path: '**/pyproject.toml'
     - name: Download fixtures
       run: |
-        wget https://www.dropbox.com/scl/fi/ivsqbao9we1lnyyyh43cc/ci_data.zip\?rlkey\=b9lcqxs63iv2409q5a7q1oh9z\&dl\=0 -O ci_data.zip
-        unzip ci_data.zip
+        wget https://www.dropbox.com/scl/fi/xzc0tro7oe6tfm3igygpj/ci_data.zip\?rlkey\=xuv6b5eoynfryp4fba1kfp5jm\&st\=9oz24ych\&dl\=0 -O ci_data.zip
+        unzip -o ci_data.zip
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -48,7 +48,7 @@ jobs:
         vamb bin taxvamb --outdir outdir_taxvamb_no_predict --no_predictor --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv -e 10 -q -t 10 -o C --minfasta 200000
         ls -la outdir_taxvamb_no_predict
         cat outdir_taxvamb_no_predict/log.txt
-        vamb bin taxvamb --outdir outdir_taxvamb_preds --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz  --no_predictor --taxonomy outdir_taxvamb/results_taxometer.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -e 10 -q -t 10 -o C --minfasta 200000
+        vamb bin taxvamb --outdir outdir_taxvamb_preds --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz  --no_predictor --taxonomy outdir_taxvamb/results_taxometer.tsv -e 10 -q -t 10 -o C --minfasta 200000
         ls -la outdir_taxvamb_preds
         cat outdir_taxvamb_preds/log.txt
     - name: Run Taxometer
@@ -56,7 +56,7 @@ jobs:
         vamb taxometer --outdir outdir_taxometer --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy taxonomy_mock.tsv -pe 10 -pt 10
         ls -la outdir_taxometer
         cat outdir_taxometer/log.txt
-        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy outdir_taxometer/results_taxometer.csv --column_contigs contigs --column_taxonomy predictions --delimiter_taxonomy , -pe 10 -pt 10
+        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --rpkm abundance_mock.npz --taxonomy outdir_taxometer/results_taxometer.tsv -pe 10 -pt 10
         ls -la outdir_taxometer_pred
         cat outdir_taxometer/log.txt
     - name: Run k-means reclustering

@@ -19,7 +19,6 @@ from collections.abc import Sequence
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from loguru import logger
-import pandas as pd
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -274,39 +273,21 @@ class TaxonomyOptions:
     __slots__ = [
         "no_predictor",
         "taxonomy_path",
-        "column_contigs",
-        "column_taxonomy",
-        "delimiter_taxonomy",
     ]
 
     def __init__(
         self,
-        no_predictor: Optional[bool],
-        taxonomy_path: Optional[Path],
-        column_contigs: Optional[str],
-        column_taxonomy: Optional[str],
-        delimiter_taxonomy: Optional[str],
+        no_predictor: bool,
+        taxonomy_path: Path,
     ):
-        assert isinstance(taxonomy_path, (Path, type(None)))
-
-        if taxonomy_path is None and no_predictor:
-            raise argparse.ArgumentTypeError(
-                "You must specify either --taxonomy_path or --taxonomy_predictions_path or run without --no_predictor flag"
-            )
-
-        if taxonomy_path is None and not no_predictor:
-            raise argparse.ArgumentTypeError(
-                "The taxonomy predictor needs --taxonomy_path for training"
-            )
+        assert isinstance(taxonomy_path, Path)
+        assert isinstance(no_predictor, bool)
 
         if taxonomy_path is not None and not taxonomy_path.is_file():
             raise FileNotFoundError(taxonomy_path)
 
         self.taxonomy_path = taxonomy_path
         self.no_predictor = no_predictor
-        self.column_contigs = column_contigs
-        self.column_taxonomy = column_taxonomy
-        self.delimiter_taxonomy = delimiter_taxonomy
 
 
 class ReclusteringOptions:
@@ -1033,77 +1014,31 @@ def run(
         )
 
 
-def parse_taxonomy(
-    taxonomy_path: Path,
-    contignames: Sequence[str],
-    column_contigs: Optional[str],
-    column_taxonomy: Optional[str],
-    delimiter_taxonomy: Optional[str],
-) -> pd.Series:
-    if column_contigs is None or column_taxonomy is None:
-        df_taxonomy = pd.read_csv(taxonomy_path, delimiter="\t", header=None)
-        column_contigs = 0
-        column_taxonomy = 8
-        if len(df_taxonomy.columns) != 9:
-            raise ValueError(
-                "The contigs column or the taxonomy column are not defined, but the taxonomy file is not in MMseqs2 format"
-            )
-    else:
-        df_taxonomy = pd.read_csv(taxonomy_path, delimiter=delimiter_taxonomy)
-    logger.info(f"{len(df_taxonomy)} lines in taxonomy file")
-    logger.info(f"{len(contignames)} contigs")
-
-    df_taxonomy = df_taxonomy.fillna(np.nan)
-    df_taxonomy = df_taxonomy[df_taxonomy[column_contigs].isin(contignames)]
-
-    missing_contigs = set(contignames) - set(df_taxonomy[column_contigs])
-    new_rows = []
-    for c in missing_contigs:
-        new_row: dict[int, Union[str, float]] = {i: np.nan for i in df_taxonomy.columns}
-        new_row[column_contigs] = c
-        new_rows.append(new_row)
-
-    df_taxonomy = pd.concat([df_taxonomy, pd.DataFrame(new_rows)], ignore_index=True)
-
-    df_taxonomy.set_index(column_contigs, inplace=True)
-    df_taxonomy = df_taxonomy.loc[contignames]
-    df_taxonomy.reset_index(inplace=True)
-    graph_column = df_taxonomy[column_taxonomy].astype(str)
-
-    if list(df_taxonomy[column_contigs]) != list(contignames):
-        raise AssertionError(
-            "The contig names of taxonomy entries are not the same as in the contigs metadata"
-        )
-
-    return graph_column
-
-
 def predict_taxonomy(
     rpkms: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
     contignames: np.ndarray,
-    taxonomy_options: TaxonomyOptions,
+    taxonomy_path: Path,
     out_dir: Path,
     predictor_training_options: PredictorTrainingOptions,
     cuda: bool,
 ):
     begintime = time.time()
 
-    graph_column = parse_taxonomy(
-        taxonomy_path=taxonomy_options.taxonomy_path,
+    taxonomies = vamb.vambtools.parse_taxonomy(
+        input_file=taxonomy_path,
         contignames=contignames,  # type:ignore
-        column_contigs=taxonomy_options.column_contigs,
-        column_taxonomy=taxonomy_options.column_taxonomy,
-        delimiter_taxonomy=taxonomy_options.delimiter_taxonomy,
+        is_canonical=False,
     )
-    graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
-        graph_column.unique()
-    )
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(taxonomies)
     logger.info(f"{len(nodes)} nodes in the graph")
-    graph_column = graph_column.fillna("Domain")
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    classes_order: list[str] = []
+    for i in taxonomies:
+        if i is None or len(i.ranks) == 0:
+            classes_order.append("root")
+        else:
+            classes_order.append(i.ranks[-1])
     targets = np.array([ind_nodes[i] for i in classes_order])
 
     model = vamb.taxvamb_encode.VAMB2Label(
@@ -1151,7 +1086,7 @@ def predict_taxonomy(
     )
 
     logger.info("Writing the taxonomy predictions")
-    predicted_path = out_dir.joinpath("results_taxometer.csv")
+    predicted_path = out_dir.joinpath("results_taxometer.tsv")
     nodes_ar = np.array(nodes)
 
     logger.info(f"Using threshold {predictor_training_options.softmax_threshold}")
@@ -1176,11 +1111,11 @@ def predict_taxonomy(
 
         with open(predicted_path, "a") as file:
             if not output_exists:
-                print("contigs,lengths,predictions,scores", file=file)
+                print("contigs\tpredictions\tlengths\tscores", file=file)
             for contig, length, prediction, prob in zip(
-                contignames[row : row + N], lengths[row : row + N], predictions, probs
+                contignames[row : row + N], predictions, lengths[row : row + N], probs
             ):
-                print(contig, length, prediction, prob, file=file, sep=",")
+                print(contig, length, prediction, prob, file=file, sep="\t")
         output_exists = True
         row += N
 
@@ -1194,7 +1129,7 @@ def run_taxonomy_predictor(
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
     predictor_training_options: PredictorTrainingOptions,
-    taxonomy_options: TaxonomyOptions,
+    taxonomy_path: Path,
 ):
     composition, abundance = load_composition_and_abundance(
         vamb_options=vamb_options,
@@ -1208,13 +1143,12 @@ def run_taxonomy_predictor(
         composition.metadata.lengths,
         composition.metadata.identifiers,
     )
-    assert taxonomy_options.taxonomy_path is not None
     predict_taxonomy(
         rpkms=rpkms,
         tnfs=tnfs,
         lengths=lengths,
         contignames=contignames,
-        taxonomy_options=taxonomy_options,
+        taxonomy_path=taxonomy_path,
         out_dir=vamb_options.out_dir,
         predictor_training_options=predictor_training_options,
         cuda=vamb_options.cuda,
@@ -1246,52 +1180,46 @@ def run_vaevae(
     )
 
     if taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
-        logger.info("Predicting missing values from mmseqs taxonomy")
+        logger.info("Predicting missing values from taxonomy")
         predict_taxonomy(
             rpkms=rpkms,
             tnfs=tnfs,
             lengths=lengths,
             contignames=contignames,
-            taxonomy_options=taxonomy_options,
+            taxonomy_path=taxonomy_options.taxonomy_path,
             out_dir=vamb_options.out_dir,
             predictor_training_options=predictor_training_options,
             cuda=vamb_options.cuda,
         )
-        predictions_path = vamb_options.out_dir.joinpath("results_taxometer.csv")
-        column_contigs = "contigs"
-        column_taxonomy = "predictions"
-        delimiter_taxonomy = ","
+        predictions_path = vamb_options.out_dir.joinpath("results_taxometer.tsv")
     else:
         logger.info("Not predicting the taxonomy")
         predictions_path = None
 
     if predictions_path is not None:
-        graph_column = parse_taxonomy(
-            taxonomy_path=predictions_path,
+        contig_taxonomies = vamb.vambtools.parse_taxonomy(
+            input_file=predictions_path,
             contignames=contignames,  # type:ignore
-            column_contigs=column_contigs,
-            column_taxonomy=column_taxonomy,
-            delimiter_taxonomy=delimiter_taxonomy,
+            is_canonical=False,
         )
     elif taxonomy_options.no_predictor:
-        logger.info("Using mmseqs taxonomy for semisupervised learning")
+        logger.info("Using taxonomy for semisupervised learning")
         assert taxonomy_options.taxonomy_path is not None
-        graph_column = parse_taxonomy(
-            taxonomy_path=taxonomy_options.taxonomy_path,
+        contig_taxonomies = vamb.vambtools.parse_taxonomy(
+            input_file=taxonomy_options.taxonomy_path,
             contignames=contignames,  # type:ignore
-            column_contigs=taxonomy_options.column_contigs,
-            column_taxonomy=taxonomy_options.column_taxonomy,
-            delimiter_taxonomy=taxonomy_options.delimiter_taxonomy,
+            is_canonical=False,
         )
     else:
         raise argparse.ArgumentTypeError("One of the taxonomy arguments is missing")
 
-    graph_column.loc[graph_column == ""] = np.nan
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
-        graph_column.unique()
-    )
-    graph_column = graph_column.fillna("Domain")
-    classes_order = np.array(list(graph_column.str.split(";").str[-1]))
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(contig_taxonomies)
+    classes_order: list[str] = []
+    for i in contig_taxonomies:
+        if i is None or len(i.ranks) == 0:
+            classes_order.append("root")
+        else:
+            classes_order.append(i.ranks[-1])
     targets = np.array([ind_nodes[i] for i in classes_order])
 
     assert vae_options is not None
@@ -1391,8 +1319,8 @@ def run_reclustering(
     )
 
     logger.info(f"{len(composition.metadata.identifiers)} contig names after filtering")
-    logger.info("mmseqs taxonomy predictions are provided")
-    predictions_path = taxonomy_options.taxonomy_predictions_path
+    logger.info("Taxonomy predictions are provided")
+    predictions_path = taxonomy_options.taxonomy_path
 
     reclustered = vamb.reclustering.recluster_bins(
         reclustering_options.clusters_path,
@@ -1476,9 +1404,6 @@ class TaxometerArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_path=args.taxonomy,
             no_predictor=False,
-            column_contigs=args.column_contigs,
-            column_taxonomy=args.column_taxonomy,
-            delimiter_taxonomy=args.delimiter_taxonomy,
         )
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=args.pred_nepochs,
@@ -1493,8 +1418,8 @@ class TaxometerArguments(BasicArguments):
             vamb_options=self.vamb_options,
             comp_options=self.comp_options,
             abundance_options=self.abundance_options,
-            taxonomy_options=self.taxonomy_options,
             predictor_training_options=self.predictor_training_options,
+            taxonomy_path=self.taxonomy_options.taxonomy_path,
         )
 
 
@@ -1618,9 +1543,6 @@ class VAEVAEArguments(BinnerArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_path=self.args.taxonomy,
             no_predictor=self.args.no_predictor,
-            column_contigs=args.column_contigs,
-            column_taxonomy=args.column_taxonomy,
-            delimiter_taxonomy=args.delimiter_taxonomy,
         )
         self.predictor_training_options = PredictorTrainingOptions(
             nepochs=self.args.pred_nepochs,
@@ -1660,9 +1582,6 @@ class ReclusteringArguments(BasicArguments):
         self.taxonomy_options = TaxonomyOptions(
             taxonomy_path=self.preds,
             no_predictor=False,
-            column_contigs=args.column_contigs,
-            column_taxonomy=args.column_taxonomy,
-            delimiter_taxonomy=args.delimiter_taxonomy,
         )
 
     def run_inner(self):
@@ -1754,7 +1673,8 @@ def add_input_output_arguments(subparser):
         type=int,
         default=DEFAULT_THREADS,
         help=(
-            "number of threads to use when parsing BAM" "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
+            "number of threads to use when parsing BAM"
+            "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
         ),
     )
     inputos.add_argument(
@@ -2065,31 +1985,10 @@ def add_taxonomy_arguments(subparser, taxonomy_only=False):
         type=Path,
         help="path to the taxonomy file",
     )
-    taxonomys.add_argument(
-        "--column_contigs",
-        metavar="",
-        type=str,
-        default=None,
-        help="the column in the provided taxonomy file that contains contig names, not needed if the file is in MMseqs2 output format [None]",
-    )
-    taxonomys.add_argument(
-        "--column_taxonomy",
-        metavar="",
-        type=str,
-        default=None,
-        help='the column in the provided taxonomy file that contains taxonomy labels from domain to species or subspecies, separated with ";", not needed if the file is in MMseqs2 output format [None]',
-    )
-    taxonomys.add_argument(
-        "--delimiter_taxonomy",
-        metavar="",
-        type=str,
-        default="\t",
-        help="the delimiter of the provided taxonomy file [\\t]",
-    )
     if not taxonomy_only:
         taxonomys.add_argument(
             "--no_predictor",
-            help="do not complete mmseqs search with taxonomy predictions [False]",
+            help="do not complete input taxonomy with Taxometer [False]",
             action="store_true",
         )
     return subparser

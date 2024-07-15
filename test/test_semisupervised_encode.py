@@ -31,10 +31,16 @@ class TestVAEVAE(unittest.TestCase):
         phylum = np.random.choice(self.phyla, 1)[0]
         clas = np.random.choice(self.classes[phylum], 1)[0]
         if np.random.random() <= 0.2:
-            return ";".join([self.domain])
+            return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+                ";".join([self.domain])
+            )
         if 0.2 < np.random.random() <= 0.5:
-            return ";".join([self.domain, phylum])
-        return ";".join([self.domain, phylum, clas])
+            return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+                ";".join([self.domain, phylum])
+            )
+        return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+            ";".join([self.domain, phylum, clas])
+        )
 
     def make_random_annotations(self):
         return [self.make_random_annotation() for _ in range(self.N_contigs)]
@@ -47,7 +53,7 @@ class TestVAEVAE(unittest.TestCase):
             set(nodes).issubset(
                 set(
                     [
-                        "Domain",
+                        "root",
                         "d_Bacteria",
                         "f_1",
                         "f_2",
@@ -83,7 +89,7 @@ class TestVAEVAE(unittest.TestCase):
         annotations = self.make_random_annotations()
         nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(annotations)
 
-        classes_order = np.array([a.split(";")[-1] for a in annotations])
+        classes_order = np.array([a.ranks[-1] for a in annotations])
         targets = np.array([ind_nodes[i] for i in classes_order])
 
         vae = vamb.taxvamb_encode.VAEVAEHLoss(

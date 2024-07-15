@@ -19,7 +19,9 @@ from loguru import logger
 import vamb
 
 
-def get_best_bin(results_dict, contig_to_marker, namelist, contig_dict, minfasta):
+def get_best_bin(
+    results_dict, contignames, contig_to_marker, namelist, contig_dict, minfasta
+):
     # There is room for improving the loop below to avoid repeated computation
     # but it runs very fast in any case
     for max_contamination in [0.1, 0.2, 0.3, 0.4, 0.5, 1]:
