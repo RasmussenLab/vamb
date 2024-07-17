@@ -117,7 +117,8 @@ def recluster_bins(
     latent: np.ndarray,
     algorithm: Union[KmeansAlgorithm, DBScanAlgorithm],
 ):
-    assert len(contiglengths) == markers.n_seqs == len(latent)
+    if not (len(contiglengths) == markers.n_seqs == len(latent)):
+        raise ValueError("Number of elements in contiglengths, markers and latent must match")
 
     # Simply dispatch to the right implementation based on the algorithm used
     if isinstance(algorithm, KmeansAlgorithm):
