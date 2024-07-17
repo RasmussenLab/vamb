@@ -16,6 +16,7 @@ from torch.nn.functional import softmax as _softmax
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 import vamb.encode as _encode
+from vamb.vambtools import mask_lower_bits
 
 if _torch.__version__ < "0.4":
     raise ImportError("PyTorch version must be 0.4 or newer")
@@ -354,6 +355,7 @@ class VAELabels(_encode.VAE):
                 row += len(mu)
 
         assert row == length
+        mask_lower_bits(latent, 12)
         return latent
 
     def trainmodel(
@@ -700,6 +702,7 @@ class VAEConcat(_encode.VAE):
                 row += len(mu)
 
         assert row == length
+        mask_lower_bits(latent, 12)
         return latent
 
 
