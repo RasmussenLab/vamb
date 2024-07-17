@@ -75,7 +75,7 @@ or
 When parsed, Vamb will produce the file `abundance.npz`, which can be used for future
 Vamb runs instead:
 ```
---rpkm abundance.npz
+--abundance abundance.npz
 ```
 
 __Note:__ Vamb will check that the sequence names in the TSV / BAM files correspond
