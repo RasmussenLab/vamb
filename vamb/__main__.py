@@ -1288,8 +1288,8 @@ def run_vaevae(
     latent_both = vae.VAEJoint.encode(dataloader_joint)
     logger.info(f"{latent_both.shape} embedding shape")
 
-    LATENT_PATH = vamb_options.out_dir.joinpath("vaevae_latent.npy")
-    np.save(LATENT_PATH, latent_both)
+    latent_path = vamb_options.out_dir.joinpath("vaevae_latent.npz")
+    vamb.vambtools.write_npz(latent_path, latent_both)
 
     # Cluster, save tsv file
     cluster_and_write_files(
