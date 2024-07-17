@@ -11,7 +11,7 @@ from sklearn.metrics import pairwise_distances
 from vamb.vambtools import ContigTaxonomy
 from vamb.parsemarkers import Markers, MarkerID
 from collections.abc import Sequence, Iterable
-from typing import Callable, NewType, Optional
+from typing import Callable, NewType, Optional, Union
 import heapq
 
 # We use these aliases to be able to work with integers, which is faster.
@@ -115,7 +115,7 @@ def recluster_bins(
     markers: Markers,
     contiglengths: np.ndarray,
     latent: np.ndarray,
-    algorithm: KmeansAlgorithm | DBScanAlgorithm,
+    algorithm: Union[KmeansAlgorithm, DBScanAlgorithm],
 ):
     assert len(contiglengths) == markers.n_seqs == len(latent)
 
