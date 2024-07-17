@@ -105,6 +105,8 @@ class DBScanAlgorithm:
     "Arguments needed specifically when using the DBScan algorithm"
 
     def __init__(self, taxonomy: list[Optional[ContigTaxonomy]], n_processes: int):
+        for i in taxonomy:
+            assert i is None or i.is_canonical
         self.taxonomy = taxonomy
         self.n_processes = n_processes
 
