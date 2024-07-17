@@ -50,64 +50,64 @@ def set_batchsize(
 
 
 def make_dataloader(
-    rpkm: _np.ndarray,
+    abundance: _np.ndarray,
     tnf: _np.ndarray,
     lengths: _np.ndarray,
     batchsize: int = 256,
     destroy: bool = False,
     cuda: bool = False,
 ) -> _DataLoader:
-    """Create a DataLoader from RPKM, TNF and lengths.
+    """Create a DataLoader from abundance, TNF and lengths.
 
     The dataloader is an object feeding minibatches of contigs to the VAE.
     The data are normalized versions of the input datasets.
 
     Inputs:
-        rpkm: RPKM matrix (N_contigs x N_samples)
+        abundance: Abundance matrix (N_contigs x N_samples)
         tnf: TNF matrix (N_contigs x N_TNF)
         lengths: Numpy array of sequence length (N_contigs)
         batchsize: Starting size of minibatches for dataloader
-        destroy: Mutate rpkm and tnf array in-place instead of making a copy.
+        destroy: Mutate abundance and tnf array in-place instead of making a copy.
         cuda: Pagelock memory of dataloader (use when using GPU acceleration)
 
     Outputs:
         DataLoader: An object feeding data to the VAE
     """
 
-    if not isinstance(rpkm, _np.ndarray) or not isinstance(tnf, _np.ndarray):
-        raise ValueError("TNF and RPKM must be Numpy arrays")
+    if not isinstance(abundance, _np.ndarray) or not isinstance(tnf, _np.ndarray):
+        raise ValueError("TNF and abundance must be Numpy arrays")
 
     if batchsize < 1:
         raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
 
-    if len(rpkm) != len(tnf) or len(tnf) != len(lengths):
-        raise ValueError("Lengths of RPKM, TNF and lengths arrays must be the same")
+    if len(abundance) != len(tnf) or len(tnf) != len(lengths):
+        raise ValueError("Lengths of abundance, TNF and lengths arrays must be the same")
 
-    if not (rpkm.dtype == tnf.dtype == _np.float32):
-        raise ValueError("TNF and RPKM must be Numpy arrays of dtype float32")
+    if not (abundance.dtype == tnf.dtype == _np.float32):
+        raise ValueError("TNF and abundance must be Numpy arrays of dtype float32")
 
     # Copy if not destroy - this way we can have all following operations in-place
     # for simplicity
     if not destroy:
-        rpkm = rpkm.copy()
+        abundance = abundance.copy()
         tnf = tnf.copy()
 
     # Normalize samples to have same depth
-    sample_depths_sum = rpkm.sum(axis=0)
+    sample_depths_sum = abundance.sum(axis=0)
     if _np.any(sample_depths_sum == 0):
         raise ValueError(
             "One or more samples have zero depth in all sequences, so cannot be depth normalized"
         )
-    rpkm *= 1_000_000 / sample_depths_sum
-    total_abundance = rpkm.sum(axis=1)
+    abundance *= 1_000_000 / sample_depths_sum
+    total_abundance = abundance.sum(axis=1)
 
-    # Normalize rpkm to sum to 1
-    n_samples = rpkm.shape[1]
+    # Normalize abundance to sum to 1
+    n_samples = abundance.shape[1]
     zero_total_abundance = total_abundance == 0
-    rpkm[zero_total_abundance] = 1 / n_samples
+    abundance[zero_total_abundance] = 1 / n_samples
     nonzero_total_abundance = total_abundance.copy()
     nonzero_total_abundance[zero_total_abundance] = 1.0
-    rpkm /= nonzero_total_abundance.reshape((-1, 1))
+    abundance /= nonzero_total_abundance.reshape((-1, 1))
 
     # Normalize TNF and total abundance to make SSE loss work better
     total_abundance = _np.log(total_abundance.clip(min=0.001))
@@ -123,7 +123,7 @@ def make_dataloader(
     weights.shape = (len(weights), 1)
 
     ### Create final tensors and dataloader ###
-    depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
+    depthstensor = _torch.from_numpy(abundance)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
     total_abundance_tensor = _torch.from_numpy(total_abundance)
     weightstensor = _torch.from_numpy(weights)

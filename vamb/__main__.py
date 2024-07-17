@@ -134,7 +134,7 @@ class AbundanceOptions:
         assert isinstance(min_alignment_id, (float, type(None)))
         assert isinstance(refcheck, bool)
 
-        # Make sure only one RPKM input is there
+        # Make sure only one abundance input is there
         if (
             (bampaths is not None)
             + (abundancepath is not None)
@@ -189,7 +189,7 @@ class AbundanceOptions:
         if min_alignment_id is not None:
             if bampaths is None:
                 raise argparse.ArgumentTypeError(
-                    "If minid is set, RPKM must be passed as bam files"
+                    "If minid is set, abundances must be passed as bam files"
                 )
             if (
                 not isfinite(min_alignment_id)
@@ -609,7 +609,7 @@ def calc_tnf(
     return composition
 
 
-def calc_rpkm(
+def calc_abundance(
     abundance_options: AbundanceOptions,
     outdir: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
@@ -670,7 +670,7 @@ def calc_rpkm(
         assert False
 
     elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tProcessed RPKM in {elapsed} seconds.\n")
+    logger.info(f"\tProcessed abundance in {elapsed} seconds.\n")
 
     return abundance
 
@@ -903,7 +903,7 @@ def load_composition_and_abundance(
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     composition = calc_tnf(comp_options, vamb_options.out_dir, binsplitter)
-    abundance = calc_rpkm(
+    abundance = calc_abundance(
         abundance_options,
         vamb_options.out_dir,
         composition.metadata,
@@ -1015,7 +1015,7 @@ def run(
 
 
 def predict_taxonomy(
-    rpkms: np.ndarray,
+    abundance: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
     contignames: np.ndarray,
@@ -1042,7 +1042,7 @@ def predict_taxonomy(
     targets = np.array([ind_nodes[i] for i in classes_order])
 
     model = vamb.taxvamb_encode.VAMB2Label(
-        rpkms.shape[1],
+        abundance.shape[1],
         len(nodes),
         nodes,
         table_parent,
@@ -1052,13 +1052,13 @@ def predict_taxonomy(
     )
 
     dataloader_vamb = vamb.encode.make_dataloader(
-        rpkms,
+        abundance,
         tnfs,
         lengths,
         batchsize=predictor_training_options.batchsize,
     )
     dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
-        rpkms,
+        abundance,
         tnfs,
         lengths,
         targets,
@@ -1137,14 +1137,14 @@ def run_taxonomy_predictor(
         abundance_options=abundance_options,
         binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
     )
-    rpkms, tnfs, lengths, contignames = (
+    abundance, tnfs, lengths, contignames = (
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
         composition.metadata.identifiers,
     )
     predict_taxonomy(
-        rpkms=rpkms,
+        abundance=abundance,
         tnfs=tnfs,
         lengths=lengths,
         contignames=contignames,
@@ -1172,7 +1172,7 @@ def run_vaevae(
         abundance_options=abundance_options,
         binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
     )
-    rpkms, tnfs, lengths, contignames = (
+    abundance, tnfs, lengths, contignames = (
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
@@ -1182,7 +1182,7 @@ def run_vaevae(
     if taxonomy_options.taxonomy_path is not None and not taxonomy_options.no_predictor:
         logger.info("Predicting missing values from taxonomy")
         predict_taxonomy(
-            rpkms=rpkms,
+            abundance=abundance,
             tnfs=tnfs,
             lengths=lengths,
             contignames=contignames,
@@ -1224,7 +1224,7 @@ def run_vaevae(
 
     assert vae_options is not None
     vae = vamb.taxvamb_encode.VAEVAEHLoss(
-        rpkms.shape[1],
+        abundance.shape[1],
         len(nodes),
         nodes,
         table_parent,
@@ -1237,14 +1237,14 @@ def run_vaevae(
     )
 
     dataloader_vamb = vamb.encode.make_dataloader(
-        rpkms,
+        abundance,
         tnfs,
         lengths,
         batchsize=vae_training_options.batchsize,
         cuda=vamb_options.cuda,
     )
     dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
-        rpkms,
+        abundance,
         tnfs,
         lengths,
         targets,
@@ -1254,7 +1254,7 @@ def run_vaevae(
         cuda=vamb_options.cuda,
     )
     dataloader_labels = vamb.taxvamb_encode.make_dataloader_labels_hloss(
-        rpkms,
+        abundance,
         tnfs,
         lengths,
         targets,
@@ -1264,7 +1264,7 @@ def run_vaevae(
         cuda=vamb_options.cuda,
     )
 
-    shapes = (rpkms.shape[1], 103, 1, len(nodes))
+    shapes = (abundance.shape[1], 103, 1, len(nodes))
     dataloader = vamb.taxvamb_encode.make_dataloader_semisupervised_hloss(
         dataloader_joint,
         dataloader_vamb,
@@ -1595,7 +1595,7 @@ class ReclusteringArguments(BasicArguments):
 
 
 def add_input_output_arguments(subparser):
-    """Add TNFs and RPKMs arguments to a subparser."""
+    """Add TNFs and abundance arguments to a subparser."""
     # TNF arguments
     tnfos = subparser.add_argument_group(
         title="TNF input (either fasta or all .npz files required)"
@@ -1605,13 +1605,13 @@ def add_input_output_arguments(subparser):
         "--composition", metavar="", type=Path, help="path to .npz of composition"
     )
 
-    # RPKM arguments
-    rpkmos = subparser.add_argument_group(
-        title="RPKM input (exactly one input required)"
+    # Abundance arguments
+    abundanceos = subparser.add_argument_group(
+        title="Abundance input (exactly one input required)"
     )
     # Note: This argument is deprecated, but we'll keep supporting it for now.
     # Instead, use --bamdir.
-    rpkmos.add_argument(
+    abundanceos.add_argument(
         "--bamfiles",
         dest="bampaths",
         metavar="",
@@ -1619,24 +1619,24 @@ def add_input_output_arguments(subparser):
         help=argparse.SUPPRESS,
         nargs="+",
     )
-    rpkmos.add_argument(
+    abundanceos.add_argument(
         "--bamdir",
         metavar="",
         type=Path,
         help="Dir with .bam files to use",
     )
-    rpkmos.add_argument(
+    abundanceos.add_argument(
         "--aemb",
         metavar="",
         type=Path,
         help="Dir with .tsv files from strobealign --aemb",
     )
-    rpkmos.add_argument(
-        "--rpkm",
+    abundanceos.add_argument(
+        "--abundance",
         metavar="",
         dest="abundancepath",
         type=Path,
-        help="path to .npz of RPKM abundances",
+        help="path to .npz of abundances",
     )
 
     reqos = subparser.add_argument_group(title="Output (required)", description=None)
@@ -2048,7 +2048,6 @@ def main():
         prog="vamb",
         description=doc,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        # usage="%(prog)s outdir tnf_input rpkm_input [options]",
         add_help=False,
     )
 
