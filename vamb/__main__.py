@@ -1383,7 +1383,7 @@ class BasicArguments(object):
     def run_inner(self):
         raise NotImplementedError
 
-    @logger.catch()
+    @logger.catch(reraise=True)
     def run(self):
         torch.set_num_threads(self.vamb_options.n_threads)
         try_make_dir(self.vamb_options.out_dir)
