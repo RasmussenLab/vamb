@@ -42,7 +42,7 @@ class BinSplitter:
     """
 
     _DEFAULT_SPLITTER = "C"
-    __slots__ = ["is_default", "splitter"]
+    __slots__ = ["is_default", "splitter", "is_initialized"]
 
     def __init__(self, binsplitter: Optional[str]):
         if binsplitter is None:
@@ -55,12 +55,17 @@ class BinSplitter:
                 self.splitter = None
             else:
                 self.splitter = binsplitter
+        
+        self.is_initialized = False
 
     @classmethod
     def inert_splitter(cls):
         return cls("")
 
     def initialize(self, identifiers: Iterable[str]):
+        if self.is_initialized:
+            return None
+        self.is_initialized = True
         separator = self.splitter
         if separator is None:
             return None
