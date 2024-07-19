@@ -23,7 +23,7 @@ from torch import Tensor
 import vamb.semisupervised_encode as _semisupervised_encode
 import vamb.encode as _encode
 import vamb.hloss_misc as _hloss
-from vamb.vambtools import ContigTaxonomy
+from vamb.taxonomy import ContigTaxonomy
 
 
 def make_graph(
