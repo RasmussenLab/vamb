@@ -1611,7 +1611,7 @@ def add_help_arguments(parser: argparse.ArgumentParser):
 
 def add_general_arguments(subparser: argparse.ArgumentParser):
     add_help_arguments(subparser)
-    reqos = subparser.add_argument_group(title="Output (required)", description=None)
+    reqos = subparser.add_argument_group(title="Output", description=None)
     reqos.add_argument(
         "--outdir",
         metavar="",
@@ -1639,10 +1639,7 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         type=int,
         default=DEFAULT_THREADS,
-        help=(
-            "number of threads to use when parsing BAM"
-            "[min(" + str(DEFAULT_THREADS) + ", nbamfiles)]"
-        ),
+        help=f"number of threads to use where customizable [{DEFAULT_THREADS}]",
     )
     general.add_argument(
         "--norefcheck",
@@ -1926,8 +1923,8 @@ def add_clustering_arguments(subparser):
         dest="max_clusters",
         metavar="",
         type=int,
-        default=None,
-        help="stop after c clusters [None = infinite]",
+        default=None, # meaning: do not stop
+        help=argparse.SUPPRESS,
     )
 
     return subparser
@@ -2068,7 +2065,7 @@ def main():
     Version: {vamb.__version_str__}
 
     Default use, good for most datasets:
-    vamb bin default --outdir out --fasta my_contigs.fna --bamdir bam_dir -o C
+    vamb bin default --outdir out --fasta my_contigs.fna --bamdir bam_dir
 
     Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
     logger.add(sys.stderr, format=format_log)
