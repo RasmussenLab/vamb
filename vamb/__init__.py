@@ -16,6 +16,7 @@ from . import vambtools
 from . import parsebam
 from . import parsecontigs
 from . import parsemarkers
+from . import taxonomy
 from . import cluster
 from . import encode
 from . import aamb_encode
@@ -35,6 +36,7 @@ __all__ = [
     "parsebam",
     "parsecontigs",
     "parsemarkers",
+    "taxonomy",
     "cluster",
     "encode",
     "aamb_encode",

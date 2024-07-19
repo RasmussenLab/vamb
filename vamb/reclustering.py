@@ -8,10 +8,12 @@ import numpy as np
 from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
-from vamb.vambtools import ContigTaxonomy
+from vamb.taxonomy import Taxonomy
 from vamb.parsemarkers import Markers, MarkerID
+from vamb.parsecontigs import CompositionMetaData
+from vamb.vambtools import RefHasher
 from collections.abc import Sequence, Iterable
-from typing import Callable, NewType, Optional, Union
+from typing import Callable, NewType, Union
 import heapq
 
 # We use these aliases to be able to work with integers, which is faster.
@@ -96,7 +98,10 @@ def deduplicate(
 class KmeansAlgorithm:
     "Arguments needed specifically when using the KMeans algorithm"
 
-    def __init__(self, clusters: list[set[ContigId]], random_seed: int):
+    def __init__(
+        self, clusters: list[set[ContigId]], random_seed: int, contiglengths: np.ndarray
+    ):
+        self.contiglengths = contiglengths
         self.clusters = clusters
         self.random_seed = random_seed
 
@@ -104,37 +109,50 @@ class KmeansAlgorithm:
 class DBScanAlgorithm:
     "Arguments needed specifically when using the DBScan algorithm"
 
-    def __init__(self, taxonomy: list[Optional[ContigTaxonomy]], n_processes: int):
-        for i in taxonomy:
-            assert i is None or i.is_canonical
+    def __init__(
+        self, comp_metadata: CompositionMetaData, taxonomy: Taxonomy, n_processes: int
+    ):
+        if not taxonomy.is_canonical:
+            raise ValueError(
+                "Can only run DBScan on a Taxonomy object with is_canonical set"
+            )
+        RefHasher.verify_refhash(
+            taxonomy.refhash,
+            comp_metadata.refhash,
+            "taxonomy",
+            "composition",
+            None,
+        )
+        self.contiglengths = comp_metadata.lengths
         self.taxonomy = taxonomy
         self.n_processes = n_processes
 
 
 def recluster_bins(
     markers: Markers,
-    contiglengths: np.ndarray,
     latent: np.ndarray,
     algorithm: Union[KmeansAlgorithm, DBScanAlgorithm],
-):
-    if not (len(contiglengths) == markers.n_seqs == len(latent)):
-        raise ValueError("Number of elements in contiglengths, markers and latent must match")
+) -> list[set[ContigId]]:
+    if not (len(algorithm.contiglengths) == markers.n_seqs == len(latent)):
+        raise ValueError(
+            "Number of elements in contiglengths, markers and latent must match"
+        )
 
     # Simply dispatch to the right implementation based on the algorithm used
     if isinstance(algorithm, KmeansAlgorithm):
         return recluster_kmeans(
             algorithm.clusters,
             latent,
-            contiglengths,
+            algorithm.contiglengths,
             markers,
             algorithm.random_seed,
         )
     elif isinstance(algorithm, DBScanAlgorithm):
-        assert len(algorithm.taxonomy) == markers.n_seqs
+        assert len(algorithm.taxonomy.contig_taxonomies) == markers.n_seqs
         return recluster_dbscan(
             algorithm.taxonomy,
             latent,
-            contiglengths,
+            algorithm.contiglengths,
             markers,
             algorithm.n_processes,
         )
@@ -260,7 +278,7 @@ def score_bin(bin: set[ContigId], markers: Markers) -> float:
 
 
 def recluster_dbscan(
-    taxonomy: list[Optional[ContigTaxonomy]],
+    taxonomy: Taxonomy,
     latent: np.ndarray,
     contiglengths: np.ndarray,
     markers: Markers,
@@ -324,10 +342,12 @@ def dbscan_genus(
 
 
 def group_indices_by_genus(
-    taxonomy: list[Optional[ContigTaxonomy]],
+    taxonomy: Taxonomy,
 ) -> dict[str, np.ndarray]:
+    if not taxonomy.is_canonical:
+        raise ValueError("Can only group by genus for a canonical taxonomy")
     by_genus: dict[str, list[ContigId]] = defaultdict(list)
-    for i, tax in enumerate(taxonomy):
+    for i, tax in enumerate(taxonomy.contig_taxonomies):
         genus = None if tax is None else tax.genus
         # TODO: Should we also cluster the ones with unknown genus?
         # Currently, we just skip it here

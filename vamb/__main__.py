@@ -15,7 +15,6 @@ from math import isfinite
 from typing import Optional, Tuple, Union, cast, Callable, Literal, NamedTuple
 from pathlib import Path
 from collections.abc import Sequence
-from collections import defaultdict
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
@@ -382,6 +381,9 @@ class TaxonomyPath:
     def __init__(self, path: Path):
         self.path = check_existing_file(path)
 
+    def get_tax_path(self) -> Path:
+        return self.path
+
 
 class TaxometerOptions:
     @classmethod
@@ -449,6 +451,13 @@ class RefinableTaxonomyOptions:
 
     def __init__(self, path_or_tax_options: Union[TaxonomyPath, TaxometerOptions]):
         self.path_or_tax_options = path_or_tax_options
+
+    def get_tax_path(self) -> Path:
+        p = self.path_or_tax_options
+        if isinstance(p, TaxonomyPath):
+            return p.get_tax_path()
+        else:
+            return p.taxonomy.get_tax_path()
 
 
 class MarkerPath:
@@ -940,6 +949,41 @@ def load_composition_and_abundance(
     return (composition, abundance)
 
 
+def load_markers(
+    options: MarkerOptions,
+    comp_metadata: vamb.parsecontigs.CompositionMetaData,
+    existing_outdir: Path,
+    n_threads: int,
+) -> vamb.parsemarkers.Markers:
+    logger.info("Loading markers")
+    begin_time = time.time()
+    if isinstance(options.content, MarkerPath):
+        path = options.content.path
+        logger.info(f'\tLoading markers from existing `markers.npz` at "{path}"')
+        markers = vamb.parsemarkers.Markers.load(path, comp_metadata.refhash)
+    elif isinstance(options.content, PredictMarkers):
+        logger.info("\tPredicting markers. This might take some time")
+        logger.info(f"\t\tFASTA file located at {options.content.fasta.path}")
+        logger.info(
+            f"\t\tHMM profile file (.hmm file) located at {options.content.hmm}"
+        )
+        markers = vamb.parsemarkers.Markers.from_files(
+            options.content.fasta.path,
+            options.content.hmm,
+            cast(Sequence[str], comp_metadata.identifiers),
+            existing_outdir.joinpath("tmp_markers"),
+            n_threads,
+            comp_metadata.refhash,
+        )
+        markers.save(existing_outdir.joinpath("markers.npz"))
+    else:
+        assert False
+
+    elapsed = round(time.time() - begin_time, 2)
+    logger.info(f"\tProcessed markers in {elapsed} seconds.\n")
+    return markers
+
+
 def trainvae(
     vae_options: VAEOptions,
     vamb_options: GeneralOptions,
@@ -1267,6 +1311,7 @@ def run_bin_aae(opt: BinAvambOptions):
 
 
 def predict_taxonomy(
+    comp_metadata: vamb.parsecontigs.CompositionMetaData,
     abundance: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
@@ -1278,15 +1323,15 @@ def predict_taxonomy(
 ):
     begintime = time.time()
 
-    taxonomies = vamb.vambtools.parse_taxonomy(
-        input_file=taxonomy_path,
-        contignames=cast(Sequence[str], contignames),
-        is_canonical=False,
+    taxonomies = vamb.taxonomy.Taxonomy.from_file(
+        taxonomy_options.taxonomy.path, comp_metadata, False
     )
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(taxonomies)
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        taxonomies.contig_taxonomies
+    )
     logger.info(f"{len(nodes)} nodes in the graph")
     classes_order: list[str] = []
-    for i in taxonomies:
+    for i in taxonomies.contig_taxonomies:
         if i is None or len(i.ranks) == 0:
             classes_order.append("root")
         else:
@@ -1388,6 +1433,7 @@ def run_taxonomy_predictor(opt: TaxometerOptions):
         composition.metadata.identifiers,
     )
     predict_taxonomy(
+        comp_metadata=composition.metadata,
         abundance=abundance,
         tnfs=tnfs,
         lengths=lengths,
@@ -1416,6 +1462,7 @@ def run_vaevae(opt: BinTaxVambOptions):
     if isinstance(opt.taxonomy.path_or_tax_options, TaxometerOptions):
         logger.info("Predicting missing values from taxonomy")
         predict_taxonomy(
+            comp_metadata=composition.metadata,
             abundance=abundance,
             tnfs=tnfs,
             lengths=lengths,
@@ -1425,22 +1472,24 @@ def run_vaevae(opt: BinTaxVambOptions):
             taxonomy_options=opt.taxonomy.path_or_tax_options,
             cuda=opt.common.general.cuda,
         )
-        contig_taxonomies = vamb.vambtools.parse_taxonomy(
-            input_file=opt.common.general.out_dir.joinpath("results_taxometer.tsv"),
-            contignames=cast(Sequence[str], contignames),
-            is_canonical=False,
+        contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
+            Path(opt.common.general.out_dir.joinpath("results_taxometer.tsv")),
+            composition.metadata,
+            False,
         )
     else:
         logger.info("Not predicting the taxonomy")
-        contig_taxonomies = vamb.vambtools.parse_taxonomy(
-            input_file=opt.taxonomy.path_or_tax_options.path,
-            contignames=cast(Sequence[str], contignames),
-            is_canonical=False,
+        contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
+            opt.taxonomy.path_or_tax_options.path,
+            composition.metadata,
+            False,
         )
 
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(contig_taxonomies)
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        contig_taxonomies.contig_taxonomies
+    )
     classes_order: list[str] = []
-    for i in contig_taxonomies:
+    for i in contig_taxonomies.contig_taxonomies:
         if i is None or len(i.ranks) == 0:
             classes_order.append("root")
         else:
@@ -1529,6 +1578,9 @@ def run_vaevae(opt: BinTaxVambOptions):
     )
 
 
+# TODO: The whole data flow around predict_taxonomy needs to change.
+# Ideally, we should have a "get taxonomy" function that loads, possibly refines,
+# and then returns the taxonomy object.
 def run_reclustering(opt: ReclusteringOptions):
     composition = calc_tnf(
         opt.composition,
@@ -1536,35 +1588,76 @@ def run_reclustering(opt: ReclusteringOptions):
         opt.general.out_dir,
         opt.output.binsplitter,
     )
-    logger.info(f"{len(composition.metadata.identifiers)} contig names after filtering")
-    logger.info("Taxonomy predictions are provided")
-    markers = opt.markers.content
-    assert isinstance(markers, PredictMarkers)
-    reclustered = vamb.reclustering.recluster_bins(
-        None if isinstance(opt.algorithm, DBScanOptions) else opt.algorithm.clusters,
-        opt.latent_path,
-        str(opt.composition.path.path),
-        composition.metadata.identifiers,
-        out_dir=opt.general.out_dir,
-        minfasta=0,
-        binned_length=1000,
-        num_process=40,
-        random_seed=opt.general.seed,
-        hmmout_path=markers.hmm,
-        algorithm="kmeans" if isinstance(opt.algorithm, KmeansOptions) else "dbscan",
-        predictions_path=None
-        if isinstance(opt.algorithm, KmeansOptions)
-        else (
-            opt.algorithm.taxonomy_options.path_or_tax_options.path
-            if isinstance(
-                opt.algorithm.taxonomy_options.path_or_tax_options, TaxonomyPath
-            )
-            else opt.algorithm.taxonomy_options.path_or_tax_options.taxonomy.path
-        ),
+    markers = load_markers(
+        opt.markers, composition.metadata, opt.general.out_dir, opt.general.n_threads
     )
-    cluster_dict: defaultdict[str, set[str]] = defaultdict(set)
-    for k, v in zip(reclustered, composition.metadata.identifiers):
-        cluster_dict[cast(str, k)].add(v)
+    latent = vamb.vambtools.read_npz(opt.latent_path)
+    alg = opt.algorithm
+
+    if isinstance(alg, DBScanOptions):
+        # If we should refine or not.
+        if isinstance(alg.taxonomy_options.path_or_tax_options, TaxometerOptions):
+            taxopt = alg.taxonomy_options.path_or_tax_options
+            abundance = calc_abundance(
+                taxopt.abundance,
+                taxopt.general.out_dir,
+                taxopt.general.refcheck,
+                composition.metadata,
+                taxopt.general.n_threads,
+            )
+            predict_taxonomy(
+                composition.metadata,
+                abundance.matrix,
+                composition.matrix,
+                composition.metadata.lengths,
+                composition.metadata.identifiers,
+                taxopt.taxonomy.path,
+                taxopt.general.out_dir,
+                taxopt,
+                taxopt.general.cuda,
+            )
+            tax_path = opt.general.out_dir.joinpath("results_taxometer.tsv")
+        else:
+            tax_path = alg.taxonomy_options.path_or_tax_options.path
+
+        taxonomy = vamb.taxonomy.Taxonomy.from_file(
+            tax_path, composition.metadata, True
+        )
+        instantiated_alg = vamb.reclustering.DBScanAlgorithm(
+            composition.metadata, taxonomy, opt.general.n_threads
+        )
+        reclustered_contigs = vamb.reclustering.recluster_bins(
+            markers, latent, instantiated_alg
+        )
+    else:
+        with open(alg.clusters) as file:
+            clusters = vamb.vambtools.read_clusters(file)
+        contig_to_id: dict[str, int] = {
+            c: i for (i, c) in enumerate(composition.metadata.identifiers)
+        }
+        clusters_as_ids: list[set[vamb.reclustering.ContigId]] = []
+        for cluster in clusters.values():
+            s = set()
+            for contig in cluster:
+                i = contig_to_id.get(contig, None)
+                if i is None:
+                    raise ValueError(
+                        f'Contig "{contig}" found in the provided clusters file is not found in the '
+                        "provided composition."
+                    )
+                s.add(vamb.reclustering.ContigId(i))
+            clusters_as_ids.append(s)
+        instantiated_alg = vamb.reclustering.KmeansAlgorithm(
+            clusters_as_ids, opt.general.seed, composition.metadata.identifiers
+        )
+        reclustered_contigs = vamb.reclustering.recluster_bins(
+            markers, latent, instantiated_alg
+        )
+
+    identifiers = composition.metadata.identifiers
+    clusters_dict: dict[str, set[str]] = dict()
+    for i, cluster in enumerate(reclustered_contigs):
+        clusters_dict[str(i)] = {identifiers[c] for c in cluster}
 
     if opt.output.min_fasta_output_size is None:
         fasta_output = None
@@ -1580,7 +1673,7 @@ def run_reclustering(opt: ReclusteringOptions):
         fasta_output,
         opt.output.binsplitter,
         str(opt.general.out_dir.joinpath("clusters_reclustered")),
-        cluster_dict,
+        clusters_dict,
         cast(Sequence[str], composition.metadata.identifiers),
         cast(Sequence[int], composition.metadata.lengths),
     )
