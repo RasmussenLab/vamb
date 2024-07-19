@@ -80,6 +80,7 @@ class Taxonomy:
                     f'Duplicate contigname when parsing taxonomy: "{contigname}"'
                 )
             contig_taxonomies[index] = taxonomy
+        self.contig_taxonomies = contig_taxonomies
         self.refhash = metadata.refhash
         self.is_canonical = is_canonical
 
