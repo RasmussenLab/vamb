@@ -18,7 +18,6 @@ from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
-from array import array
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -1400,7 +1399,7 @@ def predict_taxonomy(
                 predicted_vector[i] > taxonomy_options.softmax_threshold
             )
             ranks = list(nodes_ar[threshold_mask][1:])
-            probs = array("f", predicted_vector[i][threshold_mask][1:])
+            probs = predicted_vector[i][threshold_mask][1:]
             tax = vamb.taxonomy.PredictedContigTaxonomy(
                 vamb.taxonomy.ContigTaxonomy(ranks), probs
             )
