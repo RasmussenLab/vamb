@@ -1,7 +1,7 @@
 from typing import Optional, IO
 from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
-import array
+import numpy as np
 
 
 class ContigTaxonomy:
@@ -121,7 +121,7 @@ class Taxonomy:
 class PredictedContigTaxonomy:
     slots = ["contig_taxonomy", "probs"]
 
-    def __init__(self, tax: ContigTaxonomy, probs: array.array[float]):
+    def __init__(self, tax: ContigTaxonomy, probs: np.ndarray):
         if len(probs) != len(tax.ranks):
             raise ValueError("The length of probs must equal that of ranks")
         self.tax = tax
