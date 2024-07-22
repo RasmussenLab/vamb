@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
+from array import array
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -376,6 +377,10 @@ class GeneralOptions:
 class TaxonomyPath:
     @classmethod
     def from_args(cls, args: argparse.Namespace):
+        if args.taxonomy is None:
+            raise argparse.ArgumentTypeError(
+                "Cannot load taxonomy without specifying --taxonomy"
+            )
         return cls(typeasserted(args.taxonomy, Path))
 
     def __init__(self, path: Path):
@@ -1315,11 +1320,10 @@ def predict_taxonomy(
     abundance: np.ndarray,
     tnfs: np.ndarray,
     lengths: np.ndarray,
-    contignames: np.ndarray,
     out_dir: Path,
     taxonomy_options: TaxometerOptions,
     cuda: bool,
-):
+) -> vamb.taxonomy.PredictedTaxonomy:
     begintime = time.time()
 
     taxonomies = vamb.taxonomy.Taxonomy.from_file(
@@ -1386,36 +1390,31 @@ def predict_taxonomy(
     nodes_ar = np.array(nodes)
 
     logger.info(f"Using threshold {taxonomy_options.softmax_threshold}")
-    row = 0
-    output_exists = False
+    contig_taxonomies: list[vamb.taxonomy.PredictedContigTaxonomy] = []
     for predicted_vector, predicted_labels in model.predict(dataloader_vamb):
-        N = len(predicted_vector)
-        predictions: list[str] = []
-        probs: list[str] = []
         for i in range(predicted_vector.shape[0]):
             label = predicted_labels[i]
             while table_parent[label] != -1:
                 label = table_parent[label]
-            threshold_mask = predicted_vector[i] > taxonomy_options.softmax_threshold
-            pred_line = ";".join(nodes_ar[threshold_mask][1:])
-            predictions.append(pred_line)
-            absolute_probs = predicted_vector[i][threshold_mask]
-            absolute_prob = ";".join(map(str, absolute_probs[1:]))
-            probs.append(absolute_prob)
+            threshold_mask: Sequence[bool] = (
+                predicted_vector[i] > taxonomy_options.softmax_threshold
+            )
+            ranks = list(nodes_ar[threshold_mask][1:])
+            probs = array("f", predicted_vector[i][threshold_mask][1:])
+            tax = vamb.taxonomy.PredictedContigTaxonomy(
+                vamb.taxonomy.ContigTaxonomy(ranks), probs
+            )
+            contig_taxonomies.append(tax)
 
-        with open(predicted_path, "a") as file:
-            if not output_exists:
-                print("contigs\tpredictions\tlengths\tscores", file=file)
-            for contig, length, prediction, prob in zip(
-                contignames[row : row + N], predictions, lengths[row : row + N], probs
-            ):
-                print(contig, length, prediction, prob, file=file, sep="\t")
-        output_exists = True
-        row += N
+    taxonomy = vamb.taxonomy.PredictedTaxonomy(contig_taxonomies, comp_metadata, False)
+
+    with open(predicted_path, "w") as file:
+        taxonomy.write_as_tsv(file, comp_metadata)
 
     logger.info(
         f"Completed taxonomy predictions in {round(time.time() - begintime, 2)} seconds."
     )
+    return taxonomy
 
 
 def run_taxonomy_predictor(opt: TaxometerOptions):
@@ -1425,7 +1424,7 @@ def run_taxonomy_predictor(opt: TaxometerOptions):
         opt.abundance,
         vamb.vambtools.BinSplitter.inert_splitter(),
     )
-    abundance, tnfs, lengths, contignames = (
+    abundance, tnfs, lengths, _ = (
         abundance.matrix,
         composition.matrix,
         composition.metadata.lengths,
@@ -1436,7 +1435,6 @@ def run_taxonomy_predictor(opt: TaxometerOptions):
         abundance=abundance,
         tnfs=tnfs,
         lengths=lengths,
-        contignames=contignames,
         out_dir=opt.general.out_dir,
         taxonomy_options=opt,
         cuda=opt.general.cuda,
@@ -1459,21 +1457,16 @@ def run_vaevae(opt: BinTaxVambOptions):
     )
     if isinstance(opt.taxonomy.path_or_tax_options, TaxometerOptions):
         logger.info("Predicting missing values from taxonomy")
-        predict_taxonomy(
+        predicted_contig_taxonomies = predict_taxonomy(
             comp_metadata=composition.metadata,
             abundance=abundance,
             tnfs=tnfs,
             lengths=lengths,
-            contignames=contignames,
             out_dir=opt.common.general.out_dir,
             taxonomy_options=opt.taxonomy.path_or_tax_options,
             cuda=opt.common.general.cuda,
         )
-        contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
-            Path(opt.common.general.out_dir.joinpath("results_taxometer.tsv")),
-            composition.metadata,
-            False,
-        )
+        contig_taxonomies = predicted_contig_taxonomies.to_taxonomy()
     else:
         logger.info("Not predicting the taxonomy")
         contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
@@ -1602,23 +1595,21 @@ def run_reclustering(opt: ReclusteringOptions):
                 composition.metadata,
                 taxopt.general.n_threads,
             )
-            predict_taxonomy(
+            predicted_tax = predict_taxonomy(
                 composition.metadata,
                 abundance.matrix,
                 composition.matrix,
                 composition.metadata.lengths,
-                composition.metadata.identifiers,
                 taxopt.general.out_dir,
                 taxopt,
                 taxopt.general.cuda,
             )
-            tax_path = opt.general.out_dir.joinpath("results_taxometer.tsv")
+            taxonomy = predicted_tax.to_taxonomy()
         else:
             tax_path = alg.taxonomy_options.path_or_tax_options.path
-
-        taxonomy = vamb.taxonomy.Taxonomy.from_file(
-            tax_path, composition.metadata, True
-        )
+            taxonomy = vamb.taxonomy.Taxonomy.from_file(
+                tax_path, composition.metadata, True
+            )
         instantiated_alg = vamb.reclustering.DBScanAlgorithm(
             composition.metadata, taxonomy, opt.general.n_threads
         )
@@ -1947,6 +1938,15 @@ def add_predictor_arguments(subparser):
         help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
+        "-pq",
+        dest="pred_batchsteps",
+        metavar="",
+        type=int,
+        nargs="*",
+        default=[25, 75],
+        help=argparse.SUPPRESS,
+    )
+    pred_trainos.add_argument(
         "-pthr",
         dest="pred_softmax_threshold",
         metavar="",
@@ -2253,6 +2253,7 @@ def main():
     add_marker_arguments(recluster_parser)
     add_bin_output_arguments(recluster_parser)
     add_reclustering_arguments(recluster_parser)
+    add_predictor_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser)
 
     args = parser.parse_args()

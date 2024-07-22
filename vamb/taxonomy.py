@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, IO
 from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
+import array
 
 
 class ContigTaxonomy:
@@ -53,10 +54,11 @@ class Taxonomy:
         cls, tax_file: Path, metadata: CompositionMetaData, is_canonical: bool
     ):
         observed = cls.parse_tax_file(tax_file, is_canonical)
-        return cls(observed, metadata, is_canonical)
+        return cls.from_observed(observed, metadata, is_canonical)
 
-    def __init__(
-        self,
+    @classmethod
+    def from_observed(
+        cls,
         observed_taxonomies: list[tuple[str, ContigTaxonomy]],
         metadata: CompositionMetaData,
         is_canonical: bool,
@@ -80,8 +82,16 @@ class Taxonomy:
                     f'Duplicate contigname when parsing taxonomy: "{contigname}"'
                 )
             contig_taxonomies[index] = taxonomy
+        return cls(contig_taxonomies, metadata.refhash, is_canonical)
+
+    def __init__(
+        self,
+        contig_taxonomies: list[Optional[ContigTaxonomy]],
+        refhash: bytes,
+        is_canonical: bool,
+    ):
         self.contig_taxonomies = contig_taxonomies
-        self.refhash = metadata.refhash
+        self.refhash = refhash
         self.is_canonical = is_canonical
 
     @staticmethod
@@ -106,3 +116,60 @@ class Taxonomy:
                 )
 
         return result
+
+
+class PredictedContigTaxonomy:
+    slots = ["contig_taxonomy", "probs"]
+
+    def __init__(self, tax: ContigTaxonomy, probs: array.array[float]):
+        if len(probs) != len(tax.ranks):
+            raise ValueError("The length of probs must equal that of ranks")
+        self.tax = tax
+        self.probs = probs
+
+
+class PredictedTaxonomy:
+    "Output of Taxometer"
+
+    __slots__ = ["contig_taxonomies", "refhash", "is_canonical"]
+
+    def __init__(
+        self,
+        taxonomies: list[PredictedContigTaxonomy],
+        metadata: CompositionMetaData,
+        is_canonical: bool,
+    ):
+        if len(taxonomies) != len(metadata.identifiers):
+            raise ValueError("Length of taxonomies must match that of identifiers")
+
+        self.contig_taxonomies = taxonomies
+        self.refhash = metadata.refhash
+        self.is_canonical = is_canonical
+
+    def to_taxonomy(self) -> Taxonomy:
+        lst: list[Optional[ContigTaxonomy]] = [p.tax for p in self.contig_taxonomies]
+        return Taxonomy(lst, self.refhash, self.is_canonical)
+
+    @property
+    def nseqs(self) -> int:
+        return len(self.contig_taxonomies)
+
+    def write_as_tsv(self, file: IO[str], comp_metadata: CompositionMetaData):
+        if self.refhash != comp_metadata.refhash:
+            raise ValueError(
+                "Refhash of comp_metadata and predicted taxonomy must match"
+            )
+        assert self.nseqs == comp_metadata.nseqs
+        print("contigs\tpredictions\tlengths\tscores", file=file)
+        for i in range(self.nseqs):
+            tax = self.contig_taxonomies[i]
+            ranks_str = ";".join(tax.tax.ranks)
+            probs_str = ";".join([str(round(i, 5)) for i in tax.probs])
+            print(
+                comp_metadata.identifiers[i],
+                ranks_str,
+                comp_metadata.lengths[i],
+                probs_str,
+                file=file,
+                sep="\t",
+            )
