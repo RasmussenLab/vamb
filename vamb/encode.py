@@ -81,7 +81,9 @@ def make_dataloader(
         raise ValueError(f"Batch size must be minimum 1, not {batchsize}")
 
     if len(abundance) != len(tnf) or len(tnf) != len(lengths):
-        raise ValueError("Lengths of abundance, TNF and lengths arrays must be the same")
+        raise ValueError(
+            "Lengths of abundance, TNF and lengths arrays must be the same"
+        )
 
     if not (abundance.dtype == tnf.dtype == _np.float32):
         raise ValueError("TNF and abundance must be Numpy arrays of dtype float32")
