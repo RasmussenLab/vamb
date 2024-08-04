@@ -687,7 +687,7 @@ rule write_clusters_from_nc_folders:
         e=os.path.join(OUTDIR,'log','create_final_clusters.err')
 
     params:
-        path = os.path.join(SNAKEDIR, "src", "write_clusters_from_dereplicated_and_ripped_bins.sh"),
+        path = os.path.join(SNAKEDIR, "src", "write_clusters_from_dereplicated_and_ripped_bins.py"),
         walltime = "86400",
         nodes = "1",
         ppn = "1"
@@ -699,7 +699,7 @@ rule write_clusters_from_nc_folders:
         "avamb"
    
     shell:
-        "sh {params.path} -d {OUTDIR}/Final_bins -o {OUTDIR} ;"
+        "python {params.path} -d {OUTDIR}/Final_bins -o {OUTDIR} ;"
         "touch {log.log_fin} "
         
 # Rename and move some files and folders 
