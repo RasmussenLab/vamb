@@ -23,6 +23,11 @@ BinId = NewType("BinId", int)
 EPS_VALUES = np.arange(0.01, 0.35, 0.02)
 
 
+# TODO: This might be slightly algorithmically inefficient. The big problem is that it re-heapifies
+# the heap whenever a bin is emitted, which makes it O(N^2).
+# To solve this, I need some datastructure which is like a heap, but which allows me to update
+# arbitrary elements in the heap.
+# This can be solved with a MutableBinaryMaxHeap in Julia's DataStructures.jl, for inspiration.
 def deduplicate(
     scoring: Callable[[set[ContigId]], float],
     bins: dict[BinId, set[ContigId]],
