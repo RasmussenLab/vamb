@@ -10,6 +10,7 @@ dependencies = [
     "pandas == 2.0.0",
     "dadaptation == 3.0",
     "loguru == 0.7.2",
+    "setuptools == 74.0.0",
 ]
 # Currently pycoverm does not have binaries for Python > 3.11.
 # The dependency resolver, will not error on Python 3.11, but attempt

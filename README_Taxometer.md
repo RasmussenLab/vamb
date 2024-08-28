@@ -14,6 +14,8 @@ cd vamb
 pip install -e .
 ```
 
+Please note that this project requires Python version 3.9.0 or higher, but less than 3.12.
+
 In the future, it should become a part of the VAMB PyPi distribution. The updates will appear here and in the VAMB main README.
 
 ## Usage
