@@ -1,3 +1,5 @@
+# Taxometer README is [here](https://github.com/RasmussenLab/vamb/blob/taxometer_release/README_Taxometer.md)
+
 # Vamb
 
 Created by Jakob Nybo Nissen and Simon Rasmussen, Technical University of Denmark and Novo Nordisk Foundation Center for Protein Research, University of Copenhagen.
@@ -16,7 +18,7 @@ The Vamb package contains several programs, including three binners:
   TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
 
 And a taxonomy predictor:
-* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. [Article still in the works].
+* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. [Preprint](https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1.full).
 
 # Installation
 Vamb is in continuous development. Make sure to install the latest version for the best results.

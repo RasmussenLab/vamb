@@ -1,7 +1,7 @@
 # Taxometer
 Taxometer is a tool that improves taxonomic annotations from any taxonomic classifier for the set of contigs. Taxometer does not use a database or map contigs to reference sequences. Instead, the underlying neural network uses tetra-nucleotide frequencies and contigs abundances from a multi-sample metagenomic experiment to identify the contigs of the same origin and then completes and refines taxonomic annotations provided by any classifier using this information. 
 
-For more explanation, motivation and benchmarks see the Taxometer preprint (link).
+For more explanation, motivation and benchmarks see the Taxometer preprint https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1.
 
 Any questions, bug reports or feature requests are most welcome.
 
@@ -30,6 +30,7 @@ Some important properties of the input files:
 * BAM files must be sorted by coordinate. You can sort BAM files with `samtools sort`.
 * For the command above, the default taxonomy format follows MMseqs2 output, which means that the file is tab-separated, has no headers, the 1st column contains contigs identifiers and the 9th column contains the taxonomy annotations. Taxonomy annotations are text labels (e.g. "s__Alteromonas hispanica" or "Gammaproteobacteria") on all levels, sorted from domain to species, concatenated with ";". In the paper we benchmarked annotations that use GTDB and NCBI identifiers. 
 
+## Taxonomic labels
 The taxonomic labels do not have to correspond to a particular version of any database, the only thing that is important is that the taxonomy levels are consistent within the dataset. E.g. if one contig has a taxonomic annotation
 ```
 Bacteria;Bacillota;Clostridia;Eubacteriales;Lachnospiraceae;Roseburia;Roseburia hominis
@@ -62,7 +63,7 @@ vamb taxometer --outdir path/to/outdir \
   --bamfiles /path/to/bam/*.bam \
   --taxonomy another_taxonomy.csv \
   --column_contigs contigs \
-  --column_taxonomy predictions \
+  --column_taxonomy taxonomy \
   --delimiter_taxonomy ,
 ```
 
@@ -83,13 +84,36 @@ Columns:
 * __predictions__ - taxonomic annotations predicted by Taxometer
 * __scores__ - assigned scores on each taxonomic level, in the range [0.5, 1]
 
+## Example with data
+
+Taxometer can be tested on the pre-processed data (~4800 contigs from one sample of CAMI2 toy Oral dataset) provided as a part of this repository. After installing Taxometer, run from the current folder:
+
+```
+vamb taxometer --outdir taxometer_test --composition test/data/taxometer_data/composition.npz --rpkm test/data/taxometer_data/abundance.npz --taxonomy test/data/taxometer_data/taxonomy_oral_sample0.tsv
+```
+
+Running this command will take a few minutes on a personal computer. A neural network will be trained from scratch, followed by inference performed and the predictions stored. GPU access is not required to run this example. The `taxometer_test` folder will be created. The predicted taxonomy labels are at `taxometer_test/result_taxometer.csv`. The example output is also at `test/data/taxometer_data/result_taxometer_oral_sample0.csv`, but since the network is trained on the fly, the output can slightly vary between the runs.
 
 ## Links and references
 
-To cite Taxometer, use the following reference (link).
+To cite Taxometer, use the following reference:
+```
+@article {Kutuzova2023.11.23.568413,
+	author = {Svetlana Kutuzova and Mads Nielsen and Pau Piera Lindez and Jakob Nybo Nissen and Simon Rasmussen},
+	title = {Taxometer: Improving taxonomic classification of metagenomics contigs},
+	elocation-id = {2023.11.23.568413},
+	year = {2023},
+	doi = {10.1101/2023.11.23.568413},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413},
+	eprint = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413.full.pdf},
+	journal = {bioRxiv}
+}
+```
 
 Benchmarked taxonomic classifiers:
 * __MMseqs2__ [Article](https://academic.oup.com/bioinformatics/article/37/18/3029/6178277?login=true) [Github](https://github.com/soedinglab/MMseqs2)
 * __Metabuli__ [Article](https://www.biorxiv.org/content/10.1101/2023.05.31.543018v2) [Github](https://github.com/steineggerlab/Metabuli)
 * __Centrifuge__ [Article](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5131823/) [Github](https://github.com/infphilo/centrifuge)
 * __Kraken2__ [Article](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1891-0) [Github](https://github.com/DerrickWood/kraken2)
+* __MetaMaps__ [Article](https://www.nature.com/articles/s41467-019-10934-2) [Github](https://github.com/DiltheyLab/MetaMaps)
