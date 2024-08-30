@@ -1324,6 +1324,7 @@ def predict_taxonomy(
     cuda: bool,
 ) -> vamb.taxonomy.PredictedTaxonomy:
     begintime = time.time()
+    logger.info("Predicting taxonomy with Taxometer")
 
     taxonomies = vamb.taxonomy.Taxonomy.from_file(
         taxonomy_options.taxonomy.path, comp_metadata, False
@@ -1331,7 +1332,7 @@ def predict_taxonomy(
     nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
         taxonomies.contig_taxonomies
     )
-    logger.info(f"{len(nodes)} nodes in the graph")
+    logger.info(f"\t{len(nodes)} nodes in the graph")
     classes_order: list[str] = []
     for i in taxonomies.contig_taxonomies:
         if i is None or len(i.ranks) == 0:
@@ -1606,12 +1607,15 @@ def run_reclustering(opt: ReclusteringOptions):
             taxonomy = predicted_tax.to_taxonomy()
         else:
             tax_path = alg.taxonomy_options.path_or_tax_options.path
+            logger.info(f'Loading taxonomy from file "{tax_path}"')
             taxonomy = vamb.taxonomy.Taxonomy.from_file(
                 tax_path, composition.metadata, True
             )
         instantiated_alg = vamb.reclustering.DBScanAlgorithm(
             composition.metadata, taxonomy, opt.general.n_threads
         )
+        logger.info("Reclustering")
+        logger.info("\tAlgorithm: DBSCAN")
         reclustered_contigs = vamb.reclustering.recluster_bins(
             markers, latent, instantiated_alg
         )
@@ -1634,12 +1638,17 @@ def run_reclustering(opt: ReclusteringOptions):
                 s.add(vamb.reclustering.ContigId(i))
             clusters_as_ids.append(s)
         instantiated_alg = vamb.reclustering.KmeansAlgorithm(
-            clusters_as_ids, opt.general.seed, composition.metadata.identifiers
+            clusters_as_ids,
+            abs(opt.general.seed) % 4294967295,  # Note: sklearn seeds must be uint32
+            composition.metadata.lengths,
         )
+        logger.info("Reclustering")
+        logger.info("\tAlgorithm: KMeans")
         reclustered_contigs = vamb.reclustering.recluster_bins(
             markers, latent, instantiated_alg
         )
 
+    logger.info("\tReclustering complete")
     identifiers = composition.metadata.identifiers
     clusters_dict: dict[str, set[str]] = dict()
     for i, cluster in enumerate(reclustered_contigs):
