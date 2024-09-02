@@ -169,16 +169,16 @@ def make_dataloader_n2v(
         
         mean_ab_s_i = _np.mean(rpkm[mask_single_ab_and_nonzeroab_si,i])
         std_ab_s_i = _np.std(rpkm[mask_single_ab_and_nonzeroab_si,i])
-        #rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (rpkm[mask_single_ab_and_nonzeroab_si,i]-mean_ab_s_i)/std_ab_s_i
+        rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (rpkm[mask_single_ab_and_nonzeroab_si,i]-mean_ab_s_i)/std_ab_s_i
         
-        log_vals = _np.log(rpkm[mask_single_ab_and_nonzeroab_si,i])    
-        rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (log_vals-_np.mean(log_vals))/_np.std(log_vals)
+        #log_vals = _np.log(rpkm[mask_single_ab_and_nonzeroab_si,i])    
+        #rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (log_vals-_np.mean(log_vals))/_np.std(log_vals)
     
         
      
     #rpkm_unz=_np.log(rpkm_unz.clip(min=0.001))
     #logger.info("Adding max(log(rpkm_unz),0.001) as input")
-    logger.info("Adding rpkm_unz log before z-standarization, as input")
+    logger.info("Adding rpkm z-score vector as input for contigs only present in one sample")
     # Normalize rpkm to sum to 1
     n_samples = rpkm.shape[1]
     zero_total_abundance = total_abundance == 0
