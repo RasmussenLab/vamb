@@ -1721,6 +1721,7 @@ def run_n2v_asimetric(
     logger.info(
         "Creating dataloader"
     )
+    logger.info("LONG INPUT ADDED WITH ABUNDANCES NO PROBABILITIES")
     (
         data_loader,
         neighs_object_after_dataloader,

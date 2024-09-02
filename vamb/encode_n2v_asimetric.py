@@ -148,6 +148,37 @@ def make_dataloader_n2v(
 
     total_abundance = rpkm.sum(axis=1)
 
+
+    ## for the contigs that are present only in one sample, define the object of abundances 
+    # across samples (n_contigs x n_samples) z-score normalizing per sample only for contigs that satisfy (BOTH):
+    # a) abundance only in one sample
+    # b) abundance in the specific sample
+    rpkm_unz=_np.zeros_like(rpkm)    
+
+    singlesample_contig_idxs = _np.where(_np.count_nonzero(rpkm, axis=1) == 1)[0]
+    rpkm_unz_mask = _np.zeros(rpkm.shape[0],dtype=bool)
+    rpkm_unz_mask[singlesample_contig_idxs]=True
+
+
+    for i in range(rpkm.shape[1]):
+        mask_nonzeroab_sample_i = rpkm[:,i] > 0.0 
+        mask_single_ab_and_nonzeroab_si = rpkm_unz_mask & mask_nonzeroab_sample_i    
+        if _np.sum((mask_single_ab_and_nonzeroab_si)) == 0:
+            continue
+        
+        
+        mean_ab_s_i = _np.mean(rpkm[mask_single_ab_and_nonzeroab_si,i])
+        std_ab_s_i = _np.std(rpkm[mask_single_ab_and_nonzeroab_si,i])
+        #rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (rpkm[mask_single_ab_and_nonzeroab_si,i]-mean_ab_s_i)/std_ab_s_i
+        
+        log_vals = _np.log(rpkm[mask_single_ab_and_nonzeroab_si,i])    
+        rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (log_vals-_np.mean(log_vals))/_np.std(log_vals)
+    
+        
+     
+    #rpkm_unz=_np.log(rpkm_unz.clip(min=0.001))
+    #logger.info("Adding max(log(rpkm_unz),0.001) as input")
+    logger.info("Adding rpkm_unz log before z-standarization, as input")
     # Normalize rpkm to sum to 1
     n_samples = rpkm.shape[1]
     zero_total_abundance = total_abundance == 0
@@ -155,6 +186,12 @@ def make_dataloader_n2v(
     nonzero_total_abundance = total_abundance.copy()
     nonzero_total_abundance[zero_total_abundance] = 1.0
     rpkm /= nonzero_total_abundance.reshape((-1, 1))
+    
+    ## for the contigs that are only present in one sample, remove the sample correltaion signal ###### NOVELTY#########
+    singlesample_contig_idxs = _np.where(_np.count_nonzero(rpkm, axis=1) == 1)[0]
+    rpkm[singlesample_contig_idxs,:]=0
+    logger.info("Removing rpkm signal for contigs present only in one sample")
+
 
     # Normalize TNF and total abundance to make SSE loss work better
     total_abundance = _np.log(total_abundance.clip(min=0.001))
@@ -172,6 +209,8 @@ def make_dataloader_n2v(
 
     ### Create final tensors and dataloader ###
     depthstensor = _torch.from_numpy(rpkm)  # this is a no-copy operation
+    depthstensor_unz = _torch.from_numpy(rpkm_unz)  # this is a no-copy operation
+    depthstensor_unz_mask = _torch.from_numpy(rpkm_unz_mask)  # this is a no-copy operation
     tnftensor = _torch.from_numpy(tnf)
     total_abundance_tensor = _torch.from_numpy(total_abundance)
     weightstensor = _torch.from_numpy(weights)
@@ -186,6 +225,8 @@ def make_dataloader_n2v(
         neighs_masktensor,
         weightstensor,
         indicestensor,
+        depthstensor_unz,
+        depthstensor_unz_mask,
     )
 
     dataloader = _DataLoader(
@@ -298,7 +339,7 @@ class VAE(_nn.Module):
 
         # Add all other hidden layers
         for nin, nout in zip(
-            [self.nsamples + self.ntnf + 1] + self.nhiddens,
+            [self.nsamples + self.ntnf + 1 + self.nsamples] + self.nhiddens,
             self.nhiddens,
         ):
             self.encoderlayers.append(_nn.Linear(nin, nout))
@@ -314,7 +355,7 @@ class VAE(_nn.Module):
 
         # Reconstruction (output) layer
         self.outputlayer = _nn.Linear(
-            self.nhiddens[0], self.nsamples + self.ntnf + 1  # + self.n_embedding
+            self.nhiddens[0], self.nsamples + self.ntnf + 1 + self.nsamples  # + self.n_embedding
         )
 
         # Activation functions
@@ -376,24 +417,28 @@ class VAE(_nn.Module):
         depths_out = reconstruction.narrow(1, 0, self.nsamples)
         tnf_out = reconstruction.narrow(1, self.nsamples, self.ntnf)
         abundance_out = reconstruction.narrow(1, self.nsamples + self.ntnf, 1)
+        abundance_long_out = reconstruction.narrow(1, self.nsamples + self.ntnf + 1, self.nsamples)
+        
         # emb_out = reconstruction.narrow(1, self.ntnf + self.nsamples, self.n_embedding)
         # If multiple samples, apply softmax
         if self.nsamples > 1:
             depths_out = _softmax(depths_out, dim=1)
-        return depths_out, tnf_out, abundance_out 
+        
+        return depths_out, tnf_out, abundance_out ,abundance_long_out
 
     def forward(
         self,
         depths: Tensor,
         tnf: Tensor,
         abundance: Tensor,
+        abundance_long: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        tensor = _torch.cat((depths, tnf, abundance), 1)
+        tensor = _torch.cat((depths, tnf, abundance,abundance_long), 1)
         mu = self._encode(tensor)
         latent = self.reparameterize(mu)
-        depths_out, tnf_out, abundance_out = self._decode(latent)
+        depths_out, tnf_out, abundance_out,abundance_long_out = self._decode(latent)
 
-        return depths_out, tnf_out, abundance_out, mu
+        return depths_out, tnf_out, abundance_out,abundance_long_out, mu
 
     def calc_loss(
         self,
@@ -407,14 +452,23 @@ class VAE(_nn.Module):
         weights: Tensor,
         preds_idxs: Tensor,
         neighs_mask: Tensor,
+
+        abundance_long_in: Tensor,
+        abundance_long_out: Tensor,
+        abundance_long_mask: Tensor,
+        
+        
         warmup: bool,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor,Tensor]:
         
         # If multiple samples, use cross entropy, else use SSE for abundance
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
+        sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask
+        #print(sse_ab_long,abundance_long_mask)
         kld = 0.5 * (mu.pow(2)).sum(dim=1)
+        
         # Avoid having the denominator be zero
         if self.nsamples == 1:
             ce_weight = 0.0
@@ -425,10 +479,13 @@ class VAE(_nn.Module):
 
         ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
         sse_weight = self.alpha / self.ntnf
+        ab_long_sse_weight = self.alpha / (self.nsamples)
         kld_weight = 1 / (self.nlatent * self.beta)
+        
         weighed_ab = ab_sse * ab_sse_weight
         weighed_ce = ce * ce_weight
         weighed_sse = sse * sse_weight
+        weighed_ab_long_sse = sse_ab_long * ab_long_sse_weight
         weighed_kld = kld * kld_weight
 
         # embedding loss
@@ -452,6 +509,7 @@ class VAE(_nn.Module):
             weighed_ce
             + weighed_ab
             + weighed_sse
+            + weighed_ab_long_sse
         )
         loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
             loss_emb_cat, dim=0
@@ -484,6 +542,7 @@ class VAE(_nn.Module):
             weighed_ab.mean(),
             weighed_ce.mean(),
             weighed_sse.mean(),
+            (weighed_ab_long_sse[abundance_long_mask]).mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(), 
 
@@ -538,8 +597,9 @@ class VAE(_nn.Module):
         epoch_sseloss = 0.0
         epoch_celoss = 0.0
         epoch_embloss_pop = 0.0
-        epoch_embstd_pop = 0.0
+        #epoch_embstd_pop = 0.0
         epoch_absseloss = 0.0
+        epoch_ablongsseloss = 0.0
 
         if epoch in batchsteps:
             data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
@@ -551,11 +611,16 @@ class VAE(_nn.Module):
             neighs_mask,
             weights,
             preds_idxs,
+            abundance_long_in,
+            abundance_long_mask,
         ) in data_loader:
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
+            
             preds_idxs = preds_idxs.long()
             neighs_mask = neighs_mask.bool()
+            abundance_long_mask = abundance_long_mask.bool()
+            
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
@@ -563,11 +628,13 @@ class VAE(_nn.Module):
                 preds_idxs = preds_idxs.cuda()
                 weights = weights.cuda()
                 abundance_in = abundance_in.cuda()
+                abundance_long_in = abundance_long_in.cuda()
+                abundance_long_mask = abundance_long_mask.cuda()
 
             optimizer.zero_grad()
 
-            depths_out, tnf_out, abundance_out, mu = self(
-                depths_in, tnf_in, abundance_in
+            depths_out, tnf_out, abundance_out,abundance_long_out, mu = self(
+                depths_in, tnf_in, abundance_in,abundance_long_in
             )
 
             self.mu_container[preds_idxs] = vamb.cluster._normalize(mu.detach())
@@ -578,6 +645,7 @@ class VAE(_nn.Module):
                 ab_sse,
                 ce,
                 sse,
+                ab_long_sse,
                 kld,
                 loss_emb_pop,
             ) = self.calc_loss(
@@ -591,6 +659,9 @@ class VAE(_nn.Module):
                 weights,
                 preds_idxs,
                 neighs_mask,
+                abundance_long_in,
+                abundance_long_out,
+                abundance_long_mask,
                 warmup=True if epoch == 0 else warmup,
             )
 
@@ -603,13 +674,15 @@ class VAE(_nn.Module):
             epoch_celoss += ce.data.item()
             epoch_embloss_pop += loss_emb_pop.item() 
             epoch_absseloss += ab_sse.data.item()
+            epoch_ablongsseloss += ab_long_sse.data.item()
 
         logger.info(
-            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.7f}\tAB:{:.5e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
+            "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.6f}\tAB:{:.4e}\tABlong:{:.4e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
                 epoch_loss / len(data_loader),
                 epoch_celoss / len(data_loader),
                 epoch_absseloss / len(data_loader),
+                epoch_ablongsseloss / len(data_loader),
                 epoch_sseloss / len(data_loader),
                 epoch_embloss_pop / len(data_loader),
                 epoch_kldloss / len(data_loader),
@@ -633,7 +706,7 @@ class VAE(_nn.Module):
             data_loader, data_loader.batch_size, encode=True
         )
 
-        depths_array, _, _, _, _, _ = data_loader.dataset.tensors
+        depths_array, _, _, _, _, _,_,_ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
@@ -643,16 +716,17 @@ class VAE(_nn.Module):
 
         row = 0
         with _torch.no_grad():
-            for depths, tnf, ab, _, _, _ in new_data_loader:
+            for depths, tnf, ab, _, _, _,ab_long,_ in new_data_loader:
                 # Move input to GPU if requested
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
                     emb = emb.cuda()
                     ab = ab.cuda()
+                    ab_long = ab_long.cuda()
 
                 # Evaluate'
-                _, _, _, mu = self(depths, tnf, ab)
+                _, _, _,_,mu = self(depths, tnf, ab,ab_long)
                 # _, _, mu = self(depths, tnf, emb)
 
                 if self.usecuda:
@@ -684,6 +758,7 @@ class VAE(_nn.Module):
         }
 
         _torch.save(state, filehandle)
+
 
     @classmethod
     def load(
