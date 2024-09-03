@@ -153,19 +153,13 @@ class BAMPaths:
         self.paths = paths
 
 
-class AEMBPaths(list):
-    __slots__ = ["paths"]
+class AbundanceTSVPath:
+    __slots__ = ["path"]
 
-    def __init__(self, dir: Path):
-        if not dir.is_dir():
-            raise NotADirectoryError(dir)
-        paths = [b for b in dir.iterdir() if b.is_file() and b.suffix == ".tsv"]
-        if len(paths) == 0:
-            raise ValueError(
-                f'No `.tsv` files found in --aemb argument "{dir}". '
-                "Make sure all TSV files in the directory ends with `.tsv`."
-            )
-        self.paths = paths
+    def __init__(self, path: Path):
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        self.path = path
 
 
 class AbundanceOptions:
@@ -176,7 +170,7 @@ class AbundanceOptions:
         return (
             isinstance(args.bampaths, list)
             or isinstance(args.bamdir, Path)
-            or isinstance(args.aemb, Path)
+            or isinstance(args.abundance_tsv, Path)
             or isinstance(args.abundancepath, Path)
         )
 
@@ -185,7 +179,7 @@ class AbundanceOptions:
         return cls(
             typeasserted(args.bampaths, (list, type(None))),
             typeasserted(args.bamdir, (Path, type(None))),
-            typeasserted(args.aemb, (Path, type(None))),
+            typeasserted(args.abundance_tsv, (Path, type(None))),
             typeasserted(args.abundancepath, (Path, type(None))),
             typeasserted(args.min_alignment_id, (float, type(None))),
         )
@@ -194,25 +188,19 @@ class AbundanceOptions:
         self,
         bampaths: Optional[list[Path]],
         bamdir: Optional[Path],
-        aemb: Optional[Path],
+        abundance_tsv: Optional[Path],
         abundancepath: Optional[Path],
         min_alignment_id: Optional[float],
     ):
-        assert isinstance(bampaths, (list, type(None)))
-        assert isinstance(bamdir, (Path, type(None)))
-        assert isinstance(aemb, (Path, type(None)))
-        assert isinstance(abundancepath, (Path, type(None)))
-        assert isinstance(min_alignment_id, (float, type(None)))
-
         # Make sure only one abundance input is there
         if (
             (bampaths is not None)
             + (abundancepath is not None)
             + (bamdir is not None)
-            + (aemb is not None)
+            + (abundance_tsv is not None)
         ) != 1:
             raise argparse.ArgumentTypeError(
-                "Must specify exactly one of BAM files, BAM dir, AEMB or abundance NPZ file input"
+                "Must specify exactly one of BAM files, BAM dir, TSV file or abundance NPZ file input"
             )
 
         if abundancepath is not None:
@@ -224,8 +212,8 @@ class AbundanceOptions:
                 "The --bamfiles argument is deprecated. It works, but might be removed in future versions of Vamb. Please use --bamdir instead"
             )
             self.paths = BAMPaths(bampaths, min_alignment_id)
-        elif aemb is not None:
-            self.paths = AEMBPaths(aemb)
+        elif abundance_tsv is not None:
+            self.paths = AbundanceTSVPath(abundance_tsv)
 
 
 class BasicTrainingOptions:
@@ -913,11 +901,10 @@ def calc_abundance(
         logger.info("\tOrder of columns is:")
         for i, samplename in enumerate(abundance.samplenames):
             logger.info(f"\t{i:>6}: {samplename}")
-    elif isinstance(paths, AEMBPaths):
-        paths = list(paths.paths)
-        logger.info(f"\tParsing {len(paths)} AEMB TSV files")
-        abundance = vamb.parsebam.Abundance.from_aemb(
-            paths,
+    elif isinstance(paths, AbundanceTSVPath):
+        logger.info(f'\tParsing abundance from TSV at "{paths.path}"')
+        abundance = vamb.parsebam.Abundance.from_tsv(
+            paths.path,
             comp_metadata,
         )
         abundance.save(outdir.joinpath("abundance.npz"))
@@ -1687,10 +1674,10 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
         help="Dir with .bam files to use",
     )
     abundanceos.add_argument(
-        "--aemb",
+        "--abundance_tsv",
         metavar="",
         type=Path,
-        help="Dir with .tsv files from strobealign --aemb",
+        help='Path to TSV file of precomputed abundances with header being "contigname(\\t<samplename>)*"',
     )
     abundanceos.add_argument(
         "--abundance",
