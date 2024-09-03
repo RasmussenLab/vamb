@@ -21,8 +21,11 @@ $ for sample in 1 2 3; do
       strobealign -t 8 --aemb contigs.fna.gz ${sample}.{fw,rv}.fq.gz > aemb/${sample}.tsv;
   done
 
+$ # Paste the aemb files together to make a TSV file with given header
+$ cat <(echo -e "contigname\t1\t2\t3") paste aemb/1.tsv <(cut -f 2 aemb/2.tsv) <(cut -f 2 aemb/3.tsv) > abundance.tsv
+
 $ # Run Vamb using the contigs and the directory with abundance files
-$ vamb bin default --outdir vambout --fasta contigs.fna.gz --aemb aemb
+$ vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv
 ```
 
 #### TaxVamb
@@ -58,14 +61,15 @@ Future runs can then instead use:
 
 #### Abundance
 The abundance may be computed from:
-* [recommended ]A directory containing TSV files obtained by mapping reads from
-  each individual sample against the contig catalogue using `strobealign --aemb`
 * A directory of BAM files generated the same way, except using any aligner that
   produces a BAM file, e.g. `minimap2`
+* A TSV file with the header being "contigname" followed by one samplename per sample,
+  and the values in the TSV file being precomputed abundances.
+  These may be derived from `paste`ing together outputs from the tool `strobealign --aemb`
 
 Thus, it can be specified as:
 ```
---aemb dir_with_aemb_files
+--abundance_tsv abundance.tsv
 ```
 or
 ```
