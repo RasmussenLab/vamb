@@ -55,7 +55,7 @@ class BinSplitter:
                 self.splitter = None
             else:
                 self.splitter = binsplitter
-        
+
         self.is_initialized = False
 
     @classmethod
