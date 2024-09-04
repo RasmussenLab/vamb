@@ -1923,7 +1923,7 @@ def add_clustering_arguments(subparser):
         dest="max_clusters",
         metavar="",
         type=int,
-        default=None, # meaning: do not stop
+        default=None,  # meaning: do not stop
         help=argparse.SUPPRESS,
     )
 
