@@ -1863,7 +1863,7 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=int,
         nargs="*",
-        default=[25, 75, 150, 225],
+        default=[],
         help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
