@@ -824,9 +824,6 @@ class VAMB2Label(_nn.Module):
         self.tree = _hloss.Hierarchy(table_parent)
         self.n_tree_nodes = nlabels
 
-        if cuda:
-            self.cuda()
-
         self.nodes = nodes
         self.table_parent = table_parent
         self.hierloss = init_hier_loss(hier_loss, self.tree)
@@ -854,6 +851,9 @@ class VAMB2Label(_nn.Module):
         # Activation functions
         self.relu = _nn.LeakyReLU()
         self.dropoutlayer = _nn.Dropout(p=self.dropout)
+
+        if cuda:
+            self.cuda()
 
     def _predict(self, tensor: Tensor) -> tuple[Tensor, Tensor]:
         tensors: list[_torch.Tensor] = list()
