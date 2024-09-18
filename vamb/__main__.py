@@ -240,7 +240,7 @@ class BasicTrainingOptions:
         return cls(
             typeasserted(args.pred_nepochs, int),
             typeasserted(args.pred_batchsize, int),
-            typeasserted(args.pred_batchsteps, list),
+            [],
         )
 
     def __init__(
@@ -1855,15 +1855,6 @@ def add_predictor_arguments(subparser):
         metavar="",
         type=int,
         default=1024,
-        help=argparse.SUPPRESS,
-    )
-    pred_trainos.add_argument(
-        "-pq",
-        dest="pred_batchsteps",
-        metavar="",
-        type=int,
-        nargs="*",
-        default=[],
         help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
