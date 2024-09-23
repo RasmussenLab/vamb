@@ -184,7 +184,7 @@ class NeighsOptions:
     def __init__(
         self,           
         neighs_path: Path,
-        gamma: float ,
+        gamma: float =0.1 ,
         margin: float = 0.01,
         radius_clustering: float = 0.01,
         top_neighbours: int = 50,
