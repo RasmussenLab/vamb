@@ -911,6 +911,70 @@ def cluster_and_write_files(
     )
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
+def cluster_and_write_clusters(
+    vamb_options: VambOptions,
+    cluster_options: ClusterOptions,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    latent: np.ndarray,
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
+):
+    begintime = time.time()
+    # Create cluser iterator
+    logger.info("Clustering")
+    logger.info(f"\tWindowsize: {cluster_options.window_size}")
+    logger.info(
+        f"\tMin successful thresholds detected: {cluster_options.min_successes}",
+    )
+    logger.info(f"\tMax clusters: {cluster_options.max_clusters}")
+    logger.info(f"\tUse CUDA for clustering: {vamb_options.cuda}")
+    logger.info(f"\tBinsplitter: {cluster_options.binsplitter.splitter}")
+
+    cluster_generator = vamb.cluster.ClusterGenerator(
+        latent,
+        sequence_lens,  # type:ignore
+        windowsize=cluster_options.window_size,
+        minsuccesses=cluster_options.min_successes,
+        destroy=True,
+        normalized=False,
+        cuda=vamb_options.cuda,
+        rng_seed=vamb_options.seed,
+    )
+    # This also works correctly when max_clusters is None
+    clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
+    cluster_dict: dict[str, set[str]] = dict()
+
+    # Write the cluster metadata to file
+    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs", file=file)
+        for i, cluster in enumerate(clusters):
+            cluster_dict[str(i + 1)] = {
+                sequence_names[cast(int, i)] for i in cluster.members
+            }
+            print(
+                str(i + 1),
+                None if cluster.radius is None else round(cluster.radius, 3),
+                None
+                if cluster.observed_pvr is None
+                else round(cluster.observed_pvr, 2),
+                cluster.kind_str,
+                sum(sequence_lens[i] for i in cluster.members),
+                len(cluster.members),
+                file=file,
+                sep="\t",
+            )
+
+    elapsed = round(time.time() - begintime, 2)
+
+    write_clusters(
+        cluster_options.binsplitter,
+        base_clusters_name,
+        cluster_dict,
+    )
+    logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
+
+    return cluster_dict
+
 
 def write_clusters_and_bins(
     vamb_options: VambOptions,
@@ -969,6 +1033,37 @@ def write_clusters_and_bins(
         logger.info(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
+
+
+def write_clusters(
+    binsplitter: vamb.vambtools.BinSplitter,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    clusters: dict[str, set[str]],
+):
+    # Write unsplit clusters to file
+    begintime = time.time()
+    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+    with open(unsplit_path, "w") as file:
+        #file.write("clustername\tcontigname\n")
+        (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
+            file, clusters.items()
+        )
+    #Open unsplit clusters and split them
+    if binsplitter.splitter is not None:
+        split_path = Path(base_clusters_name + "_split.tsv")
+        clusters = dict(binsplitter.binsplit(clusters.items()))
+        with open(split_path, "w") as file:
+            (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items()
+            )
+        msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    else:
+        msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+
+    logger.info(msg)
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+
 
 
 def load_composition_and_abundance(
@@ -1152,7 +1247,7 @@ def load_composition_and_abundance_and_neighs(
     logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")    
     
     logger.info(
-        f"\nLoading contig neighs from {neighs_options.neighs_path}."
+        f"Loading contig neighs from {neighs_options.neighs_path}."
     )
 
     neighs = np.load(
@@ -1755,42 +1850,37 @@ def run_n2v_asimetric(
 
     assert latent is not None
     assert comp_metadata.nseqs == len(latent)
-
+    
+    ## First cluster based on hoods, cluster the rest with vamb default clustering
     # clean neighbours using latent space information
     neighs_object = clean_neighs_with_latents(latent,neighs_object_after_dataloader,neighs_options.max_neighs_r)
     
     logger.info("Neighbourhoods before aggregation: %i"%len(find_neighbourhoods(comp_metadata.identifiers,neighs_object).keys()))
 
     ## optimized clustering
-    logger.info("Clustering baased on the neigh communities")
+    logger.info("Clustering based on neighbourhoods communities")
     
-    latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask = cluster_hoods_based(latent,neighs_object,comp_metadata.identifiers,neighs_options.radius_clustering)
-    logger.info("Clustering baased on the neigh communities finished")
+    latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask = cluster_hoods_based(latent,neighs_object,comp_metadata.identifiers,cluster_options.binsplitter.splitter,neighs_options.radius_clustering)
+    logger.info("Clustering baased on the neighbourhoods communities finished")
 
-    write_clusters_and_bins(
-        vamb_options,
+    
+    if not os.path.isdir(os.path.join(vamb_options.out_dir,"tmp")):
+        os.mkdir(os.path.join(vamb_options.out_dir,"tmp"))
+    
+    write_clusters(
         cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_with_looners")),
-        vamb_options.out_dir.joinpath("bins_within_radius_with_looners"),
-        comp_options.path,
-        latent_communities_cs_d,
-        comp_metadata.identifiers[
-            looner_mask | contigs_in_latent_communities_mask
-        ],
-        comp_metadata.lengths[
-            looner_mask | contigs_in_latent_communities_mask
-        ],
+        str(vamb_options.out_dir.joinpath("tmp/vae_clusters_community_based")),
+        latent_communities_cs_d
     )
+
     logger.info(
         "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
     )
 
-    cluster_and_write_files(
+    cls_outside_coms_density_cs_d = cluster_and_write_clusters(
         vamb_options,
         cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters_outside_radius_with_looners")),
-        vamb_options.out_dir.joinpath("bins_outside_radius_with_looners"),
-        comp_options.path,
+        str(vamb_options.out_dir.joinpath("tmp/vae_clusters_outside_communities_density")),
         latent.copy()[
             ~(looner_mask | contigs_in_latent_communities_mask)
         ],
@@ -1801,47 +1891,33 @@ def run_n2v_asimetric(
             ~(looner_mask | contigs_in_latent_communities_mask)
         ],  # type:ignore
     )
-    ## First cluster based on hoods, cluster the rest with vamb default clustering
-    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
-    clusterspath = vamb_options.out_dir.joinpath(
-        "vae_clusters_outside_radius_with_looners_unsplit.tsv"
-    )
-    merged_cl_cs_d = latent_communities_cs_d.copy()
-    cl_c_ar = np.loadtxt(clusterspath, delimiter="\t", dtype=object,skiprows=1)
-    for cl in set(cl_c_ar[:, 0]):
-        merged_cl_cs_d[cl] = set()
-
-    for cl, c in cl_c_ar:
-        merged_cl_cs_d[cl].add(c)
     
-    print(len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))),len(comp_metadata.identifiers))
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    merged_cl_cs_d = latent_communities_cs_d.copy()
+
+
+    for cl,cs in cls_outside_coms_density_cs_d.items():
+        merged_cl_cs_d[cl] = cs
+
     assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
         comp_metadata.identifiers
     )
     # save clusters within margins and outside margins
 
-    write_clusters_and_bins(
-        vamb_options,
+    write_clusters(
         cluster_options.binsplitter,
-        str(vamb_options.out_dir.joinpath("vae_clusters_within_radius_with_looners_complete")),
-        vamb_options.out_dir.joinpath("bins_within_radius_with_looners_complete"),
-        comp_options.path,
+        str(vamb_options.out_dir.joinpath("vae_clusters_community_based_complete")),
         merged_cl_cs_d,
-        comp_metadata.identifiers,
-        comp_metadata.lengths,
     )
 
 
     ## Now generate a new set of clusters based on vamb default clustering
     # Cluster, save tsv file
-    logger.info("Clustering latents with vamb")
-    clusterspath = vamb_options.out_dir.joinpath("vae_clusters.tsv")
-    cluster_and_write_files(
+    logger.info("Clustering latents with vamb density algorithm")
+    cluster_and_write_clusters(
         vamb_options,
         cluster_options,
-        str(vamb_options.out_dir.joinpath("vae_clusters")),
-        vamb_options.out_dir.joinpath("bins"),
-        comp_options.path,
+        str(vamb_options.out_dir.joinpath("vae_clusters_density")),
         latent,
         comp_metadata.identifiers,  # type:ignore
         comp_metadata.lengths,  # type:ignore
@@ -1886,6 +1962,7 @@ def cluster_hoods_based(
     latent,
     neighs,
     contignames,
+    binsplit_separator="C",
     radius_clustering=0.01,
     radius_looner=0.5,
     
@@ -1920,13 +1997,60 @@ def cluster_hoods_based(
             for neigh_idx in neighs_graph:
                 latent_communities_g.add_edge(contignames[i],contignames[neigh_idx])
             #contigs_in_latent_communities_mask[i]=True
+        
     
-    latent_communities_cs_d = {
+    
+    # latent_communities_cs_d = {
+    #     "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
+    #     for i, cs in enumerate(nx.connected_components(latent_communities_g))
+        
+    # }
+    ## For each cluster only composed by contigs from different samples, i.e. there is only one contig from each sample present in the cluster,
+    ## remove those clusters since no graph information is used.
+    latent_communities_cs_d_NOT_CLEAN = {
         "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
         for i, cs in enumerate(nx.connected_components(latent_communities_g))
     }
+    logger.info(
+        "Neighbourhoods before removing only intersample hoods: %i" % (len([cl for cl in latent_communities_cs_d_NOT_CLEAN.keys() if cl.startswith("nneighs_")]))
+    )
 
+
+    latent_communities_cs_d = {}
+    neighs_to_split = []
+    for i,cs in enumerate(nx.connected_components(latent_communities_g)):
+        if len(cs) == 1:
+            latent_communities_cs_d["looner_%i"%i]=cs
+            continue
+        samples_hood = set( [c.split(binsplit_separator)[0] for c in cs])
+        if len(samples_hood) == len(cs):
+            neighs_to_split.append(cs)
+            continue
+        latent_communities_cs_d["nneighs_%i"%i]=cs
     
+    edges_to_remove=[]
+    
+    for cs in neighs_to_split:
+        c_seen = set()
+        for c_i in cs:
+            c_seen.add(c_i)
+            for c_j in cs-c_seen:
+                if (c_i,c_j) in latent_communities_g.edges():
+                    edges_to_remove.append((c_i,c_j))
+    
+    nodes_to_remove=set()
+    latent_communities_g.remove_edges_from(edges_to_remove)
+    for c in latent_communities_g.nodes():
+        if len(latent_communities_g.edges(c)) == 0:
+            nodes_to_remove.add(c)
+    
+    
+    latent_communities_g.remove_nodes_from(nodes_to_remove)
+
+    logger.info("%i (%i) edges (nodes) have been removed since they were part of clusters containing only intersample contigs"%(len(edges_to_remove),len(nodes_to_remove)))
+    
+
+
     contigs_in_withinradiusclusters_n = np.sum([len(cs) for cs in latent_communities_cs_d.values() if len(cs) > 1 ])
     logger.info(
         "Contigs in within neighbourhoods radius clusters: %i"
