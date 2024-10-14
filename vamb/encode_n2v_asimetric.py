@@ -178,7 +178,7 @@ def make_dataloader_n2v(
      
     #rpkm_unz=_np.log(rpkm_unz.clip(min=0.001))
     #logger.info("Adding max(log(rpkm_unz),0.001) as input")
-    logger.info("Adding rpkm z-score vector as input for contigs only present in one sample %i/%i" %(_np.sum(mask_single_ab_and_nonzeroab_si),len(mask_single_ab_and_nonzeroab_si)))
+    logger.info("Adding rpkm z-score vector as input for contigs only present in one sample %i/%i" %(_np.sum(rpkm_unz_mask),len(rpkm_unz_mask)))
     
     # Normalize rpkm to sum to 1
     n_samples = rpkm.shape[1]
@@ -457,8 +457,6 @@ class VAE(_nn.Module):
         abundance_long_in: Tensor,
         abundance_long_out: Tensor,
         abundance_long_mask: Tensor,
-        
-        
         warmup: bool,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor,Tensor]:
         
