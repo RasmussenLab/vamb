@@ -1,4 +1,9 @@
 # Taxometer
+
+A 5 minute explainer of the algorithm (redirects to Youtube)
+
+[![5 minutes explainer video](https://img.youtube.com/vi/9vuMs-n1-yU/0.jpg)](https://youtu.be/9vuMs-n1-yU?si=Kto04alvcBjDKSWe "5 minutes explainer video - Click to Watch!")
+
 Taxometer is a tool that improves taxonomic annotations from any taxonomic classifier for the set of contigs. Taxometer does not use a database or map contigs to reference sequences. Instead, the underlying neural network uses tetra-nucleotide frequencies and contigs abundances from a multi-sample metagenomic experiment to identify the contigs of the same origin and then completes and refines taxonomic annotations provided by any classifier using this information. 
 
 For more explanation, motivation and benchmarks see the Taxometer preprint https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1.
@@ -98,17 +103,7 @@ Running this command will take a few minutes on a personal computer. A neural ne
 
 To cite Taxometer, use the following reference:
 ```
-@article {Kutuzova2023.11.23.568413,
-	author = {Svetlana Kutuzova and Mads Nielsen and Pau Piera Lindez and Jakob Nybo Nissen and Simon Rasmussen},
-	title = {Taxometer: Improving taxonomic classification of metagenomics contigs},
-	elocation-id = {2023.11.23.568413},
-	year = {2023},
-	doi = {10.1101/2023.11.23.568413},
-	publisher = {Cold Spring Harbor Laboratory},
-	URL = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413},
-	eprint = {https://www.biorxiv.org/content/early/2023/11/23/2023.11.23.568413.full.pdf},
-	journal = {bioRxiv}
-}
+Kutuzova, S., Nielsen, M., Piera, P. et al. Taxometer: Improving taxonomic classification of metagenomics contigs. Nat Commun 15, 8357 (2024). https://doi.org/10.1038/s41467-024-52771-y
 ```
 
 Benchmarked taxonomic classifiers:
