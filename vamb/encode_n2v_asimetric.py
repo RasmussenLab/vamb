@@ -15,6 +15,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import Dataset
 from loguru import logger
 
+import sys
+
 
 __doc__ = """Encode a depths matrix and a tnf matrix to latent representation.
 
@@ -153,33 +155,39 @@ def make_dataloader_n2v(
     # across samples (n_contigs x n_samples) z-score normalizing per sample only for contigs that satisfy (BOTH):
     # a) abundance only in one sample
     # b) abundance in the specific sample
+
     rpkm_unz=_np.zeros_like(rpkm)    
 
-    singlesample_contig_idxs = _np.where(_np.count_nonzero(rpkm, axis=1) == 1)[0]
+    
     rpkm_unz_mask = _np.zeros(rpkm.shape[0],dtype=bool)
-    rpkm_unz_mask[singlesample_contig_idxs]=True
+    if rpkm.shape[1] <= 10:
+        singlesample_contig_idxs = _np.where(_np.count_nonzero(rpkm, axis=1) == 1)[0]    
+        rpkm_unz_mask[singlesample_contig_idxs]=True
 
 
-    for i in range(rpkm.shape[1]):
-        mask_nonzeroab_sample_i = rpkm[:,i] > 0.0 
-        mask_single_ab_and_nonzeroab_si = rpkm_unz_mask & mask_nonzeroab_sample_i    
-        if _np.sum((mask_single_ab_and_nonzeroab_si)) == 0:
-            continue
+        for i in range(rpkm.shape[1]):
+            mask_nonzeroab_sample_i = rpkm[:,i] > 0.0 
+            mask_single_ab_and_nonzeroab_si = rpkm_unz_mask & mask_nonzeroab_sample_i    
+            if _np.sum((mask_single_ab_and_nonzeroab_si)) == 0:
+                continue
+            
+            
+            mean_ab_s_i = _np.mean(rpkm[mask_single_ab_and_nonzeroab_si,i])
+            std_ab_s_i = _np.std(rpkm[mask_single_ab_and_nonzeroab_si,i])
+            rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (rpkm[mask_single_ab_and_nonzeroab_si,i]-mean_ab_s_i)/std_ab_s_i
+            
+            #log_vals = _np.log(rpkm[mask_single_ab_and_nonzeroab_si,i])    
+            #rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (log_vals-_np.mean(log_vals))/_np.std(log_vals)
+
         
-        
-        mean_ab_s_i = _np.mean(rpkm[mask_single_ab_and_nonzeroab_si,i])
-        std_ab_s_i = _np.std(rpkm[mask_single_ab_and_nonzeroab_si,i])
-        rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (rpkm[mask_single_ab_and_nonzeroab_si,i]-mean_ab_s_i)/std_ab_s_i
-        
-        #log_vals = _np.log(rpkm[mask_single_ab_and_nonzeroab_si,i])    
-        #rpkm_unz[mask_single_ab_and_nonzeroab_si,i] = (log_vals-_np.mean(log_vals))/_np.std(log_vals)
+        #rpkm_unz=_np.log(rpkm_unz.clip(min=0.001))
+        #logger.info("Adding max(log(rpkm_unz),0.001) as input")
+        logger.info("Adding rpkm z-score vector as input for contigs only present in one sample %i/%i" %(_np.sum(rpkm_unz_mask),len(rpkm_unz_mask)))
     
-        
-     
-    #rpkm_unz=_np.log(rpkm_unz.clip(min=0.001))
-    #logger.info("Adding max(log(rpkm_unz),0.001) as input")
-    logger.info("Adding rpkm z-score vector as input for contigs only present in one sample %i/%i" %(_np.sum(rpkm_unz_mask),len(rpkm_unz_mask)))
-    
+
+    else:
+        singlesample_contig_idxs = []
+            
     # Normalize rpkm to sum to 1
     n_samples = rpkm.shape[1]
     zero_total_abundance = total_abundance == 0
@@ -462,9 +470,17 @@ class VAE(_nn.Module):
         
         # If multiple samples, use cross entropy, else use SSE for abundance
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
+        
+        #ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
+        
+        #entropy= -((depths_in+ 1e-9).log() * depths_in).sum(dim=1)
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
+        # ce = ce #- entropy
+        
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
-        sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask
+
+        sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask 
+        
         #print(sse_ab_long,abundance_long_mask)
         kld = 0.5 * (mu.pow(2)).sum(dim=1)
         
@@ -490,7 +506,6 @@ class VAE(_nn.Module):
         # embedding loss
 #        if self.gamma > 0.0:
         loss_emb = self.cosinesimilarity_loss(
-
             mu,
             preds_idxs,
             neighs_mask,
@@ -503,7 +518,7 @@ class VAE(_nn.Module):
             ),
             dim=0,
         )
-
+        
         reconstruction_loss = (
             weighed_ce
             + weighed_ab
@@ -513,27 +528,11 @@ class VAE(_nn.Module):
         loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
             loss_emb_cat, dim=0
         )[0] * self.gamma
+        
 
-        # loss = _torch.max(
-        #     loss_emb_cat, dim=0
-        # )[0] * self.gamma
 
 
         loss_emb_pop = loss_emb[neighs_mask]
-        # else:
-        #     reconstruction_loss = (
-        #         weighed_ce
-        #         + weighed_ab
-        #         + weighed_sse
-        #     )
-        #     loss = (reconstruction_loss + weighed_kld) * weights
-
-        #     # loss = _torch.max(
-        #     #     loss_emb_cat, dim=0
-        #     # )[0] * self.gamma
-
-
-        #     loss_emb_pop = _torch.zeros(len(loss))
             
         
         return (
@@ -635,6 +634,7 @@ class VAE(_nn.Module):
             depths_out, tnf_out, abundance_out,abundance_long_out, mu = self(
                 depths_in, tnf_in, abundance_in,abundance_long_in
             )
+            
 
             self.mu_container[preds_idxs] = vamb.cluster._normalize(mu.detach())
             #self.mu_container[preds_idxs] = mu.detach()
