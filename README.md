@@ -18,7 +18,7 @@ The Vamb package contains several programs, including three binners:
   TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
 
 And a taxonomy predictor:
-* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. Go to the [release branch](https://github.com/RasmussenLab/vamb/blob/taxometer_release/README_Taxometer.md) for the instructions. [Preprint](https://www.biorxiv.org/content/10.1101/2023.11.23.568413v1)
+* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. Go to the [release branch](https://github.com/RasmussenLab/vamb/blob/taxometer_release/README_Taxometer.md) for the instructions. [Article](https://www.nature.com/articles/s41467-024-52771-y)
 
 See also [our tool BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl) for evaluating metagenomic bins when a ground truth is available,
 e.g. for simulated data or a mock microbiome.
