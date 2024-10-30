@@ -32,7 +32,7 @@ $ vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abund
 
 The basic usecase of running TaxVAMB is the following:
 ```
-vamb bin taxvamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamfiles /path/to/bam/*.bam --taxonomy taxonomy.tsv
+vamb bin taxvamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --bamdir /path/to/bam --taxonomy taxonomy.tsv
 ```
 
 The FASTA and BAM files preprocessing intructions are the same as for running default VAMB. BAM files must be sorted by coordinate. You can sort BAM files with `samtools sort`.
@@ -41,7 +41,7 @@ In addition to that, TaxVAMB requires a taxonomic annotation file for all the co
 
 ### Taxonomy
 
-Taxonomy annotations are text labels (e.g. "s__Alteromonas hispanica" or "Gammaproteobacteria") on all levels, sorted from domain to species, concatenated with ";". The taxonomic labels do not have to correspond to a particular version of any database, the only thing that is important is that the taxonomy levels are consistent within the dataset. E.g. if one contig has a taxonomic annotation
+Taxonomy annotations are text labels (e.g. "s__Alteromonas hispanica" or "Gammaproteobacteria") on all taxonomic levels, sorted from domain to species, concatenated with a semicolon (";"). The taxonomic labels do not have to correspond to a particular version of any database, the only thing that is important is that the taxonomy levels are consistent within the dataset. E.g. if one contig has a taxonomic annotation
 ```
 Bacteria;Bacillota;Clostridia;Eubacteriales;Lachnospiraceae;Roseburia;Roseburia hominis
 ```
@@ -58,13 +58,13 @@ Clostridia;Eubacteriales;Lachnospiraceae;Roseburia;Roseburia hominis
 
 The taxonomy file is a tab-separated file with two named columns: `contigs` and `predictions`. For example, your `taxonomy.tsv` file could look like this:
 ```
-contigs predictions
-S18C13  Bacteria;Bacillota;Clostridia;Eubacteriales
-S18C25  Bacteria;Pseudomonadota
-S18C67  Bacteria;Bacillota;Bacilli;Bacillales;Staphylococcaceae;Staphylococcus
+contigs	predictions
+S18C13	Bacteria;Bacillota;Clostridia;Eubacteriales
+S18C25	Bacteria;Pseudomonadota
+S18C67	Bacteria;Bacillota;Bacilli;Bacillales;Staphylococcaceae;Staphylococcus
 ```
 
-To use TaxVAMB and Taxometer on the output of the different classifiers, you need to convert their way to present taxonomic annotations to a format described above. One way to do it, is to use our tool __Taxconverter__ https://github.com/RasmussenLab/taxconverter. Taxconverter accepts MMSeqs2, Centrifuge, Kraken2, Metabuli or MetaMaps output files and returns the taxonomy file as described above.
+To use TaxVAMB and Taxometer on the output of the different classifiers, you need to convert their way of representing taxonomic annotations to a format described above. One way to do it, is to use our tool __Taxconverter__ https://github.com/RasmussenLab/taxconverter. Taxconverter accepts MMSeqs2, Centrifuge, Kraken2, Metabuli or MetaMaps output files and returns the taxonomy file as described above.
 
 #### AVAMB
 [TODO]
