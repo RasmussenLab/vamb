@@ -15,11 +15,6 @@ from vamb.vambtools import RefHasher
 from collections.abc import Sequence, Iterable
 from typing import NewType, Optional, Union
 
-# TODO: We can get rid of this dep by using the trick from the heapq docs here:
-# https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes
-# However, this might be a little more tricky to implement
-from pqdict import pqdict
-
 # We use these aliases to be able to work with integers, which is faster.
 ContigId = NewType("ContigId", int)
 BinId = NewType("BinId", int)
@@ -27,143 +22,6 @@ BinId = NewType("BinId", int)
 # TODO: We might want to benchmark the best value for this constant.
 # Right now, we do too much duplicated work by clustering 18 times.
 EPS_VALUES = np.arange(0.01, 0.35, 0.02)
-
-
-def deduplicate(
-    bins: dict[BinId, set[ContigId]],
-    markers: Markers,
-) -> list[set[ContigId]]:
-    """
-        deduplicate(f, bins)
-
-    Given a bin scoring function `f(x: set[ContigId]) -> float`, where better bins have a higher score,
-    and `bins: dict[BinId, set[ContigId]]` containing intersecting bins,
-    greedily returns the best bin according to the score, removing any contigs from a bin that have
-    previously been returned from any other bin.
-    Returns `list[tuple[float, set[ContigId]]]` with scored, disjoint bins.
-    """
-    # This function is a bottleneck, performance wise. Hence, we begin by filtering away some clusters
-    # that are trivial.
-    contig_sets = remove_duplicate_bins(bins.values())
-    scored_contig_sets = remove_badly_contaminated(contig_sets, markers)
-    (to_deduplicate, result) = remove_unambigous_bins(scored_contig_sets)
-    bins = {BinId(i): b for (i, (b, _)) in enumerate(to_deduplicate)}
-
-    # This is a mutable priority queue. It allows us to greedily take the best cluster,
-    # and then update all the clusters that share contigs with the removed best cluster.
-    queue = pqdict.maxpq(((BinId(i), s) for (i, (_, s)) in enumerate(to_deduplicate)))
-
-    # When removing the best bin, the contigs in that bin must be removed from all
-    # other bins, which causes some bins's score to be invalidated.
-    # We store the set of bins that needs to be recomputed in this set.
-    to_recompute: set[BinId] = set()
-
-    bins_of_contig: dict[ContigId, set[BinId]] = defaultdict(set)
-    for b, c in bins.items():
-        for ci in c:
-            bins_of_contig[ci].add(b)
-
-    while len(queue) > 0:
-        best_bin = queue.pop()
-        contigs = bins[best_bin]
-        result.append(contigs)
-
-        to_recompute.clear()
-        for contig in contigs:
-            # Delete `contig` from `bins_of_contig`, since we never need to
-            # refer to this entry in the dict again
-            bins_of_this_contig = bins_of_contig.pop(contig)
-            for bin in bins_of_this_contig:
-                if bin != best_bin:
-                    # Remove this contig from the other bin
-                    other_bin_contigs = bins[bin]
-                    other_bin_contigs.remove(contig)
-                    # If the other bin is now empty, we remove the whole bin.
-                    if len(other_bin_contigs) == 0:
-                        del bins[bin]
-                    to_recompute.add(bin)
-
-        # Remove the bin we picked as the best
-        del bins[best_bin]
-
-        for bin_to_recompute in to_recompute:
-            contigs_in_rec = bins.get(bin_to_recompute, None)
-            # If the recomputed bin is now empty, we delete it from queue
-            if contigs_in_rec is None:
-                queue.pop(bin_to_recompute)
-            else:
-                # We could use the saturating version of the function here,
-                # but it's unlikely to make a big difference performance wise,
-                # since the truly terrible bins have been filtered away
-                counts = count_markers(contigs_in_rec, markers)
-                new_score = score_from_comp_cont(get_completeness_contamination(counts))
-                queue.updateitem(bin_to_recompute, new_score)
-
-    return result
-
-
-def remove_duplicate_bins(sets: Iterable[set[ContigId]]) -> list[set[ContigId]]:
-    seen_sets: set[frozenset[ContigId]] = set()
-    # This is just for computational efficiency, so we don't instantiate frozen sets
-    # with single elements.
-    seen_singletons: set[ContigId] = set()
-    for contig_set in sets:
-        if len(contig_set) == 1:
-            seen_singletons.add(next(iter(contig_set)))
-        else:
-            fz = frozenset(contig_set)
-            if fz not in seen_sets:
-                seen_sets.add(fz)
-
-    result: list[set[ContigId]] = [{s} for s in seen_singletons]
-    for st in seen_sets:
-        result.append(set(st))
-    return result
-
-
-def remove_badly_contaminated(
-    sets: Iterable[set[ContigId]],
-    markers: Markers,
-) -> list[tuple[set[ContigId], float]]:
-    result: list[tuple[set[ContigId], float]] = []
-    max_contamination = 1.0
-    for contig_set in sets:
-        counts = count_markers_saturated(contig_set, markers)
-        # None here means that the contamination is already so high we stop counting.
-        # this is a shortcut for efficiency
-        if counts is None:
-            continue
-        (completeness, contamination) = get_completeness_contamination(counts)
-        if contamination <= max_contamination:
-            result.append(
-                (contig_set, score_from_comp_cont((completeness, contamination)))
-            )
-    return result
-
-
-def remove_unambigous_bins(
-    sets: list[tuple[set[ContigId], float]],
-) -> tuple[list[tuple[set[ContigId], float]], list[set[ContigId]]]:
-    """Remove all bins for which all the contigs are only present in that one bin,
-    and put them in the returned list.
-    These contigs have a trivial, unambiguous assignment.
-    """
-    in_single_bin: dict[ContigId, bool] = dict()
-    for contig_set, _ in sets:
-        for contig in contig_set:
-            existing = in_single_bin.get(contig)
-            if existing is None:
-                in_single_bin[contig] = True
-            elif existing is True:
-                in_single_bin[contig] = False
-    to_deduplicate: list[tuple[set[ContigId], float]] = []
-    unambiguous: list[set[ContigId]] = []
-    for contig_set, scores in sets:
-        if all(in_single_bin[c] for c in contig_set):
-            unambiguous.append(contig_set)
-        else:
-            to_deduplicate.append((contig_set, scores))
-    return (to_deduplicate, unambiguous)
 
 
 class KmeansAlgorithm:
@@ -318,16 +176,20 @@ def count_markers_saturated(
     markers: Markers,
 ) -> Optional[np.ndarray]:
     counts = np.zeros(markers.n_markers, dtype=np.int32)
-    # This implies contamination >= 2.0. The actual value depends on the unique
-    # number of markers, which is too slow to compute in this hot function
-    max_markers = 3 * markers.n_markers
     n_markers = 0
+    n_unique = 0
+    # This implies contamination == 1.0
+    max_duplicates = 1 * markers.n_markers
     for contig in contigs:
         m = markers.markers[contig]
         if m is not None:
             n_markers += len(m)
-            counts[m] += 1
-            if n_markers > max_markers:
+            for i in m:
+                existing = counts[i]
+                n_unique += existing == 0
+                counts[i] = existing + 1
+
+            if (n_markers - n_unique) > max_duplicates:
                 return None
     return counts
 
@@ -409,8 +271,6 @@ def dbscan_genus(
     num_processes: int,
 ) -> list[set[ContigId]]:
     assert len(latent_of_genus) == len(original_indices) == len(contiglengths_of_genus)
-    redundant_bins: list[set[ContigId]] = []
-    bins_this_iteration: dict[int, set[ContigId]] = defaultdict(set)
     # Precompute distance matrix. This is O(N^2), but DBScan is even worse,
     # so this pays off.
     # TODO: Maybe we should emit a warning if this function is called with too
@@ -418,11 +278,14 @@ def dbscan_genus(
     distance_matrix = pairwise_distances(
         latent_of_genus, latent_of_genus, metric="cosine"
     )
+    best_bins: tuple[int, dict[int, set[ContigId]]] = (-1, dict())
     # The DBScan approach works by blindly clustering with different eps values
     # (a critical parameter for DBscan), and then using SCGs to select the best
     # subset of clusters.
     # It's ugly and wasteful, but it does work.
+    n_worse_in_row = 0
     for eps in EPS_VALUES:
+        print(f"Running eps: {eps}")
         dbscan = DBSCAN(
             eps=eps,
             min_samples=5,
@@ -430,16 +293,41 @@ def dbscan_genus(
             metric="precomputed",
         )
         dbscan.fit(distance_matrix, sample_weight=contiglengths_of_genus)
-        bins_this_iteration.clear()
+        these_bins: dict[int, set[ContigId]] = defaultdict(set)
         for original_index, bin_index in zip(original_indices, dbscan.labels_):
-            bins_this_iteration[bin_index].add(ContigId(original_index))
-        redundant_bins.extend(bins_this_iteration.values())
+            these_bins[bin_index].add(ContigId(original_index))
+        score = count_good_genomes(these_bins.values(), markers)
+        print(f"Score: {score}, best: {best_bins[0]}, worse: {n_worse_in_row}")
+        if score > best_bins[0]:
+            best_bins = (score, these_bins)
+            n_worse_in_row = 0
+        elif score < best_bins[0]:
+            # This is an elif statement and not an if statement because we don't
+            # want e.g. a series of [1,1,1,1,1] genomes to be considered a performance
+            # degradation leading to early exit, when in fact, it probably means
+            # that eps is too low and should be increased.
+            n_worse_in_row += 1
+            # If we see 3 worse clusterings in a row, we exit early.
 
-    # Now we deduplicate the redundant bins, such that each contig is only
-    # present in one output bin, using the scoring function to greedily
-    # output the best of the redundant bins.
-    bin_dict = {BinId(i): c for (i, c) in enumerate(redundant_bins)}
-    return deduplicate(bin_dict, markers)
+            if n_worse_in_row > 2:
+                break
+
+    return list(best_bins[1].values())
+
+
+def count_good_genomes(binning: Iterable[Iterable[ContigId]], markers: Markers) -> int:
+    max_contamination = 0.3
+    min_completeness = 0.75
+    result = 0
+    for contigs in binning:
+        count = count_markers_saturated(contigs, markers)
+        if count is None:
+            continue
+        (comp, cont) = get_completeness_contamination(count)
+        if comp >= min_completeness and cont <= max_contamination:
+            result += 1
+
+    return result
 
 
 def group_indices_by_genus(
