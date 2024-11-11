@@ -31,14 +31,14 @@ class TestVAEVAE(unittest.TestCase):
         phylum = np.random.choice(self.phyla, 1)[0]
         clas = np.random.choice(self.classes[phylum], 1)[0]
         if np.random.random() <= 0.2:
-            return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+            return vamb.taxonomy.ContigTaxonomy.from_semicolon_sep(
                 ";".join([self.domain])
             )
         if 0.2 < np.random.random() <= 0.5:
-            return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+            return vamb.taxonomy.ContigTaxonomy.from_semicolon_sep(
                 ";".join([self.domain, phylum])
             )
-        return vamb.vambtools.ContigTaxonomy.from_semicolon_sep(
+        return vamb.taxonomy.ContigTaxonomy.from_semicolon_sep(
             ";".join([self.domain, phylum, clas])
         )
 
