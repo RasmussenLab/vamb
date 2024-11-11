@@ -14,7 +14,7 @@ The Vamb package contains several programs, including three binners:
 * __Avamb__: An ensemble model based on Vamb and adversarial autoencoders. [Article](https://doi.org/10.1038/s42003-023-05452-3).
   Avamb produces better bins than Vamb, but is a more complex and computationally demanding pipeline.
   See the [Avamb README page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb) for more information.
-* __TaxVamb__: A semi-supervised binner that uses taxonomy information from e.g. `mmseqs taxonomy`. [Article](TODO).
+* __TaxVamb__: A semi-supervised binner that uses taxonomy information from e.g. `mmseqs taxonomy`. [Article](https://doi.org/10.1101/2024.10.25.620172).
   TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
 
 And a taxonomy predictor:
