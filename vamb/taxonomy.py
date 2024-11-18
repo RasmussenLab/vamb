@@ -124,7 +124,7 @@ class PredictedContigTaxonomy:
     def __init__(self, tax: ContigTaxonomy, probs: np.ndarray):
         if len(probs) != len(tax.ranks):
             raise ValueError("The length of probs must equal that of ranks")
-        self.tax = tax
+        self.contig_taxonomy = tax
         self.probs = probs
 
 
@@ -147,12 +147,45 @@ class PredictedTaxonomy:
         self.is_canonical = is_canonical
 
     def to_taxonomy(self) -> Taxonomy:
-        lst: list[Optional[ContigTaxonomy]] = [p.tax for p in self.contig_taxonomies]
+        lst: list[Optional[ContigTaxonomy]] = [
+            p.contig_taxonomy for p in self.contig_taxonomies
+        ]
         return Taxonomy(lst, self.refhash, self.is_canonical)
 
     @property
     def nseqs(self) -> int:
         return len(self.contig_taxonomies)
+
+    @staticmethod
+    def parse_tax_file(
+        path: Path, force_canonical: bool
+    ) -> list[tuple[str, int, PredictedContigTaxonomy]]:
+        with open(path) as file:
+            result: list[tuple[str, int, PredictedContigTaxonomy]] = []
+            lines = filter(None, map(str.rstrip, file))
+            header = next(lines, None)
+            if header is None or not header.startswith(
+                "contigs\tpredictions\tlengths\tscores"
+            ):
+                raise ValueError(
+                    'In predicted taxonomy file, expected header to begin with "contigs\\tpredictions\\tlengths\\tscores"'
+                )
+            for line in lines:
+                (contigname, taxonomy, lengthstr, scores, *_) = line.split("\t")
+                length = int(lengthstr)
+                contig_taxonomy = ContigTaxonomy.from_semicolon_sep(
+                    taxonomy, force_canonical
+                )
+                probs = np.array([float(i) for i in scores.split(";")], dtype=float)
+                result.append(
+                    (
+                        contigname,
+                        length,
+                        PredictedContigTaxonomy(contig_taxonomy, probs),
+                    )
+                )
+
+        return result
 
     def write_as_tsv(self, file: IO[str], comp_metadata: CompositionMetaData):
         if self.refhash != comp_metadata.refhash:
@@ -163,7 +196,7 @@ class PredictedTaxonomy:
         print("contigs\tpredictions\tlengths\tscores", file=file)
         for i in range(self.nseqs):
             tax = self.contig_taxonomies[i]
-            ranks_str = ";".join(tax.tax.ranks)
+            ranks_str = ";".join(tax.contig_taxonomy.ranks)
             probs_str = ";".join([str(round(i, 5)) for i in tax.probs])
             print(
                 comp_metadata.identifiers[i],
