@@ -1134,7 +1134,7 @@ def cluster_and_write_files(
 
     # Write the cluster metadata to file
     with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
-        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs", file=file)
+        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
         for i, cluster in enumerate(clusters):
             cluster_dict[str(i + 1)] = {
                 sequence_names[cast(int, i)] for i in cluster.members
@@ -1150,6 +1150,7 @@ def cluster_and_write_files(
                 cluster.kind_str,
                 sum(sequence_lens[i] for i in cluster.members),
                 len(cluster.members),
+                sequence_names[cluster.medoid],
                 file=file,
                 sep="\t",
             )
