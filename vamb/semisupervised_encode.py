@@ -413,21 +413,21 @@ class VAELabels(_encode.VAE):
         optimizer = _Adam(self.parameters(), lr=lrate)
 
         logger.info("\tNetwork properties:")
-        logger.info(f"\tCUDA: {self.usecuda}")
-        logger.info(f"\tAlpha: {self.alpha}")
-        logger.info(f"\tBeta: {self.beta}")
-        logger.info(f"\tDropout: {self.dropout}")
-        logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
-        logger.info(f"\tN latent: {self.nlatent}")
+        logger.info(f"\t    CUDA: {self.usecuda}")
+        logger.info(f"\t    Alpha: {self.alpha}")
+        logger.info(f"\t    Beta: {self.beta}")
+        logger.info(f"\t    Dropout: {self.dropout}")
+        logger.info(f"\t    N hidden: {', '.join(map(str, self.nhiddens))}")
+        logger.info(f"\t    N latent: {self.nlatent}")
         logger.info("\tTraining properties:")
-        logger.info(f"\tN epochs: {nepochs}")
-        logger.info(f"\tStarting batch size: {dataloader.batch_size}")
+        logger.info(f"\t    N epochs: {nepochs}")
+        logger.info(f"\t    Starting batch size: {dataloader.batch_size}")
         batchsteps_string = (
             ", ".join(map(str, sorted(batchsteps_set))) if batchsteps_set else "None"
         )
-        logger.info(f"\tBatchsteps: {batchsteps_string}")
-        logger.info(f"\tLearning rate: {lrate}")
-        logger.info(f"\tN labels: {nlabels}")
+        logger.info(f"\t    Batchsteps: {batchsteps_string}")
+        logger.info(f"\t    Learning rate: {lrate}")
+        logger.info(f"\t    N labels: {nlabels}")
 
         # Train
         for epoch in range(nepochs):
@@ -1063,22 +1063,22 @@ class VAEVAE(object):
         )
 
         logger.info("\tNetwork properties:")
-        logger.info(f"\tCUDA: {self.VAEVamb.usecuda}")
-        logger.info(f"\tAlpha: {self.VAEVamb.alpha}")
-        logger.info(f"\tBeta: {self.VAEVamb.beta}")
-        logger.info(f"\tDropout: {self.VAEVamb.dropout}")
-        logger.info(f"\tN hidden: {', '.join(map(str, self.VAEVamb.nhiddens))}")
-        logger.info(f"\tN latent: {self.VAEVamb.nlatent}")
+        logger.info(f"\t    CUDA: {self.VAEVamb.usecuda}")
+        logger.info(f"\t    Alpha: {self.VAEVamb.alpha}")
+        logger.info(f"\t    Beta: {self.VAEVamb.beta}")
+        logger.info(f"\t    Dropout: {self.VAEVamb.dropout}")
+        logger.info(f"\t    N hidden: {', '.join(map(str, self.VAEVamb.nhiddens))}")
+        logger.info(f"\t    N latent: {self.VAEVamb.nlatent}")
         logger.info("\tTraining properties:")
-        logger.info(f"\tN epochs: {nepochs}")
-        logger.info(f"\tStarting batch size: {dataloader.batch_size}")
+        logger.info(f"\t    N epochs: {nepochs}")
+        logger.info(f"\t    Starting batch size: {dataloader.batch_size}")
         batchsteps_string = (
             ", ".join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
         )
-        logger.info(f"\tBatchsteps: {batchsteps_string}")
-        logger.info(f"\tLearning rate: {lrate}")
-        logger.info(f"\tN sequences: {ncontigs}")
-        logger.info(f"\tN samples: {nsamples}")
+        logger.info(f"\t    Batchsteps: {batchsteps_string}")
+        logger.info(f"\t    Learning rate: {lrate}")
+        logger.info(f"\t    N sequences: {ncontigs}")
+        logger.info(f"\t    N samples: {nsamples}")
 
         # Train
         for epoch in range(nepochs):

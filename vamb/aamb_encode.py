@@ -215,19 +215,19 @@ class AAE(nn.Module):
 
         # Initialize generator and discriminator
         logger.info("\tNetwork properties:")
-        logger.info(f"\tCUDA: {self.usecuda}")
-        logger.info(f"\tAlpha: {self.alpha}")
-        logger.info(f"\tY length: {self.y_len}")
-        logger.info(f"\tZ length: {self.ld}")
+        logger.info(f"\t    CUDA: {self.usecuda}")
+        logger.info(f"\t    Alpha: {self.alpha}")
+        logger.info(f"\t    Y length: {self.y_len}")
+        logger.info(f"\t    Z length: {self.ld}")
         logger.info("\tTraining properties:")
-        logger.info(f"\tN epochs: {nepochs}")
-        logger.info(f"\tStarting batch size: {data_loader.batch_size}")
+        logger.info(f"\t    N epochs: {nepochs}")
+        logger.info(f"\t    Starting batch size: {data_loader.batch_size}")
         batchsteps_string = (
             ", ".join(map(str, sorted(batchsteps))) if batchsteps_set else "None"
         )
-        logger.info(f"\tBatchsteps: {batchsteps_string}")
-        logger.info(f"\tN sequences: {ncontigs}")
-        logger.info(f"\tN samples: {self.nsamples}")
+        logger.info(f"\t    Batchsteps: {batchsteps_string}")
+        logger.info(f"\t    N sequences: {ncontigs}")
+        logger.info(f"\t    N samples: {self.nsamples}")
 
         # we need to separate the paramters due to the adversarial training
 
