@@ -100,13 +100,12 @@ class Taxonomy:
     ) -> list[tuple[str, ContigTaxonomy]]:
         with open(path) as file:
             result: list[tuple[str, ContigTaxonomy]] = []
-            lines = filter(None, map(str.rstrip, file))
-            header = next(lines, None)
+            header = next(file, None)
             if header is None or not header.startswith("contigs\tpredictions"):
                 raise ValueError(
                     'In taxonomy file, expected header to begin with "contigs\\tpredictions"'
                 )
-            for line in lines:
+            for line in file:
                 (contigname, taxonomy, *_) = line.split("\t")
                 result.append(
                     (
@@ -124,6 +123,9 @@ class PredictedContigTaxonomy:
     def __init__(self, tax: ContigTaxonomy, probs: np.ndarray):
         if len(probs) != len(tax.ranks):
             raise ValueError("The length of probs must equal that of ranks")
+        # Due to floating point errors, the probabilities may be slightly outside of 0 or 1.
+        # We could perhaps validate the values, but that's not likely to be necessary.
+        np.clip(probs, a_min=0.0, a_max=1.0, out=probs)
         self.contig_taxonomy = tax
         self.probs = probs
 
@@ -158,7 +160,7 @@ class PredictedTaxonomy:
 
     @staticmethod
     def parse_tax_file(
-        path: Path, force_canonical: bool
+        path: Path, minlen: int, force_canonical: bool
     ) -> list[tuple[str, int, PredictedContigTaxonomy]]:
         with open(path) as file:
             result: list[tuple[str, int, PredictedContigTaxonomy]] = []
@@ -173,6 +175,8 @@ class PredictedTaxonomy:
             for line in lines:
                 (contigname, taxonomy, lengthstr, scores, *_) = line.split("\t")
                 length = int(lengthstr)
+                if length < minlen:
+                    continue
                 contig_taxonomy = ContigTaxonomy.from_semicolon_sep(
                     taxonomy, force_canonical
                 )
