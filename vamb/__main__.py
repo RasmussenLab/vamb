@@ -114,8 +114,8 @@ class CompositionOptions:
 
 
 class AbundancePath:
-    def __init__(self, abundance: Path):
-        self.abundance = check_existing_file(abundance)
+    def __init__(self, path: Path):
+        self.path = check_existing_file(path)
 
 
 class BAMPaths:
@@ -656,7 +656,7 @@ def run(
     begintime = time.time()
     logger.info("Starting Vamb version " + vamb.__version_str__)
     logger.info("Random seed is " + str(general.seed))
-    logger.info(f"Invoked with CLI args: 'f{' '.join(sys.argv)}'")
+    logger.info(f"Invoked with CLI args: '{' '.join(sys.argv)}'")
     runner()
     logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
 
@@ -821,7 +821,7 @@ def calc_tnf(
     path = options.path
 
     if isinstance(path, CompositionPath):
-        logger.info(f"\tLoading composition from npz at: {path.path}")
+        logger.info(f'\tLoading composition from npz at: "{path.path}"')
         composition = vamb.parsecontigs.Composition.load(path.path)
         composition.filter_min_length(min_contig_length)
     else:
@@ -882,10 +882,10 @@ def calc_abundance(
 
     paths = abundance_options.paths
     if isinstance(paths, AbundancePath):
-        logger.info(f"\tLoading depths from npz at: {str(paths)}")
+        logger.info(f'\tLoading depths from npz at: "{str(paths.path)}"')
 
         abundance = vamb.parsebam.Abundance.load(
-            paths.abundance,
+            paths.path,
             comp_metadata.refhash if refcheck else None,
         )
         # I don't want this check in any constructors of abundance, since the constructors
