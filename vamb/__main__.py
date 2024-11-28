@@ -24,6 +24,7 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 import datetime
 import networkx as nx
+from git_commit import get_git_commit
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -772,7 +773,7 @@ def trainvae_n2v_asimetric(
         margin=neighs_options.margin,
     )
 
-    logger.info("\nCreated contrastive-VAE")
+    logger.info("Created contrastive-VAE")
     modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(data_loader, training_options.batchsize),
@@ -1232,6 +1233,7 @@ def load_composition_and_abundance_and_neighs(
         "Starting contrastive-Vamb version "
         + ".".join(map(str, vamb.__version__))
     )
+
     logger.info("Date and time is " + str(datetime.datetime.now()))
     begintime = time.time()
 
@@ -1816,7 +1818,7 @@ def run_n2v_asimetric(
     logger.info(
         "Creating dataloader"
     )
-    logger.info("LONG INPUT ADDED WITH ABUNDANCES NO PROBABILITIES")
+    #logger.info("LONG INPUT ADDED WITH ABUNDANCES NO PROBABILITIES")
     (
         data_loader,
         neighs_object_after_dataloader,
@@ -2221,6 +2223,9 @@ class BasicArguments(object):
         logger.add(sys.stderr, format=format_log)
         begintime = time.time()
         logger.info("Starting Vamb version " + ".".join(map(str, vamb.__version__)))
+        ## Print git commit so we can debug    
+        commit_hash = get_git_commit()
+        logger.info("Git commit hash: "+commit_hash)
         logger.info("Random seed is " + str(self.vamb_options.seed))
         self.run_inner()
         logger.info(f"Completed Vamb in {round(time.time() - begintime, 2)} seconds.")
