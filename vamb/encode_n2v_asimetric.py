@@ -380,7 +380,7 @@ class VAE(_nn.Module):
         
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
-
+        logger.info("CUDA: %s"%self.usecuda)
         if self.usecuda:
             logger.info("Mu container moved to CUDA: "+ str(self.cuda()))
             self.mu_container = self.mu_container.cuda()
