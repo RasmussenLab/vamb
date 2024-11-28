@@ -17,7 +17,7 @@ from . import reclustering
 from . import encode_n2v_asimetric
 from . import encode_n2v
 from . import aamb_encode_asy
-
+from . import git_commit
 from loguru import logger
 
 logger.remove()
@@ -36,4 +36,5 @@ __all__ = [
     "encode_n2v_asimetric",
     "encode_n2v",
     "aamb_encode_asy",
+    "git_commit"
 ]

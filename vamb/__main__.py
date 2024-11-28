@@ -2224,7 +2224,7 @@ class BasicArguments(object):
         begintime = time.time()
         logger.info("Starting Vamb version " + ".".join(map(str, vamb.__version__)))
         ## Print git commit so we can debug    
-        commit_hash = get_git_commit()
+        commit_hash = get_git_commit(os.path.abspath(__file__))
         logger.info("Git commit hash: "+commit_hash)
         logger.info("Random seed is " + str(self.vamb_options.seed))
         self.run_inner()
