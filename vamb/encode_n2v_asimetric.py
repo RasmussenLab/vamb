@@ -692,13 +692,12 @@ class VAE(_nn.Module):
                 if self.usecuda:
                     depths = depths.cuda()
                     tnf = tnf.cuda()
-                    emb = emb.cuda()
                     ab = ab.cuda()
                     ab_long = ab_long.cuda()
 
                 # Evaluate'
                 _, _, _,_,mu = self(depths, tnf, ab,ab_long)
-                # _, _, mu = self(depths, tnf, emb)
+                
 
                 if self.usecuda:
                     mu = mu.cpu()
