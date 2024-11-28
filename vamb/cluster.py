@@ -325,6 +325,8 @@ class ClusterGenerator:
         self.lengths = self.lengths[self.kept_mask]
         self.kept_mask.resize_(len(self.matrix))
         self.kept_mask[:] = 1
+        # The medoid cache is invalidated when the indices shifts
+        self.medoid_cache.clear()
 
     def pack_order(self):
         "Remove all used points from self.order"
