@@ -381,6 +381,7 @@ class VAE(_nn.Module):
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
         if self.usecuda:
+            self.cuda()
             self.mu_container = self.mu_container.cuda()
 
     def _encode(self, tensor: Tensor) -> Tensor:
@@ -599,8 +600,8 @@ class VAE(_nn.Module):
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
                 abundance_in = abundance_in.cuda()
-                weights = weights.cuda()
                 neighs_mask = neighs_mask.cuda()
+                weights = weights.cuda()
                 preds_idxs = preds_idxs.cuda()
                 abundance_long_in = abundance_long_in.cuda()
                 abundance_long_mask = abundance_long_mask.cuda()
