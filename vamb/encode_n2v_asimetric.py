@@ -382,7 +382,7 @@ class VAE(_nn.Module):
         self.neighs = neighs_object
         print("CUDA: %s"%self.usecuda)
         if self.usecuda:
-            logger.info("Mu container moved to CUDA: "+ str(self.cuda()))
+            print("Mu container moved to CUDA: "+ str(self.cuda()))
             self.mu_container = self.mu_container.cuda()
 
     def _encode(self, tensor: Tensor) -> Tensor:
