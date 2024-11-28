@@ -380,9 +380,7 @@ class VAE(_nn.Module):
         
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
-        print("CUDA: %s"%self.usecuda)
         if self.usecuda:
-            print("Mu container moved to CUDA: "+ str(self.cuda()))
             self.mu_container = self.mu_container.cuda()
 
     def _encode(self, tensor: Tensor) -> Tensor:
