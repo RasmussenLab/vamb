@@ -25,8 +25,8 @@ MIN_BIN_SIZE = int(get_config("min_bin_size", "200000", r"[1-9]\d*$"))
 
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
-MM_MEM = get_config("minimap_mem", "35gb", r"[1-9]\d*GB$")
-MM_PPN = get_config("minimap_ppn", "10", r"[1-9]\d*$")
+SA_MEM = get_config("strobealign_mem", "35gb", r"[1-9]\d*GB$")
+SA_PPN = get_config("strobealign_ppn", "10", r"[1-9]\d*$")
 AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*GB$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
 
@@ -102,234 +102,61 @@ rule cat_contigs:
         "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
-# Index resulting contig-file with minimap2
-rule index:
+# Create abundance tables by aligning reads to the catalogue
+rule strobealign:
     input:
         contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
-    output:
-        mmi = os.path.join(OUTDIR,"contigs.flt.mmi")
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn="1"
-    resources:
-        mem="90GB"
-    threads:
-        1
-    log:
-        out_ind = os.path.join(OUTDIR,"log/contigs/index.log"),
-        o = os.path.join(OUTDIR,"log/contigs/index.o"),
-        e = os.path.join(OUTDIR,"log/contigs/index.e")
- 
-
-    conda: 
-        "envs/minimap2.yaml"
-    shell:
-        "minimap2 -I {INDEX_SIZE} -d {output} {input} 2> {log.out_ind}"
-
-# This rule creates a SAM header from a FASTA file.
-# We need it because minimap2 for truly unknowable reasons will write
-# SAM headers INTERSPERSED in the output SAM file, making it unparseable.
-# To work around this mind-boggling bug, we remove all header lines from
-# minimap2's SAM output by grepping, then re-add the header created in this
-# rule.
-rule dict:
-    input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
-    output:
-        dict = os.path.join(OUTDIR,"contigs.flt.dict")  
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn="1"
-    resources:
-        mem="10GB"
-    threads:
-        1
-    log:
-        out_dict= os.path.join(OUTDIR,"log/contigs/dict.log"),
-        o = os.path.join(OUTDIR,"log/contigs/dict.o"),
-        e = os.path.join(OUTDIR,"log/contigs/dict.e")
-
-    conda:
-        "envs/samtools.yaml"
-    shell:
-        "samtools dict {input} | cut -f1-3 > {output} 2> {log.out_dict}"
-
-# Generate bam files 
-rule minimap:
-    input:
         fq = lambda wildcards: sample2path[wildcards.sample],
-        mmi = os.path.join(OUTDIR,"contigs.flt.mmi"),
-        dict = os.path.join(OUTDIR,"contigs.flt.dict")
-    output:
-        bam = temp(os.path.join(OUTDIR,"mapped/{sample}.bam"))
+    output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
     params:
         walltime="864000",
         nodes="1",
-        ppn=MM_PPN
+        ppn=SA_PPN
     resources:
-        mem=MM_MEM
+        mem=SA_MEM
     threads:
-        int(MM_PPN)
-    log:
-        out_minimap = os.path.join(OUTDIR,"log/map/{sample}.minimap.log"),
-        o = os.path.join(OUTDIR,"log/map/{sample}.minimap.o"),
-        e = os.path.join(OUTDIR,"log/map/{sample}.minimap.e")
-
+        int(SA_PPN)
     conda:
-        "envs/minimap2.yaml"
+        "envs/strobealign.yaml"
+    log:
+        out_sa = os.path.join(OUTDIR,"log/map/{sample}.strobealign.log"),
+        o = os.path.join(OUTDIR,"log/map/{sample}.strobealign.o"),
+        e = os.path.join(OUTDIR,"log/map/{sample}.strobealign.e")
+    conda:
+        "envs/strobealign.yaml"
     shell:
-        # See comment over rule "dict" to understand what happens here
-        "minimap2 -t {threads} -ax sr {input.mmi} {input.fq} -N 5"
-        " | grep -v '^@'"
-        " | cat {input.dict} - "
-        " | samtools view -F 3584 -b - " # supplementary, duplicate read, fail QC check
-        " > {output.bam} 2> {log.out_minimap}"
+        "strobealign -t {threads} --aemb {input.contigs} {input.fq}"
+        " > {output} 2> {log.out_sa}"
 
-# Sort bam files
-rule sort:
+rule create_abundance_tsv:
     input:
-        os.path.join(OUTDIR,"mapped/{sample}.bam")
-    output:
-        os.path.join(OUTDIR,"mapped/{sample}.sort.bam")
+        # We don't actually use the files in the rule itself, but we need to
+        # list them as inputs, such that Snakemake will not execute this rule
+        # until all the files are present.
+        files=expand(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"), sample=IDS),
+        directory=os.path.join(OUTDIR, "mapped")
+    output: os.path.join(OUTDIR, "abundance.tsv")
     params:
+        path=os.path.join(os.path.dirname(SNAKEDIR), "src", "abundance.py"),
         walltime="864000",
         nodes="1",
-        ppn="2",
-        prefix=os.path.join(OUTDIR,"mapped/tmp.{sample}")
+        ppn="1",
     resources:
-        mem="15GB"
-    threads:
-        2
-    log:
-        out_sort = os.path.join(OUTDIR,"log/map/{sample}.sort.log"),
-        o = os.path.join(OUTDIR,"log/map/{sample}.sort.o"),
-        e = os.path.join(OUTDIR,"log/map/{sample}.sort.e")
-       
-    conda:
-        "envs/samtools.yaml"
-    shell:
-        "samtools sort {input} -T {params.prefix} --threads 1 -m 3G -o {output} 2> {log.out_sort}"
-
-# Extract header lengths from a BAM file in order to determine which headers
-# to filter from the abundance (i.e. get the mask)
-rule get_headers:
-    input:
-        os.path.join(OUTDIR, "mapped", f"{IDS[1]}.sort.bam")
-    output:
-        os.path.join(OUTDIR,"abundances/headers.txt")
-    params:
-        walltime = "86400",
-        nodes = "1",
-        ppn = "1"
-    resources:
-        mem = "4GB"
+        mem="16GB"
     threads:
         1
-    conda:
-        "envs/samtools.yaml"
     log:
-        head = os.path.join(OUTDIR,"log/abundance/headers.log"),
-        o = os.path.join(OUTDIR,"log/abundance/get_headers.o"),
-        e = os.path.join(OUTDIR,"log/abundance/get_headers.e")
-
-    shell:
-        "samtools view -H {input}"
-        " | grep '^@SQ'"
-        " | cut -f 2,3"
-        " > {output} 2> {log.head} "
- 
-# Using the headers above, compute the mask and the refhash
-rule abundance_mask:
-    input:
-        os.path.join(OUTDIR,"abundances/headers.txt")
-    output:
-        os.path.join(OUTDIR,"abundances/mask_refhash.npz")
-
-    log:
-        mask = os.path.join(OUTDIR,"log/abundance/mask.log"),
-        o = os.path.join(OUTDIR,"log/abundance/mask.o"),
-        e = os.path.join(OUTDIR,"log/abundance/mask.e")
-    params:
-        path = os.path.join(SNAKEDIR, "src", "abundances_mask.py"),
-        walltime = "86400",
-        nodes = "1",
-        ppn = "4"
-    resources:
-        mem = "1GB"
-    threads:
-        4
+        o = os.path.join(OUTDIR,"log/contigs/abundance.o"),
+        e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
         "avamb"
-
-    shell:
-        """
-        python {params.path} --h {input} --msk {output} --minsize {MIN_CONTIG_SIZE} 2> {log.mask}
-        """
-
-
-# For every sample, compute the abundances given the mask and refhash above
-rule bam_abundance:
-    input:
-        bampath=os.path.join(OUTDIR,"mapped/{sample}.sort.bam"),
-        mask_refhash=os.path.join(OUTDIR,"abundances/mask_refhash.npz")
-    output:
-        os.path.join(OUTDIR,"abundances/{sample}.npz")
-    params:
-        path = os.path.join(SNAKEDIR, "src", "write_abundances.py"),
-        walltime = "86400",
-        nodes = "1",
-        ppn = "4"
-    resources:
-        mem = "1GB"
-    threads:
-        4
-    conda:
-        "avamb"
-    log:
-        bam = os.path.join(OUTDIR,"log/abundance/bam_abundance_{sample}.log"),
-        o = os.path.join(OUTDIR,"log/abundance/{sample}.bam_abundance.o"),
-        e = os.path.join(OUTDIR,"log/abundance/{sample}.bam_abundance.e")
-
-    shell:
-        """
-        python {params.path} --msk {input.mask_refhash} --b {input.bampath} --min_id {MIN_IDENTITY} --out {output} 2> {log.bam}
-        """
-    
-# Merge the abundances to a single Abundance object and save it
-rule create_abundances:
-    input:
-        npzpaths=expand(os.path.join(OUTDIR,"abundances","{sample}.npz"), sample=IDS),
-        mask_refhash=os.path.join(OUTDIR,"abundances","mask_refhash.npz")
-    output:
-        os.path.join(OUTDIR,"abundance.npz")
-    params:
-        path = os.path.join(SNAKEDIR, "src", "create_abundances.py"),
-        abundance_dir = os.path.join(OUTDIR, "abundances"),
-        walltime = "86400",
-        nodes = "1",
-        ppn = "4"
-    resources:
-        mem = "1GB"
-    threads:
-        4
-    conda:
-        "avamb"
-    log:
-        create_abs = os.path.join(OUTDIR,"log/abundance/create_abundances.log"),
-        o = os.path.join(OUTDIR,"log/abundance/create_abundances.o"),
-        e = os.path.join(OUTDIR,"log/abundance/create_abundances.e")
-
-    shell:
-        "python {params.path} --msk {input.mask_refhash} --ab {input.npzpaths} --min_id {MIN_IDENTITY} --out {output} 2> {log.create_abs} && "
-        "rm -r {params.abundance_dir}"
+    shell: "python {params.path} {output} {input.directory}"
 
 # Generate the 3 sets of clusters and bins
 rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        abundance=os.path.join(OUTDIR,"abundance.npz")
+        abundance=os.path.join(OUTDIR,"abundance.tsv")
     output:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
@@ -357,7 +184,7 @@ rule run_avamb:
         rm -f {OUTDIR}/contigs.flt.mmi
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --abundance {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
+        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/Final_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins

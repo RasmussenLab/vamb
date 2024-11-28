@@ -1,6 +1,6 @@
-name: minimap2
+name: strobealign
 channels:
   - bioconda
 dependencies:
-  - minimap2
+  - strobealign
   - samtools
