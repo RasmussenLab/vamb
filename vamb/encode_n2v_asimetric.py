@@ -373,6 +373,7 @@ class VAE(_nn.Module):
         self.dropoutlayer = _nn.Dropout(p=self.dropout)
 
         # Object where I will store the mu s , so we update after training
+        
         self.mu_container = _torch.randn(
             self.ncontigs, self.nlatent, dtype=_torch.float32
         )
@@ -381,7 +382,7 @@ class VAE(_nn.Module):
         self.neighs = neighs_object
 
         if cuda:
-            self.cuda()
+            logger.info("Mu container moved to CUDA: "+self.cuda())
             self.mu_container = self.mu_container.cuda()
 
     def _encode(self, tensor: Tensor) -> Tensor:
@@ -461,29 +462,17 @@ class VAE(_nn.Module):
         weights: Tensor,
         preds_idxs: Tensor,
         neighs_mask: Tensor,
-
         abundance_long_in: Tensor,
         abundance_long_out: Tensor,
         abundance_long_mask: Tensor,
-        warmup: bool,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor,Tensor]:
         
         # If multiple samples, use cross entropy, else use SSE for abundance
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
-        
-        #ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
-        
-        #entropy= -((depths_in+ 1e-9).log() * depths_in).sum(dim=1)
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
-        # ce = ce #- entropy
-        
         sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
-
         sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask 
-        
-        #print(sse_ab_long,abundance_long_mask)
         kld = 0.5 * (mu.pow(2)).sum(dim=1)
-        
         # Avoid having the denominator be zero
         if self.nsamples == 1:
             ce_weight = 0.0
@@ -492,6 +481,7 @@ class VAE(_nn.Module):
                 self.nsamples * _log(self.nsamples)
             )
 
+        
         ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
         sse_weight = self.alpha / self.ntnf
         ab_long_sse_weight = self.alpha / (self.nsamples)
@@ -502,9 +492,6 @@ class VAE(_nn.Module):
         weighed_sse = sse * sse_weight
         weighed_ab_long_sse = sse_ab_long * ab_long_sse_weight
         weighed_kld = kld * kld_weight
-
-        # embedding loss
-#        if self.gamma > 0.0:
         loss_emb = self.cosinesimilarity_loss(
             mu,
             preds_idxs,
@@ -518,7 +505,7 @@ class VAE(_nn.Module):
             ),
             dim=0,
         )
-        
+
         reconstruction_loss = (
             weighed_ce
             + weighed_ab
@@ -528,12 +515,8 @@ class VAE(_nn.Module):
         loss = (reconstruction_loss + weighed_kld) * weights + _torch.max(
             loss_emb_cat, dim=0
         )[0] * self.gamma
-        
-
-
 
         loss_emb_pop = loss_emb[neighs_mask]
-            
         
         return (
             loss.mean(),
@@ -547,9 +530,7 @@ class VAE(_nn.Module):
         )
 
     def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
-        avg_cosine_distances = _torch.empty(len(mu))
-
-
+        avg_cosine_distances = _torch.empty(len(mu),device=mu.device)
         for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
             if not neighs_mask_i:
             
@@ -559,7 +540,7 @@ class VAE(_nn.Module):
 
             else:
                 # Select the neighbors
-                mus_neighs = self.mu_container[self.neighs[idx_pred]]
+                mus_neighs = self.mu_container[self.neighs[idx_pred]].to(mu.device)
                 
                 # Compute distances
                 cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i )
@@ -585,8 +566,6 @@ class VAE(_nn.Module):
         epoch: int,
         optimizer,
         batchsteps: list[int],
-        warmup: bool = False,
-        # warmup_only_emb: bool = False,
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]]:
         self.train()
 
@@ -595,7 +574,6 @@ class VAE(_nn.Module):
         epoch_sseloss = 0.0
         epoch_celoss = 0.0
         epoch_embloss_pop = 0.0
-        #epoch_embstd_pop = 0.0
         epoch_absseloss = 0.0
         epoch_ablongsseloss = 0.0
 
@@ -622,10 +600,10 @@ class VAE(_nn.Module):
             if self.usecuda:
                 depths_in = depths_in.cuda()
                 tnf_in = tnf_in.cuda()
+                abundance_in = abundance_in.cuda()
+                weights = weights.cuda()
                 neighs_mask = neighs_mask.cuda()
                 preds_idxs = preds_idxs.cuda()
-                weights = weights.cuda()
-                abundance_in = abundance_in.cuda()
                 abundance_long_in = abundance_long_in.cuda()
                 abundance_long_mask = abundance_long_mask.cuda()
 
@@ -635,10 +613,7 @@ class VAE(_nn.Module):
                 depths_in, tnf_in, abundance_in,abundance_long_in
             )
             
-
             self.mu_container[preds_idxs] = vamb.cluster._normalize(mu.detach())
-            #self.mu_container[preds_idxs] = mu.detach()
-
             (
                 loss,
                 ab_sse,
@@ -661,12 +636,10 @@ class VAE(_nn.Module):
                 abundance_long_in,
                 abundance_long_out,
                 abundance_long_mask,
-                warmup=True if epoch == 0 else warmup,
             )
 
             loss.backward()
             optimizer.step()
-
             epoch_loss += loss.data.item()
             epoch_kldloss += kld.data.item()
             epoch_sseloss += sse.data.item()
@@ -688,6 +661,7 @@ class VAE(_nn.Module):
                 data_loader.batch_size,
             )
         )
+        
         self.eval()
         return data_loader
 
