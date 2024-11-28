@@ -381,7 +381,7 @@ class VAE(_nn.Module):
         # Container where I know the neighbours of each contig in embedding space
         self.neighs = neighs_object
 
-        if cuda:
+        if self.usecuda:
             logger.info("Mu container moved to CUDA: "+ str(self.cuda()))
             self.mu_container = self.mu_container.cuda()
 
@@ -834,8 +834,8 @@ class VAE(_nn.Module):
         logger.info(f"\tMargin: {self.margin}")
         logger.info(f"\tDropout: {self.dropout}")
         logger.info(f"\tN hidden: {', '.join(map(str, self.nhiddens))}")
-        logger.info(f"\tN latent: {self.nlatent}")
-        logger.info(f"\n\tTraining properties:")
+        logger.info(f"\tN latent: {self.nlatent}\n")
+        logger.info(f"\tTraining properties:")
         logger.info(f"\tN epochs: {nepochs}")
         logger.info(f"\tStarting batch size: {dataloader.batch_size}")
         batchsteps_string = (
