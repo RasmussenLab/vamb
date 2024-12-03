@@ -3,6 +3,9 @@ from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
 import numpy as np
 
+TAXONOMY_HEADER = "contigs\tpredictions"
+PREDICTED_TAXONOMY_HEADER = "contigs\tpredictions\tscores"
+
 
 class ContigTaxonomy:
     """
@@ -57,6 +60,14 @@ class Taxonomy:
         return cls.from_observed(observed, metadata, is_canonical)
 
     @classmethod
+    def from_refined_file(
+        cls, tax_file: Path, metadata: CompositionMetaData, is_canonical: bool
+    ):
+        observed = PredictedTaxonomy.parse_tax_file(tax_file, is_canonical)
+        observed = [(name, tax.contig_taxonomy) for (name, tax) in observed]
+        return cls.from_observed(observed, metadata, is_canonical)
+
+    @classmethod
     def from_observed(
         cls,
         observed_taxonomies: list[tuple[str, ContigTaxonomy]],
@@ -101,9 +112,9 @@ class Taxonomy:
         with open(path) as file:
             result: list[tuple[str, ContigTaxonomy]] = []
             header = next(file, None)
-            if header is None or not header.startswith("contigs\tpredictions"):
+            if header is None or not header.startswith(TAXONOMY_HEADER):
                 raise ValueError(
-                    'In taxonomy file, expected header to begin with "contigs\\tpredictions"'
+                    f"In taxonomy file, expected header to begin with {repr(TAXONOMY_HEADER)}"
                 )
             for line in file:
                 (contigname, taxonomy, *_) = line.split("\t")
@@ -160,23 +171,18 @@ class PredictedTaxonomy:
 
     @staticmethod
     def parse_tax_file(
-        path: Path, minlen: int, force_canonical: bool
-    ) -> list[tuple[str, int, PredictedContigTaxonomy]]:
+        path: Path, force_canonical: bool
+    ) -> list[tuple[str, PredictedContigTaxonomy]]:
         with open(path) as file:
-            result: list[tuple[str, int, PredictedContigTaxonomy]] = []
+            result: list[tuple[str, PredictedContigTaxonomy]] = []
             lines = filter(None, map(str.rstrip, file))
             header = next(lines, None)
-            if header is None or not header.startswith(
-                "contigs\tpredictions\tlengths\tscores"
-            ):
+            if header is None or not header.startswith(PREDICTED_TAXONOMY_HEADER):
                 raise ValueError(
-                    'In predicted taxonomy file, expected header to begin with "contigs\\tpredictions\\tlengths\\tscores"'
+                    f"In predicted taxonomy file, expected header to begin with {repr(PREDICTED_TAXONOMY_HEADER)}"
                 )
             for line in lines:
-                (contigname, taxonomy, lengthstr, scores, *_) = line.split("\t")
-                length = int(lengthstr)
-                if length < minlen:
-                    continue
+                (contigname, taxonomy, scores, *_) = line.split("\t")
                 contig_taxonomy = ContigTaxonomy.from_semicolon_sep(
                     taxonomy, force_canonical
                 )
@@ -184,7 +190,6 @@ class PredictedTaxonomy:
                 result.append(
                     (
                         contigname,
-                        length,
                         PredictedContigTaxonomy(contig_taxonomy, probs),
                     )
                 )
