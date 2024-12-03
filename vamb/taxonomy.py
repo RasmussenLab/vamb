@@ -3,6 +3,9 @@ from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
 import numpy as np
 
+TAXONOMY_HEADER = "contigs\tpredictions"
+PREDICTED_TAXONOMY_HEADER = "contigs\tpredictions\tscores"
+
 
 class ContigTaxonomy:
     """
@@ -57,6 +60,14 @@ class Taxonomy:
         return cls.from_observed(observed, metadata, is_canonical)
 
     @classmethod
+    def from_refined_file(
+        cls, tax_file: Path, metadata: CompositionMetaData, is_canonical: bool
+    ):
+        observed = PredictedTaxonomy.parse_tax_file(tax_file, is_canonical)
+        observed = [(name, tax.contig_taxonomy) for (name, tax) in observed]
+        return cls.from_observed(observed, metadata, is_canonical)
+
+    @classmethod
     def from_observed(
         cls,
         observed_taxonomies: list[tuple[str, ContigTaxonomy]],
@@ -100,13 +111,12 @@ class Taxonomy:
     ) -> list[tuple[str, ContigTaxonomy]]:
         with open(path) as file:
             result: list[tuple[str, ContigTaxonomy]] = []
-            lines = filter(None, map(str.rstrip, file))
-            header = next(lines, None)
-            if header is None or not header.startswith("contigs\tpredictions"):
+            header = next(file, None)
+            if header is None or not header.startswith(TAXONOMY_HEADER):
                 raise ValueError(
-                    'In taxonomy file, expected header to begin with "contigs\\tpredictions"'
+                    f"In taxonomy file, expected header to begin with {repr(TAXONOMY_HEADER)}"
                 )
-            for line in lines:
+            for line in file:
                 (contigname, taxonomy, *_) = line.split("\t")
                 result.append(
                     (
@@ -124,7 +134,10 @@ class PredictedContigTaxonomy:
     def __init__(self, tax: ContigTaxonomy, probs: np.ndarray):
         if len(probs) != len(tax.ranks):
             raise ValueError("The length of probs must equal that of ranks")
-        self.tax = tax
+        # Due to floating point errors, the probabilities may be slightly outside of 0 or 1.
+        # We could perhaps validate the values, but that's not likely to be necessary.
+        np.clip(probs, a_min=0.0, a_max=1.0, out=probs)
+        self.contig_taxonomy = tax
         self.probs = probs
 
 
@@ -147,12 +160,41 @@ class PredictedTaxonomy:
         self.is_canonical = is_canonical
 
     def to_taxonomy(self) -> Taxonomy:
-        lst: list[Optional[ContigTaxonomy]] = [p.tax for p in self.contig_taxonomies]
+        lst: list[Optional[ContigTaxonomy]] = [
+            p.contig_taxonomy for p in self.contig_taxonomies
+        ]
         return Taxonomy(lst, self.refhash, self.is_canonical)
 
     @property
     def nseqs(self) -> int:
         return len(self.contig_taxonomies)
+
+    @staticmethod
+    def parse_tax_file(
+        path: Path, force_canonical: bool
+    ) -> list[tuple[str, PredictedContigTaxonomy]]:
+        with open(path) as file:
+            result: list[tuple[str, PredictedContigTaxonomy]] = []
+            lines = filter(None, map(str.rstrip, file))
+            header = next(lines, None)
+            if header is None or not header.startswith(PREDICTED_TAXONOMY_HEADER):
+                raise ValueError(
+                    f"In predicted taxonomy file, expected header to begin with {repr(PREDICTED_TAXONOMY_HEADER)}"
+                )
+            for line in lines:
+                (contigname, taxonomy, scores, *_) = line.split("\t")
+                contig_taxonomy = ContigTaxonomy.from_semicolon_sep(
+                    taxonomy, force_canonical
+                )
+                probs = np.array([float(i) for i in scores.split(";")], dtype=float)
+                result.append(
+                    (
+                        contigname,
+                        PredictedContigTaxonomy(contig_taxonomy, probs),
+                    )
+                )
+
+        return result
 
     def write_as_tsv(self, file: IO[str], comp_metadata: CompositionMetaData):
         if self.refhash != comp_metadata.refhash:
@@ -160,15 +202,14 @@ class PredictedTaxonomy:
                 "Refhash of comp_metadata and predicted taxonomy must match"
             )
         assert self.nseqs == comp_metadata.nseqs
-        print("contigs\tpredictions\tlengths\tscores", file=file)
+        print(PREDICTED_TAXONOMY_HEADER, file=file)
         for i in range(self.nseqs):
             tax = self.contig_taxonomies[i]
-            ranks_str = ";".join(tax.tax.ranks)
+            ranks_str = ";".join(tax.contig_taxonomy.ranks)
             probs_str = ";".join([str(round(i, 5)) for i in tax.probs])
             print(
                 comp_metadata.identifiers[i],
                 ranks_str,
-                comp_metadata.lengths[i],
                 probs_str,
                 file=file,
                 sep="\t",

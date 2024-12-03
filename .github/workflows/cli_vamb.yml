@@ -28,7 +28,7 @@ jobs:
         cache-dependency-path: '**/pyproject.toml'
     - name: Download fixtures
       run: |
-        wget https://www.dropbox.com/scl/fi/xzc0tro7oe6tfm3igygpj/ci_data.zip\?rlkey\=xuv6b5eoynfryp4fba1kfp5jm\&st\=rjb1xccw\&dl\=0 -O ci_data.zip
+        wget https://www.dropbox.com/scl/fi/10tdf0w0kf70pf46hy8ks/ci_data.zip\?rlkey\=smlcinkesuwiw557zulgbb59l\&st\=hhokiqma\&dl\=0 -O ci_data.zip
         unzip -o ci_data.zip
     - name: Install dependencies
       run: |
@@ -55,9 +55,6 @@ jobs:
       run: |
         vamb taxometer --outdir outdir_taxometer --fasta catalogue_mock.fna.gz --abundance abundance_mock.npz --taxonomy taxonomy_mock.tsv -pe 10 -pt 10
         ls -la outdir_taxometer
-        cat outdir_taxometer/log.txt
-        vamb taxometer --outdir outdir_taxometer_pred --fasta catalogue_mock.fna.gz --abundance abundance_mock.npz --taxonomy outdir_taxometer/results_taxometer.tsv -pe 10 -pt 10
-        ls -la outdir_taxometer_pred
         cat outdir_taxometer/log.txt
     - name: Run k-means reclustering
       run: |
