@@ -202,7 +202,7 @@ class PredictedTaxonomy:
                 "Refhash of comp_metadata and predicted taxonomy must match"
             )
         assert self.nseqs == comp_metadata.nseqs
-        print("contigs\tpredictions\tlengths\tscores", file=file)
+        print(PREDICTED_TAXONOMY_HEADER, file=file)
         for i in range(self.nseqs):
             tax = self.contig_taxonomies[i]
             ranks_str = ";".join(tax.contig_taxonomy.ranks)
@@ -210,7 +210,6 @@ class PredictedTaxonomy:
             print(
                 comp_metadata.identifiers[i],
                 ranks_str,
-                comp_metadata.lengths[i],
                 probs_str,
                 file=file,
                 sep="\t",

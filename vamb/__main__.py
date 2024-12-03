@@ -417,7 +417,7 @@ def get_taxonomy(args: argparse.Namespace) -> Union[RefinedTaxonomy, UnrefinedTa
 class TaxometerOptions:
     @classmethod
     def from_args(cls, args: argparse.Namespace):
-        tax = get_taxonomy(args.taxonomy)
+        tax = get_taxonomy(args)
         if isinstance(tax, RefinedTaxonomy):
             raise ValueError(
                 f'Attempted to run Taxometer to refine taxonomy at "{args.taxonomy}", '
