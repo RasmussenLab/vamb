@@ -396,7 +396,7 @@ def get_taxonomy(args: argparse.Namespace) -> Union[RefinedTaxonomy, UnrefinedTa
         )
     with open(check_existing_file(path)) as file:
         try:
-            header = next(file)
+            header = next(file).rstrip("\r\n")
         except StopIteration:
             header = None
 
@@ -410,7 +410,7 @@ def get_taxonomy(args: argparse.Namespace) -> Union[RefinedTaxonomy, UnrefinedTa
         raise ValueError(
             f'ERROR: When reading taxonomy file at "{path}", '
             f"the first line was not either {repr(vamb.taxonomy.TAXONOMY_HEADER)} "
-            f"or {repr(vamb.taxonomy.TAXONOMY_HEADER)}'"
+            f"or {repr(vamb.taxonomy.PREDICTED_TAXONOMY_HEADER)}'"
         )
 
 
