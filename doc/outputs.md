@@ -2,8 +2,12 @@
 
 ### Vamb
 - `log.txt` - A text file with information about the Vamb run. Look here (and at stderr) if you experience errors.
-- `composition.npz`: A Numpy .npz file that contain all kmer composition information computed by Vamb from the FASTA file. This can be provided to another run of Vamb to skip the composition calculation step.
-- `abundance.npz`: Similar to `composition.npz`, but this file contains information calculated from the BAM files. Using this as input instead of BAM files will skip re-parsing the BAM files, which take a significant amount of time.
+- `composition.npz`: A Numpy .npz file that contain all kmer composition information computed by Vamb from the FASTA file.
+  This can be provided to another run of Vamb to skip the composition calculation step.
+  This is not produced if an existing `composition.npz` was used to run Vamb.
+- `abundance.npz`: Similar to `composition.npz`, but this file contains information calculated from the abundance TSV file (or BAM files).
+  Using this as input instead of BAM files will skip re-parsing the BAM files, which take a significant amount of time.
+  This file is not produced if an existing `abundance.npz` was used to run Vamb.
 - `model.pt`: A file containing the trained VAE model. When running Vamb from a Python interpreter, the VAE can be loaded from this file to skip training.
 - `latent.npz`: This contains the output of the VAE model.
 - `vae_clusters_unsplit.tsv` - A two-column text file with one row per sequence:
@@ -23,10 +27,15 @@
     - Ncontigs: Number of sequences in the cluster
 
 ### TaxVamb
-[TODO]
+* `log.txt`, `composition.npz` and `abundance.npz`: Same as when running `Vamb`
+* `predictor_model.pt` and `results_taxometer.tsv`: If Taxometer was used to automatically refine TaxVamb. See the Taxometer output section.
+* `vaevae_clusters_{split,unsplit,metadata}.tsv`: Same as when running `Vamb`, but from TaxVamb's VAEVAE model
+* `vaevae_model.pt` A PyTorch model with the trained VAEVAE model.
 
 ### Taxometer
-[TODO]
+* `log.txt`, `composition.npz` and `abundance.npz`: Same as when running `Vamb`
+* `predictor_model.pt`: A PyTorch model file containing the trained predictor.
+* `results_taxometer.tsv`: A refined taxonomy file (see the section on files on the "how to run" page)
 
 ### AVAMB
 Same as VAMB, but also:

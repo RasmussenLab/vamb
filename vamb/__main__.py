@@ -482,10 +482,10 @@ class MarkerOptions:
     @classmethod
     def from_args(cls, comp: CompositionOptions, args):
         markers = typeasserted(args.markers, (Path, type(None)))
-        hmm = typeasserted(args.hmmout_path, (Path, type(None)))
+        hmm = typeasserted(args.hmm_path, (Path, type(None)))
         if not (markers is None) ^ (hmm is None):
             raise ValueError(
-                "Exactly one of --markers or --hmmout_path must be set to input taxonomic information"
+                "Exactly one of --markers or --hmm_path must be set to input taxonomic information"
             )
         if markers is not None:
             return cls(MarkerPath(markers))
@@ -1742,7 +1742,7 @@ def run_reclustering(opt: ReclusteringOptions):
 
 def add_help_arguments(parser: argparse.ArgumentParser):
     helpos = parser.add_argument_group(title="Help and version", description=None)
-    helpos.add_argument("-h", "--help", help="print help and exit", action="help")
+    helpos.add_argument("-h", "--help", help="Print help and exit", action="help")
     helpos.add_argument(
         "--version",
         action="version",
@@ -1758,7 +1758,7 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         type=Path,
         # required=True, # Setting this flag breaks the argparse with positional arguments. The existence of the folder is checked elsewhere
-        help="output directory to create",
+        help="Output directory to create",
         required=True,
     )
 
@@ -1771,7 +1771,7 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         type=int,
         default=2000,
-        help="ignore contigs shorter than this [2000]",
+        help="Ignore contigs shorter than this [2000]",
     )
 
     general.add_argument(
@@ -1784,27 +1784,27 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
     )
     general.add_argument(
         "--norefcheck",
-        help="skip reference name hashing check [False]",
+        help="Skip reference name hashing check [False]",
         action="store_true",
     )
     general.add_argument(
-        "--cuda", help="use GPU to train & cluster [False]", action="store_true"
+        "--cuda", help="Use GPU to train & cluster [False]", action="store_true"
     )
     general.add_argument(
         "--seed",
         metavar="",
         type=int,
         default=int.from_bytes(os.urandom(7), "little"),
-        help="Random seed (random determinism not guaranteed)",
+        help="Random seed (determinism not guaranteed)",
     )
     return subparser
 
 
 def add_composition_arguments(subparser: argparse.ArgumentParser):
     tnfos = subparser.add_argument_group(title="Composition input")
-    tnfos.add_argument("--fasta", metavar="", type=Path, help="path to fasta file")
+    tnfos.add_argument("--fasta", metavar="", type=Path, help="Path to fasta file")
     tnfos.add_argument(
-        "--composition", metavar="", type=Path, help="path to .npz of composition"
+        "--composition", metavar="", type=Path, help="Path to .npz of composition"
     )
     return subparser
 
@@ -1838,7 +1838,7 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         dest="abundancepath",
         type=Path,
-        help="path to .npz of abundances",
+        help="Path to .npz of abundances",
     )
     abundanceos.add_argument(
         "-z",
@@ -1857,12 +1857,12 @@ def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=Fal
         "--taxonomy",
         metavar="",
         type=Path,
-        help="path to the taxonomy file",
+        help="Path to the taxonomy file",
     )
     if not taxonomy_only:
         taxonomys.add_argument(
             "--no_predictor",
-            help="do not complete input taxonomy with Taxometer [False]",
+            help="Do not complete input taxonomy with Taxometer [False]",
             action="store_true",
         )
     return subparser
@@ -1874,13 +1874,13 @@ def add_marker_arguments(subparser: argparse.ArgumentParser):
         "--markers",
         metavar="",
         type=Path,
-        help="path to the marker .npz file",
+        help="Path to the marker .npz file",
     )
     marker_s.add_argument(
-        "--hmmout_path",
+        "--hmm_path",
         metavar="",
         type=Path,
-        help="path to the .hmm file of marker gene profiles",
+        help="Path to the .hmm file of marker gene profiles",
     )
     return subparser
 
@@ -1893,7 +1893,7 @@ def add_bin_output_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         type=int,
         default=None,
-        help="minimum bin size to output as fasta [None = no files]",
+        help="Minimum bin size to output as fasta [None = no files]",
     )
     bin_os.add_argument(
         "-o",
@@ -1905,12 +1905,12 @@ def add_bin_output_arguments(subparser: argparse.ArgumentParser):
         default=None,
         const="",
         nargs="?",
-        help="binsplit separator [C if present] (pass empty string to disable)",
+        help="Binsplit separator [C if present] (pass empty string to disable)",
     )
     return subparser
 
 
-def add_vae_arguments(subparser):
+def add_vae_arguments(subparser: argparse.ArgumentParser):
     # VAE arguments
     vaeos = subparser.add_argument_group(title="VAE options", description=None)
 
@@ -1989,7 +1989,7 @@ def add_vae_arguments(subparser):
     return subparser
 
 
-def add_predictor_arguments(subparser):
+def add_predictor_arguments(subparser: argparse.ArgumentParser):
     # Train predictor arguments
     pred_trainos = subparser.add_argument_group(
         title="Training options for the taxonomy predictor", description=None
@@ -2040,7 +2040,7 @@ def add_predictor_arguments(subparser):
     return subparser
 
 
-def add_clustering_arguments(subparser):
+def add_clustering_arguments(subparser: argparse.ArgumentParser):
     # Clustering arguments
     clusto = subparser.add_argument_group(title="Clustering options", description=None)
     clusto.add_argument(
@@ -2071,7 +2071,7 @@ def add_clustering_arguments(subparser):
     return subparser
 
 
-def add_model_selection_arguments(subparser):
+def add_model_selection_arguments(subparser: argparse.ArgumentParser):
     # Model selection argument
     model_selection = subparser.add_argument_group(
         title="Model selection", description=None
@@ -2094,7 +2094,7 @@ def add_model_selection_arguments(subparser):
     return subparser
 
 
-def add_aae_arguments(subparser):
+def add_aae_arguments(subparser: argparse.ArgumentParser):
     # AAE arguments
     aaeos = subparser.add_argument_group(title="AAE options", description=None)
 
@@ -2175,20 +2175,20 @@ def add_aae_arguments(subparser):
     return subparser
 
 
-def add_reclustering_arguments(subparser):
+def add_reclustering_arguments(subparser: argparse.ArgumentParser):
     # Reclustering arguments
-    reclusters = subparser.add_argument_group(title="k-means reclustering arguments")
+    reclusters = subparser.add_argument_group(title="K-means reclustering arguments")
     reclusters.add_argument(
         "--latent_path",
         metavar="",
         type=Path,
-        help="path to a latent space",
+        help="Path to latent space .npz file",
     )
     reclusters.add_argument(
         "--clusters_path",
         metavar="",
         type=Path,
-        help="path to a cluster file corresponding to the latent space",
+        help="Path to TSV file with clusters",
     )
     reclusters.add_argument(
         "--algorithm",
@@ -2196,7 +2196,7 @@ def add_reclustering_arguments(subparser):
         type=str,
         default="kmeans",
         choices=["kmeans", "dbscan"],
-        help="which reclustering algorithm to use ('kmeans', 'dbscan'). DBSCAN requires a taxonomy predictions file [kmeans]",
+        help="Which reclustering algorithm to use ('kmeans', 'dbscan') [kmeans]",
     )
     return subparser
 
@@ -2244,6 +2244,7 @@ def main():
 
     vae_parser = subparsers_model.add_parser(
         VAMB,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         default binner based on a variational autoencoder. 
         See the paper "Improved metagenome binning and assembly using deep variational autoencoders" 
@@ -2251,6 +2252,9 @@ def main():
         """,
         add_help=False,
         usage="%(prog)s [options]",
+        description="""Bin using a VAE that merges composition and abundance information.
+
+Required arguments: Outdir, at least one composition input and at least one abundance input""",
     )
     add_general_arguments(vae_parser)
     add_composition_arguments(vae_parser)
@@ -2261,6 +2265,7 @@ def main():
 
     vaevae_parser = subparsers_model.add_parser(
         TAXVAMB,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         taxonomy informed binner based on a bi-modal variational autoencoder. 
         See the paper "TaxVAMB: taxonomic annotations improve metagenome binning" 
@@ -2268,6 +2273,9 @@ def main():
         """,
         add_help=False,
         usage="%(prog)s [options]",
+        description="""Bin using a semi-supervised VAEVAE model that merges composition, abundance and taxonomic information.
+
+Required arguments: Outdir, taxonomy, at least one composition input and at least one abundance input""",
     )
     add_general_arguments(vaevae_parser)
     add_composition_arguments(vaevae_parser)
@@ -2280,12 +2288,7 @@ def main():
 
     vaeaae_parser = subparsers_model.add_parser(
         AVAMB,
-        help="""
-        ensemble model of an adversarial autoencoder and a variational autoencoder. 
-        See the paper "Adversarial and variational autoencoders improve metagenomic binning" 
-        (https://www.nature.com/articles/s42003-023-05452-3). 
-        WARNING: recommended use is through the Snakemake pipeline
-        """,
+        help=argparse.SUPPRESS,
         add_help=False,
         usage="%(prog)s [options]",
     )
@@ -2299,6 +2302,7 @@ def main():
 
     predict_parser = subparsers.add_parser(
         TAXOMETER,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         refines taxonomic annotations of any metagenome classifier. 
         See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
@@ -2306,6 +2310,9 @@ def main():
         """,
         add_help=False,
         usage="%(prog)s [options]",
+        description="""Refine taxonomy using composition and abundance information.
+
+Required arguments: Outdir, unrefined taxonomy, at least one composition input and at least one abundance input""",
     )
     add_general_arguments(predict_parser)
     add_composition_arguments(predict_parser)
@@ -2315,11 +2322,22 @@ def main():
 
     recluster_parser = subparsers.add_parser(
         RECLUSTER,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         reclustering using single-copy genes for the binning results of VAMB, TaxVAMB or AVAMB
         """,
         add_help=False,
         usage="%(prog)s [options]",
+        description="""Use marker genes to re-cluster (DBScan) or refine (K-means) clusters.
+        
+Required arguments:
+  K-means algorithm: Outdir, at least one composition input, at least one marker gene input,
+    latent path and clusters path
+  DBScan algorithm with --no_predictor: Outdir, at least one composition input,
+    at least one marker gene input, latent path and taxonomy
+  DBScan algorithm without --no_predictor: Outdir, at least one composition input,
+    at least one abundance input, at least one marker gene input, latent path and taxonomy
+""",
     )
     add_general_arguments(recluster_parser)
     add_composition_arguments(recluster_parser)

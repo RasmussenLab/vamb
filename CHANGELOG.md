@@ -2,7 +2,7 @@
 
 ## v5.0.0 [UNRELEASED]
 Version 5 is a major release that includes several breaking changes to the API,
-as well as new DL models and workflows, improved binning accuracy, and more user
+as well as new types of models, improved binning accuracy, and more user
 friendliness.
 
 ### Added
@@ -11,14 +11,14 @@ friendliness.
   TaxVamb is state-of-the-art, and significantly outperforms all other Vamb
   models when the taxonomic assignment is reasonably good.
   TaxVamb is available from command-line using `vamb bin taxvamb`
-* Added the Taxometer annotation refiner. This sub-program enhances taxonomic
-  assignment of metagenomic contigs using a DL-based model.
+* Added the Taxometer annotation refiner. This program enhances taxonomic
+  assignment of metagenomic contigs using composition and abundance.
   TaxVamb will automatically run Taxometer to increase accuracy.
   Taxometer is available from command-line using `vamb taxometer`
 * [EXPERIMENTAL] Added reclustering functionality, which reclusters an existing
-  binning using single-copy genes, using the technique from the SemiBin2 tool.
-  This improves bacterial bins.
-  We may remove this feature in future versions of Vamb
+  binning using single-copy genes, using a technique inspired by the SemiBin2
+  binner. This improves bacterial bins.
+  We may remove this feature in future versions of Vamb.
 
 ### Breaking changes
 * The command-line interface of Vamb has been changed, such that the different
@@ -38,7 +38,7 @@ friendliness.
   And similarly for e.g. `vaevae_clusters_split.tsv`.
   When binsplitting is not used, only the unsplit clusters are output.
 * The `benchmark` module of Vamb has been removed, as it is superseded by our
-  new benchmarking tool https://github.com/jakobnissen/BinBencherBackend.jl
+  new benchmarking tool https://github.com/jakobnissen/BinBencher.jl
   
 ### Other changes
 * Several details of the clustering algorithm has been rehauled.
@@ -49,17 +49,15 @@ friendliness.
   a low number of samples (#210)
 * Vamb now binsplits with `-o C` by default.
 	- To disable binsplitting, pass `-o` without an argument
-* Instead of passing all BAM files individually on command line with the
-  --bamfiles flag, it is now recommended to pass in a directory with all the
-  BAM files using the --bamdir flag. --bamfiles will still work.
+* Vamb now supports passing abundances in TSV format. This TSV can created very
+  efficiently using the `strobealign` aligner with the `--aemb` flag.
+* If passing abundances in BAM format, it is now recommended to pass in a
+  directory with all the BAM files using the --bamdir flag, instead of using
+  the old --bamfiles flag.
 * Vamb no longer errors when the batch size is too large.
 * Several errors and warnings have been improved:
-	- Vamb now warns the user when running on fewer than 20,000 contigs, since
-	  this may cause overfitting
 	- The user is warned if any sequences are filtered away for falling below
 	  the contig size cutoff (flag `-m`).
-	  We currently believe that you obtain better results by removing short
-	  contigs before the mapping step, before Vamb is run.
 	- Improved the error message when the FASTA and BAM headers to not match.
 	- Vamb now errors early if the binsplit separator (flag `-o`) is not found
 	  in the parsed contig identifiers.

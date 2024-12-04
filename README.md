@@ -5,7 +5,7 @@ Vamb is a metagenomic binner which feeds sequence composition from a FASTA file 
 It performs excellently with multiple samples, and pretty good on single-sample data.
 
 * __New:__ _For benchmarking binnings with a known ground truth, see our tool [BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl)_
-* __New:__ _The new semi-supervised [TaxVamb binning mode](TODO) achieves state-of-the-art binning_
+* __New:__ _The new semi-supervised [TaxVamb binning mode](https://www.biorxiv.org/content/10.1101/2024.10.25.620172v1) achieves state-of-the-art binning_
 
 ## Programs in Vamb
 The Vamb package contains several programs, including three binners:
