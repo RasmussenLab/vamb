@@ -1509,7 +1509,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         vamb_options=opt.common.general,
         comp_options=opt.common.comp,
         abundance_options=opt.common.abundance,
-        binsplitter=vamb.vambtools.BinSplitter.inert_splitter(),
+        binsplitter=opt.common.output.binsplitter,
     )
     abundance, tnfs, lengths, contignames = (
         abundance.matrix,
