@@ -25,7 +25,7 @@ MIN_BIN_SIZE = int(get_config("min_bin_size", "200000", r"[1-9]\d*$"))
 
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
-SA_MEM = get_config("strobealign_mem", "35gb", r"[1-9]\d*GB$")
+SA_MEM = get_config("strobealign_mem", "35GB", r"[1-9]\d*GB$")
 SA_PPN = get_config("strobealign_ppn", "10", r"[1-9]\d*$")
 AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*GB$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
@@ -64,6 +64,10 @@ fh_in = open(SAMPLE_DATA, 'r')
 for line in fh_in:
     line = line.rstrip()
     fields = line.split('\t')
+    if len(fields) != 3:
+        print(f"""ERROR: {SAMPLE_DATA} is not formatted correct. 
+It needs to be a tab-separated file with 3 items. Got line `{line}`""")
+        sys.exit()
     IDS.append(fields[0])
     sample2path[fields[0]] = [fields[1], fields[2]]
 
@@ -105,7 +109,7 @@ rule cat_contigs:
 # Create abundance tables by aligning reads to the catalogue
 rule strobealign:
     input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
+        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
         fq = lambda wildcards: sample2path[wildcards.sample],
     output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
     params:
