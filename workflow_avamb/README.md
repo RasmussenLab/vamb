@@ -58,10 +58,10 @@ assemblies/contigs.sample_4.fna.gz
 
 `samples2data.tsv` contains sample name, path to read-pair1 and path to read-pair2 (tab-separated):
 ```
-sample_1    reads/sample_1.r1.fq.gz    reads/sample_1.r2.fq.gz
-sample_2    reads/sample_2.r1.fq.gz    reads/sample_2.r2.fq.gz
-sample_3    reads/sample_3.r1.fq.gz    reads/sample_3.r2.fq.gz
-sample_4    reads/sample_4.r1.fq.gz    reads/sample_4.r2.fq.gz
+sample_1	reads/sample_1.r1.fq.gz	reads/sample_1.r2.fq.gz
+sample_2	reads/sample_2.r1.fq.gz	reads/sample_2.r2.fq.gz
+sample_3	reads/sample_3.r1.fq.gz	reads/sample_3.r2.fq.gz
+sample_4	reads/sample_4.r1.fq.gz	reads/sample_4.r2.fq.gz
 
 ```
 

@@ -25,7 +25,7 @@ MIN_BIN_SIZE = int(get_config("min_bin_size", "200000", r"[1-9]\d*$"))
 
 MIN_IDENTITY = float(get_config("min_identity", "0.95", r".*"))
 
-SA_MEM = get_config("strobealign_mem", "35gb", r"[1-9]\d*GB$")
+SA_MEM = get_config("strobealign_mem", "35GB", r"[1-9]\d*GB$")
 SA_PPN = get_config("strobealign_ppn", "10", r"[1-9]\d*$")
 AVAMB_MEM = get_config("avamb_mem", "20gb", r"[1-9]\d*GB$")
 AVAMB_PPN = get_config("avamb_ppn", "10", r"[1-9]\d*(:gpus=[1-9]\d*)?$")
@@ -64,6 +64,10 @@ fh_in = open(SAMPLE_DATA, 'r')
 for line in fh_in:
     line = line.rstrip()
     fields = line.split('\t')
+    if len(fields) != 3:
+        print(f"""ERROR: {SAMPLE_DATA} is not formatted correct. 
+It needs to be a tab-separated file with 3 items. Got line `{line}`""")
+        sys.exit()
     IDS.append(fields[0])
     sample2path[fields[0]] = [fields[1], fields[2]]
 
@@ -105,7 +109,7 @@ rule cat_contigs:
 # Create abundance tables by aligning reads to the catalogue
 rule strobealign:
     input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz")
+        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
         fq = lambda wildcards: sample2path[wildcards.sample],
     output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
     params:
@@ -134,13 +138,13 @@ rule create_abundance_tsv:
         # list them as inputs, such that Snakemake will not execute this rule
         # until all the files are present.
         files=expand(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"), sample=IDS),
-        directory=os.path.join(OUTDIR, "mapped")
     output: os.path.join(OUTDIR, "abundance.tsv")
     params:
         path=os.path.join(os.path.dirname(SNAKEDIR), "src", "abundance.py"),
         walltime="864000",
         nodes="1",
         ppn="1",
+        directory=os.path.join(OUTDIR, "mapped")
     resources:
         mem="16GB"
     threads:
@@ -150,7 +154,8 @@ rule create_abundance_tsv:
         e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
         "avamb"
-    shell: "python {params.path} {output} {input.directory}"
+    # shell: "python {params.path} {output} {params.directory}"
+    shell: "cat {input.files} > {output}"
 
 # Generate the 3 sets of clusters and bins
 rule run_avamb:
@@ -162,6 +167,7 @@ rule run_avamb:
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
+        composition=os.path.join(OUTDIR,"avamb/composition.npz"),
     params:
         walltime="86400",
         nodes="1",
@@ -184,7 +190,7 @@ rule run_avamb:
         rm -f {OUTDIR}/contigs.flt.mmi
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
+        vamb avamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/Final_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins

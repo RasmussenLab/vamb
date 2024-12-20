@@ -1,6 +1,7 @@
 name: strobealign
 channels:
   - bioconda
+  - conda-forge
 dependencies:
   - strobealign
   - samtools
