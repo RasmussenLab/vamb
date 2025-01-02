@@ -138,13 +138,13 @@ rule create_abundance_tsv:
         # list them as inputs, such that Snakemake will not execute this rule
         # until all the files are present.
         files=expand(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"), sample=IDS),
-        directory=os.path.join(OUTDIR, "mapped")
     output: os.path.join(OUTDIR, "abundance.tsv")
     params:
         path=os.path.join(os.path.dirname(SNAKEDIR), "src", "abundance.py"),
         walltime="864000",
         nodes="1",
         ppn="1",
+        directory=os.path.join(OUTDIR, "mapped")
     resources:
         mem="16GB"
     threads:
@@ -154,7 +154,7 @@ rule create_abundance_tsv:
         e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
         "avamb"
-    shell: "python {params.path} {output} {input.directory}"
+    shell: "python {params.path} {output} {params.directory}"
 
 # Generate the 3 sets of clusters and bins
 rule run_avamb:
@@ -166,6 +166,7 @@ rule run_avamb:
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
         clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
+        composition=os.path.join(OUTDIR,"avamb/composition.npz"),
     params:
         walltime="86400",
         nodes="1",
