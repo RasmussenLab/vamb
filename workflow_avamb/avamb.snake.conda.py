@@ -190,7 +190,8 @@ rule run_avamb:
         rm -f {OUTDIR}/contigs.flt.mmi
         rm -rf {output.outdir_avamb} 
         {AVAMB_PRELOAD}
-        vamb avamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
+        vamb bin avamb --outdir {output.outdir_avamb} --fasta {input.contigs} -p {threads} \
+        --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
         mkdir -p {OUTDIR}/Final_bins
         mkdir -p {OUTDIR}/tmp/checkm2_all
         mkdir -p {OUTDIR}/tmp/ripped_bins
