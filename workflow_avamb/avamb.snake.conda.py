@@ -154,8 +154,7 @@ rule create_abundance_tsv:
         e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
         "avamb"
-    # shell: "python {params.path} {output} {params.directory}"
-    shell: "cat {input.files} > {output}"
+    shell: "cat <(echo -e 'contigname\tdepht') {input.files} > {output}"
 
 # Generate the 3 sets of clusters and bins
 rule run_avamb:
