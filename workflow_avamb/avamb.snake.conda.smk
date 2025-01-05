@@ -14,6 +14,7 @@ def get_config(name, default, regex):
         raise ValueError(
             f"Config option \"{name}\" is \"{res}\", but must conform to regex \"{regex}\"")
     return res
+    
 
 
 # set configurations
@@ -106,31 +107,29 @@ rule cat_contigs:
         "avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
-# Create abundance tables by aligning reads to the catalogue
-rule strobealign:
-    input:
-        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
-        fq = lambda wildcards: sample2path[wildcards.sample],
-    output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
-    params:
-        walltime="864000",
-        nodes="1",
-        ppn=SA_PPN
-    resources:
-        mem=SA_MEM
-    threads:
-        int(SA_PPN)
-    conda:
-        "envs/strobealign.yaml"
-    log:
-        out_sa = os.path.join(OUTDIR,"log/map/{sample}.strobealign.log"),
-        o = os.path.join(OUTDIR,"log/map/{sample}.strobealign.o"),
-        e = os.path.join(OUTDIR,"log/map/{sample}.strobealign.e")
-    conda:
-        "envs/strobealign.yaml"
-    shell:
-        "strobealign -t {threads} --aemb {input.contigs} {input.fq}"
-        " > {output} 2> {log.out_sa}"
+# # Create abundance tables by aligning reads to the catalogue
+# rule strobealign:
+#     input:
+#         contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
+#         fq = lambda wildcards: sample2path[wildcards.sample],
+#     output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
+#     params:
+#         walltime="864000",
+#         nodes="1",
+#         ppn=SA_PPN
+#     resources:
+#         mem=SA_MEM
+#     threads:
+#         int(SA_PPN)
+#     conda:
+#         "envs/strobealign.yaml"
+#     log:
+#         out_sa = os.path.join(OUTDIR,"log/map/{sample}.strobealign.log"),
+#         o = os.path.join(OUTDIR,"log/map/{sample}.strobealign.o"),
+#         e = os.path.join(OUTDIR,"log/map/{sample}.strobealign.e")
+#     shell:
+#         "strobealign -t {threads} --aemb {input.contigs} {input.fq}"
+#         " > {output} 2> {log.out_sa}"
 
 rule create_abundance_tsv:
     input:
@@ -154,9 +153,26 @@ rule create_abundance_tsv:
         e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
         "avamb"
-    shell: "cat <(echo -e 'contigname\tdepht') {input.files} > {output}"
+    shell: 
+        """
+        # TODO go back to the orginal
 
-# Generate the 3 sets of clusters and bins
+        # Paste the abundances files together, such that the first column is the contigname 
+        # and the rest of the rows are the depht.
+        # The sed command gets every second row, 
+        # meaning it extracts the depht column from the abundance files
+        # Might want to refactor this as a python script.
+        paste {input.files} \
+        | cut -f1 \
+        | paste - {input.files} \
+        | sed -r 's/\\t[^\\t]*(\\t|$)/\\1/g' \
+        | cat <(echo "contigname {input.files}" | sed 's= =\\t=g') -  > {output}
+
+        # Getting every second column:
+        # https://www.unix.com/shell-programming-and-scripting/253617-printing-every-alternate-columns-text-file.html
+        """
+
+# Generate the 2 sets of clusters and bins from running avamb
 rule run_avamb:
     input:
         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
@@ -165,7 +181,7 @@ rule run_avamb:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
-        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
+        # clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
         composition=os.path.join(OUTDIR,"avamb/composition.npz"),
     params:
         walltime="86400",
@@ -197,10 +213,84 @@ rule run_avamb:
         touch {log.vamb_out}
         """
 
+# Generate the clusters from running vamb
+rule run_vamb:
+    input:
+        contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
+        abundance=os.path.join(OUTDIR,"abundance.tsv")
+    output:
+        outdir_vamb=directory(os.path.join(OUTDIR,"default_vamb")),
+        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv"),
+    params:
+        walltime="86400",
+        nodes="1",
+        ppn=AVAMB_PPN,
+        cuda="--cuda" if CUDA else ""
+    resources:
+        mem=AVAMB_MEM
+    threads:
+        int(avamb_threads)
+    conda:
+        "avamb" 
+    log:
+        vamb_out=os.path.join(OUTDIR,"tmp/vamb_finished.log"),
+        o=os.path.join(OUTDIR,'log','run_vamb.out'),
+        e=os.path.join(OUTDIR,'log','run_vamb.err')
+    shell:
+        """
+        rm -rf {output.outdir_vamb} # Snakemake creates an empty dir, this removes it before running vamb, as vamb will check whether the dir exist and dont run if it does.
+        vamb bin default --outdir {output.outdir_vamb} --fasta {input.contigs} -p {threads} \
+        --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
+        """
+
+rule format_vamb_output:
+    input:        
+        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv"),
+        clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
+        clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
+    output:
+        os.path.join(OUTDIR,"tmp/format_vamb_done.txt"),
+    params:
+        walltime="300",
+        nodes="1",
+        ppn="1"
+    resources:
+        mem="1GB"
+    log:
+        o=os.path.join(OUTDIR,'log','samples_with_bins.out'),
+        e=os.path.join(OUTDIR,'log','samples_with_bins.err')
+    threads:
+        1
+    shell:
+        """
+        # rename the default vamb clusternames to not overlap with the aae clusternames, adding X at the end of each
+        ls {OUTDIR}/default_vamb/bins | sed 's/.fna//' \
+            | xargs -I __ mv {OUTDIR}/default_vamb/bins/__.fna {OUTDIR}/default_vamb/bins/__X.fna
+        mv {OUTDIR}/default_vamb/bins/* {OUTDIR}/avamb/bins
+
+        # Also rename the clusters in vae_clusters_split so the cluster named are equivalient to above
+        cat {input.clusters_vamb} | awk '{{printf "%sX\\t%s\\n", $1, $2}}' \
+            |  tail -n +2 | cat <(echo -e "clustername\\tcontigname") - > {input.clusters_vamb}_x
+        mv {input.clusters_vamb}_x {input.clusters_vamb}
+
+        # Go through each sample and make a dir for each containing the bins
+        # then move the bins there. This is the format Checkm2 uses so we need to convert to it
+        dir={OUTDIR}/avamb/bins
+        for sample in $(ls $dir | cut -f1 -d 'C' | sort | uniq)
+            do
+            mkdir -p $dir/$sample
+            # TODO should not crash if allready have been run 
+            find $dir -type f -name $sample'*' | xargs -I X mv X $dir/$sample
+        done
+
+        touch {output}
+        """
+
 # Evaluate in which samples bins were reconstructed
 checkpoint samples_with_bins:
     input:        
-        os.path.join(OUTDIR,"tmp/avamb_finished.log")
+        # os.path.join(OUTDIR,"tmp/avamb_finished.log"),
+        os.path.join(OUTDIR,"tmp/format_vamb_done.txt"),
     output:
         os.path.join(OUTDIR,"tmp/samples_with_bins.txt")
     params:
@@ -216,7 +306,10 @@ checkpoint samples_with_bins:
     threads:
         1
     shell:
-        "find {OUTDIR}/avamb/bins/*/ -type d ! -empty |sed 's=.*bins/==g'  |sed 's=/==g'  > {output}"
+        """
+        # Get the names of each sample
+        find {OUTDIR}/avamb/bins/* -type d ! -empty |sed 's=.*bins/==g'  |sed 's=/==g'  > {output}
+        """
 
 
 def samples_with_bins_f(wildcards):
@@ -242,8 +335,8 @@ rule run_checkm2_per_sample_all_bins:
         o=os.path.join(OUTDIR,'log','checkm2_{sample}.out'),
         e=os.path.join(OUTDIR,'log','checkm2_{sample}.err')
 
-    conda: 
-        "checkm2" 
+    conda:
+        "envs/checkm2.yaml"
     shell:
         """
         checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
@@ -276,7 +369,7 @@ rule cat_checkm2_all:
 #   - {bin : bin_path}             
 rule create_cluster_scores_bin_path_dictionaries:
     input:
-        checkm2_finished_log_file = os.path.join(OUTDIR,"tmp/checkm2_finished.txt")
+        checkm2_finished_log_file = os.path.join(OUTDIR,"tmp/checkm2_finished.txt"),
     output:
         cluster_score_dict_path_avamb = os.path.join(OUTDIR,"tmp/cs_d_avamb.json"),
         bin_path_dict_path_avamb = os.path.join(OUTDIR,"tmp/bp_d_avamb.json"),
@@ -305,7 +398,7 @@ rule run_drep_manual_vamb_z_y:
         composition=os.path.join(OUTDIR,"avamb/composition.npz"),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
-        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv")
+        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv")
 
     output:
         clusters_avamb_manual_drep=os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv")
@@ -437,6 +530,7 @@ rule run_checkm2_ripped_bins_avamb:
          --output-directory {OUTDIR}/tmp/ripped_bins/checkm2_out 
         touch {log.log_fin}
         """
+
 # As explained in rule create_ripped_bins_avamb, contigs present in three bins were removed from the larger bin.
 # This rule updates the quality scores after removing such contig(s).
 rule update_cs_d_avamb:
@@ -551,23 +645,23 @@ rule workflow_finished:
         e=os.path.join(OUTDIR,'log','workflow_finished.err')
     shell:
         """
-        rm -r {OUTDIR}/tmp/checkm2_all/*/protein_files
+        # TODO uncomment these again
+        # rm -r {OUTDIR}/tmp/checkm2_all/*/protein_files
         
-        rm -r {OUTDIR}/avamb/bins
+        # rm -r {OUTDIR}/avamb/bins
         
-        mkdir {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/tmp/*log  {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/tmp/*json  {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/tmp/*tsv  {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/tmp/*txt  {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/tmp/ripped_bins {OUTDIR}/tmp/snakemake_tmp/
-        
-        mv {OUTDIR}/tmp/checkm2_all  {OUTDIR}/tmp/snakemake_tmp/
-        mv {OUTDIR}/avamb/avamb_manual_drep_disjoint_clusters.tsv  {OUTDIR}/Final_clusters.tsv
-        mv {OUTDIR}/abundance.npz {OUTDIR}/tmp/
-        mv {OUTDIR}/mapped {OUTDIR}/tmp/
-        mv {OUTDIR}/contigs.flt.fna.gz {OUTDIR}/tmp/
-
+        # mkdir {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/tmp/*log  {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/tmp/*json  {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/tmp/*tsv  {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/tmp/*txt  {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/tmp/ripped_bins {OUTDIR}/tmp/snakemake_tmp/
+        #
+        # mv {OUTDIR}/tmp/checkm2_all  {OUTDIR}/tmp/snakemake_tmp/
+        # mv {OUTDIR}/avamb/avamb_manual_drep_disjoint_clusters.tsv  {OUTDIR}/Final_clusters.tsv
+        # mv {OUTDIR}/abundance.npz {OUTDIR}/tmp/
+        # mv {OUTDIR}/mapped {OUTDIR}/tmp/
+        # mv {OUTDIR}/contigs.flt.fna.gz {OUTDIR}/tmp/
         
 
         touch {output}
