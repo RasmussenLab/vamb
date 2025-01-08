@@ -239,7 +239,7 @@ def zscore(
     """
 
     if axis is not None and (axis >= array.ndim or axis < 0):
-        raise _np.AxisError(str(axis))
+        raise _np.exceptions.AxisError(str(axis))
 
     if inplace and not _np.issubdtype(array.dtype, _np.floating):
         raise TypeError("Cannot convert a non-float array to zscores")
