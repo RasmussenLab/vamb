@@ -214,6 +214,9 @@ class AbundanceOptions:
         elif abundance_tsv is not None:
             self.paths = AbundanceTSVPath(abundance_tsv)
 
+def bad(x):
+  a = 1
+  return 1
 
 class BasicTrainingOptions:
     __slots__ = ["num_epochs", "starting_batch_size", "batch_steps"]
