@@ -3,20 +3,20 @@
 dynamic = ["version"]
 name = "vamb"
 dependencies = [
-    "numpy == 1.26.4",
-    "torch == 2.3.1",
-    "pycoverm == 0.6.0",
+    "numpy == 2.2.1",
+    "torch == 2.5.1",
+    "pycoverm == 0.6.2",
     "networkx == 3.2", # 3.3 drops Python 3.9 support
-    "scikit-learn == 1.5.0",
+    "scikit-learn == 1.6.0",
     "dadaptation == 3.2",
-    "loguru == 0.7.2",
-    "pyhmmer == 0.10.12",
-    "pyrodigal == 3.4.1",
+    "loguru == 0.7.3",
+    "pyhmmer == 0.10.15",
+    "pyrodigal == 3.6.3",
 ]
-# Currently pycoverm does not have binaries for Python > 3.12.
-# The dependency resolver, will not error on Python 3.13, but attempt
+# Currently pycoverm does not have binaries for Python > 3.13.
+# The dependency resolver, will not error on Python 3.14, but attempt
 # to build pycoverm from source, but will not get the deps required for that.
-requires-python = "<3.13,>=3.9.0"
+requires-python = "<3.14,>=3.9.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [project.optional-dependencies]
