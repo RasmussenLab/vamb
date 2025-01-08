@@ -1256,6 +1256,8 @@ def write_clusters_and_bins(
     if binsplitter.splitter is not None:
         split_path = Path(base_clusters_name + "_split.tsv")
         clusters = dict(binsplitter.binsplit(clusters.items()))
+        # Add prefix before writing the clusters to file
+        clusters = add_bin_prefix(clusters, bin_prefix)
         with open(split_path, "w") as file:
             (n_split_clusters, _) = vamb.vambtools.write_clusters(
                 file, clusters.items()
@@ -1263,6 +1265,7 @@ def write_clusters_and_bins(
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+        clusters = add_bin_prefix(clusters, bin_prefix)
 
     logger.info(msg)
     elapsed = round(time.time() - begintime, 2)
@@ -1276,8 +1279,7 @@ def write_clusters_and_bins(
         sizeof = dict(zip(sequence_names, sequence_lens))
         for binname, contigs in clusters.items():
             if sum(sizeof[c] for c in contigs) >= fasta_output.min_fasta_size:
-                new_name = binname if bin_prefix is None else bin_prefix + binname
-                filtered_clusters[new_name] = contigs
+                filtered_clusters[binname] = contigs
 
         with vamb.vambtools.Reader(fasta_output.existing_fasta_path.path) as file:
             vamb.vambtools.write_bins(
@@ -1292,6 +1294,15 @@ def write_clusters_and_bins(
         logger.info(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
+
+
+def add_bin_prefix(
+    clusters: dict[str, set[str]], prefix: Optional[str]
+) -> dict[str, set[str]]:
+    if prefix is None:
+        return clusters
+    else:
+        return {prefix + b: c for (b, c) in clusters.items()}
 
 
 def run_bin_default(opt: BinDefaultOptions):
