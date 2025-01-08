@@ -1167,6 +1167,7 @@ def cluster_and_write_files(
     cuda: bool,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
     fasta_output: Optional[FastaOutput],
+    bin_prefix: Optional[str],  # see write_clusters_and_bins
 ):
     begintime = time.time()
     # Create cluser iterator
@@ -1220,6 +1221,7 @@ def cluster_and_write_files(
 
     write_clusters_and_bins(
         fasta_output,
+        bin_prefix,
         binsplitter,
         base_clusters_name,
         cluster_dict,
@@ -1231,6 +1233,11 @@ def cluster_and_write_files(
 
 def write_clusters_and_bins(
     fasta_output: Optional[FastaOutput],
+    # If `x` and not None, clusters will be renamed `x` + old_name.
+    # This is necessary since for the AAE, we may need to write bins
+    # from three latent spaces into the same directory, and the names
+    # must not clash.
+    bin_prefix: Optional[str],
     binsplitter: vamb.vambtools.BinSplitter,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
     clusters: dict[str, set[str]],
@@ -1269,7 +1276,8 @@ def write_clusters_and_bins(
         sizeof = dict(zip(sequence_names, sequence_lens))
         for binname, contigs in clusters.items():
             if sum(sizeof[c] for c in contigs) >= fasta_output.min_fasta_size:
-                filtered_clusters[binname] = contigs
+                new_name = binname if bin_prefix is None else bin_prefix + binname
+                filtered_clusters[new_name] = contigs
 
         with vamb.vambtools.Reader(fasta_output.existing_fasta_path.path) as file:
             vamb.vambtools.write_bins(
@@ -1321,6 +1329,7 @@ def run_bin_default(opt: BinDefaultOptions):
         opt.common.general.cuda,
         str(opt.common.general.out_dir.joinpath("vae_clusters")),
         FastaOutput.try_from_common(opt.common),
+        None,
     )
     del latent
 
@@ -1351,6 +1360,12 @@ def run_bin_aae(opt: BinAvambOptions):
     comp_metadata = composition.metadata
     del composition, abundance
     assert comp_metadata.nseqs == len(latent_z)
+    # Cluster and output the Z clusters
+    # This function calls write_clusters_and_bins,
+    # but also does the actual clustering and writes cluster metadata.
+    # This does not apply to the aae_y clusters, since their cluster label
+    # can be extracted directly from the latent space without clustering,
+    # and hence below, `write_clusters_and_bins` is called directly instead.
     cluster_and_write_files(
         opt.common.clustering,
         opt.common.output.binsplitter,
@@ -1361,13 +1376,16 @@ def run_bin_aae(opt: BinAvambOptions):
         opt.common.general.cuda,
         str(opt.common.general.out_dir.joinpath("aae_z_clusters")),
         FastaOutput.try_from_common(opt.common),
+        "z_",
     )
     del latent_z
 
     # We enforce this in the VAEAAEOptions constructor, see comment there
+    # Cluster and output the Y clusters
     assert opt.common.clustering.max_clusters is None
     write_clusters_and_bins(
         FastaOutput.try_from_common(opt.common),
+        "y_",
         binsplitter=opt.common.output.binsplitter,
         base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
         clusters=clusters_y_dict,
@@ -1629,6 +1647,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         opt.common.general.cuda,
         str(opt.common.general.out_dir.joinpath("vaevae_clusters")),
         FastaOutput.try_from_common(opt.common),
+        None,
     )
 
 
@@ -1732,6 +1751,7 @@ def run_reclustering(opt: ReclusteringOptions):
 
     write_clusters_and_bins(
         fasta_output,
+        None,
         opt.output.binsplitter,
         str(opt.general.out_dir.joinpath("clusters_reclustered")),
         clusters_dict,
@@ -1982,7 +2002,7 @@ def add_vae_arguments(subparser: argparse.ArgumentParser):
         "-r",
         dest="lrate",
         metavar="",
-        type=Optional[float],
+        type=float,
         default=None,
         help=argparse.SUPPRESS,
     )
