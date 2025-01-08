@@ -6,7 +6,7 @@ dependencies = [
     "numpy == 2.2.1",
     "torch == 2.5.1",
     "pycoverm == 0.6.2",
-    "networkx == 3.2", # 3.3 drops Python 3.9 support
+    "networkx == 3.4.2",
     "scikit-learn == 1.6.0",
     "dadaptation == 3.2",
     "loguru == 0.7.3",
@@ -16,7 +16,7 @@ dependencies = [
 # Currently pycoverm does not have binaries for Python > 3.13.
 # The dependency resolver, will not error on Python 3.14, but attempt
 # to build pycoverm from source, but will not get the deps required for that.
-requires-python = "<3.14,>=3.9.0"
+requires-python = "<3.14,>=3.10.0"
 scripts = {vamb = "vamb.__main__:main"}
 
 [project.optional-dependencies]
