@@ -1558,12 +1558,12 @@ def run_vaevae(opt: BinTaxVambOptions):
         )
         contig_taxonomies = predicted_contig_taxonomies.to_taxonomy()
     elif isinstance(opt.taxonomy, RefinedTaxonomy):
-        logger.info("Loading already-refined taxonomy from file")
+        logger.info(f'Loading already-refined taxonomy from file "{opt.taxonomy.path}"')
         contig_taxonomies = vamb.taxonomy.Taxonomy.from_refined_file(
             opt.taxonomy.path, composition.metadata, False
         )
     else:
-        logger.info("Loading unrefined taxonomy from file")
+        logger.info(f'Loading unrefined taxonomy from file "{opt.taxonomy.path}"')
         contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
             opt.taxonomy.path, composition.metadata, False
         )
@@ -1697,12 +1697,15 @@ def run_reclustering(opt: ReclusteringOptions):
             )
             taxonomy = predicted_tax.to_taxonomy()
         else:
-            logger.info(f'Loading taxonomy from file "{alg.taxonomy.path}"')
             if isinstance(alg.taxonomy, UnrefinedTaxonomy):
+                logger.info(
+                    f'Loading unrefined taxonomy from file "{alg.taxonomy.path}"'
+                )
                 taxonomy = vamb.taxonomy.Taxonomy.from_file(
                     alg.taxonomy.path, composition.metadata, True
                 )
             else:
+                logger.info(f'Loading refined taxonomy from file "{alg.taxonomy.path}"')
                 taxonomy = vamb.taxonomy.Taxonomy.from_refined_file(
                     alg.taxonomy.path, composition.metadata, True
                 )
