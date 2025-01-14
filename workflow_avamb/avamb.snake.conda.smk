@@ -104,7 +104,7 @@ rule cat_contigs:
         e = os.path.join(OUTDIR,"log/contigs/catcontigs.e")
     
     conda:
-        "avamb"
+        "new_avamb"
     shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 # Create abundance tables by aligning reads to the catalogue
@@ -152,7 +152,7 @@ rule create_abundance_tsv:
         o = os.path.join(OUTDIR,"log/contigs/abundance.o"),
         e = os.path.join(OUTDIR,"log/contigs/abundance.e")
     conda:
-        "avamb"
+        "new_avamb"
     shell: 
         """
         # TODO go back to the orginal
@@ -193,7 +193,7 @@ rule run_avamb:
     threads:
         int(avamb_threads)
     conda:
-        "avamb" 
+        "new_avamb" 
     log:
         vamb_out=os.path.join(OUTDIR,"tmp/avamb_finished.log"),
         o=os.path.join(OUTDIR,'log','run_avamb.out'),
@@ -231,7 +231,7 @@ rule run_avamb:
 #     threads:
 #         int(avamb_threads)
 #     conda:
-#         "avamb" 
+#         "new_avamb" 
 #     log:
 #         vamb_out=os.path.join(OUTDIR,"tmp/vamb_finished.log"),
 #         o=os.path.join(OUTDIR,'log','run_vamb.out'),
@@ -383,7 +383,7 @@ rule create_cluster_scores_bin_path_dictionaries:
     threads:
         4
     conda:
-        "avamb"
+        "new_avamb"
     log:
         o=os.path.join(OUTDIR,'log','cs_bp_dicts.out'),
         e=os.path.join(OUTDIR,'log','cs_bp_dicts.err')
@@ -412,7 +412,7 @@ rule run_drep_manual_vamb_z_y:
     threads:
         5
     conda:
-        "avamb"
+        "new_avamb"
     log:
         o=os.path.join(OUTDIR,'log','dereplication.out'),
         e=os.path.join(OUTDIR,'log','dereplication.err')
@@ -448,7 +448,7 @@ checkpoint create_ripped_bins_avamb:
     threads:
         5
     conda:
-        "avamb"
+        "new_avamb"
     log:
         o=os.path.join(OUTDIR,'log','ripping.out'),
         e=os.path.join(OUTDIR,'log','ripping.err')
@@ -483,7 +483,7 @@ rule nc_clusters_and_bins_from_mdrep_clusters_avamb:
     threads:
         4
     conda:
-        "avamb"
+        "new_avamb"
     shell:
         """
         python {params.path} --c {input.clusters_avamb_manual_drep} \
@@ -549,7 +549,7 @@ rule update_cs_d_avamb:
     threads:
         4
     conda:
-        "avamb" 
+        "new_avamb" 
     log:
         o=os.path.join(OUTDIR,'log','update_cs_bp_dicts.out'),
         e=os.path.join(OUTDIR,'log','update_cs_bp_dicst.err'),
@@ -582,7 +582,7 @@ rule aggregate_nc_bins_avamb:
     threads:
         5
     conda:
-        "avamb" 
+        "new_avamb" 
 
     log:
         o=os.path.join(OUTDIR,'log','aggregate_final_ncs.out'),
@@ -620,7 +620,7 @@ rule write_clusters_from_nc_folders:
     threads:
         1
     conda:
-        "avamb"
+        "new_avamb"
    
     shell:
         "sh {params.path} -d {OUTDIR}/Final_bins -o {OUTDIR} ;"
