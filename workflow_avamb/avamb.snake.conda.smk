@@ -105,31 +105,31 @@ rule cat_contigs:
     
     conda:
         "avamb"
-    shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
+    shell: "which python > pversion; python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
-# # Create abundance tables by aligning reads to the catalogue
-# rule strobealign:
-#     input:
-#         contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
-#         fq = lambda wildcards: sample2path[wildcards.sample],
-#     output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
-#     params:
-#         walltime="864000",
-#         nodes="1",
-#         ppn=SA_PPN
-#     resources:
-#         mem=SA_MEM
-#     threads:
-#         int(SA_PPN)
-#     conda:
-#         "envs/strobealign.yaml"
-#     log:
-#         out_sa = os.path.join(OUTDIR,"log/map/{sample}.strobealign.log"),
-#         o = os.path.join(OUTDIR,"log/map/{sample}.strobealign.o"),
-#         e = os.path.join(OUTDIR,"log/map/{sample}.strobealign.e")
-#     shell:
-#         "strobealign -t {threads} --aemb {input.contigs} {input.fq}"
-#         " > {output} 2> {log.out_sa}"
+# Create abundance tables by aligning reads to the catalogue
+rule strobealign:
+    input:
+        contigs = os.path.join(OUTDIR,"contigs.flt.fna.gz"), 
+        fq = lambda wildcards: sample2path[wildcards.sample],
+    output: temp(os.path.join(OUTDIR, "mapped", "{sample}.aemb.tsv"))
+    params:
+        walltime="864000",
+        nodes="1",
+        ppn=SA_PPN
+    resources:
+        mem=SA_MEM
+    threads:
+        int(SA_PPN)
+    conda:
+        "envs/strobealign.yaml"
+    log:
+        out_sa = os.path.join(OUTDIR,"log/map/{sample}.strobealign.log"),
+        o = os.path.join(OUTDIR,"log/map/{sample}.strobealign.o"),
+        e = os.path.join(OUTDIR,"log/map/{sample}.strobealign.e")
+    shell:
+        "strobealign -t {threads} --aemb {input.contigs} {input.fq}"
+        " > {output} 2> {log.out_sa}"
 
 rule create_abundance_tsv:
     input:
@@ -339,7 +339,7 @@ rule run_checkm2_per_sample_all_bins:
         "envs/checkm2.yaml"
     shell:
         """
-        checkm2 predict --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
+        checkm2 predict --force --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
         touch {output.out_log_file}
         """
 
