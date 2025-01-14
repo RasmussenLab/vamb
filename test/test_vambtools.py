@@ -291,10 +291,10 @@ class TestZscore(unittest.TestCase):
         )
 
     def test_axis_bounds(self):
-        with self.assertRaises(np.AxisError):
+        with self.assertRaises(np.exceptions.AxisError):
             vamb.vambtools.zscore(self.arr, axis=-1)
 
-        with self.assertRaises(np.AxisError):
+        with self.assertRaises(np.exceptions.AxisError):
             vamb.vambtools.zscore(self.arr, axis=2)
 
     def test_integer(self):
