@@ -336,7 +336,7 @@ rule run_checkm2_per_sample_all_bins:
         e=os.path.join(OUTDIR,'log','checkm2_{sample}.err')
 
     conda:
-        "envs/checkm2.yaml"
+        "checkm2"
     shell:
         """
         checkm2 predict --force --threads {threads} --input {OUTDIR}/avamb/bins/{wildcards.sample}/*.fna --output-directory {OUTDIR}/tmp/checkm2_all/{wildcards.sample}
