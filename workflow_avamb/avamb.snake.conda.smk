@@ -181,7 +181,7 @@ rule run_avamb:
         outdir_avamb=directory(os.path.join(OUTDIR,"avamb")),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
-        # clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
+        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
         composition=os.path.join(OUTDIR,"avamb/composition.npz"),
     params:
         walltime="86400",
@@ -213,39 +213,39 @@ rule run_avamb:
         touch {log.vamb_out}
         """
 
-# Generate the clusters from running vamb
-rule run_vamb:
-    input:
-        contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
-        abundance=os.path.join(OUTDIR,"abundance.tsv")
-    output:
-        outdir_vamb=directory(os.path.join(OUTDIR,"default_vamb")),
-        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv"),
-    params:
-        walltime="86400",
-        nodes="1",
-        ppn=AVAMB_PPN,
-        cuda="--cuda" if CUDA else ""
-    resources:
-        mem=AVAMB_MEM
-    threads:
-        int(avamb_threads)
-    conda:
-        "avamb" 
-    log:
-        vamb_out=os.path.join(OUTDIR,"tmp/vamb_finished.log"),
-        o=os.path.join(OUTDIR,'log','run_vamb.out'),
-        e=os.path.join(OUTDIR,'log','run_vamb.err')
-    shell:
-        """
-        rm -rf {output.outdir_vamb} # Snakemake creates an empty dir, this removes it before running vamb, as vamb will check whether the dir exist and dont run if it does.
-        vamb bin default --outdir {output.outdir_vamb} --fasta {input.contigs} -p {threads} \
-        --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
-        """
+# # Generate the clusters from running vamb
+# rule run_vamb:
+#     input:
+#         contigs=os.path.join(OUTDIR,"contigs.flt.fna.gz"),
+#         abundance=os.path.join(OUTDIR,"abundance.tsv")
+#     output:
+#         outdir_vamb=directory(os.path.join(OUTDIR,"default_vamb")),
+#         clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv"),
+#     params:
+#         walltime="86400",
+#         nodes="1",
+#         ppn=AVAMB_PPN,
+#         cuda="--cuda" if CUDA else ""
+#     resources:
+#         mem=AVAMB_MEM
+#     threads:
+#         int(avamb_threads)
+#     conda:
+#         "avamb" 
+#     log:
+#         vamb_out=os.path.join(OUTDIR,"tmp/vamb_finished.log"),
+#         o=os.path.join(OUTDIR,'log','run_vamb.out'),
+#         e=os.path.join(OUTDIR,'log','run_vamb.err')
+#     shell:
+#         """
+#         rm -rf {output.outdir_vamb} # Snakemake creates an empty dir, this removes it before running vamb, as vamb will check whether the dir exist and dont run if it does.
+#         vamb bin default --outdir {output.outdir_vamb} --fasta {input.contigs} -p {threads} \
+#         --abundance_tsv {input.abundance} -m {MIN_CONTIG_SIZE} --minfasta {MIN_BIN_SIZE}  {params.cuda}  {AVAMB_PARAMS}
+#         """
 
 rule format_vamb_output:
     input:        
-        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv"),
+        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv"),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
     output:
@@ -263,15 +263,15 @@ rule format_vamb_output:
         1
     shell:
         """
-        # rename the default vamb clusternames to not overlap with the aae clusternames, adding X at the end of each
-        ls {OUTDIR}/default_vamb/bins | sed 's/.fna//' \
-            | xargs -I __ mv {OUTDIR}/default_vamb/bins/__.fna {OUTDIR}/default_vamb/bins/__X.fna
-        mv {OUTDIR}/default_vamb/bins/* {OUTDIR}/avamb/bins
-
-        # Also rename the clusters in vae_clusters_split so the cluster named are equivalient to above
-        cat {input.clusters_vamb} | awk '{{printf "%sX\\t%s\\n", $1, $2}}' \
-            |  tail -n +2 | cat <(echo -e "clustername\\tcontigname") - > {input.clusters_vamb}_x
-        mv {input.clusters_vamb}_x {input.clusters_vamb}
+        # # rename the default vamb clusternames to not overlap with the aae clusternames, adding X at the end of each
+        # ls {OUTDIR}/default_vamb/bins | sed 's/.fna//' \
+        #     | xargs -I __ mv {OUTDIR}/default_vamb/bins/__.fna {OUTDIR}/default_vamb/bins/__X.fna
+        # mv {OUTDIR}/default_vamb/bins/* {OUTDIR}/avamb/bins
+        #
+        # # Also rename the clusters in vae_clusters_split so the cluster named are equivalient to above
+        # cat {input.clusters_vamb} | awk '{{printf "%sX\\t%s\\n", $1, $2}}' \
+        #     |  tail -n +2 | cat <(echo -e "clustername\\tcontigname") - > {input.clusters_vamb}_x
+        # mv {input.clusters_vamb}_x {input.clusters_vamb}
 
         # Go through each sample and make a dir for each containing the bins
         # then move the bins there. This is the format Checkm2 uses so we need to convert to it
@@ -398,7 +398,7 @@ rule run_drep_manual_vamb_z_y:
         composition=os.path.join(OUTDIR,"avamb/composition.npz"),
         clusters_aae_z=os.path.join(OUTDIR,"avamb/aae_z_clusters_split.tsv"),
         clusters_aae_y=os.path.join(OUTDIR,"avamb/aae_y_clusters_split.tsv"),
-        clusters_vamb=os.path.join(OUTDIR,"default_vamb/vae_clusters_split.tsv")
+        clusters_vamb=os.path.join(OUTDIR,"avamb/vae_clusters_split.tsv")
 
     output:
         clusters_avamb_manual_drep=os.path.join(OUTDIR,"tmp/avamb_manual_drep_clusters.tsv")
