@@ -1303,6 +1303,7 @@ def add_bin_prefix(
         return clusters
     else:
         return {prefix + b: c for (b, c) in clusters.items()}
+        return {b + prefix: c for (b, c) in clusters.items()}
 
 
 def run_bin_default(opt: BinDefaultOptions):
@@ -1387,7 +1388,6 @@ def run_bin_aae(opt: BinAvambOptions):
         opt.common.general.cuda,
         str(opt.common.general.out_dir.joinpath("aae_z_clusters")),
         FastaOutput.try_from_common(opt.common),
-        "z_",
     )
     del latent_z
 
@@ -1396,7 +1396,6 @@ def run_bin_aae(opt: BinAvambOptions):
     assert opt.common.clustering.max_clusters is None
     write_clusters_and_bins(
         FastaOutput.try_from_common(opt.common),
-        "y_",
         binsplitter=opt.common.output.binsplitter,
         base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
         clusters=clusters_y_dict,
