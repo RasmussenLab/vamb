@@ -105,7 +105,7 @@ rule cat_contigs:
     
     conda:
         "avamb"
-    shell: "which python > pversion; python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
+    shell: "python {params.path} {output} {input} -m {MIN_CONTIG_SIZE}"
 
 # Create abundance tables by aligning reads to the catalogue
 rule strobealign:
