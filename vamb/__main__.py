@@ -1167,7 +1167,7 @@ def cluster_and_write_files(
     cuda: bool,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
     fasta_output: Optional[FastaOutput],
-    bin_prefix: Optional[str] = None,  # see write_clusters_and_bins
+    bin_prefix: Optional[str],  # see write_clusters_and_bins
 ):
     begintime = time.time()
     # Create cluser iterator
@@ -1388,6 +1388,7 @@ def run_bin_aae(opt: BinAvambOptions):
         opt.common.general.cuda,
         str(opt.common.general.out_dir.joinpath("aae_z_clusters")),
         FastaOutput.try_from_common(opt.common),
+        "_z",
     )
     del latent_z
 
@@ -1396,7 +1397,7 @@ def run_bin_aae(opt: BinAvambOptions):
     assert opt.common.clustering.max_clusters is None
     write_clusters_and_bins(
         FastaOutput.try_from_common(opt.common),
-        None,
+        "y_",
         binsplitter=opt.common.output.binsplitter,
         base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
         clusters=clusters_y_dict,
