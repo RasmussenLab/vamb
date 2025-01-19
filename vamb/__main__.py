@@ -1167,7 +1167,7 @@ def cluster_and_write_files(
     cuda: bool,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
     fasta_output: Optional[FastaOutput],
-    bin_prefix: Optional[str],  # see write_clusters_and_bins
+    bin_prefix: Optional[str] = None,  # see write_clusters_and_bins
 ):
     begintime = time.time()
     # Create cluser iterator
