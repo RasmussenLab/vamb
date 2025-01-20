@@ -1302,7 +1302,6 @@ def add_bin_prefix(
     if prefix is None:
         return clusters
     else:
-        return {prefix + b: c for (b, c) in clusters.items()}
         return {b + prefix: c for (b, c) in clusters.items()}
 
 
@@ -1397,7 +1396,7 @@ def run_bin_aae(opt: BinAvambOptions):
     assert opt.common.clustering.max_clusters is None
     write_clusters_and_bins(
         FastaOutput.try_from_common(opt.common),
-        "y_",
+        "_y",
         binsplitter=opt.common.output.binsplitter,
         base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
         clusters=clusters_y_dict,
