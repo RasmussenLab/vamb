@@ -13,6 +13,7 @@ from vamb.parsecontigs import CompositionMetaData
 from vamb import vambtools
 from typing import Optional, TypeVar, Union, IO, Sequence, Iterable
 from pathlib import Path
+from itertools import zip_longest
 import shutil
 
 _ncpu = _os.cpu_count()
@@ -254,28 +255,34 @@ class Abundance:
             samples = columns[1:]
             n_samples = len(samples)
             matrix = _np.empty((comp_metadata.nseqs, n_samples), dtype=_np.float32)
-            # Since we read the header already and this is zero-indexed, we need to add 2
-            for line_no_minus_two, line in enumerate(file):
-                if line_no_minus_two == comp_metadata.nseqs:
+            matrix_row = 0
+            for line_number_minus_two, (line, should_keep) in enumerate(
+                zip_longest(file, comp_metadata.mask)
+            ):
+                if line is None:
                     raise ValueError(
-                        f'Too many rows in abundance TSV file "{path}", expected {comp_metadata.nseqs + 1}, got at least {line_no_minus_two + 1}'
+                        f'Too few rows in abundance TSV file "{path}", expected '
+                        f"{comp_metadata.nseqs + 1}, got {line_number_minus_two + 1}"
+                    )
+                elif should_keep is None:
+                    raise ValueError(
+                        f'Too many rows in abundance TSV file "{path}", expected '
+                        f"{comp_metadata.nseqs + 1} sequences, got at least "
+                        f"{line_number_minus_two + 2}"
                     )
                 stripped = line.rstrip()
-                if not line:
+                if not line or not should_keep:
                     continue
                 fields = stripped.split("\t")
                 if len(fields) != n_samples + 1:
                     raise ValueError(
-                        f'In abundance TSV file "{path}", on line {line_no_minus_two + 2}, expected {n_samples + 1} columns, found {len(fields)}'
+                        f'In abundance TSV file "{path}", on line {line_number_minus_two + 2}'
+                        f", expected {n_samples + 1} columns, found {len(fields)}"
                     )
                 for i in range(n_samples):
-                    matrix[line_no_minus_two, i] = float(fields[i + 1])
+                    matrix[matrix_row, i] = float(fields[i + 1])
+                matrix_row += 1
                 seen_identifiers.append(fields[0])
-
-            if line_no_minus_two + 1 != comp_metadata.nseqs:
-                raise ValueError(
-                    f'Too few rows in abundance TSV file "{path}", expected {comp_metadata.nseqs + 1}, got {line_no_minus_two + 1}'
-                )
 
         vambtools.RefHasher.verify_refhash(
             vambtools.RefHasher.hash_refnames(seen_identifiers),
