@@ -256,22 +256,32 @@ class Abundance:
             n_samples = len(samples)
             matrix = _np.empty((comp_metadata.nseqs, n_samples), dtype=_np.float32)
             matrix_row = 0
+            found_empty = False
             for line_number_minus_two, (line, should_keep) in enumerate(
                 zip_longest(file, comp_metadata.mask)
             ):
-                if line is None:
+                if line is not None:
+                    if not line.strip():
+                        found_empty = True
+                    elif found_empty:
+                        raise ValueError(
+                            "Found an empty line not at end of abundance TSV file"
+                            f'"{path}"'
+                        )
+                else:
                     raise ValueError(
                         f'Too few rows in abundance TSV file "{path}", expected '
-                        f"{comp_metadata.nseqs + 1}, got {line_number_minus_two + 1}"
+                        f"{len(comp_metadata.mask) + 1}, got {line_number_minus_two + 1}"
                     )
-                elif should_keep is None:
+                if should_keep is None:
                     raise ValueError(
                         f'Too many rows in abundance TSV file "{path}", expected '
-                        f"{comp_metadata.nseqs + 1} sequences, got at least "
+                        f"{len(comp_metadata.mask) + 1} sequences, got at least "
                         f"{line_number_minus_two + 2}"
                     )
+
                 stripped = line.rstrip()
-                if not line or not should_keep:
+                if not should_keep:
                     continue
                 fields = stripped.split("\t")
                 if len(fields) != n_samples + 1:
