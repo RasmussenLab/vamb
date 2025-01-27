@@ -114,9 +114,19 @@ class TestParseBam(unittest.TestCase):
                 for i, existing in enumerate(file):
                     lines[i] += "\t" + existing.split("\t")[1].rstrip()
 
+        # Add in lines with zeros corresponding to the masked contigs
+        unmasked_lines = []
+        i = 0
+        for keep in self.comp_metadata.mask:
+            if not keep:
+                unmasked_lines.append("\t0.0\t0.0\t0.0")
+            else:
+                unmasked_lines.append(lines[i])
+                i += 1
+
         with tempfile.NamedTemporaryFile(mode="w+") as file:
             print("contigname\tfile1\tfile2\tfile3", file=file)
-            for line in lines:
+            for line in unmasked_lines:
                 print(line, file=file)
             file.seek(0)
             abundance = vamb.parsebam.Abundance.from_tsv(

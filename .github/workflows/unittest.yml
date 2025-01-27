@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        # There is a bug in Python 3.13.0 which breaks Vamb's tests, fixed in 3.13.1
+        python-version: ["3.10", "3.11", "3.12", "3.13.1"]
 
     steps:
     - uses: actions/checkout@v3

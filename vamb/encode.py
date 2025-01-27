@@ -514,7 +514,9 @@ class VAE(_nn.Module):
         """
 
         # Forcably load to CPU even if model was saves as GPU model
-        dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
+        dictionary = _torch.load(
+            path, map_location=lambda storage, loc: storage, weights_only=True
+        )
 
         nsamples = dictionary["nsamples"]
         alpha = dictionary["alpha"]

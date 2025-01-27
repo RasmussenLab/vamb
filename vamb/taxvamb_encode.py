@@ -630,7 +630,9 @@ class VAEVAEHLoss(_semisupervised_encode.VAEVAE):
         """
 
         # Forcably load to CPU even if model was saves as GPU model
-        dictionary = _torch.load(path, map_location=lambda storage, loc: storage)
+        dictionary = _torch.load(
+            path, map_location=lambda storage, loc: storage, weights_only=False
+        )
 
         nsamples = dictionary["nsamples"]
         nlabels = dictionary["nlabels"]
