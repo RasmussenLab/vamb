@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workflow_plamb"
+version = "0.0.1"
+description = ""
+
+readme = "README.md"
+requires-python = "==3.12.2"
+dynamic = ["dependencies", "optional-dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.scripts]
+workflow_plamb = "workflow_plamb.__main__:main"

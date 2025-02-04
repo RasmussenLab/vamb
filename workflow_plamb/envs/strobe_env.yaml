@@ -1,0 +1,8 @@
+name: strobealign
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - samtools
+  - strobealign
