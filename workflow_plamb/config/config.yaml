@@ -1,0 +1,95 @@
+files: "example_file.tsv"
+
+# Options from pau pipeline
+outdir: "./data"
+
+index_size: "3G"
+min_contig_len: "2000"
+plamb_mem: "150GB"
+plamb_ppn: "30"
+plamb_params: " -o C --gamma 0.1 -b 200 "
+plamb_preload: ""
+n2v_ed: "32"
+n2v_wl: "10"
+n2v_ws: "10"
+n2v_p: "0.1"
+n2v_q: "2.0"
+
+default_walltime: "48:00:00"
+default_threads: 16
+default_mem_gb: 50
+
+rename_contigs:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+cat_contigs:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+get_contig_names:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+samtools_sort:
+  walltime: "15-00:00:00"
+  threads: 4
+  default_mem_gb: 20
+circularize:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+weighted_assembly_graphs:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+weighted_alignment_graph:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 5
+create_assembly_alignment_graph:
+  walltime: "15-00:00:00"
+  threads: 1
+  default_mem_gb: 50
+
+spades:
+  walltime: "15-00:00:00"
+  threads: 16
+  mem_gb: 245
+
+extract_neighs_from_n2v_embeddings:
+  walltime: "1-00:00:00"
+  threads: 63
+  mem_gb: 990
+
+index:
+  threads: 8
+  mem_gb: 120
+
+Strobealign_bam_default:
+  walltime: "10-00:00:00"
+  threads: 16
+  mem_gb: 245
+
+sort:
+  threads: 8
+  mem_gb: 120
+
+align_contigs:
+  threads: 8
+  mem_gb: 120
+
+vamb_asymmetric:
+  walltime: "05-00:00:00"
+  threads: 16
+  mem_gb: 245
+
+run_geNomad:
+  walltime: "05-00:00:00"
+  threads: 16
+  mem_gb: 245
+
+run_vamb_asymmetric:
+  walltime: "05-00:00:00"
+  threads: 5
+  mem_gb: 250

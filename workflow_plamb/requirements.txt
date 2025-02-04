@@ -1,0 +1,4 @@
+pandas==2.2.3 
+rich-click==1.8.3
+loguru==0.7.3
+
