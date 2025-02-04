@@ -67,8 +67,7 @@ default_mem_gb: 50
 ```
 If these exceed the resourcess available they will be scaled down to match the hardware available. 
 
-### Running on cluster 
-(! needs to be tested !)
+### Running on cluster [! needs to be tested !]
 You can extend the arguments passed to snakemake by the '--snakemake_arguments' flag
 This can then be used to have snakemake submit jobs to a cluster.
 On SLURM this could look like
