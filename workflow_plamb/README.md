@@ -87,7 +87,7 @@ on PBS this could like:
 ```
 
 
-### Running using snakemake CLI directly
+### Running using snakemake CLI directly [! needs to be tested !]
 The pipeline can be run without using the CLI wrapper around snakemake
 
 The input files for the pipeline can be configurated in ``` config/accesions.txt ``` 
