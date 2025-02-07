@@ -3,6 +3,7 @@
 import sys
 
 import rich_click as click
+from loguru import logger
 
 from workflow_plamb.click_file_types import OneOrMoreSnakemakeArguments, WssFile
 from workflow_plamb.command_line_runners import CliRunner, SnakemakeRunner
