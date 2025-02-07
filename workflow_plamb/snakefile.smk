@@ -2,6 +2,7 @@ import pandas as pd
 import collections
 import os
 from pathlib import Path
+import sys
 
 THIS_FILE_DIR =config.get("src_dir")
 THIS_FILE_DIR = Path("") if THIS_FILE_DIR is None else Path(THIS_FILE_DIR)
@@ -59,9 +60,13 @@ contigs =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.fasta"
 contigs_paths =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.paths"
 assembly_graph = OUTDIR / "data/sample_{key}/spades_{id}/assembly_graph_after_simplification.gfa"
 
+if config.get("read_file") == None and config.get("read_assembly_dir") == None:
+    print("ERROR: read_file or read_assembly_dir not passed to snakemake as config. Define either. Eg. snakemake <arguments> --config read_file=<read file>. If in doubt refer to the README.md file")
+    sys.exit()
+
 # If the read_file is defined the pipeline will also run SPades and assemble the reads
 if config.get("read_file") != None:
-    df = pd.read_csv(config["read_file"], sep="\s+", comment="#")
+    df = pd.read_csv(config["read_file"], sep=r"\s+", comment="#")
     sample_id = collections.defaultdict(list)
     sample_id_path = collections.defaultdict(dict)
     for id, (read1, read2) in enumerate(zip(df.read1, df.read2)):
@@ -72,7 +77,7 @@ if config.get("read_file") != None:
 
 # If read_assembly dir is defined the pipeline will run user defined SPades output files
 if config.get("read_assembly_dir") != None:
-    df = pd.read_csv(config["read_assembly_dir"], sep="\s+", comment="#")
+    df = pd.read_csv(config["read_assembly_dir"], sep=r"\s+", comment="#")
     sample_id = collections.defaultdict(list)
     sample_id_path = collections.defaultdict(dict)
     sample_id_path_assembly = collections.defaultdict(dict)

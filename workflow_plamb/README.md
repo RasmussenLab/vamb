@@ -32,21 +32,21 @@ To run the pipeline from allready assembled reads pass in a whitespace separated
 ```
 workflow_plamb --reads_and_assembly_dir <reads_and_assembly_dir>  --output <output_directory>
 ```
-This directory must contain the following 3 files which Spades produces: 
-| Description                         | File Name from Spades                               |
-|:------------------------------------|:----------------------------------------|
-| The assembled contigs               | `contigs.fasta`                         |
-| The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
-| A metadata file                     | `contigs.paths`                         |
-
-This file could look like:
-
+The `reads_and_assembly_dir` file could look like:
 ``` 
 read1                          read2                         assembly_dir                                           
 im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2   path/sample_1/Spades_output  
 im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2   path/sample_2/Spades_output          
 ```
  :heavy_exclamation_mark: Notice the header names are required to be: read1, read2 and assembly_dir  
+
+The path to the SPades output directory (under the assembly_dir column in the above example) must contain the following 3 files which Spades produces: 
+| Description                         | File Name from Spades                               |
+|:------------------------------------|:----------------------------------------|
+| The assembled contigs               | `contigs.fasta`                         |
+| The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
+| A metadata file                     | `contigs.paths`                         |
+
  
 ## Advanced
 ### Resources 
@@ -62,7 +62,7 @@ spades:
 if no resourcess are configurated for a rule the defaults will be used which are also defined in: ``` config/config.yaml ```  as
 ```
 default_walltime: "48:00:00"
-default_threads: 1
+default_threads: 16
 default_mem_gb: 50
 ```
 If these exceed the resourcess available they will be scaled down to match the hardware available. 
@@ -85,25 +85,61 @@ on PBS this could like:
     --cluster "sbatch  --output={rule}.%j.o --error={rule}.%j.e \
     --time={resources.walltime} --job-name {rule}  --cpus-per-task {threads} --mem {resources.mem_gb}G "'
 ```
+### Running using snakemake CLI directly 
+The pipeline can be run without using the CLI wrapper around snakemake. 
+For using snakemake refer to the snakemake documentation: <https://snakemake.readthedocs.io/en/stable/>
 
+#### Running from Reads using snakemake directly
+To run the entire pipeline including assembly pass in a whitespace separated file containing the reads to snakemake using to the config flag in the snakemake CLI:
+```
+snakemake --use-conda --cores <number_of_cores> --snakefile <path_to_snakefile> --config read_file=<read_file>
+```
+The <read_file> could look like:
 
-### Running using snakemake CLI directly [! needs to be tested !]
-The pipeline can be run without using the CLI wrapper around snakemake
+``` 
+read1                          read2
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2
+```
+:heavy_exclamation_mark: Notice the header names are required to be: read1 and read2  
 
-The input files for the pipeline can be configurated in ``` config/accesions.txt ``` 
-As an example this could look like:
+#### Running from assembled reads using snakemake directly
+To run the pipeline from allready assembled reads pass in a whitespace separated file containing the reads and the path to the spades assembly directories for each read pair to the config flag in snakemake.
 ```
-SAMPLE ID READ1 READ2
-Airways 4 reads/errorfree/Airways/reads/4/fw.fq.gz reads/errorfree/Airways/reads/4/rv.fq.gz
-Airways 5 reads/errorfree/Airways/reads/5/fw.fq.gz reads/errorfree/Airways/reads/5/rv.fq.gz
+snakemake --use-conda --cores <number_of_cores> --snakefile <path_to_snakefile> --config read_assembly_dir=<reads_and_assembly_dir_file>
 ```
 
-with an installation of snakemake run the following to dry-run the pipeline
+The reads_and_assembly_dir_file could look like:
+``` 
+read1                          read2                         assembly_dir                                           
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2   path/sample_1/Spades_output  
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2   path/sample_2/Spades_output          
 ```
-	snakemake -np --snakefile snakefile.smk
+ :heavy_exclamation_mark: Notice the header names are required to be: read1, read2 and assembly_dir  
+
+This assembly_dir directory filepath must contain the following 3 files which Spades produces: 
+| Description                         | File Name from Spades                               |
+|:------------------------------------|:----------------------------------------|
+| The assembled contigs               | `contigs.fasta`                         |
+| The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
+| A metadata file                     | `contigs.paths`                         |
+
+#### Ressources for the different snakemake rules when using snakemake directly
+To define resources for the specific snakemake rules either edit the snakemake.smk file directly or pass in a YAML config-file describing the resource use for each rule. 
 ```
-and running the pipeline with 4 threads
+snakemake <arguments> --configfile <config_file.yaml>
 ```
-	snakemake -p -c4 --snakefile snakefile.smk --use-conda
+For a specification of the configfile refer to the ``` config/config.yaml ``` file.
+Here the resources for each rule can be configurated as follows
 ```
+spades:
+  walltime: "15-00:00:00"
+  threads: 16
+  mem_gb: 60
 ```
+if no resourcess are configurated for a rule the defaults will be used which are also defined in: ``` config/config.yaml ```  as
+```
+default_walltime: "48:00:00"
+default_threads: 16
+default_mem_gb: 50
+
