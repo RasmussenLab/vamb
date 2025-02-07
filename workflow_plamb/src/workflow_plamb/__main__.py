@@ -37,7 +37,7 @@ Passing in this file means that the pipeline will be run from the start, meaning
 <Notice the header names are required to be: read1, read2 and assembly_dir>
 This file could look like:  
 ```
-read1                     read2                     assembly_dir
+read1                  read2                  assembly_dir
 path/sample_1/read1    path/sample_1/read2    path/sample_1/Spades_dir
 path/sample_2/read1    path/sample_2/read2    path/sample_2/Spades_dir
 ```
@@ -81,10 +81,15 @@ Passing in this file means that the pipeline will not assemble the reads but run
 @click.option(
     "-nn",
     "--cli_dryrun",
-    help="Run a dryrun for the cli interface. Showing the commands which would be run fron the cli interface",
+    help="Run a dryrun for the cli interface. Showing the commands which would be run from the cli interface",
     is_flag=True,
 )
-@click.option("-s", "--snakemake_arguments", type=OneOrMoreSnakemakeArguments())
+@click.option(
+    "-s",
+    "--snakemake_arguments",
+    type=OneOrMoreSnakemakeArguments(),
+    help="String of white space seperated snakemake arguments. eg. workflow_plamb <options> --snakemake_arguments '-n -p'",
+)
 def main(
     setup_env,
     reads,
@@ -100,7 +105,7 @@ def main(
     The first time running the program it will try to install the genomad database (~3.1 G) and required scripts.
     For running the pipeline either the --reads or the --reads_and_assembly_dir arguments are required.
     Additionally, the --output argument is required which defines the output directory.
-    For Quick Start please see the README: https://github.com/Las02/ptracker_workflow/tree/try_cli
+    For Quick Start please see the README: https://github.com/RasmussenLab/vamb/tree/plamb_pipeline/workflow_plamb
     """
 
     if cli_dryrun:

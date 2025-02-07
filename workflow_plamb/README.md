@@ -107,5 +107,3 @@ and running the pipeline with 4 threads
 	snakemake -p -c4 --snakefile snakefile.smk --use-conda
 ```
 ```
-## TODO
-- [ ] envs/pipeline_conda.yaml refers to specific path - change to releative

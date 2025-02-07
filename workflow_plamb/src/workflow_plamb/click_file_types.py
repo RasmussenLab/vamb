@@ -5,7 +5,7 @@ from loguru import logger
 
 
 class OneOrMoreSnakemakeArguments(click.ParamType):
-    name = "snakemake_arguments"
+    name = "str"
 
     def convert(self, value, param, ctx):
         value = value.split()
