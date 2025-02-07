@@ -79,7 +79,7 @@ class WssFile(click.ParamType):
             parts_of_df_which_are_files.itertuples(index=False)
         ):
             for file in list(content):
-                if not file_exists(file):
+                if not file_exist(file):
                     raise self.fail(
                         f"{value!r} has file(s) which do not exist\nError Message:\n < {value} > Contains column < {i +1 } > (1 indexed) which has the file < {file} > which do not exist",
                         param,
@@ -94,12 +94,10 @@ class WssFile(click.ParamType):
             ]
 
         logger.info(
-            f"\nRead in the following sample list from '{value}' using flag '--{param.human_readable_name}':"
+            f"\nRead in the following sample list from '{value}' using flag '--{param.human_readable_name}':\n {df.to_markdown(index=False)}"
         )
 
-        # TODO Make it such that long files are not formatted wierd
-        logger.info(df.to_markdown(index=False))
-        logger.info("")
+        print("")
         return value
 
     def is_spades_dir_correct(self, x, value, param, ctx):

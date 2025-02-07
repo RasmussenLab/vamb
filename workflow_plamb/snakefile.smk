@@ -3,7 +3,7 @@ import collections
 import os
 from pathlib import Path
 
-THIS_FILE_DIR =config.get("dir_of_current_file")
+THIS_FILE_DIR =config.get("src_dir")
 THIS_FILE_DIR = Path("") if THIS_FILE_DIR is None else Path(THIS_FILE_DIR)
 
 configfile: THIS_FILE_DIR / "config/config.yaml"

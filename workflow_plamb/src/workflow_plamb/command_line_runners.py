@@ -36,7 +36,7 @@ class CliRunner:
 
     def run(self):
         if self.dry_run_command:
-            logger.info("running:")
+            logger.info("Would run:")
             logger.info(self._argument_holder)
         else:
             print("Running:")
