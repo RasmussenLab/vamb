@@ -67,23 +67,15 @@ default_mem_gb: 50
 ```
 If these exceed the resourcess available they will be scaled down to match the hardware available. 
 
-### Running on cluster [! needs to be tested !]
+### Running on cluster [! needs to be tested also w.r.t to specific snakemake version as they changed how to submit to a cluster through snakemake !]
 You can extend the arguments passed to snakemake by the '--snakemake_arguments' flag
 This can then be used to have snakemake submit jobs to a cluster.
-On SLURM this could look like
-
-```
-./cli.py <arguments> --snakemake_arguments \
-    '--jobs 16 --max-jobs-per-second 5 --max-status-checks-per-second 5 --latency-wait 60 \
-    --cluster "sbatch  --output={rule}.%j.o --error={rule}.%j.e \
-    --time={resources.walltime} --job-name {rule}  --cpus-per-task {threads} --mem {resources.mem_gb}G "'
-```
 on PBS this could like:
 ```
 ./cli.py <arguments> --snakemake_arguments \
     '--jobs 16 --max-jobs-per-second 5 --max-status-checks-per-second 5 --latency-wait 60 \
     --cluster "sbatch  --output={rule}.%j.o --error={rule}.%j.e \
-    --time={resources.walltime} --job-name {rule}  --cpus-per-task {threads} --mem {resources.mem_gb}G "'
+    --time={resources.walltime} --job-name {rule} --cpus-per-task {threads} --mem {resources.mem_gb}G "'
 ```
 ### Running using snakemake CLI directly 
 The pipeline can be run without using the CLI wrapper around snakemake. 

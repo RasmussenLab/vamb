@@ -60,7 +60,11 @@ contigs =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.fasta"
 contigs_paths =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.paths"
 assembly_graph = OUTDIR / "data/sample_{key}/spades_{id}/assembly_graph_after_simplification.gfa"
 
-if config.get("read_file") == None and config.get("read_assembly_dir") == None:
+sample_id = dict()               
+sample_id_path= dict() 
+sample_id_path_assembly = dict()
+
+if config.get("read_file") == None and config.get("read_assembly_dir") == None and config.get("should_install_genomad") == None:
     print("ERROR: read_file or read_assembly_dir not passed to snakemake as config. Define either. Eg. snakemake <arguments> --config read_file=<read file>. If in doubt refer to the README.md file")
     sys.exit()
 
@@ -107,6 +111,21 @@ rule all:
         expand(os.path.join(OUTDIR, "{key}", 'log/run_vamb_asymmetric.finished'), key=sample_id.keys()),
         expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_0.75_candidate_plasmids.tsv'),key=sample_id.keys()),
         expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
+
+rulename = "download_genomad_db"
+rule download_genomad_db:
+    output:
+        dir_geNomad_db = directory(THIS_FILE_DIR / "genomad_db"),
+        geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db" / "genomad_db"),
+        geNomad_db_path = directory(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
+    threads: threads_fn(rulename)
+    resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
+    conda: THIS_FILE_DIR / "envs/genomad.yaml"
+    shell:
+        """
+        mkdir -p {output.dir_geNomad_db}
+        genomad download-database {output.dir_geNomad_db}
+        """
 
 rulename = "spades"
 rule spades:
@@ -444,21 +463,21 @@ rulename = "run_geNomad"
 rule run_geNomad:
     input:
         OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
+        geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
         os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
         os.path.join(OUTDIR,"{key}",'tmp','geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
-    params:
-        db_geNomad= THIS_FILE_DIR / "genomad_db" / "genomad_db", 
+    # params:
+    #     db_geNomad= THIS_FILE_DIR / "genomad_db" / "genomad_db", 
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
     log: config.get("log", "log/") + "{key}_" + rulename
-    # conda: "envs/pipeline_conda.yaml"
     conda: THIS_FILE_DIR / "envs/genomad.yaml"
     shell:
         """
-        genomad end-to-end --cleanup {input} {output[0]}   {params.db_geNomad} --threads {threads}
+        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads}
         touch {output[1]}
         """
 

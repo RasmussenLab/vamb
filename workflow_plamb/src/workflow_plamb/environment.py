@@ -19,16 +19,17 @@ class EnvironmentManager:
         snakemake_runner.add_arguments(["--directory", self._src_dir])
         # We need to download the genomad tools first so conda needs to be passed to snakemake
         snakemake_runner.add_arguments(["--use-conda"])
+        snakemake_runner.add_to_config("should_install_genomad=True")
         snakemake_runner.add_arguments(["-c", "1"])
         # Set target rule to genomad_db to create the database
         snakemake_runner.add_arguments(["download_genomad_db"])
         snakemake_runner.run()
 
-    def install_conda_environments(self):
-        logger.info(f"Installing conda environments")
-        snakemake_runner = SnakemakeRunner()
-        snakemake_runner.add_arguments(["--use-conda", "--conda-create-envs-only"])
-        snakemake_runner.run()
+    # def install_conda_environments(self):
+    #     logger.info(f"Installing conda environments")
+    #     snakemake_runner = SnakemakeRunner()
+    #     snakemake_runner.add_arguments(["--use-conda", "--conda-create-envs-only"])
+    #     snakemake_runner.run()
 
     def setup_environment(self):
         logger.info("Setting up environment")
