@@ -1,4 +1,5 @@
 /snakemake_output/
+Makefile
 /genomad_db/
 /trash
 .cli.py.swp

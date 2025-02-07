@@ -114,7 +114,7 @@ def main(
 
     environment_manager = EnvironmentManager()
     # Set up the environment
-    if setup_env:
+    if setup_env and not dryrun:
         environment_manager.setup_environment()
         sys.exit()
 
@@ -134,7 +134,7 @@ def main(
         )
 
     # Check if the environment is setup correctly, if not set it up
-    if not environment_manager.check_if_everything_is_setup():
+    if not environment_manager.check_if_everything_is_setup() and not dryrun:
         environment_manager.setup_environment()
 
     snakemake_runner = SnakemakeRunner(snakefile="snakefile.smk")
