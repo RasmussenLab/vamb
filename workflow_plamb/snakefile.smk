@@ -6,7 +6,10 @@ from pathlib import Path
 THIS_FILE_DIR =config.get("src_dir")
 THIS_FILE_DIR = Path("") if THIS_FILE_DIR is None else Path(THIS_FILE_DIR)
 
-configfile: THIS_FILE_DIR / "config/config.yaml"
+CONFIG_PATH = THIS_FILE_DIR / "config/config.yaml"
+if CONFIG_PATH.exists():
+    configfile: CONFIG_PATH
+
 # The src directory for the files used in the snakemake workflow
 PAU_SRC_DIR = THIS_FILE_DIR / "files_used_in_snakemake_workflow"  
 
@@ -17,9 +20,9 @@ output_directory = Path("") if output_directory is None else Path(output_directo
 OUTDIR= output_directory / "outdir_plamb" 
 
 # Define default threads/walltime/mem_gb based on configfile
-default_walltime = config.get("default_walltime")
-default_threads = config.get("default_threads")
-default_mem_gb = config.get("default_mem_gb")
+default_walltime = config.get("default_walltime", "48:00:00")
+default_threads = config.get("default_threads", 16)
+default_mem_gb = config.get("default_mem_gb", 50)
 
 # Functions to get the config-defined threads/walltime/mem_gb for a rule and if not defined the default
 threads_fn = lambda rulename: config.get(rulename, {"threads": default_threads}).get("threads", default_threads) 
@@ -27,8 +30,7 @@ walltime_fn  = lambda rulename: config.get(rulename, {"walltime": default_wallti
 mem_gb_fn  = lambda rulename: config.get(rulename, {"mem_gb": default_mem_gb}).get("mem_gb", default_mem_gb) 
 
 ## Contig parameters
-CONTIGS = config.get("contigs") #get_config('contigs', 'contigs.txt', r'.*') # each line is a contigs path from a given sample
-MIN_CONTIG_LEN = int(config.get("min_contig_len")) #get_config('min_contig_len', '2000', r'[1-9]\d*$'))
+MIN_CONTIG_LEN = int(config.get("min_contig_len", 2000)) #get_config('min_contig_len', '2000', r'[1-9]\d*$'))
 
 ## TODO MISING
 MAX_INSERT_SIZE_CIRC = 50 # 50 is deafult
@@ -436,7 +438,6 @@ rule run_vamb_asymmetric:
 rulename = "run_geNomad"
 rule run_geNomad:
     input:
-        #CONTIGS_FILE
         OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
