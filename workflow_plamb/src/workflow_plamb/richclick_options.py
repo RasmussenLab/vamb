@@ -2,7 +2,7 @@ import rich_click as click
 
 # Setting rich options
 click.rich_click.OPTION_GROUPS = {
-    "cli.py": [
+    "workflow_plamb": [
         {
             "name": "Defining input files: One of these options are required",
             "options": ["--reads", "--reads_and_assembly_dir"],
@@ -18,7 +18,14 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Other Options",
-            "options": ["--threads", "--dryrun", "--setup_env", "--help"],
+            "options": [
+                "--threads",
+                "--dryrun",
+                "--cli_dryrun",
+                "--snakemake_arguments",
+                "--setup_env",
+                "--help",
+            ],
             "table_styles": {
                 "row_styles": ["yellow", "default", "default", "default"],
             },
