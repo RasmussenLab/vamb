@@ -97,7 +97,6 @@ See following installation guide: https://snakemake.readthedocs.io/en/stable/get
         self.add_arguments(["--rerun-incomplete"])
 
         self.add_to_config(f"output_directory={self.output_directory}")
-        self.add_to_config(f"src_dir={self._src_dir}")
         # Add config options -- these needs to be passed together to snakemake
         # eg. --config <arg1> <arg2> Therefore we collect them in the self._config_options variable and
         # append them at the end

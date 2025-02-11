@@ -4,7 +4,7 @@
 # This is the minium size of the contigs used. Contigs smaller than this size are filtered away
 min_contig_len: "2000"
 # Pass in arguments here to extend the vamb call in the pipeline
-plamb_params: " -o C --gamma 0.1 -b 200 "
+plamb_params: " -o C "
 # Pass in commands here to run before vamb is run in the pipeline
 plamb_preload: ""
 # These are parameters for node2vec which is used in the pipeline
@@ -13,6 +13,15 @@ n2v_wl: "10"
 n2v_ws: "10"
 n2v_p: "0.1"
 n2v_q: "2.0"
+n2v_nz: "weight"
+n2v_nw: "50"
+
+# Other parameters
+neighs_r: "0.05"
+max_insert_size_circ: "50"
+genomad_thr: "0.75"
+# Use cuda for the vamb part of the pipeline. Uncomment to use cuda
+# cuda: "True"
 
 ## Default resources
 # This is the default resources used by the different rules

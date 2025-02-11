@@ -4,69 +4,67 @@ import os
 from pathlib import Path
 import sys
 
-THIS_FILE_DIR =config.get("src_dir")
-THIS_FILE_DIR = Path("") if THIS_FILE_DIR is None else Path(THIS_FILE_DIR)
+# Set the directory the snakefile exists in. This makes us able to call the pipeline with the relevant src files from other directories.
+THIS_FILE_DIR = Path(workflow.basedir)
 
+# If the configfile is not set explicit fall back to the default
 CONFIG_PATH = THIS_FILE_DIR / "config/config.yaml"
 if CONFIG_PATH.exists():
     configfile: CONFIG_PATH
 
-# The src directory for the files used in the snakemake workflow
-PAU_SRC_DIR = THIS_FILE_DIR / "files_used_in_snakemake_workflow"  
+# Define the src directory for the files used in the snakemake workflow
+SRC_DIR = THIS_FILE_DIR / "files_used_in_snakemake_workflow"  
 
-# Get thee output_directory defined by the user
-output_directory = config.get("output_directory") # Returns None if `output_directory` is not defined through CLI
-# Set as empty path if not defined 
-output_directory = Path("") if output_directory is None else Path(output_directory)
-OUTDIR= output_directory / "outdir_plamb" 
+# Get the output_directory defined by the user or fallback to current directory, which is the default way snakemake handles output directories
+OUTDIR = Path("") if config.get("output_directory") is None else Path(config.get("output_directory"))
 
-# Define default threads/walltime/mem_gb based on configfile
+#### Setting parameters from the config file ####
+##  For a more throughout description of what the different config options mean see the /config/config.yaml file
+
+# Default resources used
 default_walltime = config.get("default_walltime", "48:00:00")
 default_threads = config.get("default_threads", 16)
 default_mem_gb = config.get("default_mem_gb", 50)
 
-# Functions to get the config-defined threads/walltime/mem_gb for a rule and if not defined the default
-threads_fn = lambda rulename: config.get(rulename, {"threads": default_threads}).get("threads", default_threads) 
-walltime_fn  = lambda rulename: config.get(rulename, {"walltime": default_walltime}).get("walltime", default_walltime) 
-mem_gb_fn  = lambda rulename: config.get(rulename, {"mem_gb": default_mem_gb}).get("mem_gb", default_mem_gb) 
+# Minimum contig length used
+MIN_CONTIG_LEN = int(config.get("min_contig_len", 2000)) 
 
-## Contig parameters
-MIN_CONTIG_LEN = int(config.get("min_contig_len", 2000)) #get_config('min_contig_len', '2000', r'[1-9]\d*$'))
-
-## TODO MISING
-MAX_INSERT_SIZE_CIRC = 50 # 50 is deafult
-
-## N2V parameters
+# N2V parameters
 N2V_NZ= config.get("n2v_nz", "weight") 
-N2V_ED= config.get("n2v_ed", 128) 
+N2V_ED= config.get("n2v_ed", 32) 
 N2V_WL= config.get("n2v_wl", 10) 
 N2V_NW= config.get("n2v_nw", 50) 
 N2V_WS= config.get("n2v_ws", 10) 
 N2V_P= config.get("n2v_p", 0.1) 
 N2V_Q= config.get("n2v_q", 2.0) 
 
-NEIGHS_R=config.get("neighs_r", '0.05') 
-
-## Binning parameters
-PLAMB_PARAMS = config.get("plamb_params", ' -o C --minfasta 200000  ') 
+# Binning parameters
+PLAMB_PARAMS = config.get("plamb_params", ' -o C ') 
 PLAMB_PRELOAD = config.get("plamb_preload", "") 
 
-# is GPU used ? #
-CUDA = config.get("cuda", False)
+# Other options
+CUDA = True if config.get("cuda") ==  "True" else False
+NEIGHS_R=config.get("neighs_r", '0.05') 
+MAX_INSERT_SIZE_CIRC = int(config.get("max_insert_size_circ", 50))
+GENOMAD_THR = config.get("genomad_thr", "0.75")
+ 
+## ----------- ##
 
-# Set default paths for the SPades outputfiles 
-# These need to be defined here as running the pipeline from allready assembled reads overwrite these values
+# Assert that input files are actually passed to snakemake
+if config.get("read_file") == None and config.get("read_assembly_dir") == None and config.get("should_install_genomad") == None:
+    print("ERROR: read_file or read_assembly_dir not passed to snakemake as config. Define either. Eg. snakemake <arguments> --config read_file=<read file>. If in doubt refer to the README.md file")
+    sys.exit()
+
+# Set default paths for the SPades outputfiles - running the pipeline from allready assembled reads overwrite these values
 contigs =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.fasta"
 contigs_paths =  OUTDIR / "data/sample_{key}/spades_{id}/contigs.paths"
 assembly_graph = OUTDIR / "data/sample_{key}/spades_{id}/assembly_graph_after_simplification.gfa"
 
+# Set default values for dictonaries containg information about the input information
+# The way snakemake parses snakefiles means we have to define them even though they will always be present
 sample_id = dict()               
 sample_id_path= dict() 
 sample_id_path_assembly = dict()
-
-if config.get("read_file") == None and config.get("read_assembly_dir") == None and config.get("should_install_genomad") == None:
-    print("ERROR: read_file or read_assembly_dir not passed to snakemake as config. Define either. Eg. snakemake <arguments> --config read_file=<read file>. If in doubt refer to the README.md file")
-    sys.exit()
 
 # If the read_file is defined the pipeline will also run SPades and assemble the reads
 if config.get("read_file") != None:
@@ -75,7 +73,10 @@ if config.get("read_file") != None:
     sample_id_path = collections.defaultdict(dict)
     for id, (read1, read2) in enumerate(zip(df.read1, df.read2)):
         id = f"sample{str(id)}"
-        sample = "Plamb_Ptracker"
+        # Earlier version of the pipeline could handle passing several samples at the same time which would be processed separatly.
+        # For easier user input this was removed. Therefore the "sample" is always set to the same. 
+        # By parsing different sample names from the input this can be implemented again - this is nice eg. for benchmarking
+        sample = "Plamb_Ptracker" 
         sample_id[sample].append(id)
         sample_id_path[sample][id] = [read1, read2]
 
@@ -97,11 +98,15 @@ if config.get("read_assembly_dir") != None:
     assembly_graph  =  lambda wildcards: Path(sample_id_path_assembly[wildcards.key][wildcards.id][0]) / "assembly_graph_after_simplification.gfa"
     contigs_paths  =  lambda wildcards: Path(sample_id_path_assembly[wildcards.key][wildcards.id][0]) / "contigs.paths"
 
-read_fw_after_fastp = lambda wildcards: sample_id_path[wildcards.key][wildcards.id][0]
-read_rv_after_fastp =  lambda wildcards: sample_id_path[wildcards.key][wildcards.id][1]
+read_fw = lambda wildcards: sample_id_path[wildcards.key][wildcards.id][0]
+read_rv =  lambda wildcards: sample_id_path[wildcards.key][wildcards.id][1]
 
+# Functions to get the config-defined threads/walltime/mem_gb for a rule and if not defined the default
+threads_fn = lambda rulename: config.get(rulename, {"threads": default_threads}).get("threads", default_threads) 
+walltime_fn  = lambda rulename: config.get(rulename, {"walltime": default_walltime}).get("walltime", default_walltime) 
+mem_gb_fn  = lambda rulename: config.get(rulename, {"mem_gb": default_mem_gb}).get("mem_gb", default_mem_gb) 
 
-try: # TODO why?
+try: 
     os.makedirs(os.path.join(OUTDIR,'log'), exist_ok=True)
 except FileExistsError:
     pass
@@ -109,9 +114,8 @@ except FileExistsError:
 rule all:
     input:
         expand(os.path.join(OUTDIR, "{key}", 'log/run_vamb_asymmetric.finished'), key=sample_id.keys()),
-        expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_0.75_candidate_plasmids.tsv'),key=sample_id.keys()),
+        expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
         expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
-
 
 # If the genomad database is given as an argument don't download it again
 # This works boths from when the tool is called from the CLI wrapper and from snakemake if the config is extended setting the genomad_database variable
@@ -135,11 +139,12 @@ else:
             genomad download-database {output.dir_geNomad_db}
             """
 
+# If only reads are passed run metaspades to assemble the reads
 rulename = "spades"
 rule spades:
     input:
-       fw = read_fw_after_fastp, 
-       rv = read_rv_after_fastp, 
+       fw = read_fw, 
+       rv = read_rv, 
     output:
        outdir = directory(OUTDIR / "data/sample_{key}/spades_{id}"),
        outfile = OUTDIR / "data/sample_{key}/spades_{id}/contigs.fasta",
@@ -154,8 +159,9 @@ rule spades:
        "spades.py --meta "
        "-t {threads} -m 180 "
        "-o {output.outdir} -1 {input.fw} -2 {input.rv} " 
-       "-t {threads} --memory {resources.mem_gb} > {log} " 
+       "-t {threads} --memory {resources.mem_gb} &> {log} " 
 
+# Rename the contigs to keep sample information for later use 
 rulename = "rename_contigs"
 rule rename_contigs:
     input:
@@ -171,19 +177,21 @@ rule rename_contigs:
         sed 's/^>/>S{wildcards.id}C/' {input} > {output} 2> {log}
         """
 
+# Cat the contigs together in one file to later map each pair of reads against all the contigs together
 rulename="cat_contigs"
 rule cat_contigs:
     input: lambda wildcards: expand(OUTDIR / "data/sample_{key}/spades_{id}/contigs.renamed.fasta", key=wildcards.key, id=sample_id[wildcards.key]),
     output: OUTDIR / "data/sample_{key}/contigs.flt.fna.gz"
     threads: threads_fn(rulename)
-    params: script =  PAU_SRC_DIR / "concatenate.py"
+    params: script =  SRC_DIR / "concatenate.py"
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}" + rulename
     log: config.get("log", "log/") + "{key}_" + rulename
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell: 
-        "python {params.script} {output} {input} --keepnames 2> {log} "  # TODO should filter depending on size????
+        "python {params.script} {output} {input} --keepnames -m {MIN_CONTIG_LEN} 2> {log} "  
 
+# Extract the contigs names for later use
 rulename = "get_contig_names"
 rule get_contig_names:
     input:
@@ -197,15 +205,13 @@ rule get_contig_names:
     shell:
         "zcat {input} | grep '>' | sed 's/>//' > {output} 2> {log} "
 
+# Run strobealign to get the abundances  
 rulename = "Strobealign_bam_default"
 rule Strobealign_bam_default:
         input: 
-            fw = read_fw_after_fastp,
-            rv = read_rv_after_fastp,
+            fw = read_fw,
+            rv = read_rv,
             contig = OUTDIR /"data/sample_{key}/contigs.flt.fna.gz",
-            # fw = lambda wildcards: sample_id_path[wildcards.key][wildcards.value][0],
-            # rv = lambda wildcards: sample_id_path[wildcards.key][wildcards.value][1],
-            # contig = "results/{key}/contigs.flt.fna",
         output:
             OUTDIR / "data/sample_{key}/mapped/{id}.bam"
         threads: threads_fn(rulename)
@@ -218,7 +224,7 @@ rule Strobealign_bam_default:
             strobealign -t {threads} {input.contig} {input.fw} {input.rv} > {output} 2> {log}
             """
 
- # Sort bam files
+# Sort the bam files and index them
 rulename="sort"
 rule sort:
     input:
@@ -237,28 +243,28 @@ rule sort:
 	"""
 
 ## The next part of the pipeline is composed of the following steps:
-# (Despite the steps are numerated, some of the order might change)
-#   0. Look for contigs circularizable 
-#   1. Align contigs all against all 
-#   2. Generate per sample assembly graphs from gfa assembly graphs
-#   3. Run n2v on the per sample assembly graphs 
-#   4. Extract hoods from assembly graphs n2v embeddings per sample 
-#   5. Connect hoods with alignment graphs
-#   6. Run vamb to merge the hoods
-#   7. Classify bins/clusters into plasmid/organism/virus bins/clusters
+# 0. Look for contigs circularizable 
+# 1. Align contigs all against all 
+# 2. Generate per sample assembly graphs from gfa assembly graphs
+# 3. Generate alignment graph from 1. output
+# 4. Produce assembly-alignment graph from merging assembly graph and alignment graph.
+# 5. Run n2v on the per sample assembly graphs 
+# 6. Extract neighbourhoods from assembly-alignment graph n2v embeddings
+# 7. Run vamb to merge,split, and expand the hoods
+# 8. Merge graph clusters with circular clusters
+# 9. Run geNomad to get contig plasmid, chromosome, and virus classificaiton scores
+# 10. Classify bins/clusters into plasmid/organism/virus bins/clusters
 
-
-# 0.Look for contigs circularizable 
+# 0. Look for contigs circularizable 
 rulename = "circularize"
 rule circularize:
     input:
-        # dir_bams=BAMS_DIR
-        bamfiles = lambda wildcards: expand(str(OUTDIR) +  "/data/sample_{key}/mapped_sorted/{id}.bam.sort", key=f"{wildcards.key}", id=sample_id[wildcards.key]),
+        bamfiles = lambda wildcards: expand(OUTDIR /  "data/sample_{key}/mapped_sorted/{id}.bam.sort", key=f"{wildcards.key}", id=sample_id[wildcards.key]),
     output:
         os.path.join(OUTDIR,'{key}','tmp','circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
         os.path.join(OUTDIR,'{key}','log/circularisation/circularisation.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'circularisation.py'),
+        path = os.path.join(SRC_DIR, 'circularisation.py'),
         dir_bams = lambda wildcards: expand(OUTDIR / "data/sample_{key}/mapped_sorted", key=wildcards.key)
     threads: threads_fn(rulename),
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
@@ -271,7 +277,7 @@ rule circularize:
         touch {output[1]}
         """        
 
-# Align contigs all against all
+# 1. Align contigs all against all
 rulename = "align_contigs"
 rule align_contigs:
     input:
@@ -294,8 +300,7 @@ rule align_contigs:
         touch {output[1]}
         """
         
-## Generate nx graph per sample for graphs from gfa assembly graphs
-# for each "sample"
+## 2. Generate nx graph per sample for graphs from gfa assembly graphs for each "sample"
 rulename = "weighted_assembly_graphs"
 rule weighted_assembly_graphs:
     input:
@@ -305,7 +310,7 @@ rule weighted_assembly_graphs:
         os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'),
         os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_{id}.finished'),
     params:
-        path = os.path.join(PAU_SRC_DIR, 'process_gfa.py'),
+        path = os.path.join(SRC_DIR, 'process_gfa.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
@@ -317,7 +322,6 @@ rule weighted_assembly_graphs:
         && touch {output[1]}
         """
 
-# TODO Why does this exist?
 rulename = "weighted_assembly_graphs_all_samples"
 rule weighted_assembly_graphs_all_samples:
     input: lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'),key=wildcards.key, id=sample_id[wildcards.key]),
@@ -332,7 +336,7 @@ rule weighted_assembly_graphs_all_samples:
         touch {output}
         """
 
-## 3. Genereate nx graph from the alignment graph
+# 3. Genereate nx graph from the alignment graph
 rulename = "weighted_alignment_graph"
 rule weighted_alignment_graph:
     input:
@@ -342,7 +346,7 @@ rule weighted_alignment_graph:
         os.path.join(OUTDIR,"{key}",'tmp','alignment_graph','alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'process_blastout.py'),
+        path = os.path.join(SRC_DIR, 'process_blastout.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -354,13 +358,11 @@ rule weighted_alignment_graph:
         touch {output[1]}
         """
 
-
-## 4. Merge assembly graphs an alignment graph into a unified graph
+# 4. Produce assembly-alignment graph from merging assembly graph and alignment graph.
 rulename = "create_assembly_alignment_graph"
 rule create_assembly_alignment_graph:
     input:
         alignment_graph_file = os.path.join(OUTDIR,"{key}",'tmp','alignment_graph','alignment_graph.pkl'),
-        # assembly_graph_files = expand_dir(os.path.join(OUTDIR,"[key]",'tmp','assembly_graphs','[value].pkl'), sample_id), # TODO might be funky 
         assembly_graph_files = lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'), key=wildcards.key, id=sample_id[wildcards.key]),
         weighted_alignment_graph_finished_log = os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished'),
         weighted_assembly_graphs_all_samples_finished_log = os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
@@ -368,7 +370,7 @@ rule create_assembly_alignment_graph:
         os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}", 'log','create_assembly_alignment_graph.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'merge_assembly_alignment_graphs.py'),
+        path = os.path.join(SRC_DIR, 'merge_assembly_alignment_graphs.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -380,7 +382,7 @@ rule create_assembly_alignment_graph:
         touch {output[1]}
         """
 
-## 3. Run n2v on the per sample assembly graphs
+## 5. Run n2v on the per sample assembly graphs
 rulename = "n2v_assembly_alignment_graph"
 rule n2v_assembly_alignment_graph:
     input:
@@ -393,7 +395,7 @@ rule n2v_assembly_alignment_graph:
         os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
         os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'fastnode2vec_args.py'),
+        path = os.path.join(SRC_DIR, 'fastnode2vec_args.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -406,8 +408,7 @@ rule n2v_assembly_alignment_graph:
         touch {output[3]}
         """
 
-
-## 4. Extract hoods from assembly graphs n2v embeddings per sample 
+# 6. Extract neighbourhoods from assembly-alignment graph n2v embeddings
 rulename = "extract_neighs_from_n2v_embeddings"
 rule extract_neighs_from_n2v_embeddings:
     input:
@@ -421,7 +422,7 @@ rule extract_neighs_from_n2v_embeddings:
         os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
         os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'embeddings_to_neighs.py'),
+        path = os.path.join(SRC_DIR, 'embeddings_to_neighs.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -434,7 +435,7 @@ rule extract_neighs_from_n2v_embeddings:
         touch {output[2]}
         """
 
-## 5. Run vamb to merge the hoods
+# 7. Run vamb to merge, split, and expand the hoods
 rulename = "run_vamb_asymmetric"
 rule run_vamb_asymmetric:
     input:
@@ -467,29 +468,8 @@ rule run_vamb_asymmetric:
         touch {output}
         """
 
-rulename = "run_geNomad"
-rule run_geNomad:
-    input:
-        OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
-        geNomad_db = geNomad_db
-    output:
-        directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
-        os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
-        os.path.join(OUTDIR,"{key}",'tmp','geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
-    # params:
-    #     db_geNomad= THIS_FILE_DIR / "genomad_db" / "genomad_db", 
-    threads: threads_fn(rulename)
-    resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
-    benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", "log/") + "{key}_" + rulename
-    conda: THIS_FILE_DIR / "envs/genomad.yaml"
-    shell:
-        """
-        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads}
-        touch {output[1]}
-        """
 
-## 7. Merge graph clustes with circular clusters
+# 8. Merge graph clustes with circular clusters
 rulename = "merge_circular_with_graph_clusters"
 rule merge_circular_with_graph_clusters:
     input:
@@ -501,7 +481,7 @@ rule merge_circular_with_graph_clusters:
         os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
         os.path.join(OUTDIR,'{key}','log/merge_circular_with_graph_clusters.finished')
     params:
-        path=os.path.join(PAU_SRC_DIR, 'merge_circular_plamb_clusters.py'),
+        path=os.path.join(SRC_DIR, 'merge_circular_plamb_clusters.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -513,7 +493,28 @@ rule merge_circular_with_graph_clusters:
         touch {output[1]}
         """
 
-## 7. Classify bins/clusters into plasmid/organism/virus bins/clusters
+# 9. Run geNomad to get contig plasmid, chromosome, and virus classificaiton scores
+rulename = "run_geNomad"
+rule run_geNomad:
+    input:
+        OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
+        geNomad_db = geNomad_db
+    output:
+        directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
+        os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
+        os.path.join(OUTDIR,"{key}",'tmp','geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
+    threads: threads_fn(rulename)
+    resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
+    benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
+    log: config.get("log", "log/") + "{key}_" + rulename
+    conda: THIS_FILE_DIR / "envs/genomad.yaml"
+    shell:
+        """
+        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads}
+        touch {output[1]}
+        """
+
+# 10. Classify bins/clusters into plasmid/organism/virus bins/clusters
 rulename = "classify_bins_with_geNomad"
 rule classify_bins_with_geNomad:
     input:
@@ -526,10 +527,10 @@ rule classify_bins_with_geNomad:
         comm_clusters = os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
         composition = os.path.join(OUTDIR,'{key}','vamb_asymmetric','composition.npz'),
     output:
-        os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_0.75_candidate_plasmids.tsv'),
+        os.path.join(OUTDIR,"{key}",'vamb_asymmetric',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
         os.path.join(OUTDIR,"{key}",'log','classify_bins_with_geNomad.finished')
     params:
-        path = os.path.join(PAU_SRC_DIR, 'classify_bins_with_geNomad_strict_circular.py'),
+        path = os.path.join(SRC_DIR, 'classify_bins_with_geNomad.py'),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -539,8 +540,7 @@ rule classify_bins_with_geNomad:
         """
         python {params.path} --clusters {input.comm_clusters} \
          --dflt_cls {OUTDIR}/{wildcards.key}/vamb_asymmetric/vae_clusters_density_unsplit.tsv --scores {input[0]} --outp {output[0]} \
-         --composition {input.composition}
-         # --lengths {input.lengths} --contignames {input.contignames} --composition {input.composition}
+         --composition {input.composition} --thr {GENOMAD_THR}
         touch {output[1]}
         """
 
