@@ -189,7 +189,7 @@ rule cat_contigs:
     log: config.get("log", "log/") + "{key}_" + rulename
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell: 
-        "python {params.script} {output} {input} --keepnames -m {MIN_CONTIG_LEN} 2> {log} "  
+        "python {params.script} {output} {input} --keepnames -m {MIN_CONTIG_LEN} &> {log} "  
 
 # Extract the contigs names for later use
 rulename = "get_contig_names"
@@ -238,8 +238,8 @@ rule sort:
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
-	samtools sort --threads {threads} {input} -o {output} 
-	samtools index {output}
+	samtools sort --threads {threads} {input} -o {output} 2> {log}
+	samtools index {output} 2>> {log}
 	"""
 
 ## The next part of the pipeline is composed of the following steps:
@@ -273,7 +273,7 @@ rule circularize:
     log: config.get("log", "log/") + "{key}_" + rulename
     shell:
         """
-        python {params.path} --dir_bams {params.dir_bams} --outcls {output[0]} --max_insert {MAX_INSERT_SIZE_CIRC}
+        python {params.path} --dir_bams {params.dir_bams} --outcls {output[0]} --max_insert {MAX_INSERT_SIZE_CIRC} &> {log}
         touch {output[1]}
         """        
 
@@ -294,9 +294,9 @@ rule align_contigs:
     log: config.get("log", "log/") + "{key}_" + rulename
     shell:
         """
-        gunzip -c {input} |makeblastdb -in - -dbtype nucl -out {params.db_name} -title contigs.db 
-        gunzip -c {input} |blastn -query - -db {params.db_name} -out {output[0]}.redundant -outfmt 6 -perc_identity 95 -num_threads {threads} -max_hsps 1000000 >> {log}
-        awk '$1 != $2 && $4 >= 500' {output[0]}.redundant > {output[0]} 
+        gunzip -c {input} |makeblastdb -in - -dbtype nucl -out {params.db_name} -title contigs.db 2> {log}
+        gunzip -c {input} |blastn -query - -db {params.db_name} -out {output[0]}.redundant -outfmt 6 -perc_identity 95 -num_threads {threads} -max_hsps 1000000 2>> {log}
+        awk '$1 != $2 && $4 >= 500' {output[0]}.redundant > {output[0]} 2>> {log}
         touch {output[1]}
         """
         
@@ -318,7 +318,7 @@ rule weighted_assembly_graphs:
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
-        python {params.path} --gfa {input[0]} --paths {input[1]} -s {wildcards.id} -m {MIN_CONTIG_LEN}  --out {output[0]} 2> {log} \
+        python {params.path} --gfa {input[0]} --paths {input[1]} -s {wildcards.id} -m {MIN_CONTIG_LEN}  --out {output[0]} &> {log} \
         && touch {output[1]}
         """
 
@@ -354,7 +354,7 @@ rule weighted_alignment_graph:
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
-        python {params.path} --blastout {input[0]} --out {output[0]} --minid 98 2> {log}
+        python {params.path} --blastout {input[0]} --out {output[0]} --minid 98 &> {log}
         touch {output[1]}
         """
 
@@ -378,7 +378,7 @@ rule create_assembly_alignment_graph:
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
-        python {params.path} --graph_alignment {input.alignment_graph_file}  --graphs_assembly {input.assembly_graph_files} --out {output[0]}  2> {log}
+        python {params.path} --graph_alignment {input.alignment_graph_file}  --graphs_assembly {input.assembly_graph_files} --out {output[0]}  &> {log}
         touch {output[1]}
         """
 
@@ -404,7 +404,7 @@ rule n2v_assembly_alignment_graph:
     shell:
         """
         python {params.path} -G {input[0]} --ed {N2V_ED} --nw {N2V_NW} --ws {N2V_WS} --wl {N2V_WL}\
-         -p {N2V_P} -q {N2V_Q} --outdirembs {output[0]} --normE {N2V_NZ} --contignames {input.contig_names_file}
+         -p {N2V_P} -q {N2V_Q} --outdirembs {output[0]} --normE {N2V_NZ} --contignames {input.contig_names_file} &> {log}
         touch {output[3]}
         """
 
@@ -431,7 +431,7 @@ rule extract_neighs_from_n2v_embeddings:
     shell:
         """
         python {params.path} --embs {input[0]} --contigs_embs {input[1]}\
-         --contignames {input.contig_names_file} -g {input[3]} -r {NEIGHS_R} --neighs_outdir {output[0]}
+         --contignames {input.contig_names_file} -g {input[3]} -r {NEIGHS_R} --neighs_outdir {output[0]} &> {log}
         touch {output[2]}
         """
 
@@ -464,7 +464,7 @@ rule run_vamb_asymmetric:
         {PLAMB_PRELOAD}
         vamb bin vae_asy --outdir {output.directory} --fasta {input.contigs} -p {threads} --bamfiles {input.bamfiles}\
         --seed 1 --neighs {input.nb_file}  -m {MIN_CONTIG_LEN} {PLAMB_PARAMS}\
-         {params.cuda}  
+         {params.cuda} &> {log}
         touch {output}
         """
 
@@ -489,7 +489,7 @@ rule merge_circular_with_graph_clusters:
     conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
-        python {params.path} --cls_plamb {input.vae_clusters} --cls_circular {input[2]} --outcls {output[0]}
+        python {params.path} --cls_plamb {input.vae_clusters} --cls_circular {input[2]} --outcls {output[0]} &> {log}
         touch {output[1]}
         """
 
@@ -510,7 +510,7 @@ rule run_geNomad:
     conda: THIS_FILE_DIR / "envs/genomad.yaml"
     shell:
         """
-        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads}
+        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads} &> {log}
         touch {output[1]}
         """
 
@@ -540,7 +540,7 @@ rule classify_bins_with_geNomad:
         """
         python {params.path} --clusters {input.comm_clusters} \
          --dflt_cls {OUTDIR}/{wildcards.key}/vamb_asymmetric/vae_clusters_density_unsplit.tsv --scores {input[0]} --outp {output[0]} \
-         --composition {input.composition} --thr {GENOMAD_THR}
+         --composition {input.composition} --thr {GENOMAD_THR} &> {log}
         touch {output[1]}
         """
 
