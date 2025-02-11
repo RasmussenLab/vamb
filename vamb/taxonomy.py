@@ -181,8 +181,14 @@ class PredictedTaxonomy:
                 raise ValueError(
                     f"In predicted taxonomy file, expected header to begin with {repr(PREDICTED_TAXONOMY_HEADER)}"
                 )
-            for line in lines:
-                (contigname, taxonomy, scores, *_) = line.split("\t")
+            for linenum_minus_two, line in enumerate(lines):
+                fields = line.split("\t")
+                if len(fields) != 3:
+                    raise ValueError(
+                        f"Expected 3 fields in line {linenum_minus_two + 2} of file {path}, got {len(fields)}."
+                        f"\nLine: {line}"
+                    )
+                (contigname, taxonomy, scores) = fields
                 contig_taxonomy = ContigTaxonomy.from_semicolon_sep(
                     taxonomy, force_canonical
                 )
