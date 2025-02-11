@@ -1,73 +1,76 @@
-files: "example_file.tsv"
-
-# Options from pau pipeline
-outdir: "./data"
-
-index_size: "3G"
+## Parameters for the pipeline
+# These are the recommended parameters used for the pipeline.
+# --
+# This is the minium size of the contigs used. Contigs smaller than this size are filtered away
 min_contig_len: "2000"
-plamb_mem: "150GB"
-plamb_ppn: "30"
+# Pass in arguments here to extend the vamb call in the pipeline
 plamb_params: " -o C --gamma 0.1 -b 200 "
+# Pass in commands here to run before vamb is run in the pipeline
 plamb_preload: ""
+# These are parameters for node2vec which is used in the pipeline
 n2v_ed: "32"
 n2v_wl: "10"
 n2v_ws: "10"
 n2v_p: "0.1"
 n2v_q: "2.0"
 
+## Default resources
+# This is the default resources used by the different rules
+# If no specific resources are defined for a rule, these will be used.
+# If these exceed the resources available they will be scaled down to match the hardware available. 
+# See https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#resources for reference
 default_walltime: "48:00:00"
 default_threads: 16
 default_mem_gb: 50
 
+## Specific rule resources
+# Below is the specific resources defined for the various rules in the pipeline 
+# If no specific resources are defined for a rule, the default will be used instead.
 rename_contigs:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 cat_contigs:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 get_contig_names:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 samtools_sort:
-  walltime: "15-00:00:00"
   threads: 4
   default_mem_gb: 20
+
 circularize:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 weighted_assembly_graphs:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 weighted_alignment_graph:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 5
+
 create_assembly_alignment_graph:
-  walltime: "15-00:00:00"
   threads: 1
   default_mem_gb: 50
 
 spades:
-  walltime: "15-00:00:00"
   threads: 16
-  mem_gb: 245
+  mem_gb: 200
 
 extract_neighs_from_n2v_embeddings:
-  walltime: "1-00:00:00"
   threads: 63
-  mem_gb: 990
+  mem_gb: 200
 
 index:
   threads: 8
   mem_gb: 120
 
 Strobealign_bam_default:
-  walltime: "10-00:00:00"
   threads: 16
   mem_gb: 245
 
@@ -80,16 +83,13 @@ align_contigs:
   mem_gb: 120
 
 vamb_asymmetric:
-  walltime: "05-00:00:00"
   threads: 16
   mem_gb: 245
 
 run_geNomad:
-  walltime: "05-00:00:00"
   threads: 16
   mem_gb: 245
 
 run_vamb_asymmetric:
-  walltime: "05-00:00:00"
   threads: 5
   mem_gb: 250
