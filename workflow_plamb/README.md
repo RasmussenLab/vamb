@@ -47,7 +47,9 @@ The path to the SPades output directory (under the assembly_dir column in the ab
 | The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
 | A metadata file                     | `contigs.paths`                         |
 
- 
+## Output files
+(Description of output files, maybe a nice tree)
+
 ## Advanced
 ### Using an allready downloaded geNomad database
 To use an allready downloaded database, pass in a path to the genomad database with the --genomad_db argument
