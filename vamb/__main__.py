@@ -988,8 +988,7 @@ class BinOutputOptions:
         if min_fasta_output_size is not None:
             if not isinstance(composition.path, FASTAPath):
                 raise argparse.ArgumentTypeError(
-                    "If minfasta is not None, "
-                    "input fasta file must be given explicitly"
+                    "If minfasta is not None, input fasta file must be given explicitly"
                 )
             if min_fasta_output_size < 0:
                 raise argparse.ArgumentTypeError(
@@ -1274,7 +1273,7 @@ def calc_abundance(
     begintime = time.time()
     logger.info("Loading depths")
     logger.info(
-        f'\tReference hash: {comp_metadata.refhash.hex() if refcheck else "None"}'
+        f"\tReference hash: {comp_metadata.refhash.hex() if refcheck else 'None'}"
     )
 
     paths = abundance_options.paths

@@ -555,7 +555,7 @@ class RefHasher:
                     log_and_error(ValueError, message)
                 elif observed_id != target_id:
                     message += (
-                        f"\nIdentifier mismatch: Identifier number {i+1} does not match "
+                        f"\nIdentifier mismatch: Identifier number {i + 1} does not match "
                         f"between {obs_name} and {tgt_name}:"
                         f'{obs_name}: "{observed_id}"'
                         f'{tgt_name}: "{target_id}"'
