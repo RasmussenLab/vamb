@@ -112,20 +112,28 @@ rule all:
         expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_0.75_candidate_plasmids.tsv'),key=sample_id.keys()),
         expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
 
-rulename = "download_genomad_db"
-rule download_genomad_db:
-    output:
-        dir_geNomad_db = directory(THIS_FILE_DIR / "genomad_db"),
-        geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db" / "genomad_db"),
-        geNomad_db_path = directory(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
-    threads: threads_fn(rulename)
-    resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
-    conda: THIS_FILE_DIR / "envs/genomad.yaml"
-    shell:
-        """
-        mkdir -p {output.dir_geNomad_db}
-        genomad download-database {output.dir_geNomad_db}
-        """
+
+# If the genomad database is given as an argument don't download it again
+# This works boths from when the tool is called from the CLI wrapper and from snakemake if the config is extended setting the genomad_database variable
+if config.get("genomad_database") is not None:
+    geNomad_db = config.get("genomad_database")
+else: 
+    geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
+
+    rulename = "download_genomad_db"
+    rule download_genomad_db:
+        output:
+            geNomad_db_path = directory(geNomad_db),
+            dir_geNomad_db = directory(THIS_FILE_DIR / "genomad_db"),
+            geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db" / "genomad_db"),
+        threads: threads_fn(rulename)
+        resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
+        conda: THIS_FILE_DIR / "envs/genomad.yaml"
+        shell:
+            """
+            mkdir -p {output.dir_geNomad_db}
+            genomad download-database {output.dir_geNomad_db}
+            """
 
 rulename = "spades"
 rule spades:
@@ -463,7 +471,7 @@ rulename = "run_geNomad"
 rule run_geNomad:
     input:
         OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
-        geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
+        geNomad_db = geNomad_db
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
         os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
