@@ -68,6 +68,12 @@ Passing in this file means that the pipeline will not assemble the reads but run
     type=click.Path(exists=False),
 )
 @click.option(
+    "-d",
+    "--genomad_db",
+    help="Path to the genomad database",
+    type=click.Path(exists=False),
+)
+@click.option(
     "-e",
     "--setup_env",
     help="Setup environment, this will be done automatically the first time the application is run",
@@ -100,6 +106,7 @@ def main(
     output,
     cli_dryrun,
     snakemake_arguments,
+    genomad_db,
 ):
     """
     \bThis is a program to run the Ptracker Snakemake pipeline to bin plasmids from metagenomic reads.
@@ -114,6 +121,10 @@ def main(
         CliRunner.dry_run_command = True
 
     environment_manager = EnvironmentManager()
+
+    if genomad_db is not None:
+        environment_manager._genomad_db_exist = True
+
     # Set up the environment
     if setup_env and not dryrun:
         environment_manager.setup_environment()
@@ -140,6 +151,10 @@ def main(
 
     snakemake_runner = SnakemakeRunner(snakefile="snakefile.smk")
     snakemake_runner.add_arguments(["-c", str(threads)])
+
+    if genomad_db is not None:
+        logger.info(f"Setting genomad database path to {genomad_db}")
+        snakemake_runner.add_to_config(f"genomad_database={genomad_db}")
 
     if snakemake_arguments is not None:
         logger.info(f"Expanding snakemake arguments with: {snakemake_arguments}")

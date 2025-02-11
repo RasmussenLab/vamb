@@ -49,6 +49,9 @@ The path to the SPades output directory (under the assembly_dir column in the ab
 
  
 ## Advanced
+### Using an allready downloaded geNomad database
+To use an allready downloaded database, pass in a path to the genomad database with the --genomad_db argument
+
 ### Resources 
 
 The pipeline can be configurated in: ``` config/config.yaml ```
@@ -134,4 +137,9 @@ if no resourcess are configurated for a rule the defaults will be used which are
 default_walltime: "48:00:00"
 default_threads: 16
 default_mem_gb: 50
-
+```
+#### Using an allready downloaded geNomad database 
+To use an allready downloaded database, pass in a path to the genomad database with using the config flag
+```
+snakemake <arguments> --config genomad_database=<path_to_genomad_database>
+```

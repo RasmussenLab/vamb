@@ -24,6 +24,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--cli_dryrun",
                 "--snakemake_arguments",
                 "--setup_env",
+                "--genomad_db",
                 "--help",
             ],
             "table_styles": {
