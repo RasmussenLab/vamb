@@ -1008,7 +1008,7 @@ class VAEVAE(object):
         metrics_dict["correct_labels_labels"] /= data_loader.batch_size
         logger.info(
             ", ".join(
-                [k + f" {v/len(data_loader):.6f}" for k, v in metrics_dict.items()]
+                [k + f" {v / len(data_loader):.6f}" for k, v in metrics_dict.items()]
             )
         )
 
