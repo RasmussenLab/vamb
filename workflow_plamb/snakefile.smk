@@ -544,11 +544,3 @@ rule classify_bins_with_geNomad:
         touch {output[1]}
         """
 
-
-
-
-
-
-
-
-
