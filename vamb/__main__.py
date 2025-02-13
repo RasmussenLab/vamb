@@ -18,6 +18,8 @@ from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
+import datetime
+import networkx as nx
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -152,6 +154,11 @@ class BAMPaths:
         self.paths = paths
 
 
+class NeighsPath:
+    def __init__(self, path: Path):
+        self.path = check_existing_file(path)
+
+
 class AbundanceTSVPath:
     __slots__ = ["path"]
 
@@ -182,7 +189,6 @@ class AbundanceOptions:
             typeasserted(args.abundancepath, (Path, type(None))),
             typeasserted(args.min_alignment_id, (float, type(None))),
         )
-
     def __init__(
         self,
         bampaths: Optional[list[Path]],
@@ -214,6 +220,55 @@ class AbundanceOptions:
         elif abundance_tsv is not None:
             self.paths = AbundanceTSVPath(abundance_tsv)
 
+class NeighsOptions:
+    __slots__ = [
+        "neighs_path",
+        "gamma",
+        "margin",
+        "radius_clustering",
+        "top_neighbours",
+        "max_neighs_r",
+    ]
+    @classmethod
+    def from_args(
+        cls,
+        args: argparse.Namespace,
+    ):
+        return cls(
+            typeasserted(args.neighs_path, Path),
+            typeasserted(args.gamma, float),
+            typeasserted(args.margin, float),
+            typeasserted(args.radius_clustering, float),
+            typeasserted(args.top_neighbours, int),
+            typeasserted(args.max_neighs_r, float),
+        )
+
+
+
+    def __init__(
+        self,           
+        neighs_path: Path,
+        gamma: float =0.1,
+        margin: float = 0.01,
+        radius_clustering: float = 0.01,
+        top_neighbours: int = 50,
+        max_neighs_r: float = 0.2,
+    ):
+        
+        assert isinstance(neighs_path, Path)
+        assert isinstance(gamma, float)
+        assert isinstance(margin, float)
+        assert isinstance(radius_clustering, float)
+        assert isinstance(top_neighbours, int)
+        assert isinstance(max_neighs_r, float)
+        
+        self.margin = margin
+        self.radius_clustering = radius_clustering
+        self.neighs_path = neighs_path
+        self.gamma = gamma
+        self.top_neighbours = top_neighbours
+        self.max_neighs_r = max_neighs_r
+
 
 class BasicTrainingOptions:
     __slots__ = ["num_epochs", "starting_batch_size", "batch_steps"]
@@ -242,8 +297,12 @@ class BasicTrainingOptions:
             [],
         )
 
+
     def __init__(
-        self, num_epochs: int, starting_batch_size: int, batch_steps: list[int]
+        self, 
+        num_epochs: int, 
+        starting_batch_size: int, 
+        batch_steps: list[int]
     ):
         if num_epochs < 1:
             raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {num_epochs}")
@@ -264,8 +323,43 @@ class BasicTrainingOptions:
         self.batch_steps = batch_steps
 
 
+# class NeighsOptions:
+#     __slots__ = [
+#         "neighs_path",
+#         "gamma",
+#         "margin",
+#         "radius_clustering",
+#         "top_neighbours",
+#         "max_neighs_r",
+#     ]
+
+#     def __init__(
+#         self,           
+#         neighs_path: Path,
+#         gamma: float =0.1 ,
+#         margin: float = 0.01,
+#         radius_clustering: float = 0.01,
+#         top_neighbours: int = 50,
+#         max_neighs_r: float = 0.2,
+#     ):
+        
+#         assert isinstance(neighs_path, Path)
+#         assert isinstance(gamma, float)
+#         assert isinstance(margin, float)
+#         assert isinstance(radius_clustering, float)
+#         assert isinstance(top_neighbours, int)
+#         assert isinstance(max_neighs_r, float)
+        
+#         self.margin = margin
+#         self.radius_clustering = radius_clustering
+#         self.neighs_path = NeighsPath(neighs_path)
+#         self.gamma = gamma
+#         self.top_neighbours = top_neighbours
+#         self.max_neighs_r = max_neighs_r
+
 class VAEOptions:
-    __slots__ = ["nhiddens", "nlatent", "alpha", "beta", "dropout", "basic_options"]
+    __slots__ = ["nhiddens", "nlatent", "alpha",
+                "beta", "dropout", "basic_options"]
 
     @classmethod
     def from_args(cls, basic: BasicTrainingOptions, args: argparse.Namespace):
@@ -312,7 +406,6 @@ class VAEOptions:
         if dropout is not None and (dropout < 0 or dropout >= 1):
             raise argparse.ArgumentTypeError("dropout must be in 0 <= d < 1")
         self.dropout = dropout
-
 
 class GeneralOptions:
     __slots__ = [
@@ -371,6 +464,225 @@ class GeneralOptions:
         self.seed = seed
         self.cuda = cuda
         self.refcheck = refcheck
+
+
+class TaxonomyOptions:
+    __slots__ = [
+        "no_predictor",
+        "taxonomy_path",
+        "column_contigs",
+        "column_taxonomy",
+        "delimiter_taxonomy",
+    ]
+
+    def __init__(
+        self,
+        no_predictor: Optional[bool],
+        taxonomy_path: Optional[Path],
+        column_contigs: Optional[str],
+        column_taxonomy: Optional[str],
+        delimiter_taxonomy: Optional[str],
+    ):
+        assert isinstance(taxonomy_path, (Path, type(None)))
+
+        if taxonomy_path is None and no_predictor:
+            raise argparse.ArgumentTypeError(
+                "You must specify either --taxonomy_path or --taxonomy_predictions_path or run without --no_predictor flag"
+            )
+
+        if taxonomy_path is None and not no_predictor:
+            raise argparse.ArgumentTypeError(
+                "The taxonomy predictor needs --taxonomy_path for training"
+            )
+
+        if taxonomy_path is not None and not taxonomy_path.is_file():
+            raise FileNotFoundError(taxonomy_path)
+
+        self.taxonomy_path = taxonomy_path
+        self.no_predictor = no_predictor
+        self.column_contigs = column_contigs
+        self.column_taxonomy = column_taxonomy
+        self.delimiter_taxonomy = delimiter_taxonomy
+
+
+class ReclusteringOptions:
+    __slots__ = [
+        "latent_path",
+        "clusters_path",
+        "hmmout_path",
+        "binsplitter",
+        "algorithm",
+    ]
+
+    def __init__(
+        self,
+        latent_path: Path,
+        clusters_path: Path,
+        binsplit_separator: Optional[str],
+        algorithm: str,
+        hmmout_path: Path = "",
+    ):
+        assert isinstance(latent_path, Path)
+        assert isinstance(clusters_path, Path)
+        #assert isinstance(hmmout_path, Path)
+
+        for path in [latent_path, clusters_path]:
+            if not path.is_file():
+                raise FileNotFoundError(path)
+
+        if algorithm not in ("kmeans", "dbscan"):
+            raise ValueError("Algortihm must be 'kmeans' or 'dbscan'")
+
+        self.latent_path = latent_path
+        self.clusters_path = clusters_path
+        self.hmmout_path = hmmout_path
+        self.algorithm = algorithm
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
+
+
+# class EncoderOptions:
+#     __slots__ = ["vae_options", "aae_options", "alpha"]
+
+#     def __init__(
+#         self,
+#         vae_options: Optional[VAEOptions],
+#         aae_options: Optional[AAEOptions],
+#         alpha: Optional[float],
+#     ):
+#         assert isinstance(alpha, (float, type(None)))
+#         assert isinstance(vae_options, (VAEOptions, type(None)))
+#         assert isinstance(aae_options, (AAEOptions, type(None)))
+
+#         if alpha is not None and (alpha <= 0 or alpha) >= 1:
+#             raise argparse.ArgumentTypeError("alpha must be above 0 and below 1")
+#         self.alpha = alpha
+
+#         if vae_options is None and aae_options is None:
+#             raise argparse.ArgumentTypeError(
+#                 "You must specify either VAE or AAE or both as encoders, cannot run with no encoders."
+#             )
+
+#         self.vae_options = vae_options
+#         self.aae_options = aae_options
+
+
+class VAETrainingOptions:
+    def __init__(self, nepochs: int, batchsize: int, batchsteps: list[int]):
+        assert isinstance(nepochs, int)
+        assert isinstance(batchsize, int)
+        assert isinstance(batchsteps, list)
+
+        if nepochs < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
+        self.nepochs = nepochs
+
+        if batchsize < 1:
+            raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
+        self.batchsize = batchsize
+
+        batchsteps = sorted(set(batchsteps))
+        if max(batchsteps, default=0) >= self.nepochs:
+            raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
+
+        if min(batchsteps, default=1) < 1:
+            raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
+        self.batchsteps = batchsteps
+
+
+class PredictorTrainingOptions(VAETrainingOptions):
+    def __init__(
+        self,
+        nepochs: int,
+        batchsize: int,
+        batchsteps: list[int],
+        softmax_threshold: float,
+        ploss: str,
+    ):
+        losses = ["flat_softmax", "cond_softmax", "soft_margin"]
+        if (softmax_threshold > 1) or (softmax_threshold < 0):
+            raise argparse.ArgumentTypeError(
+                f"Softmax threshold should be between 0 and 1, currently {softmax_threshold}"
+            )
+        if ploss not in losses:
+            raise argparse.ArgumentTypeError(
+                f"Predictor loss needs to be one of {losses}"
+            )
+        self.softmax_threshold = softmax_threshold
+        self.ploss = ploss
+        super(PredictorTrainingOptions, self).__init__(
+            nepochs,
+            batchsize,
+            batchsteps,
+        )
+
+
+class AAETrainingOptions:
+    def __init__(
+        self,
+        nepochs: int,
+        batchsize: int,
+        batchsteps: list[int],
+        temp: Optional[float],
+    ):
+        assert isinstance(nepochs, int)
+        assert isinstance(batchsize, int)
+        assert isinstance(batchsteps, list)
+
+        if nepochs < 1:
+            raise argparse.ArgumentTypeError(f"Minimum 1 epoch, not {nepochs}")
+        self.nepochs = nepochs
+
+        if batchsize < 1:
+            raise argparse.ArgumentTypeError(f"Minimum batchsize of 1, not {batchsize}")
+        self.batchsize = batchsize
+
+        batchsteps = sorted(set(batchsteps))
+        if max(batchsteps, default=0) >= self.nepochs:
+            raise argparse.ArgumentTypeError("All batchsteps must be less than nepochs")
+
+        if min(batchsteps, default=1) < 1:
+            raise argparse.ArgumentTypeError("All batchsteps must be 1 or higher")
+        self.batchsteps = batchsteps
+
+        assert isinstance(temp, (float, type(None)))
+        self.temp = temp
+
+
+
+class ClusterOptions:
+    __slots__ = [
+        "window_size",
+        "min_successes",
+        "max_clusters",
+        "binsplitter",
+    ]
+
+    def __init__(
+        self,
+        window_size: int,
+        min_successes: int,
+        max_clusters: Optional[int],
+        binsplit_separator: Optional[str],
+    ):
+        assert isinstance(window_size, int)
+        assert isinstance(min_successes, int)
+        assert isinstance(max_clusters, (int, type(None)))
+        assert isinstance(binsplit_separator, (str, type(None)))
+
+        if window_size < 1:
+            raise argparse.ArgumentTypeError("Window size must be at least 1")
+        self.window_size = window_size
+
+        if min_successes < 1 or min_successes > window_size:
+            raise argparse.ArgumentTypeError(
+                "Minimum cluster size must be in 1:windowsize"
+            )
+        self.min_successes = min_successes
+
+        if max_clusters is not None and max_clusters < 1:
+            raise argparse.ArgumentTypeError("Max clusters must be at least 1")
+        self.max_clusters = max_clusters
+        self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
 
 
 class TaxonomyBase:
@@ -797,6 +1109,7 @@ class BinAvambOptions:
         basic_vae = BasicTrainingOptions.from_args_vae(args)
         basic_aae = BasicTrainingOptions.from_args_aae(args)
         clustering = ClusterOptions.from_args(args)
+        
         return cls(
             common,
             VAEOptions.from_args(basic_vae, args),
@@ -812,6 +1125,29 @@ class BinAvambOptions:
         self.common = common
         self.vae = vae
         self.aae = aae
+
+
+class BinContrVambOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        common = BinnerCommonOptions.from_args(args)
+        basic = BasicTrainingOptions.from_args_vae(args)
+        neighs = NeighsOptions.from_args(args)
+        return cls(
+            common,
+            VAEOptions.from_args(basic, args),
+            neighs
+        )
+
+    def __init__(
+        self,
+        common: BinnerCommonOptions,
+        vae: VAEOptions,
+        neighs: NeighsOptions,
+    ):
+        self.common = common
+        self.vae = vae
+        self.neighs = neighs 
 
 
 class ReclusteringOptions:
@@ -1091,6 +1427,61 @@ def trainvae(
     return latent
 
 
+def train_contr_vae(
+    vae_options: VAEOptions,
+    #training_options: VAETrainingOptions,
+    vamb_options: GeneralOptions,
+    neighs_options: NeighsOptions,
+    #lrate: float,
+    #alpha: Optional[float],
+    data_loader: DataLoader,
+    neighs_object: np.ndarray,
+) -> np.ndarray:
+    begintime = time.time()
+    logger.info("Creating and training contrastive-VAE")
+
+    nsamples = data_loader.dataset.tensors[0].shape[1]
+    ncontigs = data_loader.dataset.tensors[0].shape[0]
+
+    vae = vamb.encode_n2v_asimetric.VAE(
+        nsamples,
+        ncontigs,
+        neighs_object,
+        nhiddens=vae_options.nhiddens,
+        nlatent=vae_options.nlatent,
+        alpha=vae_options.alpha,
+        beta=vae_options.beta,
+        gamma=neighs_options.gamma,
+        dropout=vae_options.dropout,
+        cuda=vamb_options.cuda,
+        seed=vamb_options.seed,
+        margin=neighs_options.margin,
+    )
+
+    logger.info("Created contrastive-VAE")
+    modelpath = vamb_options.out_dir.joinpath("model.pt")
+    vae.trainmodel(
+        vamb.encode.set_batchsize(
+            data_loader, 
+            vae_options.basic_options.starting_batch_size
+            ),
+        nepochs=vae_options.basic_options.num_epochs,
+        #lrate=lrate, # use default value [1e-3] since vamb vae uses d-adaptation
+        batchsteps=vae_options.basic_options.batch_steps,
+        modelfile=modelpath    
+        )
+
+    logger.info("\nEncoding to latent representation")
+    latent = vae.encode(data_loader)
+    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
+    del vae  # Needed to free "latent" array's memory references?
+
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"\nTrained contrastive-VAE and encoded in {elapsed} seconds.")
+
+    return latent
+
+
 def trainaae(
     data_loader: DataLoader,
     aae_options: AAEOptions,
@@ -1230,6 +1621,71 @@ def cluster_and_write_files(
     )
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
+def cluster_and_write_clusters(
+    vamb_options: GeneralOptions,
+    cluster_options: ClusterOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    latent: np.ndarray,
+    sequence_names: Sequence[str],
+    sequence_lens: Sequence[int],
+):
+    begintime = time.time()
+    # Create cluser iterator
+    logger.info("Clustering")
+    logger.info(f"\tWindowsize: {cluster_options.window_size}")
+    logger.info(
+        f"\tMin successful thresholds detected: {cluster_options.min_successes}",
+    )
+    logger.info(f"\tMax clusters: {cluster_options.max_clusters}")
+    logger.info(f"\tUse CUDA for clustering: {vamb_options.cuda}")
+    logger.info(f"\tBinsplitter: {binsplitter.splitter}")
+
+    cluster_generator = vamb.cluster.ClusterGenerator(
+        latent,
+        sequence_lens,  # type:ignore
+        windowsize=cluster_options.window_size,
+        minsuccesses=cluster_options.min_successes,
+        destroy=True,
+        normalized=False,
+        cuda=vamb_options.cuda,
+        rng_seed=vamb_options.seed,
+    )
+    # This also works correctly when max_clusters is None
+    clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
+    cluster_dict: dict[str, set[str]] = dict()
+
+    # Write the cluster metadata to file
+    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs", file=file)
+        for i, cluster in enumerate(clusters):
+            cluster_dict[str(i + 1)] = {
+                sequence_names[cast(int, i)] for i in cluster.members
+            }
+            print(
+                str(i + 1),
+                None if cluster.radius is None else round(cluster.radius, 3),
+                None
+                if cluster.observed_pvr is None
+                else round(cluster.observed_pvr, 2),
+                cluster.kind_str,
+                sum(sequence_lens[i] for i in cluster.members),
+                len(cluster.members),
+                file=file,
+                sep="\t",
+            )
+
+    elapsed = round(time.time() - begintime, 2)
+
+    write_clusters(
+        binsplitter,
+        base_clusters_name,
+        cluster_dict,
+    )
+    logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
+
+    return cluster_dict
+
 
 def write_clusters_and_bins(
     fasta_output: Optional[FastaOutput],
@@ -1248,11 +1704,11 @@ def write_clusters_and_bins(
     begintime = time.time()
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
     with open(unsplit_path, "w") as file:
+        #file.write("clustername\tcontigname\n")
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
             file, clusters.items()
         )
-
-    # Open unsplit clusters and split them
+    #Open unsplit clusters and split them
     if binsplitter.splitter is not None:
         split_path = Path(base_clusters_name + "_split.tsv")
         clusters = dict(binsplitter.binsplit(clusters.items()))
@@ -1295,7 +1751,6 @@ def write_clusters_and_bins(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
 
-
 def add_bin_prefix(
     clusters: dict[str, set[str]], prefix: Optional[str]
 ) -> dict[str, set[str]]:
@@ -1305,7 +1760,229 @@ def add_bin_prefix(
         return {prefix + b: c for (b, c) in clusters.items()}
 
 
+def write_clusters(
+    binsplitter: vamb.vambtools.BinSplitter,
+    base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
+    clusters: dict[str, set[str]],
+):
+    # Write unsplit clusters to file
+    begintime = time.time()
+    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+    with open(unsplit_path, "w") as file:
+        #file.write("clustername\tcontigname\n")
+        (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
+            file, clusters.items()
+        )
+    #Open unsplit clusters and split them
+    if binsplitter.splitter is not None:
+        split_path = Path(base_clusters_name + "_split.tsv")
+        clusters = dict(binsplitter.binsplit(clusters.items()))
+        with open(split_path, "w") as file:
+            (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items()
+            )
+        msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+    else:
+        msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+
+    logger.info(msg)
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+
+
+def find_neighbours(
+    cosine_distances,
+    idxs_without_neighs,
+    radius=0.02,
+    sort=True,
+):
+    logger.info("Neighbour if within %s cosine distance" % str(radius))
+
+    # Set the diagonal to a value greater than the threshold to avoid self-selection
+    np.fill_diagonal(cosine_distances, 1)
+    logger.info("diagonal_filled")
+
+    # Use NumPy operations for faster neighbor finding
+    mask = cosine_distances < radius
+    
+    logger.info("mask generated with shape %i, %i"%(mask.shape[0],mask.shape[1]))
+
+    idxs_with_neighs = np.any(mask, axis=1)
+    
+    logger.info("idxs_with_neighs generated")
+    
+    neighs = [
+        []
+        if i in set(idxs_without_neighs)
+        else list(np.where(mask[i])[0])
+        if idxs_with_neighs[i]
+        else []
+        for i in range(mask.shape[0])
+    ]
+    logger.info("neighs found")
+    # new part
+    if sort == True:
+        neighs_sorted = []
+        for i, nn_idxs in enumerate(neighs):
+            if len(nn_idxs) == 0:
+                neighs_sorted.append([])
+                continue
+
+            distances_neighs_i = cosine_distances[i, mask[i, :]]
+            sorted_distances_i = sorted(
+                range(len(distances_neighs_i)), key=lambda i: distances_neighs_i[i]
+            )
+            # nn_idxs_sorted = [nn_idxs[i] for i in sorted_distances_i]
+            nn_idxs_sorted = [
+                nn_idxs[i]
+                for i in sorted_distances_i
+                if nn_idxs[i] not in idxs_without_neighs
+            ]
+            neighs_sorted.append(nn_idxs_sorted)
+
+        return neighs_sorted, np.where(idxs_with_neighs)[0]
+    else:
+        return neighs, idxs_with_neighs
+
+
+def find_looners_and_expand_neighs(
+    cosine_distances,
+    contig_idxs_with_neighs,
+    neighs_g,
+    contignames,
+    radius_looner=0.05,
+    radius_neigh = 0.01,
+    
+):
+    logger.info("Neighbour if within %.3f cosine distance" % radius_neigh)
+    logger.info("Looner if no contigs within %.3f cosine distance" % radius_looner)
+
+    c2idx = { c:i for i,c in enumerate(contignames)}
+    # Set the diagonal to a value greater than the threshold to avoid self-selection
+    np.fill_diagonal(cosine_distances, 1)
+    mask_looners  = np.zeros(len(cosine_distances),dtype=bool)
+    looner_contigs = set()
+    for c_idx in range(len(cosine_distances)):
+        if np.min(cosine_distances[c_idx]) > radius_looner and c_idx not in contig_idxs_with_neighs:
+            looner_contigs.add(contignames[c_idx])
+            mask_looners[c_idx]=True
+            
+            continue 
+        idxs_neighs = np.where(cosine_distances[c_idx] < 0.01)[0]
+        for idx_neigh in idxs_neighs:
+            neighs_g.add_edge(contignames[c_idx],contignames[idx_neigh])
+            
+        
+    hoods_with_looners_cs_d = {
+        "hood_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(neighs_g))
+    }
+    for i,c in enumerate(looner_contigs):
+        hoods_with_looners_cs_d["looner_%i"%(i)]=set([c])
+    
+    mask_neighs  = np.zeros(len(cosine_distances),dtype=bool)
+    mask_neighs[[c2idx[c]  for c in neighs_g ]]=True
+    
+    
+
+
+    return looner_contigs,neighs_g,hoods_with_looners_cs_d,mask_looners, mask_neighs
+
+
+def find_neighbourhoods(contignames,neighs):
+    
+    neighbourhoods_g = nx.Graph()
+    for i,neigh_idxs in enumerate(neighs): 
+        c = contignames[i]
+        for neigh_idx in neigh_idxs:
+            c_neigh = contignames[neigh_idx]
+            if  c_neigh == c:
+                continue 
+            #neighbourhoods_g.add_edge(c_neigh,c)
+            neighbourhoods_g.add_edge(c,c_neigh)
+    
+    neighbourhoods_cs_d = { i:cc for i,cc in enumerate(nx.connected_components(neighbourhoods_g))}
+    
+    return neighbourhoods_cs_d
+
+
+
+def split_neighbourhoods_by_sample(neighbourhoods):
+    nbhds_split = dict()
+    for i,(nbhd_id, nbhd_cs) in enumerate(neighbourhoods.items()):
+        samples_in_nbhd = set([ c.split("C")[0] for c in nbhd_cs ])
+        
+        nbhd_S_d = { S:set() for S in samples_in_nbhd}
+
+        for c in nbhd_cs:
+            nbhd_S_d[c.split("C")[0]].add(c)
+
+        # remove 1 contig neighbourhoods
+        nbhd_S_clean_d = { S:cs for S,cs in nbhd_S_d.items() if len(cs) > 1 }
+        
+
+
+        for S,cs in nbhd_S_clean_d.items():
+            nbhds_split["%i_%s"%(nbhd_id,S)] = cs
+        
+    return nbhds_split
+
+
+
+def load_composition_and_abundance_and_neighs(
+    vamb_options: GeneralOptions,
+    comp_options: CompositionOptions,
+    abundance_options: AbundanceOptions,
+    neighs_options: NeighsOptions,
+    binsplitter: vamb.vambtools.BinSplitter,
+) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance, np.ndarray]:
+    logger.info(
+        "Starting contrastive-Vamb version "
+        + ".".join(map(str, vamb.__version_str__))
+    )
+
+    logger.info("Date and time is " + str(datetime.datetime.now()))
+    begintime = time.time()
+
+    composition = calc_tnf(comp_options, vamb_options.min_contig_length ,vamb_options.out_dir, binsplitter)
+    abundance = calc_abundance(
+        abundance_options,
+        vamb_options.out_dir,
+        vamb_options.refcheck,
+        composition.metadata,
+        vamb_options.n_threads,
+    )
+
+    time_generating_input = round(time.time() - begintime, 2)
+    logger.info(f"TNF and coabundances generated in {time_generating_input} seconds.")    
+    
+    logger.info(
+        f"Loading contig neighs from {neighs_options.neighs_path}."
+    )
+
+    neighs = np.load(
+        neighs_options.neighs_path,allow_pickle=True
+    )["arr_0"]
+
+    neighs_mask = np.array([ len(lst) > 0 for lst in neighs])
+    
+    contigs_with_neighs_n = np.sum(neighs_mask)
+    total_neighs = np.sum([len(ns) for ns in neighs])
+    mean_neighs_per_contig = np.mean([len(ns) for ns in neighs])
+    std_neighs_per_contig = np.std([len(ns) for ns in neighs])
+    logger.info(f"Contigs with neighs {contigs_with_neighs_n}.")
+    logger.info("Mean(std) neighbours per contig: %.2f (%.2f)."%(mean_neighs_per_contig,std_neighs_per_contig))
+    logger.info(f"Total neigh connections {total_neighs}.")
+        
+    return (
+        composition,
+        abundance,
+        neighs,
+        neighs_mask
+    )
+
 def run_bin_default(opt: BinDefaultOptions):
+
     composition, abundance = load_composition_and_abundance(
         vamb_options=opt.common.general,
         comp_options=opt.common.comp,
@@ -1661,14 +2338,13 @@ def run_vaevae(opt: BinTaxVambOptions):
         None,
     )
 
-
 def run_reclustering(opt: ReclusteringOptions):
     composition = calc_tnf(
         opt.composition,
         opt.general.min_contig_length,
         opt.general.out_dir,
         opt.output.binsplitter,
-    )
+    )    
     markers = load_markers(
         opt.markers, composition.metadata, opt.general.out_dir, opt.general.n_threads
     )
@@ -1772,6 +2448,427 @@ def run_reclustering(opt: ReclusteringOptions):
         cast(Sequence[str], composition.metadata.identifiers),
         cast(Sequence[int], composition.metadata.lengths),
     )
+
+
+def run_bin_contr_vamb(
+    opt: BinContrVambOptions,
+    # vamb_options: VambOptions,
+    # comp_options: CompositionOptions,
+    # abundance_options: AbundanceOptions,
+    # neighs_options: NeighsOptions,
+    # encoder_options: Encodern2vOptions,
+    # training_options: TrainingOptions,
+    # cluster_options: ClusterOptions,
+):
+    # # I HAVE TO MAKE CHANGES ACCORDING TO THE CHANGES IN THE ENCODE_N2V_ASIMETRIC
+    # # I ALSO HAVE TO IMPLEMENT A FUNCTION THAT GENERATES AN OBJECT INDICATING THE NEIGHBOURS OF EACH CONTIG
+    # # BAED ON EMBEDDING SPACE AND radius DISTANCE
+    # vae_options = encoder_options.vae_options
+    # vae_training_options = training_options.vae_options
+
+    (
+        composition,
+        abundance,
+        neighs_object,
+        neighs_mask,
+    ) = load_composition_and_abundance_and_neighs(
+        vamb_options=opt.common.general,
+        comp_options=opt.common.comp,
+        abundance_options=opt.common.abundance,
+        neighs_options=opt.neighs,
+        binsplitter=opt.common.output.binsplitter,
+    )
+
+    # Write contignames and contiglengths needed for dereplication purposes
+    np.savetxt(
+        opt.common.general.out_dir.joinpath("contignames"),
+        composition.metadata.identifiers,
+        fmt="%s",
+    )
+    np.savez(opt.common.general.out_dir.joinpath("lengths.npz"), composition.metadata.lengths)
+
+    logger.info(
+        "Creating dataloader"
+    )
+    #logger.info("LONG INPUT ADDED WITH ABUNDANCES NO PROBABILITIES")
+    (
+        data_loader,
+        neighs_object_after_dataloader,
+    ) = vamb.encode_n2v_asimetric.make_dataloader_n2v(
+        abundance.matrix.astype(np.float32),
+        composition.matrix.astype(np.float32),
+        neighs_mask.astype(np.float32),
+        neighs_object,
+        composition.metadata.lengths,
+        256,  # dummy value - we change this before using the actual loader
+        destroy=True,
+        cuda=opt.common.general.cuda,
+    )
+
+    latent = None
+    # Train, save model
+    latent = train_contr_vae(
+        vae_options=opt.vae,
+        vamb_options=opt.common.general,
+        # training_options=vae_training_options,
+        # vamb_options=opt.common.general,
+        neighs_options=opt.neighs,
+        # #lrate=training_options.lrate,
+        # alpha=encoder_options.alpha,
+        data_loader=data_loader,
+        neighs_object=neighs_object_after_dataloader,
+    )
+
+    # Free up memory
+    comp_metadata = composition.metadata
+    del composition, abundance
+
+    assert latent is not None
+    assert comp_metadata.nseqs == len(latent)
+    
+    ## First cluster based on hoods, cluster the rest with vamb default clustering
+    # clean neighbours using latent space information
+    neighs_object = clean_neighs_with_latents(
+        latent,
+        neighs_object_after_dataloader,
+        opt.neighs.max_neighs_r
+        )
+    
+    logger.info("Neighbourhoods before aggregation: %i"%len(find_neighbourhoods(comp_metadata.identifiers,neighs_object).keys()))
+
+    ## optimized clustering
+    logger.info("Clustering based on neighbourhoods communities")
+    
+    latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask = cluster_hoods_based(
+        latent,
+        neighs_object,
+        comp_metadata.identifiers,
+        opt.common.output.binsplitter.splitter,
+        opt.neighs.radius_clustering
+        )
+    logger.info("Clustering baased on the neighbourhoods communities finished")
+
+    
+    if not os.path.isdir(os.path.join(opt.common.general.out_dir,"tmp")):
+        os.mkdir(os.path.join(opt.common.general.out_dir,"tmp"))
+    
+    write_clusters(
+        opt.common.output.binsplitter,
+        str(opt.common.general.out_dir.joinpath("tmp/vae_clusters_community_based")),
+        latent_communities_cs_d
+    )
+
+    logger.info(
+        "\tClustering remaining contigs not within a radius distance from within_radius_merged_hoods_0.01 members"
+    )
+
+    cls_outside_coms_density_cs_d = cluster_and_write_clusters(
+        opt.common.general,
+        opt.common.clustering,
+        opt.common.output.binsplitter,
+        str(opt.common.general.out_dir.joinpath("tmp/vae_clusters_outside_communities_density")),
+        latent.copy()[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],
+        comp_metadata.identifiers[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],  # type:ignore
+        comp_metadata.lengths[
+            ~(looner_mask | contigs_in_latent_communities_mask)
+        ],  # type:ignore
+    )
+    
+    # merge the within and outside clusters and ensure tehre are not repeats and missing contigs
+    merged_cl_cs_d = latent_communities_cs_d.copy()
+
+
+    for cl,cs in cls_outside_coms_density_cs_d.items():
+        merged_cl_cs_d[cl] = cs
+
+    assert len(np.sum(set([c for cs in merged_cl_cs_d.values() for c in cs]))) == len(
+        comp_metadata.identifiers
+    )
+    # save clusters within margins and outside margins
+
+    write_clusters(
+        opt.common.output.binsplitter,
+        str(opt.common.general.out_dir.joinpath("vae_clusters_community_based_complete")),
+        merged_cl_cs_d,
+    )
+
+
+    ## Now generate a new set of clusters based on vamb default clustering
+    # Cluster, save tsv file
+    logger.info("Clustering latents with vamb density algorithm")
+    cluster_and_write_clusters(
+        opt.common.general,
+        opt.common.clustering,
+        opt.common.output.binsplitter,
+        str(opt.common.general.out_dir.joinpath("vae_clusters_density")),
+        latent,
+        comp_metadata.identifiers,  # type:ignore
+        comp_metadata.lengths,  # type:ignore
+    )
+    
+    del latent
+
+
+
+def clean_neighs_with_latents(
+    latent,
+    neighs,
+    max_radius=0.2
+):
+    """
+    Given the contig latents, and the neighs, break neighbour connections if neighbours are furhter than a given cosine distance
+    """
+    neighs_clean=[]
+    latent_nz = vamb.cluster._normalize(latent)
+    total_neighs_removed=0
+    total_neighs_original=0
+    logger.info("Breaking neighbour connections if further than %s normalized cosine distance"%str(max_radius))
+    for c_idx,neigh_idxs in enumerate(neighs):
+        if len(neigh_idxs)==0:
+            neighs_clean.append([])
+            continue
+        distances = vamb.cluster._calc_distances(latent_nz,c_idx)
+        mask_neighs = torch.zeros(len(latent_nz),dtype=bool)
+        mask_neighs[neigh_idxs] = True
+        #print("Neighs before cleaning",neigh_idxs)
+        within_max_radius = (distances <= max_radius) & mask_neighs # keep contigs that are neighbours and are within the max radius on latent space
+        neighs_clean_i = list(np.arange(len(neighs))[within_max_radius])
+        #logger("Neighs after cleaning",neighs_clean_i))
+        neighs_clean.append(neighs_clean_i)
+        total_neighs_removed += len(neigh_idxs)-len(neighs_clean_i)
+        total_neighs_original+= len(neigh_idxs)
+    logger.info("%i neighs before cleaining with latents"%total_neighs_original)
+    logger.info("%i neighs after cleaining with latents"%(total_neighs_original-total_neighs_removed))
+    return neighs_clean                
+        
+        
+def cluster_hoods_based(
+    latent,
+    neighs,
+    contignames,
+    binsplit_separator="C",
+    radius_clustering=0.01,
+    radius_looner=0.5,
+    
+):
+    """
+    Given the latent space after training, and the neighs extracted from the n2v alignmnet-assembly graph,
+    expand the communities based on the latent space.
+    """
+    radius = radius_clustering/2
+    looner_radius=radius_looner/2
+    
+    looner_mask = np.zeros(len(latent),dtype=bool)
+    latent_communities_g = nx.Graph()
+    latent_nz = vamb.cluster._normalize(latent)
+
+    ## For each contig latent, find the contigs that are within a distance, and link them
+    for i in range(len(latent)):
+        distances = vamb.cluster._calc_distances(latent_nz,i)
+        mask_ = torch.ones(len(latent), dtype=torch.bool)
+        mask_[i] = False
+        within_radius = (distances <= radius) & mask_
+        neighs_graph = neighs[i]
+        if torch.sum(within_radius) == len(neighs_graph) == 0: # potentially a loner
+            within_looner_radius = (distances <= looner_radius) & mask_        
+            if torch.sum(within_looner_radius) == 0:
+                looner_mask[i]=True
+                latent_communities_g.add_node(contignames[i])
+        else:
+            for lat_neigh in np.where(within_radius)[0]:
+                latent_communities_g.add_edge(contignames[i],contignames[lat_neigh])
+            
+            for neigh_idx in neighs_graph:
+                latent_communities_g.add_edge(contignames[i],contignames[neigh_idx])
+            #contigs_in_latent_communities_mask[i]=True
+        
+    
+    
+    # latent_communities_cs_d = {
+    #     "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
+    #     for i, cs in enumerate(nx.connected_components(latent_communities_g))
+        
+    # }
+    ## For each cluster only composed by contigs from different samples, i.e. there is only one contig from each sample present in the cluster,
+    ## remove those clusters since no graph information is used.
+    latent_communities_cs_d_NOT_CLEAN = {
+        "nneighs_%i" % i if len(cs) > 1 else "looner_%i"%i: cs
+        for i, cs in enumerate(nx.connected_components(latent_communities_g))
+    }
+    logger.info(
+        "Neighbourhoods before removing only intersample hoods: %i" % (len([cl for cl in latent_communities_cs_d_NOT_CLEAN.keys() if cl.startswith("nneighs_")]))
+    )
+
+
+    latent_communities_cs_d = {}
+    neighs_to_split = []
+    for i,cs in enumerate(nx.connected_components(latent_communities_g)):
+        if len(cs) == 1:
+            latent_communities_cs_d["looner_%i"%i]=cs
+            continue
+        samples_hood = set( [c.split(binsplit_separator)[0] for c in cs])
+        if len(samples_hood) == len(cs):
+            neighs_to_split.append(cs)
+            continue
+        latent_communities_cs_d["nneighs_%i"%i]=cs
+    
+    edges_to_remove=[]
+    
+    for cs in neighs_to_split:
+        c_seen = set()
+        for c_i in cs:
+            c_seen.add(c_i)
+            for c_j in cs-c_seen:
+                if (c_i,c_j) in latent_communities_g.edges():
+                    edges_to_remove.append((c_i,c_j))
+    
+    nodes_to_remove=set()
+    latent_communities_g.remove_edges_from(edges_to_remove)
+    for c in latent_communities_g.nodes():
+        if len(latent_communities_g.edges(c)) == 0:
+            nodes_to_remove.add(c)
+    
+    
+    latent_communities_g.remove_nodes_from(nodes_to_remove)
+
+    logger.info("%i (%i) edges (nodes) have been removed since they were part of clusters containing only intersample contigs"%(len(edges_to_remove),len(nodes_to_remove)))
+    
+
+
+    contigs_in_withinradiusclusters_n = np.sum([len(cs) for cs in latent_communities_cs_d.values() if len(cs) > 1 ])
+    logger.info(
+        "Contigs in within neighbourhoods radius clusters: %i"
+        % contigs_in_withinradiusclusters_n
+    )
+    cluster_with_more_contigs = max(latent_communities_cs_d, key=lambda k : len(latent_communities_cs_d[k]) )
+    
+    n_contigs_max_cluster = len(latent_communities_cs_d[cluster_with_more_contigs])
+    
+#    logger.info("Removing within neighbourhoods radius cluster with more aggregated contigs %i"%n_contigs_max_cluster)
+#    latent_communities_g.remove_nodes_from([c  for c in latent_communities_cs_d[cluster_with_more_contigs]])
+#    del latent_communities_cs_d[cluster_with_more_contigs]
+    contigs_in_latent_communities_mask= np.array([ 1 if c in latent_communities_g.nodes() else 0  for c in contignames ],dtype=bool)
+    logger.info(
+        "Looner contigs: %i"
+        % np.sum(looner_mask)
+    )
+
+    logger.info(
+        "Aggregated neighbourhoods: %i" % (len([cl for cl in latent_communities_cs_d.keys() if cl.startswith("nneighs_")]))
+    )
+
+    return latent_communities_cs_d,looner_mask,contigs_in_latent_communities_mask
+
+
+    
+def neighs_within_radius(
+    neighs_object,
+    contignames,
+    latent_neighs,
+):
+    """
+    There are two kind of neighbours, the neighs from the n2v embeddings space, and the ones from vamb's 
+    latent space. Here we merge them.
+    Input:
+        neighs_object: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in n2v embedding space
+        contignames: contig names
+        latent_neighs: list of lists of len == N_contigs where each element indicates the neighbouring contig indices in vamb's latent space
+    """
+    
+    c2idx = {contigname: i for i, contigname in enumerate(contignames)}
+    mask_contigs_withinR_neighbourhoods = np.zeros(len(contignames), dtype=bool)    
+    mask_contigs_in_neighbourhoods =  np.zeros(len(contignames), dtype=bool)    
+    ## First create the neighbourhoods objects only based upon 
+    neighbourhoods_graph = nx.Graph()
+    contigs_in_neighbourhoods = set()
+    for c_i, neigh_idxs in enumerate(neighs_object):
+        for n_i in neigh_idxs:
+            neighbourhoods_graph.add_edge(contignames[c_i], contignames[n_i])
+            contigs_in_neighbourhoods.add(contignames[n_i])
+            contigs_in_neighbourhoods.add(contignames[c_i])
+            mask_contigs_in_neighbourhoods[c_i] = True
+            mask_contigs_in_neighbourhoods[n_i] = True
+            
+    logger.info("Contigs in neighbourhoods: %i" % len(contigs_in_neighbourhoods))
+
+    n_neighbourhoods = np.sum(
+        [1 for cs in nx.connected_components(neighbourhoods_graph) if len(cs) > 1]
+    )
+    logger.info("Initial neighbourhoods: %i" % n_neighbourhoods)
+
+    # withinradiusclusters_g = nx.Graph()
+    hood_cs_d = {
+        "hood_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(neighbourhoods_graph))
+    }
+
+    withinradiusclusters_g = neighbourhoods_graph
+    logger.info("Graph object copied")
+    singleton_contigs_aggregated = set()
+    edges_to_add = []
+    for cs in nx.connected_components(neighbourhoods_graph):
+        # print(cs)
+        assert len(cs) > 1, "neighbourhoods should be composed of at least 2 contigs"
+        # define contig indices already part of the neighbourhood        
+        idxs_cs_already_in_hood = [c2idx[c] for c in cs] 
+        
+        for idx_c_already_in_hood in idxs_cs_already_in_hood:
+            idxs_latent_neighs_not_in_hood = set(latent_neighs[idx_c_already_in_hood]) - set(idxs_cs_already_in_hood)
+            if len(idxs_latent_neighs_not_in_hood) > 0:
+                for idx_latent_neighs_not_in_hood in idxs_latent_neighs_not_in_hood:
+                    edges_to_add.append((contignames[idx_c_already_in_hood],contignames[idx_latent_neighs_not_in_hood]))
+                    mask_contigs_withinR_neighbourhoods[idx_latent_neighs_not_in_hood] = True
+                    if contignames[idx_latent_neighs_not_in_hood] not in contigs_in_neighbourhoods:
+                        singleton_contigs_aggregated.add(contignames[idx_latent_neighs_not_in_hood])
+    logger.info("merging finished")
+    logger.info("%i (%i) edges (neighbourhoods) before merging"%(len(withinradiusclusters_g.edges()),len(list(nx.connected_components(withinradiusclusters_g)))))
+    withinradiusclusters_g.add_edges_from(edges_to_add)
+    logger.info("%i (%i) edges (neighbourhoods) after merging"%(len(withinradiusclusters_g.edges()),len(list(nx.connected_components(withinradiusclusters_g)))))
+        # # define contig indices not part of the neighbourhood
+        # idxs_cs_not_in_hood = set(np.arange(len(contignames))) - set(idxs_cs_already_in_hood) 
+        
+        # for idx_c_not_in_hood in idxs_cs_not_in_hood:
+        #     # get the neighbouring contigs of the contigs not in hoods and that are in the hood (so the neighbours that are part of the original hood)
+        #     latent_neighs_neighbourhood = set(latent_neighs[idx_c_not_in_hood]).intersection(
+        #         set(idxs_cs_already_in_hood)
+        #     )
+        #     if len(latent_neighs_neighbourhood) > 0:
+        #         for latent_neigh_idx in latent_neighs_neighbourhood:
+        #             withinradiusclusters_g.add_edge(contignames[latent_neigh_idx], contignames[idx_c_not_in_hood])
+        #             mask_contigs_withinR_neighbourhoods[idx_c_not_in_hood] = True
+        #             if contignames[idx_c_not_in_hood] not in contigs_in_neighbourhoods:
+        #                 singleton_contigs_aggregated.add(contignames[idx_c_not_in_hood])
+                        
+    withinradiusclusters_cs_d = {
+        "nneighs_%i" % i: cs
+        for i, cs in enumerate(nx.connected_components(withinradiusclusters_g))
+    }
+    logger.info(
+        "Collected singleton contigs: %i"
+        % len(singleton_contigs_aggregated)
+    )
+    
+    contigs_in_withinradiusclusters_n = np.sum([len(cs) for cs in withinradiusclusters_cs_d.values() ])
+    logger.info(
+        "Contigs in within neighbourhoods radius clusters: %i"
+        % contigs_in_withinradiusclusters_n
+    )
+
+    logger.info(
+        "Aggregated neighbourhoods: %i" % (len(withinradiusclusters_cs_d.keys()))
+    )
+    return (
+        hood_cs_d,
+        withinradiusclusters_cs_d,
+        withinradiusclusters_g,
+        mask_contigs_in_neighbourhoods,
+        mask_contigs_withinR_neighbourhoods,
+    )
+
 
 
 def add_help_arguments(parser: argparse.ArgumentParser):
@@ -2116,12 +3213,7 @@ def add_model_selection_arguments(subparser: argparse.ArgumentParser):
         dest="model",
         metavar="",
         type=str,
-        choices=[
-            "vae",
-            "aae",
-            "vae-aae",
-            "vaevae",
-        ],
+        choices=["vae", "aae", "vae-aae", "vaevae", "vae_asy", "vae_sy"],
         default="vae",
         help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae; reclustering [vae]",
     )
@@ -2235,6 +3327,58 @@ def add_reclustering_arguments(subparser: argparse.ArgumentParser):
     return subparser
 
 
+def add_contr_vae_arguments(subparser: argparse.ArgumentParser):
+    # Reclustering arguments
+    contr_vaeos = subparser.add_argument_group(title="Contrastive-VAE arguments")
+    contr_vaeos.add_argument(
+        "--Rc",
+        dest="radius_clustering",
+        help="radius clustering within radius  [0.01]",
+        type=float,
+        default=0.01,
+        
+    )
+    contr_vaeos.add_argument(
+        "--top_neighbours",
+        dest="top_neighbours",
+        help="only consider n closest contigs in embedding space as neighbours [50]",
+        type=int,
+        default=50,
+    )    
+    contr_vaeos.add_argument(
+        "--neighs",
+        dest="neighs_path",
+        metavar="",
+        type=Path,
+        help="paths to graph neighs obj, where each row (contig) indicates the neibouring contig indices",
+    )
+    contr_vaeos.add_argument(
+        "--gamma",
+        dest="gamma",
+        help="Weight for the embeddings contrastive losss [0.1]",
+        type=float,
+        default=0.1,
+    )
+    contr_vaeos.add_argument(
+        "--margin",
+        dest="margin",
+        help="Margin where cosine distances stop being penalized [0.01]",
+        type=float,
+        default=0.01,
+    )
+    contr_vaeos.add_argument(
+        "--max_neighs_r",
+        dest="max_neighs_r",
+        help="Neighbours further than this on latent space will be removed [0.2]",
+        type=float,
+        default=0.2,
+    )
+    
+    return subparser
+
+
+
+
 def main():
     doc = f"""
     Version: {vamb.__version_str__}
@@ -2265,11 +3409,12 @@ def main():
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
+    CONTR_VAMB = "contr_vamb"
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
         help="""
-        VAMB, TaxVAMB, AVAMB binners
+        VAMB, TaxVAMB, AVAMB,CONTR_VAMB binners
         """,
         add_help=False,
     )
@@ -2322,7 +3467,11 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
 
     vaeaae_parser = subparsers_model.add_parser(
         AVAMB,
-        help=argparse.SUPPRESS,
+        help="""
+        Ensemble model of an adversarial autoencoder and a variational autoencoder. See the paper "Adversarial and variational autoencoders improve metagenomic binning
+                        (https://www.nature.com/articles/s42003-023-05452-3). WARNING: recommended use is through the Snakemake pipeline
+        """,
+        #argparse.SUPPRESS,
         add_help=False,
         usage="%(prog)s [options]",
     )
@@ -2333,6 +3482,25 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
     add_vae_arguments(vaeaae_parser)
     add_aae_arguments(vaeaae_parser)
     add_clustering_arguments(vaeaae_parser)
+
+
+    contr_vae_parser = subparsers_model.add_parser(
+        CONTR_VAMB,
+        help="""
+        Variational Autoencoder binner that besides coabundances and TNF also applies 
+        a contrastive effect to integrate non-uniform genome features into the latent representations,
+        at the moment is applied to integrate communities extracted from the assembly-alignment graph.
+        """,
+        add_help=False,
+    )
+    add_general_arguments(contr_vae_parser)
+    add_composition_arguments(contr_vae_parser)
+    add_abundance_arguments(contr_vae_parser)
+    add_bin_output_arguments(contr_vae_parser)
+    add_vae_arguments(contr_vae_parser)
+    add_contr_vae_arguments(contr_vae_parser)
+    add_clustering_arguments(contr_vae_parser)
+    
 
     predict_parser = subparsers.add_parser(
         TAXOMETER,
@@ -2382,6 +3550,7 @@ Required arguments:
     add_predictor_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser)
 
+
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -2405,6 +3574,11 @@ Required arguments:
             opt = BinAvambOptions.from_args(args)
             runner = partial(run_bin_aae, opt)
             run(runner, opt.common.general)
+        elif model == CONTR_VAMB:
+            opt = BinContrVambOptions.from_args(args)
+            runner = partial(run_bin_contr_vamb, opt)
+            run(runner, opt.common.general)
+    
     elif args.subcommand == RECLUSTER:
         opt = ReclusteringOptions.from_args(args)
         runner = partial(run_reclustering, opt)
@@ -2416,3 +3590,4 @@ Required arguments:
 
 if __name__ == "__main__":
     main()
+

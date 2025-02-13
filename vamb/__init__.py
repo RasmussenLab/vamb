@@ -26,6 +26,8 @@ from . import taxvamb_encode
 from . import reclustering
 
 from importlib.metadata import version as get_version
+from . import encode_n2v_asimetric
+from . import git_commit
 from loguru import logger
 
 __version_str__ = get_version("vamb")
@@ -44,4 +46,6 @@ __all__ = [
     "taxvamb_encode",
     "hloss_misc",
     "reclustering",
+    "encode_n2v_asimetric",
+    "git_commit"
 ]

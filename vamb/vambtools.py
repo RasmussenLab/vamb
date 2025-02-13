@@ -148,6 +148,9 @@ class BinSplitter:
         {'s2-bin1': {'s1-c1', 's1-c3'}, 's1-bin1': {'s1-c1', 's1-c5'}, 's5-bin1': {'s1-c8'}}
         """
         for binname, headers in clusters:
+            if "clustername" in binname and "contigname" in headers:
+                continue
+                
             for newbinname, splitheaders in self.split_bin(binname, headers):
                 yield newbinname, splitheaders
 
