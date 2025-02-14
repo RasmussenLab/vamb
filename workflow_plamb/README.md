@@ -149,3 +149,6 @@ To use an allready downloaded database, pass in a path to the genomad database w
 ```
 snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 ```
+
+### Bugs on Esrum ![need to be tested]!
+Need to have channel priority as flexible
