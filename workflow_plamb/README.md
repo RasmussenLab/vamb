@@ -13,6 +13,10 @@ git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy
 cd vamb/workflow_plamb
 pip install .
 ```
+To see all options run
+```
+workflow_plamb --help
+```
  To run the entire pipeline including assembling the reads pass in a whitespace separated file containing the reads:
 ```
 workflow_plamb --reads <read_file>  --output <output_directory>
