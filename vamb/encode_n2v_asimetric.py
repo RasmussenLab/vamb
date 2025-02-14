@@ -593,6 +593,7 @@ class VAE(_nn.Module):
             depths_in.requires_grad = True
             tnf_in.requires_grad = True
             
+    
             preds_idxs = preds_idxs.long()
             neighs_mask = neighs_mask.bool()
             abundance_long_mask = abundance_long_mask.bool()
@@ -637,7 +638,7 @@ class VAE(_nn.Module):
                 abundance_long_out,
                 abundance_long_mask,
             )
-
+            
             loss.backward()
             optimizer.step()
             epoch_loss += loss.data.item()
