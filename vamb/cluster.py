@@ -422,7 +422,8 @@ class ClusterGenerator:
             sampled_medoid = candidates[i]
             tried.add(sampled_medoid)
             sample_cluster, sample_distances, sample_density = self.sample_medoid(
-                medoid
+                #medoid
+                sampled_medoid
             )
 
             # If the mean distance of inner points of the sample is lower,
