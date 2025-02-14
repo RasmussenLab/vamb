@@ -11,7 +11,7 @@ Clone the repository and install the package
 ```
 git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy
 cd vamb/workflow_plamb
-pip install .
+pip install -e .
 ```
 To see all options run
 ```
