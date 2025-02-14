@@ -2,6 +2,7 @@ from typing import Optional, IO
 from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
 import numpy as np
+from typing import Union
 
 TAXONOMY_HEADER = "contigs\tpredictions"
 PREDICTED_TAXONOMY_HEADER = "contigs\tpredictions\tscores"
@@ -104,6 +105,7 @@ class Taxonomy:
         self.contig_taxonomies = contig_taxonomies
         self.refhash = refhash
         self.is_canonical = is_canonical
+        assert_unambiguous_ranks(self)
 
     @staticmethod
     def parse_tax_file(
@@ -158,6 +160,7 @@ class PredictedTaxonomy:
         self.contig_taxonomies = taxonomies
         self.refhash = metadata.refhash
         self.is_canonical = is_canonical
+        assert_unambiguous_ranks(self)
 
     def to_taxonomy(self) -> Taxonomy:
         lst: list[Optional[ContigTaxonomy]] = [
@@ -220,3 +223,35 @@ class PredictedTaxonomy:
                 file=file,
                 sep="\t",
             )
+
+
+def assert_unambiguous_ranks(taxonomy: Union[Taxonomy, PredictedTaxonomy]):
+    """
+    Ensure that no rank appears at multiple levels in the taxonomy.
+    This will mess up some of TaxVamb's algorithms since it's based on the names of
+    taxons, and therefore, having a name on two ranks may cause it to be parsed
+    as a graph which is not a tree.
+    """
+    seen_ranks: dict[str, int] = dict()
+    parent_of: dict[str, str] = dict()
+    for i in taxonomy.contig_taxonomies:
+        # May be missing from Taxonomy
+        if i is None:
+            continue
+
+        if isinstance(i, ContigTaxonomy):
+            ranks = i.ranks
+        else:
+            ranks = i.contig_taxonomy.ranks
+
+        for rank, name in enumerate(ranks):
+            if seen_ranks.setdefault(name, rank) != rank:
+                raise ValueError(
+                    f'Taxonomy is ambiguous: "{name}" appears at multiple ranks'
+                )
+
+        for parent, child in zip(ranks, ranks[1:]):
+            if parent_of.setdefault(child, parent) != parent:
+                raise ValueError(
+                    f'Taxonomy is ambiguous: "{child}" has multiple parents'
+                )
