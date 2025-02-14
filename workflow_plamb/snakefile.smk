@@ -463,7 +463,7 @@ rule run_vamb_asymmetric:
         """
         rmdir {output.directory}
         {PLAMB_PRELOAD}
-        vamb bin vae_asy --outdir {output.directory} --fasta {input.contigs} -p {threads} --bamfiles {input.bamfiles}\
+        vamb bin contr_vamb --outdir {output.directory} --fasta {input.contigs} -p {threads} --bamfiles {input.bamfiles}\
         --seed 1 --neighs {input.nb_file}  -m {MIN_CONTIG_LEN} {PLAMB_PARAMS}\
          {params.cuda} &> {log}
         touch {output}
