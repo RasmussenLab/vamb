@@ -40,15 +40,33 @@ def make_graph(
         for parent, child in zip(contig_taxonomy.ranks, contig_taxonomy.ranks[1:]):
             G.add_edge(parent, child)
     edges = nx.bfs_edges(G, root)
+    # Nodes are unique here, because even though a taxon may appear multiple times
+    # in contig taxonomies, its edges will only be added once to the graph
     nodes: list[str] = [root] + [v for _, v in edges]
     ind_nodes = {v: i for i, v in enumerate(nodes)}
+    # We have checked during construction of the Taxonomy that node names are unique
+    # in that they can't have distinct parents, so this should hold
+    assert len(ind_nodes) == len(nodes)
     table_parent: list[int] = []
-    for n in nodes:
+    for child_node, n in enumerate(nodes):
         if n == root:
             table_parent.append(-1)
         else:
-            table_parent.append(ind_nodes[list(G.predecessors(n))[0]])
+            parent = only(G.predecessors(n))
+            parent_index = ind_nodes[parent]
+            assert parent_index < ind_nodes[n]
+            table_parent.append(parent_index)
     return nodes, ind_nodes, table_parent
+
+
+def only(itr):
+    itr = iter(itr)
+    y = next(itr)
+    try:
+        next(itr)
+    except StopIteration:
+        return y
+    raise ValueError("More than one element in iterator")
 
 
 def collate_fn_labels_hloss(
