@@ -2,10 +2,10 @@
 <information about the tool>
 
 ## Quick Start :rocket:
-Create conda environment:
+To run the pipeline a conda installation with snakemake is needed:
+Given conda is configured install snakemake using: 
 ```
-conda create -y -n workflow_plamb -c conda-forge -c bioconda 'snakemake==8.26.0' 'mamba==1.5.9'
-conda activate workflow_plamb
+conda install -c conda-forge -c bioconda 'snakemake==8.26.0'
 ```
 Clone the repository and install the package
 ```
