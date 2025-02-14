@@ -113,7 +113,7 @@ def main(
     The first time running the program it will try to install the genomad database (~3.1 G) and required scripts.
     For running the pipeline either the --reads or the --reads_and_assembly_dir arguments are required.
     Additionally, the --output argument is required which defines the output directory.
-    For Quick Start please see the README: https://github.com/RasmussenLab/vamb/tree/plamb_pipeline/workflow_plamb
+    For Quick Start please see the README: https://github.com/RasmussenLab/vamb/blob/vamb_n2v_asy/workflow_plamb/README.md
     """
 
     if cli_dryrun:
