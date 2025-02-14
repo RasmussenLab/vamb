@@ -1641,7 +1641,7 @@ def cluster_and_write_clusters(
     logger.info(f"\tUse CUDA for clustering: {vamb_options.cuda}")
     logger.info(f"\tBinsplitter: {binsplitter.splitter}")
 
-    cluster_generator = vamb.cluster.ClusterGenerator(
+    cluster_generator = vamb.cluster.ClusterGenerator( #vamb.cluster_contr_vamb.ClusterGenerator(
         latent,
         sequence_lens,  # type:ignore
         windowsize=cluster_options.window_size,
@@ -2487,10 +2487,13 @@ def run_bin_contr_vamb(
     )
     np.savez(opt.common.general.out_dir.joinpath("lengths.npz"), composition.metadata.lengths)
 
+
+    
     logger.info(
         "Creating dataloader"
     )
     #logger.info("LONG INPUT ADDED WITH ABUNDANCES NO PROBABILITIES")
+
     (
         data_loader,
         neighs_object_after_dataloader,
@@ -2504,6 +2507,7 @@ def run_bin_contr_vamb(
         destroy=True,
         cuda=opt.common.general.cuda,
     )
+    
 
     latent = None
     # Train, save model
@@ -2868,7 +2872,6 @@ def neighs_within_radius(
         mask_contigs_in_neighbourhoods,
         mask_contigs_withinR_neighbourhoods,
     )
-
 
 
 def add_help_arguments(parser: argparse.ArgumentParser):
@@ -3375,8 +3378,6 @@ def add_contr_vae_arguments(subparser: argparse.ArgumentParser):
     )
     
     return subparser
-
-
 
 
 def main():
