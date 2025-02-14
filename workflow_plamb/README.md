@@ -9,11 +9,11 @@ conda activate workflow_plamb
 ```
 Clone the repository and install the package
 ```
-git clone <repository>
-cd <repository>/workflow_plamb
+git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy
+cd https://github.com/RasmussenLab/vamb/tree/vamb_n2v_asy/workflow_plamb
 pip install .
 ```
- To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
+ To run the entire pipeline including assembling the reads pass in a whitespace separated file containing the reads:
 ```
 workflow_plamb --reads <read_file>  --output <output_directory>
 ```
