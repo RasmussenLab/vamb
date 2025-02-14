@@ -4,7 +4,7 @@ dynamic = ["version"]
 name = "vamb"
 dependencies = [
     "numpy == 2.2.1",
-    "torch == 2.6.0",
+    "torch == 2.5.1",
     "pycoverm == 0.6.2",
     "networkx == 3.4.2",
     "scikit-learn == 1.6.0",
