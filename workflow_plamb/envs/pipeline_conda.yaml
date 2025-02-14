@@ -1,0 +1,22 @@
+name: ptracker_pipeline
+
+channels:
+  - pytorch
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python==3.12
+  - minimap2
+  - samtools
+  - spades
+  - blast
+  - snakemake
+  - networkx
+  - pytorch
+  - pysam
+  - pip
+  - pip:
+      - -e ../../..
+      - fastnode2vec
