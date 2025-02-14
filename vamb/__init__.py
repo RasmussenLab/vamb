@@ -18,6 +18,7 @@ from . import parsecontigs
 from . import parsemarkers
 from . import taxonomy
 from . import cluster
+from . import cluster_contr_vamb
 from . import encode
 from . import aamb_encode
 from . import semisupervised_encode
@@ -40,6 +41,7 @@ __all__ = [
     "parsemarkers",
     "taxonomy",
     "cluster",
+    "cluster_contr_vamb"
     "encode",
     "aamb_encode",
     "semisupervised_encode",
