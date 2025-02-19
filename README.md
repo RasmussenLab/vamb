@@ -1,65 +1,147 @@
-# Vamb
-[![Read the Docs](https://readthedocs.org/projects/vamb/badge/?version=latest)](https://vamb.readthedocs.io/en/latest/)
+# Pipeline for running PLAMB 
+<information about the tool>
 
-Vamb is a metagenomic binner which feeds sequence composition from a FASTA file of contigs, and abundance information from e.g. BAM files into a variational autoencoder and clusters the latent representation.
-It performs excellently with multiple samples, and pretty good on single-sample data.
-
-* __New:__ _For benchmarking binnings with a known ground truth, see our tool [BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl)_
-* __New:__ _The new semi-supervised [TaxVamb binning mode](https://www.biorxiv.org/content/10.1101/2024.10.25.620172v1) achieves state-of-the-art binning_
-
-## Programs in Vamb
-The Vamb package contains several programs, including three binners:
-* __Vamb__: The original binner based on variational autoencoders. [Article](https://doi.org/10.1038/s41587-020-00777-4).
-  This has been upgraded significantly since its original release.
-* __Avamb__: An ensemble model based on Vamb and adversarial autoencoders. [Article](https://doi.org/10.1038/s42003-023-05452-3).
-  Avamb produces better bins than Vamb, but is a more complex and computationally demanding pipeline.
-  See the [Avamb README page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb) for more information.
-* __TaxVamb__: A semi-supervised binner that uses taxonomy information from e.g. `mmseqs taxonomy`. [Article](https://doi.org/10.1101/2024.10.25.620172).
-  TaxVamb produces superior bins, but requires you have run a taxonomic annotation workflow.
-
-And a taxonomy predictor:
-* __Taxometer__: This tool refines arbitrary taxonomy predictions (e.g. from `mmseqs taxonomy`) using kmer composition and co-abundance. Go to the [release branch](https://github.com/RasmussenLab/vamb/blob/taxometer_release/README_Taxometer.md) for the instructions. [Article](https://www.nature.com/articles/s41467-024-52771-y)
-
-See also [our tool BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl) for evaluating metagenomic bins when a ground truth is available,
-e.g. for simulated data or a mock microbiome.
-
-# Installation
-Vamb is in continuous development. Make sure to install the latest version for the best results.
-
-### Installation for casual users:
-Recommended: Vamb can be installed with pip (thanks to contribution from C. Titus Brown):
+## Quick Start :rocket:
+Create conda environment:
 ```
-pip install vamb
+conda create -n workflow_plamb -c conda-forge -c bioconda 'snakemake==8.26.0' 'mamba==1.5.9'
+conda activate workflow_plamb
+```
+Clone the repository and install the package
+```
+git clone <repository>
+cd <repository>/workflow_plamb
+pip install .
+```
+ To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
+```
+workflow_plamb --reads <read_file>  --output <output_directory>
+```
+The <read_file> could look like:
+
+``` 
+read1                          read2
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2
+```
+:heavy_exclamation_mark: Notice the header names are required to be: read1 and read2  
+
+To dry run the pipeline before pass in the --dryrun flag
+
+To run the pipeline from allready assembled reads pass in a whitespace separated file containing the reads and the path to the spades assembly directories for each read pair.
+```
+workflow_plamb --reads_and_assembly_dir <reads_and_assembly_dir>  --output <output_directory>
+```
+The `reads_and_assembly_dir` file could look like:
+``` 
+read1                          read2                         assembly_dir                                           
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2   path/sample_1/Spades_output  
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2   path/sample_2/Spades_output          
+```
+ :heavy_exclamation_mark: Notice the header names are required to be: read1, read2 and assembly_dir  
+
+The path to the SPades output directory (under the assembly_dir column in the above example) must contain the following 3 files which Spades produces: 
+| Description                         | File Name from Spades                               |
+|:------------------------------------|:----------------------------------------|
+| The assembled contigs               | `contigs.fasta`                         |
+| The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
+| A metadata file                     | `contigs.paths`                         |
+
+## Output files
+(Description of output files, maybe a nice tree)
+
+## Advanced
+### Using an allready downloaded geNomad database
+To use an allready downloaded database, pass in a path to the genomad database with the --genomad_db argument
+
+### Resources 
+
+The pipeline can be configurated in: ``` config/config.yaml ```
+Here the resources for each rule can be configurated as follows
+```
+spades:
+  walltime: "15-00:00:00"
+  threads: 16
+  mem_gb: 60
+```
+if no resourcess are configurated for a rule the defaults will be used which are also defined in: ``` config/config.yaml ```  as
+```
+default_walltime: "48:00:00"
+default_threads: 16
+default_mem_gb: 50
+```
+If these exceed the resourcess available they will be scaled down to match the hardware available. 
+
+### Running on cluster [! needs to be tested also w.r.t to specific snakemake version as they changed how to submit to a cluster through snakemake !]
+You can extend the arguments passed to snakemake by the '--snakemake_arguments' flag
+This can then be used to have snakemake submit jobs to a cluster.
+on PBS this could like:
+```
+./cli.py <arguments> --snakemake_arguments \
+    '--jobs 16 --max-jobs-per-second 5 --max-status-checks-per-second 5 --latency-wait 60 \
+    --cluster "sbatch  --output={rule}.%j.o --error={rule}.%j.e \
+    --time={resources.walltime} --job-name {rule} --cpus-per-task {threads} --mem {resources.mem_gb}G "'
+```
+### Running using snakemake CLI directly 
+The pipeline can be run without using the CLI wrapper around snakemake. 
+For using snakemake refer to the snakemake documentation: <https://snakemake.readthedocs.io/en/stable/>
+
+#### Running from Reads using snakemake directly
+To run the entire pipeline including assembly pass in a whitespace separated file containing the reads to snakemake using to the config flag in the snakemake CLI:
+```
+snakemake --use-conda --cores <number_of_cores> --snakefile <path_to_snakefile> --config read_file=<read_file>
+```
+The <read_file> could look like:
+
+``` 
+read1                          read2
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2
+```
+:heavy_exclamation_mark: Notice the header names are required to be: read1 and read2  
+
+#### Running from assembled reads using snakemake directly
+To run the pipeline from allready assembled reads pass in a whitespace separated file containing the reads and the path to the spades assembly directories for each read pair to the config flag in snakemake.
+```
+snakemake --use-conda --cores <number_of_cores> --snakefile <path_to_snakefile> --config read_assembly_dir=<reads_and_assembly_dir_file>
 ```
 
-Note: An active Conda environment can hijack your system's linker, causing an error during installation. Either deactivate `conda`, or delete the `~/miniconda/compiler_compats` directory before installing with pip.
-
-### Installation for advanced users:
-If you want to install the latest version from GitHub, or you want to change Vamb's source code, you should install it like this:
-
+The reads_and_assembly_dir_file could look like:
+``` 
+read1                          read2                         assembly_dir                                           
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2   path/sample_1/Spades_output  
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2   path/sample_2/Spades_output          
 ```
-# clone the desired branch from the repository, here master
-git clone https://github.com/RasmussenLab/vamb -b master
-cd vamb
-pip install -e .
+ :heavy_exclamation_mark: Notice the header names are required to be: read1, read2 and assembly_dir  
+
+This assembly_dir directory filepath must contain the following 3 files which Spades produces: 
+| Description                         | File Name from Spades                               |
+|:------------------------------------|:----------------------------------------|
+| The assembled contigs               | `contigs.fasta`                         |
+| The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
+| A metadata file                     | `contigs.paths`                         |
+
+#### Ressources for the different snakemake rules when using snakemake directly
+To define resources for the specific snakemake rules either edit the snakemake.smk file directly or pass in a YAML config-file describing the resource use for each rule. 
 ```
-
-__Note that the master branch is work-in-progress and is expected to have more bugs__
-
-### Installing by compiling the Cython yourself
-
-If you can't/don't want to use pip/Conda, you can do it the hard way: Install the dependencies listed in the `pyproject.toml` file. Compile `src/_vambtools.pyx` then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
-
-# Running Vamb
-First, figure out what program you want to run:
-* If you want to bin, and are able to get taxonomic information, run `vamb bin taxvamb`
-* Otherwise, if you want a good and simple binner, run `vamb bin default`
-* If you want to bin, and don't mind a more complex, but performant workflow run the [Avamb Snakemake workflow](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb)
-* If you want to refine existing taxonomic classification, run `vamb taxometer`
-
-For more command-line options, see the command-line help menu:
+snakemake <arguments> --configfile <config_file.yaml>
 ```
-vamb -h
+For a specification of the configfile refer to the ``` config/config.yaml ``` file.
+Here the resources for each rule can be configurated as follows
 ```
-
-For details about how to run Vamb, see [the documentation](https://vamb.readthedocs.io/en/latest/)
+spades:
+  walltime: "15-00:00:00"
+  threads: 16
+  mem_gb: 60
+```
+if no resourcess are configurated for a rule the defaults will be used which are also defined in: ``` config/config.yaml ```  as
+```
+default_walltime: "48:00:00"
+default_threads: 16
+default_mem_gb: 50
+```
+#### Using an allready downloaded geNomad database 
+To use an allready downloaded database, pass in a path to the genomad database with using the config flag
+```
+snakemake <arguments> --config genomad_database=<path_to_genomad_database>
+```
