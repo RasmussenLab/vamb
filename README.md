@@ -1,4 +1,4 @@
-# Pipeline for running PLAMB 
+# PLAMB 
 <information about the tool>
 
 ## Quick Start :rocket:
