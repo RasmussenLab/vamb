@@ -2,17 +2,14 @@
 <information about the tool>
 
 ## Quick Start :rocket:
-Create conda environment:
+Clone the repository and install the package using conda
 ```
-conda create -n workflow_plamb -c conda-forge -c bioconda 'snakemake==8.26.0' 'mamba==1.5.9'
+git clone <repository> -b <branch>
+cd <repository>
+conda env create -n workflow_plamb --file=pipeline_conda.yaml
 conda activate workflow_plamb
 ```
-Clone the repository and install the package
-```
-git clone <repository>
-cd <repository>/workflow_plamb
-pip install .
-```
+
  To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
 ```
 workflow_plamb --reads <read_file>  --output <output_directory>

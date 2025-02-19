@@ -8,6 +8,7 @@ channels:
 
 dependencies:
   - python==3.12
+  - snakemake==8.26.0 
   - minimap2
   - samtools
   - spades
@@ -18,5 +19,7 @@ dependencies:
   - pysam
   - pip
   - pip:
-      - -e ../../..
+      - -e .
+  - pip:
+      - ./workflow_plamb
       - fastnode2vec
