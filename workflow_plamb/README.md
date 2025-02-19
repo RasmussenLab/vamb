@@ -1,23 +1,16 @@
-# Pipeline for running PLAMB 
+# PLAMB 
 <information about the tool>
 
 ## Quick Start :rocket:
-To run the pipeline a conda installation with snakemake is needed:
-Given conda is configured install snakemake using: 
+Clone the repository and install the package using conda
 ```
-conda install -c conda-forge -c bioconda 'snakemake==8.26.0'
+git clone <repository> -b <branch>
+cd <repository>/workflow_plamb
+conda env create -n workflow_plamb --file=pipeline_conda.yaml
+conda activate workflow_plamb
 ```
-Then clone the repository and install the package
-```
-git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy
-cd vamb/workflow_plamb
-pip install -e .
-```
-To see all options run
-```
-workflow_plamb --help
-```
- To run the entire pipeline including assembling the reads pass in a whitespace separated file containing the reads:
+
+ To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
 ```
 workflow_plamb --reads <read_file>  --output <output_directory>
 ```
@@ -149,7 +142,3 @@ To use an allready downloaded database, pass in a path to the genomad database w
 ```
 snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 ```
-
-### Bugs on Esrum ![need to be tested]!
-Need to have channel priority as flexible
-'conda config --set channel_priority flexible
