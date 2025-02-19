@@ -6,7 +6,7 @@ Clone the repository and install the package using conda
 ```
 git clone <repository> -b <branch>
 cd <repository>/workflow_plamb
-conda env create -n workflow_plamb --file=pipeline_conda.yaml
+conda env create -n workflow_plamb --file=envs/pipeline_conda.yaml
 conda activate workflow_plamb
 ```
 

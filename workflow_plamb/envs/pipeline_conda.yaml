@@ -19,9 +19,6 @@ dependencies:
   - pysam
   - pip
   - pip:
-      - -e ..
-  - pip:
-      - -e ./workflow_plamb
-  - pip:
       - fastnode2vec
-  # - -e ../../..
+      - -e .. # Install the cli wrapper - paths are relative to the location of the .yaml file
+      - -e ../.. # Install vamb
