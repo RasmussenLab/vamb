@@ -1,4 +1,4 @@
-name: ptracker_pipeline
+name: 1ptracker_pipeline
 
 channels:
   - pytorch
@@ -7,18 +7,16 @@ channels:
   - defaults
 
 dependencies:
-  - python==3.12
-  - snakemake==8.26.0 
+  - python==3.10.2
+  - pip
+  - pip:
+      - -e ../.. # Install vamb
+      - -e .. # Install the cli wrapper - paths are relative to the location of the .yaml file
+  - snakemake
   - minimap2
   - samtools
   - spades
   - blast
   - snakemake
   - networkx
-  - pytorch
   - pysam
-  - pip
-  - pip:
-      - fastnode2vec
-      - -e .. # Install the cli wrapper - paths are relative to the location of the .yaml file
-      - -e ../.. # Install vamb
