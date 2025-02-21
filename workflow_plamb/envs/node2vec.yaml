@@ -1,0 +1,12 @@
+name: node2vec
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python==3.12
+  - networkx
+  - pip:
+      - fastnode2vec

@@ -402,6 +402,7 @@ rule n2v_assembly_alignment_graph:
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
     log: config.get("log", "log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
+    conda: THIS_FILE_DIR / "envs/node2vec.yaml"
     shell:
         """
         python {params.path} -G {input[0]} --ed {N2V_ED} --nw {N2V_NW} --ws {N2V_WS} --wl {N2V_WL}\
