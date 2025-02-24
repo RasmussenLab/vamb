@@ -8,5 +8,6 @@ channels:
 dependencies:
   - python==3.12
   - networkx
+  - pip
   - pip:
       - fastnode2vec
