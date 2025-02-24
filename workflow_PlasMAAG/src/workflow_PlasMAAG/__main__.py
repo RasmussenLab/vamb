@@ -5,10 +5,10 @@ import sys
 import rich_click as click
 from loguru import logger
 
-from workflow_plamb.click_file_types import OneOrMoreSnakemakeArguments, WssFile
-from workflow_plamb.command_line_runners import CliRunner, SnakemakeRunner
-from workflow_plamb.environment import EnvironmentManager
-from workflow_plamb.richclick_options import *
+from workflow_PlasMAAG.click_file_types import OneOrMoreSnakemakeArguments, WssFile
+from workflow_PlasMAAG.command_line_runners import CliRunner, SnakemakeRunner
+from workflow_PlasMAAG.environment import EnvironmentManager
+from workflow_PlasMAAG.richclick_options import *
 
 
 @click.command()
@@ -109,7 +109,7 @@ def main(
     genomad_db,
 ):
     """
-    \bThis is a program to run the Ptracker Snakemake pipeline to bin plasmids from metagenomic reads.
+    \bThis is a program to run the PlasMAAG Snakemake pipeline to bin plasmids from metagenomic reads.
     The first time running the program it will try to install the genomad database (~3.1 G) and required scripts.
     For running the pipeline either the --reads or the --reads_and_assembly_dir arguments are required.
     Additionally, the --output argument is required which defines the output directory.

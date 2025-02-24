@@ -1,5 +1,4 @@
-name: 1ptracker_pipeline
-
+name: PlasMAAG 
 channels:
   - pytorch
   - conda-forge

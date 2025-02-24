@@ -4,7 +4,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from workflow_plamb.command_line_runners import CliRunner, SnakemakeRunner
+from workflow_PlasMAAG.command_line_runners import CliRunner, SnakemakeRunner
 
 
 class EnvironmentManager:

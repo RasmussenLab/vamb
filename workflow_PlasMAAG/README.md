@@ -1,18 +1,18 @@
-# PLAMB 
+# PlasMAAG workflow
 <information about the tool>
 
 ## Quick Start :rocket:
 Clone the repository and install the package using conda
 ```
 git clone <repository> -b <branch>
-cd <repository>/workflow_plamb
-conda env create -n workflow_plamb --file=envs/pipeline_conda.yaml
+cd <repository>/PlasMAAG_workflow 
+conda env create -n PlasMAAG --file=envs/PlasMAAG.yaml
 conda activate workflow_plamb
 ```
 
  To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
 ```
-workflow_plamb --reads <read_file>  --output <output_directory>
+PlasMAAG --reads <read_file>  --output <output_directory>
 ```
 The <read_file> could look like:
 
@@ -25,9 +25,9 @@ im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2
 
 To dry run the pipeline before pass in the --dryrun flag
 
-To run the pipeline from allready assembled reads pass in a whitespace separated file containing the reads and the path to the spades assembly directories for each read pair.
+To run the pipeline from already assembled reads pass in a whitespace separated file containing the reads and the path to the spades assembly directories for each read pair.
 ```
-workflow_plamb --reads_and_assembly_dir <reads_and_assembly_dir>  --output <output_directory>
+PlasMAAG --reads_and_assembly_dir <reads_and_assembly_dir>  --output <output_directory>
 ```
 The `reads_and_assembly_dir` file could look like:
 ``` 
@@ -37,7 +37,7 @@ im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2   path/sample_2/Spade
 ```
  :heavy_exclamation_mark: Notice the header names are required to be: read1, read2 and assembly_dir  
 
-The path to the SPades output directory (under the assembly_dir column in the above example) must contain the following 3 files which Spades produces: 
+The path to the SPAdes output directory (under the assembly_dir column in the above example) must contain the following 3 files which Spades produces: 
 | Description                         | File Name from Spades                               |
 |:------------------------------------|:----------------------------------------|
 | The assembled contigs               | `contigs.fasta`                         |
@@ -74,7 +74,7 @@ You can extend the arguments passed to snakemake by the '--snakemake_arguments' 
 This can then be used to have snakemake submit jobs to a cluster.
 on PBS this could like:
 ```
-./cli.py <arguments> --snakemake_arguments \
+PlasMAAG  <arguments> --snakemake_arguments \
     '--jobs 16 --max-jobs-per-second 5 --max-status-checks-per-second 5 --latency-wait 60 \
     --cluster "sbatch  --output={rule}.%j.o --error={rule}.%j.e \
     --time={resources.walltime} --job-name {rule} --cpus-per-task {threads} --mem {resources.mem_gb}G "'
@@ -138,7 +138,7 @@ default_threads: 16
 default_mem_gb: 50
 ```
 #### Using an allready downloaded geNomad database 
-To use an allready downloaded database, pass in a path to the genomad database with using the config flag
+To use an allready downloaded database, pass in a path to the genomad database using the config flag
 ```
 snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 ```

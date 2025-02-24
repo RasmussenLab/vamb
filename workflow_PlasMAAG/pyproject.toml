@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "workflow_plamb"
+name = "workflow_PlasMAAG"
 version = "0.0.1"
 description = ""
 
@@ -14,4 +14,4 @@ dynamic = ["dependencies", "optional-dependencies"]
 dependencies = {file = ["requirements.txt"]}
 
 [project.scripts]
-workflow_plamb = "workflow_plamb.__main__:main"
+PlasMAAG = "workflow_PlasMAAG.__main__:main"
