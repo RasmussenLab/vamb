@@ -7,6 +7,9 @@ Clone the repository and install the package using conda
 git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy 
 cd vamb/workflow_PlasMAAG 
 conda env create -n PlasMAAG --file=envs/PlasMAAG.yaml
+```
+To use the program activate the conda environment
+```
 conda activate PlasMAAG
 ```
 
