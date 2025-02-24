@@ -7,7 +7,7 @@ Clone the repository and install the package using conda
 git clone https://github.com/RasmussenLab/vamb -b vamb_n2v_asy 
 cd vamb/workflow_PlasMAAG 
 conda env create -n PlasMAAG --file=envs/PlasMAAG.yaml
-conda activate workflow_plamb
+conda activate PlasMAAG
 ```
 
  To run the entire pipeline including assembly pass in a whitespace separated file containing the reads:
