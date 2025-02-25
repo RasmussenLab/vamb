@@ -45,7 +45,7 @@ PLAMB_PRELOAD = config.get("plamb_preload", "")
 
 # Other options
 CUDA = True if config.get("cuda") ==  "True" else False
-NEIGHS_R=config.get("neighs_r", '0.05') 
+NEIGHS_R=config.get("neighs_r", '0.10') 
 MAX_INSERT_SIZE_CIRC = int(config.get("max_insert_size_circ", 50))
 GENOMAD_THR = config.get("genomad_thr", "0.75")
  
@@ -123,7 +123,7 @@ rule all:
 if config.get("genomad_database") is not None:
     geNomad_db = config.get("genomad_database")
 else: 
-    geNomad_db = protected(THIS_FILE_DIR / "genomad_db" / "genomad_db"),
+    geNomad_db = THIS_FILE_DIR / "genomad_db" / "genomad_db",
 
     rulename = "download_genomad_db"
     rule download_genomad_db:
@@ -499,7 +499,7 @@ rule merge_circular_with_graph_clusters:
 rulename = "run_geNomad"
 rule run_geNomad:
     input:
-        OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
+        contigs = OUTDIR / "data/sample_{key}/contigs.flt.fna.gz",
         geNomad_db = geNomad_db
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
@@ -512,7 +512,7 @@ rule run_geNomad:
     conda: THIS_FILE_DIR / "envs/genomad.yaml"
     shell:
         """
-        genomad end-to-end --cleanup {input} {output[0]} {input.geNomad_db} --threads {threads} &> {log}
+        genomad end-to-end --cleanup {input.contigs} {output[0]} {input.geNomad_db} --threads {threads} &> {log}
         touch {output[1]}
         """
 

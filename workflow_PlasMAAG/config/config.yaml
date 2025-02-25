@@ -17,7 +17,7 @@ n2v_nz: "weight"
 n2v_nw: "50"
 
 # Other parameters
-neighs_r: "0.05"
+neighs_r: "0.10"
 max_insert_size_circ: "50"
 genomad_thr: "0.75"
 # Use cuda for the vamb part of the pipeline. Uncomment to use cuda
@@ -68,11 +68,11 @@ create_assembly_alignment_graph:
   default_mem_gb: 50
 
 spades:
-  threads: 16
+  threads: 10
   mem_gb: 200
 
 extract_neighs_from_n2v_embeddings:
-  threads: 63
+  threads: 10
   mem_gb: 200
 
 index:
@@ -80,7 +80,7 @@ index:
   mem_gb: 120
 
 Strobealign_bam_default:
-  threads: 16
+  threads: 10
   mem_gb: 245
 
 sort:
@@ -91,14 +91,10 @@ align_contigs:
   threads: 8
   mem_gb: 120
 
-vamb_asymmetric:
-  threads: 16
-  mem_gb: 245
-
 run_geNomad:
-  threads: 16
+  threads: 40
   mem_gb: 245
 
 run_vamb_asymmetric:
-  threads: 5
+  threads: 40
   mem_gb: 250

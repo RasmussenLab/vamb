@@ -16,6 +16,5 @@ dependencies:
   - samtools
   - spades
   - blast
-  - snakemake
   - networkx
   - pysam
