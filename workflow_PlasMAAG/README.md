@@ -1,3 +1,8 @@
+# TODO
+- [ ] Remove seed from vamb asymmetric
+- [ ] Write section on output files
+- [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproucibility 
+
 # PlasMAAG workflow
 <information about the tool>
 
