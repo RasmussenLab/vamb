@@ -60,7 +60,7 @@ The program produces three directories in the output directory choosen
 ├── log
 └── results
 ```
-### results directory
+### Results directory
 The *results* directory contains:
 ````
 results
@@ -81,11 +81,11 @@ im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2  <-- Contigs from the
 im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2  <-- Contigs from these reads would be called sample1
 ```
 
-### log directory
+### Log directory
 The *log* directory contains the output from the various rules called in the snakemake pipeline.
 So for example `< output directory > /log/intermidiate_files_run_contrastive_VAE` would contain the log produced by running the `contrastive_VAE` rule in snakemake. 
  
-### intermidiate_files directory
+### Intermidiate_files directory
 The *intermidiate_files* directory contains the intermidiate files from the pipeline. 
 
 ## Advanced
