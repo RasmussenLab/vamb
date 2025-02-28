@@ -1,16 +1,17 @@
 TODO first part
-rename first_pipeline_part and second
-rename to contrastive_VAE
+<!-- rename first_pipeline_part and second -->
+<!-- rename to contrastive_VAE -->
+
 
 Create result clusters. | copy with new names
-        plasmid_clusters.tsv
-        non_plasmid_clusters.tsv
+        <!-- plasmid_clusters.tsv -->
+        <!-- non_plasmid_clusters.tsv -->
         cluster_scores.tsv | Each clusters score w.r.t plasmid-virus-genome # TODO optional
 
 # Other things
-Remove seed from vamb asymmetric
-Update README
-         - Write section on output files | only on the main output results files. | we can update in the future
+<!-- Remove seed from vamb asymmetric -->
+<!-- Update README -->
+<!--          - Write section on output files | only on the main output results files. | we can update in the future -->
       
 
 # │       └── vae_clusters_unsplit.tsv # TODO why is this generated ?  - Remvoe it 

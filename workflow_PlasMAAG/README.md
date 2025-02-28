@@ -56,7 +56,6 @@ The program produces three directories in the output directory choosen
 ├── log
 └── results
 ```
-### Results directory
 The *results* directory contains:
 ````
 results
@@ -77,11 +76,9 @@ im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2  <-- Contigs from the
 im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2  <-- Contigs from these reads would be called sample1
 ```
 
-### Log directory
 The *log* directory contains the output from the various rules called in the snakemake pipeline.
 So for example `< output directory > /log/intermidiate_files_run_contrastive_VAE` would contain the log produced by running the `contrastive_VAE` rule in snakemake. 
  
-### Intermidiate_files directory
 The *intermidiate_files* directory contains the intermidiate files from the pipeline. 
 
 ## Advanced
@@ -184,3 +181,9 @@ snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 - [x] Remove seed from vamb asymmetric
 - [x] Write section on output files
 - [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproducibility
+- [ ] Add fasta files of the contigs to the output directory
+- [ ] Test that cluster submit works
+      - plasmid_bins/ *.fna 
+      - nonplasmid_bins/ *.fna 
+- [ ] why is this created
+      ─ vae_clusters_unsplit.tsv # TODO why is this generated ?  - remove it ? 
