@@ -117,10 +117,10 @@ rulename = "all"
 rule all:
     input:
         candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
-        candidate_genomes = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '.tsv'),key=sample_id.keys()), #
+        candidate_genomes = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrcirc_' + GENOMAD_THR_CIRC + '.tsv'),key=sample_id.keys()), #
         assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'), key=sample_id.keys()),
         assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}",'rule_completed_checks/run_contrastive_VAE.finished'), key=sample_id.keys()),
-        candidate_genomes_scores =expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'), key=sample_id.keys()),
+        candidate_genomes_scores =expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'), key=sample_id.keys()),
         candidate_plasmids_scores = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids_gN_scores.tsv'), key=sample_id.keys()),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
@@ -322,7 +322,7 @@ rule weighted_assembly_graphs:
         graphinfo  = contigs_paths
     output:
         os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'),
-        os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_{id}.finished'),
+        os.path.join(OUTDIR,"{key}", 'rule_completed_checks','assembly_graph_processing','weighted_assembly_graphs_{id}.finished'),
     params:
         path = os.path.join(SRC_DIR, 'process_gfa.py'),
     threads: threads_fn(rulename)
@@ -339,7 +339,7 @@ rulename = "weighted_assembly_graphs_all_samples"
 rule weighted_assembly_graphs_all_samples:
     input: lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'),key=wildcards.key, id=sample_id[wildcards.key]),
     output:
-        os.path.join(OUTDIR,"{key}",'log','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -357,7 +357,7 @@ rule weighted_alignment_graph:
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished')
     output:
         os.path.join(OUTDIR,"{key}",'alignment_graph','alignment_graph.pkl'),
-        os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','alignment_graph_processing','weighted_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'process_blastout.py'),
     threads: threads_fn(rulename)
@@ -376,11 +376,11 @@ rule create_assembly_alignment_graph:
     input:
         alignment_graph_file = os.path.join(OUTDIR,"{key}",'alignment_graph','alignment_graph.pkl'),
         assembly_graph_files = lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'), key=wildcards.key, id=sample_id[wildcards.key]),
-        weighted_alignment_graph_finished_log = os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished'),
-        weighted_assembly_graphs_all_samples_finished_log = os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
+        weighted_alignment_graph_finished_log = os.path.join(OUTDIR,"{key}",'rule_completed_checks','alignment_graph_processing','weighted_alignment_graph.finished'),
+        weighted_assembly_graphs_all_samples_finished_log = os.path.join(OUTDIR,"{key}", 'rule_completed_checks','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
     output:
         os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
-        os.path.join(OUTDIR,"{key}", 'log','create_assembly_alignment_graph.finished')
+        os.path.join(OUTDIR,"{key}", 'rule_completed_checks','create_assembly_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'merge_assembly_alignment_graphs.py'),
     threads: threads_fn(rulename)
@@ -398,13 +398,13 @@ rulename = "n2v_assembly_alignment_graph"
 rule n2v_assembly_alignment_graph:
     input:
         os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
-        os.path.join(OUTDIR,"{key}",'log','create_assembly_alignment_graph.finished'), 
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','create_assembly_alignment_graph.finished'), 
         contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
         directory(os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings')),
         os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
         os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
-        os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','n2v','n2v_assembly_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'fastnode2vec_args.py'),
     threads: threads_fn(rulename)
@@ -425,13 +425,13 @@ rule extract_neighs_from_n2v_embeddings:
     input:
         os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
         os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
-        os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','n2v','n2v_assembly_alignment_graph.finished'),
         os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
         contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
         directory(os.path.join(OUTDIR,"{key}",'neighs')),
         os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
-        os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','neighs','extract_neighs_from_n2v_embeddings.finished')
     params:
         path = os.path.join(SRC_DIR, 'embeddings_to_neighs.py'),
     threads: threads_fn(rulename)
@@ -449,7 +449,7 @@ rule extract_neighs_from_n2v_embeddings:
 rulename = "run_contrastive_VAE"
 rule run_contrastive_VAE:
     input:
-        notused = os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished'), # TODO why is this not used?
+        notused = os.path.join(OUTDIR,"{key}",'rule_completed_checks','neighs','extract_neighs_from_n2v_embeddings.finished'), # TODO why is this not used?
         contigs = OUTDIR /  "{key}/assembly_mapping_output/contigs.flt.fna.gz",
         bamfiles = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=wildcards.key, id=sample_id[wildcards.key]),
         nb_file = os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
@@ -535,9 +535,9 @@ rule classify_bins_with_geNomad:
         composition = os.path.join(OUTDIR,'{key}','contrastive_VAE','composition.npz'),
     output:
         os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
-        os.path.join(OUTDIR,"{key}",'log','classify_bins_with_geNomad.finished'),
-        candidate_genomes =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '.tsv'),
-        candidate_genomes_scores =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks','classify_bins_with_geNomad.finished'),
+        candidate_genomes =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrcirc_' + GENOMAD_THR_CIRC + '.tsv'),
+        candidate_genomes_scores =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'),
         candidate_plasmids_scores = os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids_gN_scores.tsv'),
     params:
         path = os.path.join(SRC_DIR, 'classify_bins_with_geNomad.py'),
