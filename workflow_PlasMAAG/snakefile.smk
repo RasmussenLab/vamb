@@ -171,7 +171,7 @@ rule spades:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_{id}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_{id}_" + rulename
     conda: THIS_FILE_DIR / "envs/spades_env.yaml"
     shell:
        "spades.py --meta "
@@ -189,7 +189,7 @@ rule rename_contigs:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_{id}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_{id}_" + rulename
     shell:
         """
         sed 's/^>/>S{wildcards.id}C/' {input} > {output} 2> {log}
@@ -204,7 +204,7 @@ rule cat_contigs:
     params: script =  SRC_DIR / "concatenate.py"
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell: 
         "python {params.script} {output} {input} --keepnames -m {MIN_CONTIG_LEN} &> {log} "  
@@ -219,7 +219,7 @@ rule get_contig_names:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     shell:
         "zcat {input} | grep '>' | sed 's/>//' > {output} 2> {log} "
 
@@ -235,7 +235,7 @@ rule Strobealign_bam_default:
         threads: threads_fn(rulename)
         resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
         benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
-        log: config.get("log", str(OUTDIR) + "/log/") + "{key}_{id}_" + rulename
+        log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_{id}_" + rulename
         conda: THIS_FILE_DIR / "envs/strobe_env.yaml"
         shell:
             """
@@ -252,7 +252,7 @@ rule sort:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_{id}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_{id}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -288,7 +288,7 @@ rule circularize:
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     shell:
         """
         python {params.path} --dir_bams {params.dir_bams} --outcls {output[0]} --max_insert {MAX_INSERT_SIZE_CIRC} &> {log}
@@ -309,7 +309,7 @@ rule align_contigs:
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     shell:
         """
         gunzip -c {input} |makeblastdb -in - -dbtype nucl -out {params.db_name} -title contigs.db 2> {log}
@@ -332,7 +332,7 @@ rule weighted_assembly_graphs:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_{id}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_{id}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -348,7 +348,7 @@ rule weighted_assembly_graphs_all_samples:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     shell:
         """
         touch {output}
@@ -368,7 +368,7 @@ rule weighted_alignment_graph:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -392,7 +392,7 @@ rule create_assembly_alignment_graph:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -417,7 +417,7 @@ rule n2v_assembly_alignment_graph:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     conda: THIS_FILE_DIR / "envs/node2vec.yaml"
     shell:
@@ -445,7 +445,7 @@ rule extract_neighs_from_n2v_embeddings:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -474,7 +474,7 @@ rule run_contrastive_VAE:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -503,7 +503,7 @@ rule merge_circular_with_graph_clusters:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
@@ -524,7 +524,7 @@ rule run_geNomad:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     conda: THIS_FILE_DIR / "envs/genomad.yaml"
     shell:
         """
@@ -555,7 +555,7 @@ rule classify_bins_with_geNomad:
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
-    log: config.get("log", str(OUTDIR) + "/log/") + "{key}_" + rulename
+    log: config.get("log", f"{str(OUTDIR)}/log/") + "{key}_" + rulename
     # conda: THIS_FILE_DIR / "envs/pipeline_conda.yaml"
     shell:
         """
