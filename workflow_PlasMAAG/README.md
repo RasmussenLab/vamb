@@ -1,6 +1,6 @@
 # TODO
 - [ ] Remove seed from vamb asymmetric
-- [ ] Write section on output files
+- [x] Write section on output files
 - [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproducibility
 
 # PlasMAAG workflow
@@ -53,7 +53,40 @@ The path to the SPAdes output directory (under the assembly_dir column in the ab
 | A metadata file                     | `contigs.paths`                         |
 
 ## Output files
-(Description of output files, maybe a nice tree)
+The program produces three directories in the output directory choosen
+```
+< output directory >
+├── intermidiate_files
+├── log
+└── results
+```
+### results directory
+The *results* directory contains:
+````
+results
+├── candidate_plasmids.tsv : The candidate plasmids
+├── candidate_genomes.tsv : The candidate chromosomes
+└── scores.tsv : The scores for each contig 
+````
+The `candidate_genomes.tsv` and `candidate_genomes.tsv` files are formatted as:
+````
+clustername     contigname
+nneighs_1051    Ssample0CNODE_198_length_19708_cov_59.381163
+nneighs_1051    Ssample1CNODE_2317_length_2483_cov_58.855437
+````
+Here the sample names in the contignames (eg `sample0` in `Ssample0CNODE_198_length_19708_cov_59.381163`) refer to the order the reads were passed to the program. See example below:
+``` 
+read1                          read2
+im/a/path/to/sample_1/read1    im/a/path/to/sample_1/read2  <-- Contigs from these reads would be called sample0
+im/a/path/to/sample_2/read1    im/a/path/to/sample_2/read2  <-- Contigs from these reads would be called sample1
+```
+
+### log directory
+The *log* directory contains the output from the various rules called in the snakemake pipeline.
+So for example `< output directory > /log/intermidiate_files_run_contrastive_VAE` would contain the log produced by running the `contrastive_VAE` rule in snakemake. 
+ 
+### intermidiate_files directory
+The *intermidiate_files* directory contains the intermidiate files from the pipeline. 
 
 ## Advanced
 ### Using an allready downloaded geNomad database
