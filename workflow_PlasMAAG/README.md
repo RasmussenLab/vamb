@@ -181,6 +181,6 @@ snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 ```
 
 # TODO
-- [ ] Remove seed from vamb asymmetric
+- [x] Remove seed from vamb asymmetric
 - [x] Write section on output files
 - [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproducibility
