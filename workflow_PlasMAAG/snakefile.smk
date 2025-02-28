@@ -537,7 +537,7 @@ rule classify_bins_with_geNomad:
         os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks','classify_bins_with_geNomad.finished'),
         candidate_genomes =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrcirc_' + GENOMAD_THR_CIRC + '.tsv'),
-        candidate_genomes_scores =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'),
+        candidate_genomes_scores =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_thrcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'),
         candidate_plasmids_scores = os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids_gN_scores.tsv'),
     params:
         path = os.path.join(SRC_DIR, 'classify_bins_with_geNomad.py'),
