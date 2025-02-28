@@ -95,6 +95,6 @@ run_geNomad:
   threads: 40
   mem_gb: 245
 
-run_vamb_asymmetric:
+run_contrastive_VAE:
   threads: 40
   mem_gb: 250

@@ -115,9 +115,9 @@ except FileExistsError:
 rulename = "all"
 rule all:
     input:
-        candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
+        candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
         assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'), key=sample_id.keys()),
-        assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}",'rule_completed_checks/run_vamb_asymmetric.finished'), key=sample_id.keys()),
+        assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}",'rule_completed_checks/run_contrastive_VAE.finished'), key=sample_id.keys()),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     output:
@@ -447,22 +447,21 @@ rule extract_neighs_from_n2v_embeddings:
         """
 
 # 7. Run vamb to merge, split, and expand the hoods
-rulename = "run_vamb_asymmetric"
-rule run_vamb_asymmetric:
+rulename = "run_contrastive_VAE"
+rule run_contrastive_VAE:
     input:
         notused = os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished'), # TODO why is this not used?
         contigs = OUTDIR /  "{key}/assembly_mapping_output/contigs.flt.fna.gz",
         bamfiles = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=wildcards.key, id=sample_id[wildcards.key]),
         nb_file = os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
     output:
-        directory = directory(os.path.join(OUTDIR,"{key}", 'vamb_asymmetric')),
-        bins = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),
-        finished = os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
-        lengths = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','lengths.npz'),
-        vae_clusters = os.path.join(OUTDIR, '{key}','vamb_asymmetric/vae_clusters_community_based_complete_unsplit.tsv'),
-        compo = os.path.join(OUTDIR, '{key}','vamb_asymmetric/composition.npz'),
+        directory = directory(os.path.join(OUTDIR,"{key}", 'contrastive_VAE')),
+        bins = os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_unsplit.tsv'),
+        finished = os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_contrastive_VAE.finished'),
+        lengths = os.path.join(OUTDIR,"{key}",'contrastive_VAE','lengths.npz'),
+        vae_clusters = os.path.join(OUTDIR, '{key}','contrastive_VAE/vae_clusters_community_based_complete_unsplit.tsv'),
+        compo = os.path.join(OUTDIR, '{key}','contrastive_VAE/composition.npz'),
     params:
-        walltime='86400',
         cuda='--cuda' if CUDA else ''
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
@@ -484,12 +483,12 @@ rule run_vamb_asymmetric:
 rulename = "merge_circular_with_graph_clusters"
 rule merge_circular_with_graph_clusters:
     input:
-        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_contrastive_VAE.finished'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/circularisation/circularisation.finished'),
         os.path.join(OUTDIR,"{key}",'circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
-        vae_clusters = os.path.join(OUTDIR, '{key}','vamb_asymmetric/vae_clusters_community_based_complete_unsplit.tsv')
+        vae_clusters = os.path.join(OUTDIR, '{key}','contrastive_VAE/vae_clusters_community_based_complete_unsplit.tsv')
     output:
-        os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
+        os.path.join(OUTDIR,'{key}','contrastive_VAE','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/merge_circular_with_graph_clusters.finished')
     params:
         path=os.path.join(SRC_DIR, 'merge_circular_plamb_clusters.py'),
@@ -530,15 +529,15 @@ rulename = "classify_bins_with_geNomad"
 rule classify_bins_with_geNomad:
     input:
         os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv'),
-        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_contrastive_VAE.finished'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'),
-        os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),
+        os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_unsplit.tsv'),
         contignames = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted",
-        lengths = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','lengths.npz'),
-        comm_clusters = os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
-        composition = os.path.join(OUTDIR,'{key}','vamb_asymmetric','composition.npz'),
+        lengths = os.path.join(OUTDIR,"{key}",'contrastive_VAE','lengths.npz'),
+        comm_clusters = os.path.join(OUTDIR,'{key}','contrastive_VAE','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
+        composition = os.path.join(OUTDIR,'{key}','contrastive_VAE','composition.npz'),
     output:
-        os.path.join(OUTDIR,"{key}",'vamb_asymmetric',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
+        os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
         os.path.join(OUTDIR,"{key}",'log','classify_bins_with_geNomad.finished')
     params:
         path = os.path.join(SRC_DIR, 'classify_bins_with_geNomad.py'),
@@ -550,7 +549,7 @@ rule classify_bins_with_geNomad:
     shell:
         """
         python {params.path} --clusters {input.comm_clusters} \
-         --dflt_cls {OUTDIR}/{wildcards.key}/vamb_asymmetric/vae_clusters_density_unsplit.tsv --scores {input[0]} --outp {output[0]} \
+         --dflt_cls {OUTDIR}/{wildcards.key}/contrastive_VAE/vae_clusters_density_unsplit.tsv --scores {input[0]} --outp {output[0]} \
          --composition {input.composition} --thr {GENOMAD_THR} &> {log}
         touch {output[1]}
         """
