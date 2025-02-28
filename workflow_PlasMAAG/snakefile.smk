@@ -48,6 +48,7 @@ CUDA = True if config.get("cuda") ==  "True" else False
 NEIGHS_R=config.get("neighs_r", '0.10') 
 MAX_INSERT_SIZE_CIRC = int(config.get("max_insert_size_circ", 50))
 GENOMAD_THR = config.get("genomad_thr", "0.75")
+GENOMAD_THR_CIRC = config.get("genomad_thr_circ", "0.5")
  
 ## ----------- ##
 
@@ -116,15 +117,22 @@ rulename = "all"
 rule all:
     input:
         candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
+        candidate_genomes = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '.tsv'),key=sample_id.keys()), #
         assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'), key=sample_id.keys()),
         assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}",'rule_completed_checks/run_contrastive_VAE.finished'), key=sample_id.keys()),
+        candidate_genomes_scores =expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'), key=sample_id.keys()),
+        candidate_plasmids_scores = expand(os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids_gN_scores.tsv'), key=sample_id.keys()),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     output:
-        OUTDIR / "results/candidate_plasmids.tsv",
+        candidate_plasmids = OUTDIR / "results/candidate_plasmids.tsv",
+        candidate_genomes = OUTDIR / "results/candidate_genomes.tsv",
+        combined_scores = OUTDIR / "results/scores.tsv",
     shell: 
         """
-        cat {input.candidate_plasmids} > {output}
+        cat {input.candidate_plasmids} > {output.candidate_plasmids}
+        cat {input.candidate_genomes} > {output.candidate_genomes}
+        cat {input.candidate_genomes_scores} {input.candidate_plasmids_scores} > {output.combined_scores}
         """
 
 # If the genomad database is given as an argument don't download it again
@@ -294,7 +302,7 @@ rule align_contigs:
         OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
     output:
         os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
-        os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished'),
     params:
         db_name=os.path.join(OUTDIR,'tmp', "{key}",'blastn','contigs.db'), # TODO should be made?
     threads: threads_fn(rulename)
@@ -538,7 +546,10 @@ rule classify_bins_with_geNomad:
         composition = os.path.join(OUTDIR,'{key}','contrastive_VAE','composition.npz'),
     output:
         os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),
-        os.path.join(OUTDIR,"{key}",'log','classify_bins_with_geNomad.finished')
+        os.path.join(OUTDIR,"{key}",'log','classify_bins_with_geNomad.finished'),
+        candidate_genomes =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '.tsv'),
+        candidate_genomes_scores =os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_' + GENOMAD_THR + '_threcirc_' + GENOMAD_THR_CIRC + '_gN_scores.tsv'),
+        candidate_plasmids_scores = os.path.join(OUTDIR,"{key}",'contrastive_VAE',f'vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids_gN_scores.tsv'),
     params:
         path = os.path.join(SRC_DIR, 'classify_bins_with_geNomad.py'),
     threads: threads_fn(rulename)
@@ -550,7 +561,12 @@ rule classify_bins_with_geNomad:
         """
         python {params.path} --clusters {input.comm_clusters} \
          --dflt_cls {OUTDIR}/{wildcards.key}/contrastive_VAE/vae_clusters_density_unsplit.tsv --scores {input[0]} --outp {output[0]} \
-         --composition {input.composition} --thr {GENOMAD_THR} &> {log}
+         --composition {input.composition} --thr {GENOMAD_THR} --thr_circ {GENOMAD_THR_CIRC} &> {log}
         touch {output[1]}
         """
 
+# │       ├── vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_0.75_thrcirc_0.5_gN_scores.tsv   |-  Scores should be in results
+# │       ├── vae_clusters_density_unsplit_geNomadplasclustercontigs_extracted_thr_0.75_thrcirc_0.5.tsv           |  Clusters | in results
+# │       ├── vae_clusters_graph_thr_0.75_candidate_plasmids_gN_scores.tsv  | - Scores should be used in results
+# │       ├── vae_clusters_graph_thr_0.75_candidate_plasmids.tsv           /  - In results
+# │       └── vae_clusters_unsplit.tsv # TODO why is this generated ?  - Remvoe it 

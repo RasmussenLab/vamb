@@ -13,6 +13,8 @@ Update README
          - Write section on output files | only on the main output results files. | we can update in the future
       
 
+# │       └── vae_clusters_unsplit.tsv # TODO why is this generated ?  - Remvoe it 
+
 results/ 
         plasmid_clusters.tsv
         non_plasmid_clusters.tsv
@@ -220,6 +222,7 @@ first_pipeline_part
 │       ├── vae_clusters_graph_thr_0.75_candidate_plasmids.tsv           /  - In results
 │       └── vae_clusters_unsplit.tsv # TODO why is this generated ?  - Remvoe it 
 
+<!--  TODO:  -->
 ├── tmp // This should be moved.  to /secondpart/blastn/database
 │   └── Plamb_Ptracker
 │       └── blastn
