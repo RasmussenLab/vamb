@@ -1,6 +1,7 @@
 TODO first part
 rename first_pipeline_part and second
 rename to contrastive_VAE
+
 Create result clusters. | copy with new names
         plasmid_clusters.tsv
         non_plasmid_clusters.tsv
@@ -75,7 +76,7 @@ first_pipeline_part
 ├── Plamb_Ptracker # Rename: second_pipeline_part
 
 
-## What to do here
+## What to do here -- these are not logs but checks
 │   ├── log # Fine
 │   │   ├── alignment_graph_processing
 │   │   │   └── weighted_alignment_graph.finished

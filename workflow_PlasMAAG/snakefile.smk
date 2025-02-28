@@ -116,8 +116,8 @@ rulename = "all"
 rule all:
     input:
         candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
-        assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
-        assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}", 'log/run_vamb_asymmetric.finished'), key=sample_id.keys()),
+        assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'), key=sample_id.keys()),
+        assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}",'rule_completed_checks/run_vamb_asymmetric.finished'), key=sample_id.keys()),
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     output:
@@ -271,8 +271,8 @@ rule circularize:
     input:
         bamfiles = lambda wildcards: expand(OUTDIR /  "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=f"{wildcards.key}", id=sample_id[wildcards.key]),
     output:
-        os.path.join(OUTDIR,'{key}','tmp','circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
-        os.path.join(OUTDIR,'{key}','log/circularisation/circularisation.finished')
+        os.path.join(OUTDIR,"{key}",'circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/circularisation/circularisation.finished')
     params:
         path = os.path.join(SRC_DIR, 'circularisation.py'),
         dir_bams = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted", key=wildcards.key)
@@ -294,7 +294,7 @@ rule align_contigs:
         OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
     output:
         os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
-        os.path.join(OUTDIR,"{key}",'log/blastn/align_contigs.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished')
     params:
         db_name=os.path.join(OUTDIR,'tmp', "{key}",'blastn','contigs.db'), # TODO should be made?
     threads: threads_fn(rulename)
@@ -351,7 +351,7 @@ rulename = "weighted_alignment_graph"
 rule weighted_alignment_graph:
     input:
         os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
-        os.path.join(OUTDIR,"{key}",'log/blastn/align_contigs.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished')
     output:
         os.path.join(OUTDIR,"{key}",'alignment_graph','alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished')
@@ -430,7 +430,7 @@ rule extract_neighs_from_n2v_embeddings:
         contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
         directory(os.path.join(OUTDIR,"{key}",'neighs')),
-        os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
+        os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
         os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished')
     params:
         path = os.path.join(SRC_DIR, 'embeddings_to_neighs.py'),
@@ -453,11 +453,11 @@ rule run_vamb_asymmetric:
         notused = os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished'), # TODO why is this not used?
         contigs = OUTDIR /  "{key}/assembly_mapping_output/contigs.flt.fna.gz",
         bamfiles = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=wildcards.key, id=sample_id[wildcards.key]),
-        nb_file = os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
+        nb_file = os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
     output:
         directory = directory(os.path.join(OUTDIR,"{key}", 'vamb_asymmetric')),
         bins = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),
-        finished = os.path.join(OUTDIR,"{key}",'log/run_vamb_asymmetric.finished'),
+        finished = os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
         lengths = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','lengths.npz'),
         vae_clusters = os.path.join(OUTDIR, '{key}','vamb_asymmetric/vae_clusters_community_based_complete_unsplit.tsv'),
         compo = os.path.join(OUTDIR, '{key}','vamb_asymmetric/composition.npz'),
@@ -484,13 +484,13 @@ rule run_vamb_asymmetric:
 rulename = "merge_circular_with_graph_clusters"
 rule merge_circular_with_graph_clusters:
     input:
-        os.path.join(OUTDIR,'{key}','log/run_vamb_asymmetric.finished'),
-        os.path.join(OUTDIR,'{key}','log/circularisation/circularisation.finished'),
-        os.path.join(OUTDIR,'{key}','tmp','circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/circularisation/circularisation.finished'),
+        os.path.join(OUTDIR,"{key}",'circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
         vae_clusters = os.path.join(OUTDIR, '{key}','vamb_asymmetric/vae_clusters_community_based_complete_unsplit.tsv')
     output:
         os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
-        os.path.join(OUTDIR,'{key}','log/merge_circular_with_graph_clusters.finished')
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/merge_circular_with_graph_clusters.finished')
     params:
         path=os.path.join(SRC_DIR, 'merge_circular_plamb_clusters.py'),
     threads: threads_fn(rulename)
@@ -512,7 +512,7 @@ rule run_geNomad:
         geNomad_db = geNomad_db
     output:
         directory(os.path.join(OUTDIR,"{key}",'geNomad')),
-        os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'),
         os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
@@ -530,8 +530,8 @@ rulename = "classify_bins_with_geNomad"
 rule classify_bins_with_geNomad:
     input:
         os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv'),
-        os.path.join(OUTDIR,"{key}",'log/run_vamb_asymmetric.finished'),
-        os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_vamb_asymmetric.finished'),
+        os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'),
         os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),
         contignames = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted",
         lengths = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','lengths.npz'),
