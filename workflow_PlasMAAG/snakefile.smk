@@ -293,7 +293,7 @@ rule align_contigs:
     input:
         OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
     output:
-        os.path.join(OUTDIR,"{key}",'tmp','blastn','blastn_all_against_all.txt'),
+        os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
         os.path.join(OUTDIR,"{key}",'log/blastn/align_contigs.finished')
     params:
         db_name=os.path.join(OUTDIR,'tmp', "{key}",'blastn','contigs.db'), # TODO should be made?
@@ -317,7 +317,7 @@ rule weighted_assembly_graphs:
         graph = assembly_graph,
         graphinfo  = contigs_paths
     output:
-        os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'),
+        os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'),
         os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_{id}.finished'),
     params:
         path = os.path.join(SRC_DIR, 'process_gfa.py'),
@@ -334,7 +334,7 @@ rule weighted_assembly_graphs:
 
 rulename = "weighted_assembly_graphs_all_samples"
 rule weighted_assembly_graphs_all_samples:
-    input: lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'),key=wildcards.key, id=sample_id[wildcards.key]),
+    input: lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'),key=wildcards.key, id=sample_id[wildcards.key]),
     output:
         os.path.join(OUTDIR,"{key}",'log','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
     threads: threads_fn(rulename)
@@ -350,10 +350,10 @@ rule weighted_assembly_graphs_all_samples:
 rulename = "weighted_alignment_graph"
 rule weighted_alignment_graph:
     input:
-        os.path.join(OUTDIR,"{key}",'tmp','blastn','blastn_all_against_all.txt'),
+        os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
         os.path.join(OUTDIR,"{key}",'log/blastn/align_contigs.finished')
     output:
-        os.path.join(OUTDIR,"{key}",'tmp','alignment_graph','alignment_graph.pkl'),
+        os.path.join(OUTDIR,"{key}",'alignment_graph','alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'process_blastout.py'),
@@ -372,12 +372,12 @@ rule weighted_alignment_graph:
 rulename = "create_assembly_alignment_graph"
 rule create_assembly_alignment_graph:
     input:
-        alignment_graph_file = os.path.join(OUTDIR,"{key}",'tmp','alignment_graph','alignment_graph.pkl'),
-        assembly_graph_files = lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'tmp','assembly_graphs','{id}.pkl'), key=wildcards.key, id=sample_id[wildcards.key]),
+        alignment_graph_file = os.path.join(OUTDIR,"{key}",'alignment_graph','alignment_graph.pkl'),
+        assembly_graph_files = lambda wildcards: expand(os.path.join(OUTDIR,"{key}",'assembly_graphs','{id}.pkl'), key=wildcards.key, id=sample_id[wildcards.key]),
         weighted_alignment_graph_finished_log = os.path.join(OUTDIR,"{key}",'log','alignment_graph_processing','weighted_alignment_graph.finished'),
         weighted_assembly_graphs_all_samples_finished_log = os.path.join(OUTDIR,"{key}", 'log','assembly_graph_processing','weighted_assembly_graphs_all_samples.finished')
     output:
-        os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
+        os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}", 'log','create_assembly_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'merge_assembly_alignment_graphs.py'),
@@ -396,13 +396,13 @@ rule create_assembly_alignment_graph:
 rulename = "n2v_assembly_alignment_graph"
 rule n2v_assembly_alignment_graph:
     input:
-        os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
+        os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}",'log','create_assembly_alignment_graph.finished'), 
         contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
-        directory(os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings')),
-        os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
-        os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
+        directory(os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings')),
+        os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
+        os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
         os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished')
     params:
         path = os.path.join(SRC_DIR, 'fastnode2vec_args.py'),
@@ -423,13 +423,13 @@ rule n2v_assembly_alignment_graph:
 rulename = "extract_neighs_from_n2v_embeddings"
 rule extract_neighs_from_n2v_embeddings:
     input:
-        os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
-        os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
+        os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
+        os.path.join(OUTDIR,"{key}",'n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
         os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished'),
-        os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
+        os.path.join(OUTDIR,"{key}",'assembly_alignment_graph.pkl'),
         contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
-        directory(os.path.join(OUTDIR,"{key}",'tmp','neighs')),
+        directory(os.path.join(OUTDIR,"{key}",'neighs')),
         os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
         os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished')
     params:
@@ -511,9 +511,9 @@ rule run_geNomad:
         contigs = OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
         geNomad_db = geNomad_db
     output:
-        directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
+        directory(os.path.join(OUTDIR,"{key}",'geNomad')),
         os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
-        os.path.join(OUTDIR,"{key}",'tmp','geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
+        os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv')
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -529,7 +529,7 @@ rule run_geNomad:
 rulename = "classify_bins_with_geNomad"
 rule classify_bins_with_geNomad:
     input:
-        os.path.join(OUTDIR,"{key}",'tmp','geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv'),
+        os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv'),
         os.path.join(OUTDIR,"{key}",'log/run_vamb_asymmetric.finished'),
         os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
         os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),

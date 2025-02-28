@@ -73,6 +73,9 @@ first_pipeline_part
 │           └── contigs.renamed.fasta
 ├── log # Removed 
 ├── Plamb_Ptracker # Rename: second_pipeline_part
+
+
+## What to do here
 │   ├── log # Fine
 │   │   ├── alignment_graph_processing
 │   │   │   └── weighted_alignment_graph.finished
@@ -100,7 +103,9 @@ first_pipeline_part
 │   │   │   └── extract_neighs_from_n2v_embeddings.finished
 │   │   ├── run_geNomad.finished
 │   │   └── run_vamb_asymmetric.finished
-│   ├── tmp
+
+### Move out ?? 
+│   ├── tmp  ### Move out ?? 
 │   │   ├── alignment_graph
 │   │   │   └── alignment_graph.pkl
 │   │   ├── assembly_alignment_graph.pkl
@@ -187,6 +192,7 @@ first_pipeline_part
 │   │       ├── neighs_intraonly_rm_object_r_0.05.npz
 │   │       ├── neighs_object_r_0.05.npz
 │   │       └── neighs_split_object_r_0.05.npz
+
 │   └── vamb_asymmetric# TODO Change folder name to: contrastive_VAE
 │       ├── abundance.npz
 │       ├── composition.npz
@@ -212,6 +218,7 @@ first_pipeline_part
 │       ├── vae_clusters_graph_thr_0.75_candidate_plasmids_gN_scores.tsv  | - Scores should be used in results
 │       ├── vae_clusters_graph_thr_0.75_candidate_plasmids.tsv           /  - In results
 │       └── vae_clusters_unsplit.tsv # TODO why is this generated ?  - Remvoe it 
+
 ├── tmp // This should be moved.  to /secondpart/blastn/database
 │   └── Plamb_Ptracker
 │       └── blastn
