@@ -302,7 +302,7 @@ rule align_contigs:
         os.path.join(OUTDIR,"{key}",'blastn','blastn_all_against_all.txt'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/blastn/align_contigs.finished'),
     params:
-        db_name=os.path.join(OUTDIR,'tmp', "{key}",'blastn','contigs.db'), # TODO should be made?
+        db_name=os.path.join(OUTDIR, "{key}",'blastn','contigs.db'), # TODO should be made?
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
