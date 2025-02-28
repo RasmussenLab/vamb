@@ -45,7 +45,7 @@ PLAMB_PRELOAD = config.get("plamb_preload", "")
 
 # Other options
 CUDA = True if config.get("cuda") ==  "True" else False
-NEIGHS_R=config.get("neighs_r", '0.10') 
+NEIGHS_R=config.get("neighs_r", '0.1') 
 MAX_INSERT_SIZE_CIRC = int(config.get("max_insert_size_circ", 50))
 GENOMAD_THR = config.get("genomad_thr", "0.75")
 GENOMAD_THR_CIRC = config.get("genomad_thr_circ", "0.5")
