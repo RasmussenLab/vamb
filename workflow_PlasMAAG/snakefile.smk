@@ -132,7 +132,8 @@ rule all:
         """
         cat {input.candidate_plasmids} > {output.candidate_plasmids}
         cat {input.candidate_genomes} > {output.candidate_genomes}
-        cat {input.candidate_genomes_scores} {input.candidate_plasmids_scores} > {output.combined_scores}
+        # Remove header from one of the files
+        tail -n+2 scores.tsv {input.candidate_genomes_scores} | cat {input.candidate_plasmids_scores} - > {output.combined_scores}
         """
 
 # If the genomad database is given as an argument don't download it again
