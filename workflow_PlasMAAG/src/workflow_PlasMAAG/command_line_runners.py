@@ -95,6 +95,8 @@ See following installation guide: https://snakemake.readthedocs.io/en/stable/get
         self.add_arguments(["--use-conda"])
         # Always rerun incomplete
         self.add_arguments(["--rerun-incomplete"])
+        # Always keep incomplete
+        self.add_arguments(["--keep-incomplete"])
 
         self.add_to_config(f"output_directory={self.output_directory}")
         # Add config options -- these needs to be passed together to snakemake
