@@ -57,9 +57,9 @@ if config.get("read_file") == None and config.get("read_assembly_dir") == None a
     sys.exit()
 
 # Set default paths for the SPades outputfiles - running the pipeline from allready assembled reads overwrite these values
-contigs =  OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.fasta"
-contigs_paths =  OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.paths"
-assembly_graph = OUTDIR / "first_pipeline_part/{key}/spades_{id}/assembly_graph_after_simplification.gfa"
+contigs =  OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.fasta"
+contigs_paths =  OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.paths"
+assembly_graph = OUTDIR / "{key}/assembly_mapping_output/spades_{id}/assembly_graph_after_simplification.gfa"
 
 # Set default values for dictonaries containg information about the input information
 # The way snakemake parses snakefiles means we have to define them even though they will always be present
@@ -77,7 +77,7 @@ if config.get("read_file") != None:
         # Earlier version of the pipeline could handle passing several samples at the same time which would be processed separatly.
         # For easier user input this was removed. Therefore the "sample" is always set to the same. 
         # By parsing different sample names from the input this can be implemented again - this is nice eg. for benchmarking
-        sample = "Plamb_Ptracker" 
+        sample = "intermidiate_files" 
         sample_id[sample].append(id)
         sample_id_path[sample][id] = [read1, read2]
 
@@ -89,7 +89,7 @@ if config.get("read_assembly_dir") != None:
     sample_id_path_assembly = collections.defaultdict(dict)
     for id, (read1, read2, assembly) in enumerate(zip( df.read1, df.read2, df.assembly_dir)):
         id = f"sample{str(id)}"
-        sample = "run_1"
+        sample = "intermidiate_files"
         sample_id[sample].append(id)
         sample_id_path[sample][id] = [read1, read2]
         sample_id_path_assembly[sample][id] = [assembly]
@@ -112,11 +112,20 @@ try:
 except FileExistsError:
     pass
 
+rulename = "all"
 rule all:
     input:
-        expand(os.path.join(OUTDIR, "{key}", 'log/run_vamb_asymmetric.finished'), key=sample_id.keys()),
-        expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
-        expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
+        candidate_plasmids = expand(os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_graph_thr_' + GENOMAD_THR + '_candidate_plasmids.tsv'),key=sample_id.keys()),
+        assert_genomad_finished = expand(os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'), key=sample_id.keys()),
+        assert_vamb_finished = expand(os.path.join(OUTDIR, "{key}", 'log/run_vamb_asymmetric.finished'), key=sample_id.keys()),
+    threads: threads_fn(rulename)
+    resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
+    output:
+        OUTDIR / "results/candidate_plasmids.tsv",
+    shell: 
+        """
+        cat {input.candidate_plasmids} > {output}
+        """
 
 # If the genomad database is given as an argument don't download it again
 # This works boths from when the tool is called from the CLI wrapper and from snakemake if the config is extended setting the genomad_database variable
@@ -147,10 +156,10 @@ rule spades:
        fw = read_fw, 
        rv = read_rv, 
     output:
-       outdir = directory(OUTDIR / "first_pipeline_part/{key}/spades_{id}"),
-       outfile = OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.fasta",
-       graph = OUTDIR / "first_pipeline_part/{key}/spades_{id}/assembly_graph_after_simplification.gfa",
-       graphinfo  = OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.paths",
+       outdir = directory(OUTDIR / "{key}/assembly_mapping_output/spades_{id}"),
+       outfile = OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.fasta",
+       graph = OUTDIR / "{key}/assembly_mapping_output/spades_{id}/assembly_graph_after_simplification.gfa",
+       graphinfo  = OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.paths",
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
@@ -168,7 +177,7 @@ rule rename_contigs:
     input:
         contigs,
     output:
-        OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.renamed.fasta"
+        OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.renamed.fasta"
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
@@ -181,8 +190,8 @@ rule rename_contigs:
 # Cat the contigs together in one file to later map each pair of reads against all the contigs together
 rulename="cat_contigs"
 rule cat_contigs:
-    input: lambda wildcards: expand(OUTDIR / "first_pipeline_part/{key}/spades_{id}/contigs.renamed.fasta", key=wildcards.key, id=sample_id[wildcards.key]),
-    output: OUTDIR / "first_pipeline_part/{key}/contigs.flt.fna.gz"
+    input: lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/spades_{id}/contigs.renamed.fasta", key=wildcards.key, id=sample_id[wildcards.key]),
+    output: OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz"
     threads: threads_fn(rulename)
     params: script =  SRC_DIR / "concatenate.py"
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
@@ -196,9 +205,9 @@ rule cat_contigs:
 rulename = "get_contig_names"
 rule get_contig_names:
     input:
-        OUTDIR / "first_pipeline_part/{key}/contigs.flt.fna.gz"
+        OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz"
     output: 
-        OUTDIR / "first_pipeline_part/{key}/contigs.names.sorted"
+        OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -212,9 +221,9 @@ rule Strobealign_bam_default:
         input: 
             fw = read_fw,
             rv = read_rv,
-            contig = OUTDIR /"first_pipeline_part/{key}/contigs.flt.fna.gz",
+            contig = OUTDIR /"{key}/assembly_mapping_output/contigs.flt.fna.gz",
         output:
-            OUTDIR / "first_pipeline_part/{key}/mapped/{id}.bam"
+            OUTDIR / "{key}/assembly_mapping_output/mapped/{id}.bam"
         threads: threads_fn(rulename)
         resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
         benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
@@ -229,9 +238,9 @@ rule Strobealign_bam_default:
 rulename="sort"
 rule sort:
     input:
-        OUTDIR / "first_pipeline_part/{key}/mapped/{id}.bam",
+        OUTDIR / "{key}/assembly_mapping_output/mapped/{id}.bam",
     output:
-        OUTDIR / "first_pipeline_part/{key}/mapped_sorted/{id}.bam.sort",
+        OUTDIR / "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort",
     threads: threads_fn(rulename)
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_{id}_" + rulename
@@ -260,13 +269,13 @@ rule sort:
 rulename = "circularize"
 rule circularize:
     input:
-        bamfiles = lambda wildcards: expand(OUTDIR /  "first_pipeline_part/{key}/mapped_sorted/{id}.bam.sort", key=f"{wildcards.key}", id=sample_id[wildcards.key]),
+        bamfiles = lambda wildcards: expand(OUTDIR /  "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=f"{wildcards.key}", id=sample_id[wildcards.key]),
     output:
         os.path.join(OUTDIR,'{key}','tmp','circularisation','max_insert_len_%i_circular_clusters.tsv.txt'%MAX_INSERT_SIZE_CIRC),
         os.path.join(OUTDIR,'{key}','log/circularisation/circularisation.finished')
     params:
         path = os.path.join(SRC_DIR, 'circularisation.py'),
-        dir_bams = lambda wildcards: expand(OUTDIR / "first_pipeline_part/{key}/mapped_sorted", key=wildcards.key)
+        dir_bams = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted", key=wildcards.key)
     threads: threads_fn(rulename),
     resources: walltime = walltime_fn(rulename), mem_gb = mem_gb_fn(rulename)
     benchmark: config.get("benchmark", "benchmark/") + "{key}_" + rulename
@@ -282,7 +291,7 @@ rule circularize:
 rulename = "align_contigs"
 rule align_contigs:
     input:
-        OUTDIR / "first_pipeline_part/{key}/contigs.flt.fna.gz",
+        OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
     output:
         os.path.join(OUTDIR,"{key}",'tmp','blastn','blastn_all_against_all.txt'),
         os.path.join(OUTDIR,"{key}",'log/blastn/align_contigs.finished')
@@ -389,7 +398,7 @@ rule n2v_assembly_alignment_graph:
     input:
         os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
         os.path.join(OUTDIR,"{key}",'log','create_assembly_alignment_graph.finished'), 
-        contig_names_file = OUTDIR / "first_pipeline_part/{key}/contigs.names.sorted"
+        contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings')),
         os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','embeddings.npz'),
@@ -418,7 +427,7 @@ rule extract_neighs_from_n2v_embeddings:
         os.path.join(OUTDIR,"{key}",'tmp','n2v','assembly_alignment_graph_embeddings','contigs_embedded.txt'),
         os.path.join(OUTDIR,"{key}",'log','n2v','n2v_assembly_alignment_graph.finished'),
         os.path.join(OUTDIR,"{key}",'tmp','assembly_alignment_graph.pkl'),
-        contig_names_file = OUTDIR / "first_pipeline_part/{key}/contigs.names.sorted"
+        contig_names_file = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted"
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','neighs')),
         os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R),
@@ -442,8 +451,8 @@ rulename = "run_vamb_asymmetric"
 rule run_vamb_asymmetric:
     input:
         notused = os.path.join(OUTDIR,"{key}",'log','neighs','extract_neighs_from_n2v_embeddings.finished'), # TODO why is this not used?
-        contigs = OUTDIR /  "first_pipeline_part/{key}/contigs.flt.fna.gz",
-        bamfiles = lambda wildcards: expand(OUTDIR / "first_pipeline_part/{key}/mapped_sorted/{id}.bam.sort", key=wildcards.key, id=sample_id[wildcards.key]),
+        contigs = OUTDIR /  "{key}/assembly_mapping_output/contigs.flt.fna.gz",
+        bamfiles = lambda wildcards: expand(OUTDIR / "{key}/assembly_mapping_output/mapped_sorted/{id}.bam.sort", key=wildcards.key, id=sample_id[wildcards.key]),
         nb_file = os.path.join(OUTDIR,'{key}','tmp','neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
     output:
         directory = directory(os.path.join(OUTDIR,"{key}", 'vamb_asymmetric')),
@@ -499,7 +508,7 @@ rule merge_circular_with_graph_clusters:
 rulename = "run_geNomad"
 rule run_geNomad:
     input:
-        contigs = OUTDIR / "first_pipeline_part/{key}/contigs.flt.fna.gz",
+        contigs = OUTDIR / "{key}/assembly_mapping_output/contigs.flt.fna.gz",
         geNomad_db = geNomad_db
     output:
         directory(os.path.join(OUTDIR,"{key}",'tmp','geNomad')),
@@ -524,7 +533,7 @@ rule classify_bins_with_geNomad:
         os.path.join(OUTDIR,"{key}",'log/run_vamb_asymmetric.finished'),
         os.path.join(OUTDIR,"{key}",'log/run_geNomad.finished'),
         os.path.join(OUTDIR,"{key}",'vamb_asymmetric','vae_clusters_unsplit.tsv'),
-        contignames = OUTDIR / "first_pipeline_part/{key}/contigs.names.sorted",
+        contignames = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted",
         lengths = os.path.join(OUTDIR,"{key}",'vamb_asymmetric','lengths.npz'),
         comm_clusters = os.path.join(OUTDIR,'{key}','vamb_asymmetric','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
         composition = os.path.join(OUTDIR,'{key}','vamb_asymmetric','composition.npz'),
