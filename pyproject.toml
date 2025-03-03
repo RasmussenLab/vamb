@@ -3,11 +3,11 @@
 dynamic = ["version"]
 name = "vamb"
 dependencies = [
-    "numpy == 2.2.1",
-    "torch == 2.5.1",
+    "numpy == 1.26.4",
+    "torch == 2.6.0",
     "pycoverm == 0.6.2",
     "networkx == 3.4.2",
-    "scikit-learn == 1.6.0",
+    "scikit-learn == 1.6.1",
     "dadaptation == 3.2",
     "loguru == 0.7.3",
     "pyhmmer == 0.10.15",
