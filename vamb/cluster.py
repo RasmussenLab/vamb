@@ -3,7 +3,7 @@ __doc__ = "Iterative medoid clustering"
 import random as _random
 import numpy as _np
 import torch as _torch
-from collections import deque as _deque
+from collections import deque as _deque, OrderedDict
 from math import ceil as _ceil
 from torch.functional import Tensor as _Tensor
 import vamb.vambtools as _vambtools
@@ -15,6 +15,10 @@ _MEDOID_RADIUS = 0.05
 
 _DELTA_X = 0.005
 _XMAX = 0.3
+
+# We don't want to keep an indefinite amount of data points in the medoid cache,
+# since it can be a memory hog.
+MAX_CACHED_RESULTS = 64
 
 Cl = TypeVar("Cl", bound="Cluster")
 
@@ -283,7 +287,9 @@ class ClusterGenerator:
         self.histogram = histogram
         self.histogram_edges = _torch.linspace(0.0, _XMAX, round(_XMAX / _DELTA_X) + 1)
         self.kept_mask = kept_mask
-        self.medoid_cache: dict[int, tuple[_Tensor, _Tensor, float]] = dict()
+        self.medoid_cache: OrderedDict[int, tuple[_Tensor, _Tensor, float]] = (
+            OrderedDict()
+        )
 
     # It's an iterator itself
     def __iter__(self):
@@ -622,6 +628,10 @@ class ClusterGenerator:
         closeness = _MEDOID_RADIUS - distances[within_threshold]
         local_density = (self.lengths[within_threshold] * closeness).sum().item()
         result = (cluster, distances, local_density)
+
+        # Make room for a new element in the cache if full, by dropping the oldest entry
+        if len(self.medoid_cache) == MAX_CACHED_RESULTS:
+            self.medoid_cache.popitem(last=False)
         self.medoid_cache[medoid] = result
 
         return result
