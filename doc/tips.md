@@ -23,7 +23,7 @@ Hence, to use bins you can rely on, you will need to postprocess your bins:
   that pass some scoring criteria
 * You may use the information in the `vae_clusters_metadata.tsv` file (see Output),
   and e.g. remove all clusters marked as "Fallback", below a certain size, or with a too
-  high peak-valley ratio.
+  high peak-valley ratio. However, this is only recommended for advanced users.
 
 ### How binsplitting works
 In the recommended workflow, each sample is assembled independently, then the contigs are pooled
@@ -35,13 +35,15 @@ in different samples.
 To obtain mono-sample bins from the clusters, the clusters then split by their sample of origin in a process we call binsplitting.
 This reduces duplication in the output bins, and better preserves inter-sample diversity.
 
-Binplsitting is done by looking at the identifiers (headers) of the contigs in the FASTA file:
+Binsplitting is done by looking at the identifiers (headers) of the contigs in the FASTA file:
 They are assumed to be named according to the scheme `<sample identifier><separator><contig identifier>`,
 where:
 * The sample identifier uniquely identifies the same that the contig came from,
 * The separator separates the sample- and contig identifier, and is guaranteed to not be contained in the sample identifier
 * The contig identifier uniquely identifies the contig within the sample.
 When using the provided `src/concatenate.py` script, the names conform to this scheme, being named e.g.
-`S5C1042`, for sample 5, contig 1042. In this case, the separator is 'C'.
+`S5C1042`, for sample 5, contig 1042. In this case, the binsplit separator is 'C'.
 
 The separator can be set on command-line with the flag `-o`.
+It defaults to 'C', if all headers contain a 'C'.
+To disable binsplitting, pass `-o` without an argument.
