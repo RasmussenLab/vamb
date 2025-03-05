@@ -1,7 +1,4 @@
-# Vamb
-[![Read the Doc](https://readthedocs.org/projects/vamb/badge/?version=latest)](https://vamb.readthedocs.io/en/latest/)
-
-Read the documentation on how to use Vamb here: https://vamb.readthedocs.io/en/latest/
+# Variational Autoencoders for Metagenomic Binning (Vamb)
 
 Vamb is a family of metagenomic binners which feeds kmer composition and abundance into a variational autoencoder and clusters the embedding to form bins.
 Its binners perform excellently with multiple samples, and pretty good on single-sample data.
@@ -28,32 +25,3 @@ And a taxonomy predictor:
 
 See also [our tool BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl) for evaluating metagenomic bins when a ground truth is available,
 e.g. for simulated data or a mock microbiome.
-
-## Quickstart
-See [the documentation for more details.](https://vamb.readthedocs.io/en/latest/)
-
-```shell
-# Assemble your reads, one assembly per sample, e.g. with SPAdes
-for sample in 1 2 3; do
-    spades.py --meta ${sample}.{fw,rv}.fq.gz -t 24 -m 100gb -o asm_${sample};
-done    
-
-# Concatenate your assemblies, and rename the contigs to the naming scheme
-# S{sample}C{original contig name}. This can be done with a script provided by Vamb
-# in the vamb/src directory
-python src/concatenate.py contigs.fna.gz asm_{1,2,3}/contigs.fasta
-
-# Estimate sample-wise abundance by mapping reads to the contigs.
-# Any mapper will do, but we recommend strobealign with the --aemb flag
-mkdir aemb
-for sample in 1 2 3; do
-    strobealign -t 8 --aemb contigs.fna.gz ${sample}.{fw,rv}.fq.gz > aemb/${sample}.tsv;
-done
-
-# Paste the aemb files together to make a TSV file with given header
-echo -e "contigname\t1\t2\t3" > abundance.tsv # header
-paste aemb/1.tsv <(cut -f 2 aemb/2.tsv) <(cut -f 2 aemb/3.tsv) >> abundance.tsv
-
-# Run Vamb using the contigs and the directory with abundance files
-vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv
-```

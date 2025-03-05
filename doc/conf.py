@@ -96,7 +96,7 @@ html_theme_options = {
     "repository_branch": "main",
     "home_page_in_toc": True,
     "path_to_docs": "docs",
-    "show_navbar_depth": 1,
+    "show_navbar_depth": 2,
     "use_edit_page_button": True,
     "use_repository_button": True,
     "use_download_button": True,

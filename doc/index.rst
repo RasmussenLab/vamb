@@ -1,34 +1,28 @@
-Variational Autoencoders for Metagenomic Binning (VAMB)
-=======================================================
-
-.. include:: ../README.md
+.. include:: front_page.md
    :parser: myst_parser.sphinx_
-   :start-line: 1
 
 Table of contents
 ==================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: How to run
+   :maxdepth: 3
+
+   installation.md
+
+.. toctree::
+   :maxdepth: 3
    
    how_to_run.md
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Vamb output
+   :maxdepth: 3
    
-   outputs.md
+   inputs_outputs.md
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Tips for running Vamb
+   :maxdepth: 3
    
    tips.md
-
-.. toctree::
-   :maxdepth: 2
-   :caption: In-depth walkthrough
 
 Indices and tables
 ==================
