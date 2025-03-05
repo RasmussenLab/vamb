@@ -6,42 +6,43 @@ First figure out what you want to run:
 * Do you have contigs plus reads plus a taxonomic annotation of the contigs? Use __TaxVamb__
 * Do you only have contigs plus reads and want a decent, fast binner? Use __Vamb__
 
-We also support the __AVAMB__ binner. It's performance is in between TaxVamb and Vamb,
+We also support the now-obsolete __AVAMB__ binner. Its performance is in between TaxVamb and Vamb,
 but it requires more compute than either.
 I recommend new users run either TaxVamb or Vamb.
 
 ## Quickstart
 ### Vamb
 ```shell
-$ # Assemble your reads, one assembly per sample, e.g. with SPAdes
-$ for sample in 1 2 3; do
-      spades.py --meta ${sample}.{fw,rv}.fq.gz -t 24 -m 100gb -o asm_${sample};
-  done    
+# Assemble your reads, one assembly per sample, e.g. with SPAdes
+for sample in 1 2 3; do
+    spades.py --meta ${sample}.{fw,rv}.fq.gz -t 24 -m 100gb -o asm_${sample};
+done    
 
-$ # Concatenate your assemblies, and rename the contigs to the naming scheme
-$ # S{sample}C{original contig name}. This can be done with a script provided by Vamb:
-$ python concatenate.py contigs.fna.gz asm_{1,2,3}/contigs.fasta
+# Concatenate your assemblies, and rename the contigs to the naming scheme
+# S{sample}C{original contig name}. This can be done with a script provided by Vamb
+# in the vamb/src directory
+python src/concatenate.py contigs.fna.gz asm_{1,2,3}/contigs.fasta
 
-$ # Estimate sample-wise abundance by mapping reads to the contigs.
-$ # Any mapper will do, but we recommend strobealign with the --aemb flag
-$ mkdir aemb
-$ for sample in 1 2 3; do
-      strobealign -t 8 --aemb contigs.fna.gz ${sample}.{fw,rv}.fq.gz > aemb/${sample}.tsv;
-  done
+# Estimate sample-wise abundance by mapping reads to the contigs.
+# Any mapper will do, but we recommend strobealign with the --aemb flag
+mkdir aemb
+for sample in 1 2 3; do
+    strobealign -t 8 --aemb contigs.fna.gz ${sample}.{fw,rv}.fq.gz > aemb/${sample}.tsv;
+done
 
-$ # Paste the aemb files together to make a TSV file with given header
-$ echo -e "contigname\t1\t2\t3" > abundance.tsv # header
-$ paste aemb/1.tsv <(cut -f 2 aemb/2.tsv) <(cut -f 2 aemb/3.tsv) >> abundance.tsv
+# Paste the aemb files together to make a TSV file with given header
+echo -e "contigname\t1\t2\t3" > abundance.tsv # header
+paste aemb/1.tsv <(cut -f 2 aemb/2.tsv) <(cut -f 2 aemb/3.tsv) >> abundance.tsv
 
-$ # Run Vamb using the contigs and the directory with abundance files
-$ vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv
+# Run Vamb using the contigs and the directory with abundance files
+vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv
 ```
 
 ### TaxVamb
-First, process your FASTA file and abundance using the same commands as when running default VAMB.
+First, process your FASTA file and abundance using the same commands as when running default Vamb.
 
 Then, prepare a _taxonomy file_.
-See the description of the taxonomy input in the section on inputs below. 
+See the description of the taxonomy input in the section on inputs. 
 
 Finally, run TaxVamb with:
 
@@ -52,142 +53,34 @@ $ vamb bin taxvamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --a
 ### AVAMB
 See the README.md file in the `workflow_avamb` directory.
 
-### The different Vamb inputs
-All modes of Vamb takes various _inputs_ and produces various _outputs_.
-Currently, all modes take the following two central inputs:
+## Explanation of command-line options
+Each program in Vamb only has a subset of the following options.
 
-* The kmer-composition of the sequence (the _composition_).
-* The abundance of the contigs in each sample (the _abundance_).
-
-For inputs that take significant time to produce, Vamb will serialize the parsed input to a file, such that future runs of Vamb can use that instead of re-computing it.
-
-#### Composition
-The composition is computed from the input contig file in FASTA format (the 'catalogue').
-From command line, this looks like:
-
-```shell
---fasta contigs.fna.gz
-```
-
-Where the catalogue may be either gzipped or a plain file.
-
-Vamb produces the best results when run with the "multi-split" workflow, as demonstrated in the quickstart section above.
-In this workflow, samples are assembled independently, and the resulting contigs are concatenated to a single FASTA file before binning.
-After binning, the bins can be split into sample-wise pure bins.
-
-To do this splitting (termed "binsplitting"), Vamb needs to know which contig came from which sample.
-Therefore, it's recommended that the FASTA headers are formatted in the following pattern:
-`{samplename}C{contigname}`
-
-Where `{samplename}` is some text that uniquely identifies each sample, and `{contigname}` uniquely identifies each contig within a sample.
-For example, if the samples are named S1, S2, S3, etc., and the contigs are named 1, 2, 3, etc, a FASTA header may be `S3C119`.
-
-After the `composition.npz` has been created, Vamb will write the composition in the output file `composition.npz`.
-Future runs of Vamb can then instead use the following option to load the composition directly:
-
-```shell
---composition composition.npz
-```
-
-#### Abundance
-The abundance may be computed from either:
-* A TSV file with the header being "contigname" followed by one sample name per sample,
-  and the values in the TSV file being precomputed abundances.
-  These may be derived from `paste`ing together outputs from the tool `strobealign --aemb`
-* A directory of sorted BAM files generated by mapping the reads of each sample to the contig catalogue.
-
-On the command line, abundance input can be specified as:
-```shell
---abundance_tsv abundance.tsv
-```
-or
-```shell
---bamdir dir_with_bam_files
-```
-
-Once the abundance has been parsed, Vamb will produce the file `abundance.npz`, which can be used for future
-Vamb runs instead:
-```shell
---abundance abundance.npz
-```
-
-__Note:__ Vamb will check that the sequence names in the TSV / BAM files correspond
-to the names in the composition.
-
-##### Abundance TSV format
-This follows the ordinary `.tsv` format, with a mandatory header, and disallowing `\t` in contig names.
-
-Example file:
-```
-contigname\tS1\tS2\tS3
-S1C1\t1.53\t1.11\t4.1e2
-S1C2\t0.94\t9.2\t5.1e2
-S2C1\t1.2e-3\t0\t9.2
-S3C1\t88.21\t51.2\t12.1e3
-S3C2\t14.1\t90.1\t13.01
-```
-
-
-
-##### Abundance as BAM files
-If you don't want to compute abundance using `strobealign --aemb` and create a TSV file from its output (recommended),
-Vamb can compute abundances from BAM files.
-
-To do this:
-
-* Create the FASTA contig catalogue as described in the section of "composition".
-* Map the reads for each sample to the catalogue, to obtain on BAM file per sample.
-
-Using the aligner [minimap2](https://github.com/lh3/minimap2) as well as [samstrip](https://github.com/jakobnissen/samstrip) and [samtools](https://github.com/samtools/samtools), the commands may be:
-
-```shell
-# Index the FASTA file so it only has to be done once instead of on every mapping
-minimap2 -I 32G -d catalogue.mmi catalogue.fasta;
-
-# Map each sample. Here, using 8 threads, using paired short reads.
-minimap2 -t 8 -ax sr catalogue.mmi s1.fw.fq.gz s1.rv.fq.gz | samstrip | samtools view -F 3584 -b - > s1.bam
-```
-
-_Note that if you use minimap2 specifically, be aware of [this bug in minimap2](https://github.com/lh3/minimap2/issues/37), where, if the index
-is not large enough, the output will be an invalid SAM file. To get around this, use enough RAM when indexing (e.g. set option `-I` appropriately)_
-
-### Taxonomy
-Vamb operates with two kinds of taxonomies:
-* _Unrefined_ taxonomies give the taxonomic annotation for each contig
-* _Refined_ taxonomies gives the taxonomic annotation _plus a probability estimate_ for each contig
-
-Vamb's __Taxometer__ tool can be used to refine a taxonomy.
-It takes an unrefined taxonomy as input, and outputs a refined taxonomy.
-TaxVamb usually achieves better results if its taxonomy input is refined with Taxometer.
-
-Both refined and unrefined taxonomies can be used for TaxVamb.
-By default, if TaxVamb gets an unrefined taxonomy, it will automatically refine it with Taxometer, unless `--no_predict` is passed.
-
-Taxonomy files are TSV files with the following format:
-* Header: `contigs\tpredictions` for unrefined taxonomies and `contigs\tpredictions\tscores` for refined ones.
-* In the `contigs` column: The FASTA identifier for every contig in the catalogue.
-* In the `predictions` column: A semicolon-separated string with taxonomic levels, for each of the following seven ranks, in order:
-  domain, phylum, class, order, family, genus, species. Lower ranks may be omitted.
-  There is no requirement that the labels are actually meaningful, i.e. that they correspond to any real taxonomic clade.
-* In the `scores` column: A semicolon separated list of floats, one per element in the `predictions` column.
-
-The following are examples of VALID prediction columns:
-```
-Bacteria;Bacillota;Clostridia
-Bacteria;Bacillota;Bacilli;Bacillales
-Bacteria;Pseudomonadota;Gammaproteobacteria;Moraxellales;Moraxellaceae;Acinetobacter;Acinetobacter sp. TTH0-4
-```
-
-The following are example of INVALID prediction columns:
-* Invalid: Begins with class instead of domain: `Clostridia;Eubacteriales;Lachnospiraceae;Roseburia;Roseburia hominis`
-* Invalid: Skips the phylum: `Bacteria;Gammaproteobacteria;Moraxellales;Moraxellaceae;Acinetobacter;Acinetobacter sp. TTH0-4`
-
-The following is an example of a valid, unrefined taxonomy file:
-```
-contigs	predictions
-S18C13	Bacteria;Bacillota;Clostridia;Eubacteriales
-S18C25	Bacteria;Pseudomonadota
-S18C67	Bacteria;Bacillota;Bacilli;Bacillales;Staphylococcaceae;Staphylococcus
-```
-
-Our tool  __Taxconverter__ https://github.com/RasmussenLab/taxconverter can be used to create unrefined taxonomy files from MMSeqs2, Centrifuge, Kraken2, Metabuli or MetaMaps output files.
+* `-h, --help`: Print help and exit
+* `--version`: Print version to stdout and exit
+* `--outdir`: Output directory to create. Must not exist. Parent directory must exist.
+* `-m`: Ignore contigs shorter than this value. Too short contigs have an unstable kmer composition
+  and abundance signal, and therefore adds too much noise to the binning process.
+* `-p` Number of threads to use. Note that Vamb has limited control over the number of threads used by
+  its underlying libraries such as PyTorch, NumPy and BLAS. Although Vamb tries its best to limit the
+  number of threads to the number specified, that might not always work.
+* `--norefcheck`: Disable reference hash checking between composition, abundance and taxonomic inputs.
+  See the section on reference hash checking in the input section.
+* `--cuda`: Use a graphical processing unit for model training and clustering.
+  Must have a CUDA-compatible version of PyTorch installed, and an NVIDIA GPU which supports CUDA. 
+* `--seed`: Pass an integer seed for the random number generation. Vamb will use this seed to attempt reproducibility. Note that PyTorch does not support reproducible training of models, so passing this seed does not guarantee that Vamb will produce the same results from the same data.
+* `--minfasta`: Output all bins with a total size (sum of contig lengths) greater than or equal to this
+  number. The bins will be output in a directory called `bins` under the output directory, and each bin
+  will be a FASTA file with the same name as the bin, suffixed by ".fna".
+* `-o` Set binsplit separator. See the section on binsplitting in "tips for running Vamb" section for its meaning.
+  If not passed, defaults to `C` if 'C' is present in all identifiers.
+  To disable binsplitting, pass `-o` without an argument.
+* `--no_predictor`: When running TaxVamb, if this flag is not set, TaxVamb will automatically run
+  Taxometer when given an unrefined input taxonomy to refine it.
+  Using a refined taxonomy usually improves the accuracy of TaxVamb.
+* `--fasta`: FASTA input file. See section on Vamb inputs and outputs.
+* `--composition`: NPZ composition input file. See section on Vamb inputs and outputs.
+* `--bamdir`: Directory with BAM files to use for abundance. See section on Vamb inputs and outputs.
+* `--abundance_tsv`: TSV file with precomputed abundances. See section on Vamb inputs and outputs.
+* `--abundance`: NPZ abundance input file. See section on Vamb inputs and outputs.
+* `--taxonomy`: TSV file with refined or unrefined taxonomy. See section on Vamb inputs and outputs.

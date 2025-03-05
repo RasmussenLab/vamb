@@ -1,11 +1,11 @@
 # Tips for running Vamb
 
-### Garbage in, garbage out
+## Garbage in, garbage out
 For the best results when running Vamb, make sure the inputs to Vamb are as good as they can be.
 In particular, the assembly process is a main bottleneck in the total binning workflow, so improving assembly
 by e.g. preprocessing reads, using a better assembler, or switching to long read technology can make a big difference.
 
-### Postprocess your bins
+## Postprocess your bins
 On principle, Vamb will bin every single input contig.
 Currently, Vamb's bins are also _disjoint_, meaning each contig is present in only one bin.
 
@@ -25,7 +25,7 @@ Hence, to use bins you can rely on, you will need to postprocess your bins:
   and e.g. remove all clusters marked as "Fallback", below a certain size, or with a too
   high peak-valley ratio. However, this is only recommended for advanced users.
 
-### How binsplitting works
+## How binsplitting works
 In the recommended workflow, each sample is assembled independently, then the contigs are pooled
 and binning together.
 After Vamb have encoded the input features into the embedding (latent space), the embedding is clustered
