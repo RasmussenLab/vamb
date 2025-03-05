@@ -5,6 +5,9 @@ Variational Autoencoders for Metagenomic Binning (VAMB)
    :parser: myst_parser.sphinx_
    :start-line: 1
 
+Table of contents
+==================
+
 .. toctree::
    :maxdepth: 2
    :caption: How to run
@@ -26,8 +29,6 @@ Variational Autoencoders for Metagenomic Binning (VAMB)
 .. toctree::
    :maxdepth: 2
    :caption: In-depth walkthrough
-   
-   tutorial.md
 
 Indices and tables
 ==================
