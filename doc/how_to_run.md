@@ -30,9 +30,8 @@ for sample in 1 2 3; do
     strobealign -t 8 --aemb contigs.fna.gz ${sample}.{fw,rv}.fq.gz > aemb/${sample}.tsv;
 done
 
-# Paste the aemb files together to make a TSV file with given header
-echo -e "contigname\t1\t2\t3" > abundance.tsv # header
-paste aemb/1.tsv <(cut -f 2 aemb/2.tsv) <(cut -f 2 aemb/3.tsv) >> abundance.tsv
+# Create an abundance TSV file from --aemb outputs using the script in vamb/src dir
+python src/merge_aemb.py aemb abundance.tsv
 
 # Run Vamb using the contigs and the directory with abundance files
 vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv

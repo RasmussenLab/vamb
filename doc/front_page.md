@@ -16,7 +16,7 @@ The Vamb package contains several programs, including three binners:
 * __Avamb__: An obsolete ensemble model based on Vamb and adversarial autoencoders. 
   Avamb has an accuracy in between Vamb and TaxVamb, but is more computationally demanding than either.
   We don't recommend running Avamb: If you have the compute to run it, you should instead run TaxVamb
-  See the [Avamb README page](https://github.com/RasmussenLab/avamb/tree/avamb_new/workflow_avamb) for more information.
+  See the [Avamb README page](https://github.com/RasmussenLab/vamb/tree/master/workflow_avamb) for more information.
   [Link to article](https://doi.org/10.1038/s42003-023-05452-3).
 
 And a taxonomy predictor:

@@ -59,6 +59,13 @@ Vamb runs instead:
 
 ### Abundance TSV format
 This follows the ordinary `.tsv` format, with a mandatory header, and disallowing `\t` in contig names.
+The header of the first column name must be exactly `contigname`.
+
+The abundance TSV file in the correct format can be created from the output of `strobealign --aemb` using the script in `src/merge_aemb.py`:
+
+```shell
+python src/merge_aemb.py input_dir abundance.tsv
+```
 
 Example file:
 ```
