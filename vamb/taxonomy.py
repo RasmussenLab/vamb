@@ -114,12 +114,21 @@ class Taxonomy:
         with open(path) as file:
             result: list[tuple[str, ContigTaxonomy]] = []
             header = next(file, None)
-            if header is None or not header.startswith(TAXONOMY_HEADER):
+            header = None if header is None else header.rstrip()
+            if header is None or header != TAXONOMY_HEADER:
                 raise ValueError(
-                    f"In taxonomy file, expected header to begin with {repr(TAXONOMY_HEADER)}"
+                    f"In taxonomy file '{path}', expected header to be {repr(TAXONOMY_HEADER)}, "
+                    f"but found {'no header' if header is None else repr(header)}"
                 )
-            for line in file:
-                (contigname, taxonomy, *_) = line.split("\t")
+            # Minus two because we already read header, and because Python is zero-indexed
+            for lineno_minus_two, line in enumerate(file):
+                fields = line.split("\t")
+                if len(fields) != 2:
+                    raise ValueError(
+                        f"In taxonomy file '{path}', on line {lineno_minus_two + 2}, "
+                        f"expected 2 tab-separated columns, but found {len(fields)}."
+                    )
+                (contigname, taxonomy) = fields
                 result.append(
                     (
                         contigname,
@@ -180,16 +189,18 @@ class PredictedTaxonomy:
             result: list[tuple[str, PredictedContigTaxonomy]] = []
             lines = filter(None, map(str.rstrip, file))
             header = next(lines, None)
-            if header is None or not header.startswith(PREDICTED_TAXONOMY_HEADER):
+            if header is None or header != PREDICTED_TAXONOMY_HEADER:
                 raise ValueError(
-                    f"In predicted taxonomy file, expected header to begin with {repr(PREDICTED_TAXONOMY_HEADER)}"
+                    f"In predicted taxonomy file '{path}', "
+                    f"expected header to be {repr(PREDICTED_TAXONOMY_HEADER)}, "
+                    f"but found {'no header' if header is None else repr(header)}."
                 )
             for linenum_minus_two, line in enumerate(lines):
                 fields = line.split("\t")
                 if len(fields) != 3:
                     raise ValueError(
-                        f"Expected 3 fields in line {linenum_minus_two + 2} of file {path}, got {len(fields)}."
-                        f"\nLine: {line}"
+                        f"Expected 3 fields in line {linenum_minus_two + 2} of file '{path}', "
+                        f"got {len(fields)}.\nLine: '{line}'"
                     )
                 (contigname, taxonomy, scores) = fields
                 contig_taxonomy = ContigTaxonomy.from_semicolon_sep(

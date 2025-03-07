@@ -2,7 +2,7 @@ import os as _os
 import numpy as _np
 import vamb.vambtools as _vambtools
 from collections.abc import Iterable, Sequence
-from typing import IO, Union, TypeVar
+from typing import IO, Union, TypeVar, Optional
 from pathlib import Path
 
 # This kernel is created in src/create_kernel.py. See that file for explanation
@@ -154,6 +154,7 @@ class Composition:
     def from_file(
         cls: type[C],
         filehandle: Iterable[bytes],
+        filename: Optional[str],
         minlength: int = 2000,
     ) -> C:
         """Parses a FASTA file open in binary reading mode, returning Composition.
@@ -171,7 +172,7 @@ class Composition:
         lengths = _vambtools.PushArray(_np.int32)
         mask = bytearray()  # we convert to Numpy at end
         contignames: list[str] = list()
-        entries = _vambtools.byte_iterfasta(filehandle)
+        entries = _vambtools.byte_iterfasta(filehandle, filename)
 
         for entry in entries:
             length = len(entry)
