@@ -39,7 +39,7 @@ class TestReadContigs(unittest.TestCase):
         file.seek(0)
 
         with self.assertRaises(ValueError):
-            Composition.from_file(file)
+            Composition.from_file(file, None)
 
     def test_unique_names(self):
         with self.assertRaises(ValueError):
@@ -52,7 +52,7 @@ class TestReadContigs(unittest.TestCase):
 
     def test_filter_minlength(self):
         minlen = 500
-        composition = Composition.from_file(self.io, minlength=450)
+        composition = Composition.from_file(self.io, None, minlength=450)
         md = composition.metadata
         hash1 = md.refhash
 
@@ -88,10 +88,10 @@ class TestReadContigs(unittest.TestCase):
 
     def test_minlength(self):
         with self.assertRaises(ValueError):
-            Composition.from_file(self.io, minlength=3)
+            Composition.from_file(self.io, None, minlength=3)
 
     def test_properties(self):
-        composition = Composition.from_file(self.io, minlength=420)
+        composition = Composition.from_file(self.io, None, minlength=420)
         passed = list(filter(lambda x: len(x.sequence) >= 420, self.records))
 
         self.assertEqual(composition.nseqs, len(composition.metadata.identifiers))
@@ -113,7 +113,7 @@ class TestReadContigs(unittest.TestCase):
 
     def test_save_load(self):
         buf = io.BytesIO()
-        composition_1 = Composition.from_file(self.io)
+        composition_1 = Composition.from_file(self.io, None)
         md1 = composition_1.metadata
         composition_1.save(buf)
         buf.seek(0)
@@ -143,8 +143,8 @@ class TestReadContigs(unittest.TestCase):
 
         buf1.seek(0)
         buf2.seek(0)
-        comp1 = Composition.from_file(buf1)
-        comp2 = Composition.from_file(buf2)
+        comp1 = Composition.from_file(buf1, None)
+        comp2 = Composition.from_file(buf2, None)
 
         self.assertEqual(comp1.metadata.refhash, comp2.metadata.refhash)
         self.assertTrue(np.all(comp1.matrix == comp2.matrix))

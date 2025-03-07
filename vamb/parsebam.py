@@ -243,12 +243,12 @@ class Abundance:
             try:
                 header = next(file)
             except StopIteration:
-                err = ValueError(f'Empty abundance TSV path at "{path}"')
+                err = ValueError(f"Found no TSV header in abundance file '{path}'")
                 raise err from None
-            columns = header.splitlines()[0].split("\t")
-            if len(columns) < 1:
+            columns = header.rstrip("\r\n").split("\t")
+            if len(columns) < 2:
                 raise ValueError(
-                    f'Expected at least 1 column in abundance TSV file at "{path}"'
+                    f'Expected at least 2 columns in abundance TSV file at "{path}"'
                 )
             if columns[0] != "contigname":
                 raise ValueError('First column in header must be "contigname"')
@@ -256,23 +256,29 @@ class Abundance:
             n_samples = len(samples)
             matrix = _np.empty((comp_metadata.nseqs, n_samples), dtype=_np.float32)
             matrix_row = 0
-            found_empty = False
+
+            # Line number minus two since we already read header, and Python is zero-indexed
             for line_number_minus_two, (line, should_keep) in enumerate(
                 zip_longest(file, comp_metadata.mask)
             ):
-                if line is not None:
-                    if not line.strip():
-                        found_empty = True
-                    elif found_empty:
-                        raise ValueError(
-                            "Found an empty line not at end of abundance TSV file"
-                            f'"{path}"'
-                        )
-                else:
+                if line is None:
+                    # If line is none, there are too few lines in file
                     raise ValueError(
                         f'Too few rows in abundance TSV file "{path}", expected '
                         f"{len(comp_metadata.mask) + 1}, got {line_number_minus_two + 1}"
                     )
+
+                line = line.rstrip()
+
+                if not line:
+                    for next_line in file:
+                        if next_line.rstrip():
+                            raise ValueError(
+                                "Found an empty line not at end of abundance TSV file"
+                                f'"{path}"'
+                            )
+                    break
+
                 if should_keep is None:
                     raise ValueError(
                         f'Too many rows in abundance TSV file "{path}", expected '
@@ -280,10 +286,10 @@ class Abundance:
                         f"{line_number_minus_two + 2}"
                     )
 
-                stripped = line.rstrip()
                 if not should_keep:
                     continue
-                fields = stripped.split("\t")
+
+                fields = line.split("\t")
                 if len(fields) != n_samples + 1:
                     raise ValueError(
                         f'In abundance TSV file "{path}", on line {line_number_minus_two + 2}'

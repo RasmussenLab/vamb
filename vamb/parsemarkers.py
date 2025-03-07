@@ -212,7 +212,7 @@ def split_file(
         for i, (outfile, record) in enumerate(
             zip(
                 itertools.cycle(filehandles),
-                filter(lambda x: x.identifier in names, byte_iterfasta(infile)),
+                filter(lambda x: x.identifier in names, byte_iterfasta(infile, None)),
             )
         ):
             refhasher.add_refname(record.identifier)
@@ -273,7 +273,7 @@ def work_per_process(
     result: list[tuple[ContigName, np.ndarray]] = []
     finder = pyrodigal.GeneFinder(meta=True)
     with open(contig_path, "rb") as file:
-        for record in byte_iterfasta(file):
+        for record in byte_iterfasta(file, None):
             chunk.append(record)
             if len(chunk) == 2048:
                 result.extend(process_chunk(chunk, hmms, name_to_id, finder))

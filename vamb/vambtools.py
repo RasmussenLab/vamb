@@ -395,7 +395,7 @@ class FastaEntry:
             codeunit = stripped[0]
             bad_character = chr(codeunit)
             raise ValueError(
-                f"Non-IUPAC DNA/RNA byte in sequence {identifier}: '{bad_character}', byte value {codeunit}"
+                f"Non-IUPAC DNA/RNA byte in sequence '{identifier}': '{bad_character}', byte value {codeunit}"
             )
 
         self.sequence: bytearray = masked
@@ -429,13 +429,13 @@ class FastaEntry:
 
 
 def byte_iterfasta(
-    filehandle: Iterable[bytes], comment: bytes = b"#"
+    filehandle: Iterable[bytes], filename: Optional[str], comment: bytes = b"#"
 ) -> Iterator[FastaEntry]:
     """Yields FastaEntries from a binary opened fasta file.
 
     Usage:
     >>> with Reader('/dir/fasta.fna') as filehandle:
-    ...     entries = byte_iterfasta(filehandle) # a generator
+    ...     entries = byte_iterfasta(filehandle, '/dir/fasta/fna') # a generator
 
     Inputs:
         filehandle: Any iterator of binary lines of a FASTA file
@@ -446,9 +446,12 @@ def byte_iterfasta(
 
     # Make it work for persistent iterators, e.g. lists
     line_iterator = iter(filehandle)
+    line_number = 0
+    prefix = "" if filename is None else f"In file '{filename}', "
     # Skip to first header
     try:
         for probeline in line_iterator:
+            line_number += 1
             stripped = probeline.lstrip()
             if stripped.startswith(comment):
                 pass
@@ -457,16 +460,15 @@ def byte_iterfasta(
                 break
 
             else:
-                raise ValueError("First non-comment line is not a Fasta header")
+                raise ValueError(
+                    f"{prefix}First non-comment line is not a FASTA header"
+                )
 
         else:  # no break
             return None
-            # raise ValueError('Empty or outcommented file')
 
     except TypeError:
-        errormsg = (
-            "First line does not contain bytes. Are you reading file in binary mode?"
-        )
+        errormsg = f"{prefix}First line does not contain bytes. Are you reading file in binary mode?"
         raise TypeError(errormsg) from None
 
     # 13 is the byte value of \r, meaning we remove either \r\n or \n
@@ -656,7 +658,7 @@ def write_bins(
         keep.update(i)
 
     bytes_by_id: dict[str, bytes] = dict()
-    for entry in byte_iterfasta(fastaio):
+    for entry in byte_iterfasta(fastaio, None):
         if entry.identifier in keep:
             bytes_by_id[entry.identifier] = _gzip.compress(
                 entry.format().encode(), compresslevel=1
@@ -740,7 +742,7 @@ def concatenate_fasta_ios(
         if rename:
             identifiers.clear()
 
-        for entry in byte_iterfasta(reader):
+        for entry in byte_iterfasta(reader, None):
             if len(entry) < minlength:
                 continue
 

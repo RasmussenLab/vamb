@@ -30,13 +30,13 @@ class TestCompositionResult(unittest.TestCase):
         self.io.seek(0)
 
     def test_runs(self):
-        comp = vamb.parsecontigs.Composition.from_file(self.io)
+        comp = vamb.parsecontigs.Composition.from_file(self.io, None)
         self.assertIsInstance(comp, vamb.parsecontigs.Composition)
 
     if TEST_UNSTABLE_HASHES:
 
         def test_result(self):
-            comp = vamb.parsecontigs.Composition.from_file(self.io)
+            comp = vamb.parsecontigs.Composition.from_file(self.io, None)
             self.assertEqual(
                 sha256(comp.matrix.data.tobytes()).digest().hex(),
                 "9e9a2d7b021654e874894722bdd6cd3eda18bed03fabd32a9440e806a8ab1bd1",

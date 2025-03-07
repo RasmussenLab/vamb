@@ -218,28 +218,28 @@ class TestFASTAReader(unittest.TestCase):
         # First non-comment line must be header
         with self.assertRaises(ValueError):
             data = b"#foo\n#bar\n  \n>foo\nTAG".splitlines()
-            list(vamb.vambtools.byte_iterfasta(data))
+            list(vamb.vambtools.byte_iterfasta(data, None))
 
         # String input
         with self.assertRaises(TypeError):
             data = ">abc\nTAG\na\nAC".splitlines()
-            list(vamb.vambtools.byte_iterfasta(data))  # type:ignore
+            list(vamb.vambtools.byte_iterfasta(data, None))  # type:ignore
 
     # Various correct formats
     def test_good_files(self):
         # Empty file
         data = b"".splitlines()
-        records = list(vamb.vambtools.byte_iterfasta(data))
+        records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(0, len(records))
 
         # Only comments
         data = b"#bar\n#foo\n#".splitlines()
-        records = list(vamb.vambtools.byte_iterfasta(data))
+        records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(0, len(records))
 
         # A few sequences
         data = b"#bar\n#foo\n>ab\nTA\nT\n \t\nA\nNN\n>foo\nCyAmmkg\n>bar\n".splitlines()
-        records = list(vamb.vambtools.byte_iterfasta(data))
+        records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(3, len(records))
         self.assertEqual(records[0].sequence, bytearray(b"TATANN"))
         self.assertEqual(records[1].sequence, bytearray(b"CyAmmkg"))
@@ -247,7 +247,7 @@ class TestFASTAReader(unittest.TestCase):
 
         # Comment inside seqs
         data = b"#bar\n>foo\nTAG\n##xxx\n>@@AA\nAAA".splitlines()
-        records = list(vamb.vambtools.byte_iterfasta(data))
+        records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(records[0].sequence, bytearray(b"TAG"))
 
 
@@ -464,11 +464,11 @@ class TestConcatenateFasta(unittest.TestCase):
         )
         out.seek(0)
         out_bytes = io.BytesIO(out.read().encode())
-        records_out = list(vamb.vambtools.byte_iterfasta(out_bytes))
+        records_out = list(vamb.vambtools.byte_iterfasta(out_bytes, None))
         self.file_1.seek(0)
         self.file_2.seek(0)
-        records_1 = list(vamb.vambtools.byte_iterfasta(self.file_1))
-        records_2 = list(vamb.vambtools.byte_iterfasta(self.file_2))
+        records_1 = list(vamb.vambtools.byte_iterfasta(self.file_1, None))
+        records_2 = list(vamb.vambtools.byte_iterfasta(self.file_2, None))
         records_in = records_1 + records_2
         self.assertEqual(
             [i.sequence for i in records_out], [i.sequence for i in records_in]
@@ -621,7 +621,7 @@ class TestWriteBins(unittest.TestCase):
             reconstructed_bins: dict[str, set[str]] = dict()
             for filename in os.listdir(dir):
                 with open(os.path.join(dir, filename), "rb") as file:
-                    entries = list(vamb.vambtools.byte_iterfasta(file))
+                    entries = list(vamb.vambtools.byte_iterfasta(file, None))
                     binname = filename[:-4]
                     reconstructed_bins[binname] = set()
                     for entry in entries:
