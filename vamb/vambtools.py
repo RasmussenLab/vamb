@@ -446,30 +446,27 @@ def byte_iterfasta(
 
     # Make it work for persistent iterators, e.g. lists
     line_iterator = iter(filehandle)
-    line_number = 0
     prefix = "" if filename is None else f"In file '{filename}', "
     # Skip to first header
-    try:
-        for probeline in line_iterator:
-            line_number += 1
-            stripped = probeline.lstrip()
-            if stripped.startswith(comment):
-                pass
+    for probeline in line_iterator:
+        if not isinstance(probeline, bytes):
+            raise TypeError(
+                f"{prefix}First line does not contain bytes. Are you reading file in binary mode?"
+            )
 
-            elif probeline[0:1] == b">":
-                break
+        stripped = probeline.lstrip()
 
-            else:
-                raise ValueError(
-                    f"{prefix}First non-comment line is not a FASTA header"
-                )
+        if stripped.startswith(comment):
+            pass
 
-        else:  # no break
-            return None
+        elif probeline[0:1] == b">":
+            break
 
-    except TypeError:
-        errormsg = f"{prefix}First line does not contain bytes. Are you reading file in binary mode?"
-        raise TypeError(errormsg) from None
+        else:
+            raise ValueError(f"{prefix}First non-comment line is not a FASTA header")
+
+    else:  # no break - empty file
+        return None
 
     # 13 is the byte value of \r, meaning we remove either \r\n or \n
     header = probeline[1 : -(1 + (probeline[-2] == 13))]
