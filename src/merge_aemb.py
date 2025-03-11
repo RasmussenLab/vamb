@@ -147,6 +147,12 @@ for col_minus_one, file in enumerate(files[1:]):
                 f"Error: Identifier '{identifier}' found in file '{file}' "
                 "but not present in all files.",
             )
+
+        if matrix[index, col_minus_one + 1] != -1.0:
+            exit_with(
+                f"Error: Identifier '{identifier}' present multiple times in file '{file}'"
+            )
+
         matrix[index, col_minus_one + 1] = depth
 
     # Check that this file does not have a strict subset of identifiers from the first
