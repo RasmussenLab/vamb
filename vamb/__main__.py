@@ -2104,29 +2104,6 @@ def add_clustering_arguments(subparser: argparse.ArgumentParser):
     return subparser
 
 
-def add_model_selection_arguments(subparser: argparse.ArgumentParser):
-    # Model selection argument
-    model_selection = subparser.add_argument_group(
-        title="Model selection", description=None
-    )
-
-    model_selection.add_argument(
-        "--model",
-        dest="model",
-        metavar="",
-        type=str,
-        choices=[
-            "vae",
-            "aae",
-            "vae-aae",
-            "vaevae",
-        ],
-        default="vae",
-        help="Choose which model to run; only vae (vae); only aae (aae); the combination of vae and aae (vae-aae); taxonomy_predictor; vaevae; reclustering [vae]",
-    )
-    return subparser
-
-
 def add_aae_arguments(subparser: argparse.ArgumentParser):
     # AAE arguments
     aaeos = subparser.add_argument_group(title="AAE options", description=None)
@@ -2239,9 +2216,9 @@ def main():
     Version: {vamb.__version_str__}
 
     Default use, good for most datasets:
-    vamb bin default --outdir out --fasta my_contigs.fna --bamdir bam_dir
+    vamb bin default --outdir vambout --fasta my_contigs.fna --abundance_tsv abundance.tsv
 
-    Find the latest updates and documentation at https://github.com/RasmussenLab/vamb"""
+    Find documentation at https://github.com/RasmussenLab/vamb"""
     logger.add(sys.stderr, format=format_log)
 
     parser = argparse.ArgumentParser(
@@ -2268,7 +2245,7 @@ def main():
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
         help="""
-        VAMB, TaxVAMB, AVAMB binners
+        VAMB and TaxVAMB binners
         """,
         add_help=False,
     )
@@ -2280,9 +2257,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         default binner based on a variational autoencoder. 
-        See the paper "Improved metagenome binning and assembly using deep variational autoencoders" 
-        (https://www.nature.com/articles/s41587-020-00777-4)
-        """,
+        See the paper 'Improved metagenome binning and assembly using deep variational autoencoders'""",
         add_help=False,
         usage="%(prog)s [options]",
         description="""Bin using a VAE that merges composition and abundance information.
@@ -2301,9 +2276,7 @@ Required arguments: Outdir, at least one composition input and at least one abun
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         taxonomy informed binner based on a bi-modal variational autoencoder. 
-        See the paper "TaxVAMB: taxonomic annotations improve metagenome binning" 
-        (link)
-        """,
+        See the paper 'TaxVAMB: taxonomic annotations improve metagenome binning'""",
         add_help=False,
         usage="%(prog)s [options]",
         description="""Bin using a semi-supervised VAEVAE model that merges composition, abundance and taxonomic information.
@@ -2338,9 +2311,7 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
         refines taxonomic annotations of any metagenome classifier. 
-        See the paper "Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss" 
-        (link)
-        """,
+        See the paper 'Taxometer: deep learning improves taxonomic classification of contigs using binning features and a hierarchical loss'""",
         add_help=False,
         usage="%(prog)s [options]",
         description="""Refine taxonomy using composition and abundance information.
@@ -2357,7 +2328,7 @@ Required arguments: Outdir, unrefined taxonomy, at least one composition input a
         RECLUSTER,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="""
-        reclustering using single-copy genes for the binning results of VAMB, TaxVAMB or AVAMB
+        reclustering using single-copy genes for the binning results of VAMB or TaxVAMB
         """,
         add_help=False,
         usage="%(prog)s [options]",
