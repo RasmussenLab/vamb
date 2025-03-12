@@ -428,8 +428,19 @@ class FastaEntry:
         return counts
 
 
+def strip_newline(s: bytes) -> bytes:
+    "Remove trailing \r\n or \n from the bytestring, if present"
+    if len(s) > 0 and s[-1] == 10:
+        if len(s) > 1 and s[-2] == 13:
+            return s[:-2]
+        else:
+            return s[:-1]
+    else:
+        return s
+
+
 def byte_iterfasta(
-    filehandle: Iterable[bytes], filename: Optional[str], comment: bytes = b"#"
+    filehandle: Iterable[bytes], filename: Optional[str]
 ) -> Iterator[FastaEntry]:
     """Yields FastaEntries from a binary opened fasta file.
 
@@ -447,40 +458,30 @@ def byte_iterfasta(
     # Make it work for persistent iterators, e.g. lists
     line_iterator = iter(filehandle)
     prefix = "" if filename is None else f"In file '{filename}', "
-    # Skip to first header
-    for probeline in line_iterator:
-        if not isinstance(probeline, bytes):
-            raise TypeError(
-                f"{prefix}First line does not contain bytes. Are you reading file in binary mode?"
-            )
+    header = next(line_iterator, None)
 
-        stripped = probeline.lstrip()
-
-        if stripped.startswith(comment):
-            pass
-
-        elif probeline[0:1] == b">":
-            break
-
-        else:
-            raise ValueError(f"{prefix}First non-comment line is not a FASTA header")
-
-    else:  # no break - empty file
+    # Empty file is valid - we return from the iterator
+    if header is None:
         return None
+    elif not isinstance(header, bytes):
+        raise TypeError(
+            f"{prefix}first line is not binary. Are you sure you are reading the file in binary mode?"
+        )
+    elif not header.startswith(b">"):
+        raise ValueError(
+            f"{prefix}FASTA file is invalid, first line does not begin with '>'"
+        )
 
     # 13 is the byte value of \r, meaning we remove either \r\n or \n
-    header = probeline[1 : -(1 + (probeline[-2] == 13))]
+    header = strip_newline(header[1:])
     buffer: list[bytes] = list()
 
     # Iterate over lines
     for line in line_iterator:
-        if line.startswith(comment):
-            pass
-
-        elif line.startswith(b">"):
+        if line.startswith(b">"):
             yield FastaEntry(header, bytearray().join(buffer))
             buffer.clear()
-            header = line[1 : -(1 + (line[-2] == 13))]
+            header = strip_newline(line[1:])
 
         else:
             buffer.append(line)

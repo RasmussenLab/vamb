@@ -232,13 +232,8 @@ class TestFASTAReader(unittest.TestCase):
         records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(0, len(records))
 
-        # Only comments
-        data = b"#bar\n#foo\n#".splitlines()
-        records = list(vamb.vambtools.byte_iterfasta(data, None))
-        self.assertEqual(0, len(records))
-
         # A few sequences
-        data = b"#bar\n#foo\n>ab\nTA\nT\n \t\nA\nNN\n>foo\nCyAmmkg\n>bar\n".splitlines()
+        data = b">ab\nTA\nT\n \t\nA\nNN\n>foo\nCyAmmkg\n>bar\n".splitlines()
         records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(3, len(records))
         self.assertEqual(records[0].sequence, bytearray(b"TATANN"))
@@ -246,7 +241,7 @@ class TestFASTAReader(unittest.TestCase):
         self.assertEqual(records[2].sequence, bytearray(b""))
 
         # Comment inside seqs
-        data = b"#bar\n>foo\nTAG\n##xxx\n>@@AA\nAAA".splitlines()
+        data = b">foo\nTAG\n>@@AA\nAAA".splitlines()
         records = list(vamb.vambtools.byte_iterfasta(data, None))
         self.assertEqual(records[0].sequence, bytearray(b"TAG"))
 
