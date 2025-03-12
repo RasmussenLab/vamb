@@ -1789,7 +1789,7 @@ def add_help_arguments(parser: argparse.ArgumentParser):
     )
 
 
-def add_general_arguments(subparser: argparse.ArgumentParser):
+def add_universal_arguments(subparser: argparse.ArgumentParser):
     add_help_arguments(subparser)
     reqos = subparser.add_argument_group(title="Output", description=None)
     reqos.add_argument(
@@ -1801,9 +1801,22 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         required=True,
     )
 
+
+# TODO: These are not general.
+# Outdir: All
+# Minlength: Composition and abundance
+# Nthreads: abundance, encoding and clustering
+# norefcheck: abundance, encoding, clustering
+# cuda: encoding and clustering
+# seed: encoding and clustering
+def add_general_group(subparser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
     general = subparser.add_argument_group(
         title="General optional arguments", description=None
     )
+    return general
+
+
+def add_minlength(general: argparse._ArgumentGroup):
     general.add_argument(
         "-m",
         dest="minlength",
@@ -1812,6 +1825,13 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         default=2000,
         help="Ignore contigs shorter than this [2000]",
     )
+
+
+def add_general_arguments(subparser: argparse.ArgumentParser):
+    add_universal_arguments(subparser)
+
+    general = add_general_group(subparser)
+    add_minlength(general)
 
     general.add_argument(
         "-p",
@@ -2247,6 +2267,7 @@ def main():
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
+    PARTIAL = "partial"
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
@@ -2358,6 +2379,19 @@ Required arguments:
     add_predictor_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser)
 
+    partial_subparser = subparsers.add_parser(
+        PARTIAL, help="Process individual parts of the VAMB pipelines", add_help=False
+    )
+    partial_part = partial_subparser.add_subparsers(dest="partial_part")
+
+    composition_parser = partial_part.add_parser(
+        "composition", help="Process composition data", add_help=False
+    )
+    add_universal_arguments(composition_parser)
+    general = add_general_group(composition_parser)
+    add_minlength(general)
+    add_composition_arguments(composition_parser)
+
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -2381,10 +2415,25 @@ Required arguments:
             opt = BinAvambOptions.from_args(args)
             runner = partial(run_bin_aae, opt)
             run(runner, opt.common.general)
+        else:
+            assert False  # no other options
     elif args.subcommand == RECLUSTER:
         opt = ReclusteringOptions.from_args(args)
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
+    elif args.subcommand == PARTIAL:
+        # TODO: Not implemented. Need to refactor to universal options, then minlength, then add composition
+        # then make a function to run tnf only
+        if args.partial_part == "composition":
+            opt = CompositionOptions.from_args(args)
+            runner = partial(run_tnf, opt)
+            run(runner, opt)
+        else:
+            # TODO: Add abundance
+            # TODO: Add encoding w. VAE
+            # TODO: Add encoding w. VAEVAE
+            # TODO: Add clustering
+            assert False  # no other options
     else:
         # There are no more subcommands
         assert False
