@@ -314,7 +314,7 @@ class TestInplaceMaskArray(unittest.TestCase):
 
     def test_numpy(self):
         arr = np.random.random((10, 3)).astype(np.float32)
-        mask = np.array([0, 1, 1, 1, 1, 0, 0, 0, 0, 0]).astype(np.uint8)
+        mask = np.array([0, 1, 1, 1, 1, 0, 0, 0, 0, 0]).astype(bool)
         arr2 = arr[[bool(i) for i in mask]]
         vamb.vambtools.numpy_inplace_maskarray(arr, mask)
         self.almost_similar_np(arr, arr2)
