@@ -134,43 +134,6 @@ class TestFASTAEntry(unittest.TestCase):
             ">1_2\nTGTAmnyAncC",
         )
 
-    def test_kmercounts(self):
-        seq = vamb.vambtools.FastaEntry(b"X", bytearray(b"TTAyCAAnGAC"))
-
-        with self.assertRaises(ValueError):
-            seq.kmercounts(0)
-
-        with self.assertRaises(ValueError):
-            seq.kmercounts(13)
-
-        self.assertTrue(np.all(seq.kmercounts(1) == np.array([4, 2, 1, 2])))
-
-        self.assertTrue(
-            np.all(
-                seq.kmercounts(2)
-                == np.array(
-                    [
-                        1,
-                        1,
-                        0,
-                        0,
-                        1,
-                        0,
-                        0,
-                        0,
-                        1,
-                        0,
-                        0,
-                        0,
-                        1,
-                        0,
-                        0,
-                        1,
-                    ]
-                )
-            )
-        )
-
     def test_random_kmercounts(self):
         indexof = {
             "".join(ncs): idx
@@ -184,7 +147,7 @@ class TestFASTAEntry(unittest.TestCase):
             if ind is not None:
                 manual_counts[ind] += 1
 
-        automatic = seq.kmercounts(4)
+        automatic = seq.kmercounts()
         self.assertTrue(np.all(manual_counts == automatic))
 
     def test_rename(self):
@@ -314,7 +277,7 @@ class TestInplaceMaskArray(unittest.TestCase):
 
     def test_numpy(self):
         arr = np.random.random((10, 3)).astype(np.float32)
-        mask = np.array([0, 1, 1, 1, 1, 0, 0, 0, 0, 0]).astype(np.uint8)
+        mask = np.array([0, 1, 1, 1, 1, 0, 0, 0, 0, 0]).astype(bool)
         arr2 = arr[[bool(i) for i in mask]]
         vamb.vambtools.numpy_inplace_maskarray(arr, mask)
         self.almost_similar_np(arr, arr2)

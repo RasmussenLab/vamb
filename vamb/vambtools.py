@@ -5,7 +5,7 @@ import bz2 as _bz2
 import lzma as _lzma
 import numpy as _np
 import re as _re
-from vamb._vambtools import _kmercounts, _overwrite_matrix
+from vambcore import kmercounts, overwrite_matrix
 import collections as _collections
 from itertools import zip_longest
 from hashlib import md5 as _md5
@@ -275,8 +275,7 @@ def numpy_inplace_maskarray(array: _np.ndarray, mask: _np.ndarray) -> _np.ndarra
     elif len(array.shape) != 2:
         raise ValueError("Can only take a 2 dimensional-array.")
 
-    uints = _np.frombuffer(mask, dtype=_np.uint8)
-    index = _overwrite_matrix(array, uints)
+    index = overwrite_matrix(array, mask)
     array.resize((index, array.shape[1]), refcheck=False)
     return array
 
@@ -293,8 +292,7 @@ def torch_inplace_maskarray(array, mask):
         raise ValueError("Can only take a 2 dimensional-array.")
 
     np_array = array.numpy()
-    np_mask = _np.frombuffer(mask.numpy(), dtype=_np.uint8)
-    index = _overwrite_matrix(np_array, np_mask)
+    index = overwrite_matrix(np_array, _np.frombuffer(mask.numpy(), dtype=bool))
     array.resize_((index, array.shape[1]))
     return array
 
@@ -419,12 +417,9 @@ class FastaEntry:
         )
         return f">{self.header}\n{spacedseq}"
 
-    def kmercounts(self, k: int) -> _np.ndarray:
-        if k < 1 or k > 10:
-            raise ValueError("k must be between 1 and 10 inclusive")
-
-        counts = _np.zeros(1 << (2 * k), dtype=_np.int32)
-        _kmercounts(self.sequence, k, counts)
+    def kmercounts(self) -> _np.ndarray:
+        counts = _np.zeros(256, dtype=_np.uint32)
+        kmercounts(counts, self.sequence)
         return counts
 
 

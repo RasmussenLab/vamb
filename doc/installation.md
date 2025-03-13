@@ -26,9 +26,6 @@ pip install -e .
 
 __Note that the master branch is work-in-progress, have not been thoroughly tested, and is expected to have more bugs.__
 
-## Installing by compiling the Cython yourself
-If you can't/don't want to use pip/Conda, you can do it the hard way: Install the dependencies listed in the `pyproject.toml` file. Compile `src/_vambtools.pyx` then move the resulting binary to the inner of the two `vamb` directories. Check if it works by importing `vamb` in a Python session.
-
 ## Avoid using Conda to install Vamb
 The version of Vamb currently on BioConda is out of date, and significantly less accurate than the latest current version.
 We have also experienced that our users have more issues with installations from Conda.

@@ -3,6 +3,7 @@
 dynamic = ["version"]
 name = "vamb"
 dependencies = [
+    "vambcore == 0.1.2",
     "numpy == 1.26.4",
     "torch == 2.6.0",
     "pycoverm == 0.6.2",
