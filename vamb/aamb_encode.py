@@ -262,6 +262,7 @@ class AAE(nn.Module):
                 data_loader = set_batchsize(
                     data_loader,
                     data_loader.batch_size * 2,  # type:ignore
+                    data_loader.dataset.tensors[0].shape[0],
                 )
 
             (
@@ -446,8 +447,10 @@ class AAE(nn.Module):
             l_latents array"""
         self.eval()
 
-        new_data_loader = set_batchsize(data_loader, 256, encode=True)
         depths_array, _, _, _ = data_loader.dataset.tensors
+        new_data_loader = set_batchsize(
+            data_loader, 256, len(depths_array), encode=True
+        )
 
         length = len(depths_array)
         latent = np.empty((length, self.ld), dtype=np.float32)
