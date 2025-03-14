@@ -363,7 +363,7 @@ class VAE(_nn.Module):
         batchsteps: list[int],
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
         n_seq = len(data_loader.dataset.tensors[0])
-        if n_seq:
+        if n_seq < 2:
             raise ValueError(
                 "Cannot train on a dataset with fewer than 2 sequences, but got "
                 f"{n_seq} sequences. "
