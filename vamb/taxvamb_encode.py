@@ -127,7 +127,7 @@ def make_dataloader_labels_hloss(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=False,
+        drop_last=dataset.tensors[0].shape[0] > batchsize,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -167,7 +167,7 @@ def make_dataloader_concat_hloss(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=len(depthstensor) > batchsize,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -219,7 +219,7 @@ def make_dataloader_semisupervised_hloss(
     dataloader_all = _DataLoader(
         dataset=dataset_all,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=len(indices_unsup_vamb) > batchsize,
         shuffle=False,
         num_workers=dataloader_joint.num_workers,
         pin_memory=cuda,
@@ -376,17 +376,6 @@ class VAELabelsHLoss(_semisupervised_encode.VAELabels):
                 raise ValueError("All elements of batchsteps must be integers")
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:  # type: ignore
-                raise ValueError(
-                    f"Last batch size of {last_batchsize} exceeds dataset length "
-                    f"of {len(dataloader.dataset)}. "  # type: ignore
-                    "This means you have too few contigs left after filtering to train. "
-                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
-                    "after filtering. "
-                    "Please check the Vamb log file to see where the sequences were "
-                    "filtered away, and verify BAM files has sensible content."
-                )
             batchsteps_set = set(batchsteps)
 
         # Get number of features
@@ -900,7 +889,10 @@ class VAMB2Label(_nn.Module):
         self.eval()
 
         new_data_loader = _encode.set_batchsize(
-            data_loader, data_loader.batch_size, encode=True
+            data_loader,
+            data_loader.batch_size,
+            data_loader.dataset.tensors[0].shape[0],
+            encode=True,
         )
 
         with _torch.no_grad():
@@ -960,11 +952,12 @@ class VAMB2Label(_nn.Module):
         epoch_correct_labels = 0
 
         if epoch in batchsteps:
+            new_batchsize = data_loader.batch_size * 2
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,
+                batch_size=new_batchsize,
                 shuffle=True,
-                drop_last=True,
+                drop_last=data_loader.datset.tensors[0].shape[0] > new_batchsize,
                 num_workers=data_loader.num_workers,
                 pin_memory=data_loader.pin_memory,
                 collate_fn=data_loader.collate_fn,

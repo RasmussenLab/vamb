@@ -139,7 +139,7 @@ def make_dataloader_concat(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=len(depthstensor) > batchsize,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -165,7 +165,7 @@ def make_dataloader_labels(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=True,
+        drop_last=len(rpkm) > batchsize,
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -266,11 +266,13 @@ class VAELabels(_encode.VAE):
         epoch_correct_labels = 0
 
         if epoch in batchsteps:
+            new_batch_size = data_loader.batch_size * 2  # type: ignore
+            drop_last = data_loader.dataset.tensors[0].shape[0] > new_batch_size
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,  # type:ignore
+                batch_size=new_batch_size,
                 shuffle=True,
-                drop_last=True,
+                drop_last=drop_last,
                 num_workers=data_loader.num_workers,
                 pin_memory=data_loader.pin_memory,
                 collate_fn=data_loader.collate_fn,
@@ -394,17 +396,6 @@ class VAELabels(_encode.VAE):
                 raise ValueError("All elements of batchsteps must be integers")
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:  # type: ignore
-                raise ValueError(
-                    f"Last batch size of {last_batchsize} exceeds dataset length "
-                    f"of {len(dataloader.dataset)}. "  # type: ignore
-                    "This means you have too few contigs left after filtering to train. "
-                    "It is not adviced to run Vamb with fewer than 10,000 sequences "
-                    "after filtering. "
-                    "Please check the Vamb log file to see where the sequences were "
-                    "filtered away, and verify BAM files has sensible content."
-                )
             batchsteps_set = set(batchsteps)
 
         # Get number of features
@@ -589,11 +580,12 @@ class VAEConcat(_encode.VAE):
         epoch_correct_labels = 0
 
         if epoch in batchsteps:
+            new_batch_size = data_loader.batch_size * 2  # type:ignore
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,  # type:ignore
+                batch_size=new_batch_size,  # type:ignore
                 shuffle=True,
-                drop_last=True,
+                drop_last=data_loader.dataset.tensors[0].shape[0] > new_batch_size,
                 num_workers=data_loader.num_workers,
                 pin_memory=data_loader.pin_memory,
                 collate_fn=data_loader.collate_fn,
@@ -859,11 +851,12 @@ class VAEVAE(object):
         tensors_dict: dict[str, _torch.Tensor] = {k: None for k in metrics}
 
         if epoch in batchsteps:
+            new_batch_size = data_loader.batch_size * 2
             data_loader = _DataLoader(
                 dataset=data_loader.dataset,
-                batch_size=data_loader.batch_size * 2,
+                batch_size=new_batch_size,
                 shuffle=True,
-                drop_last=True,
+                drop_last=data_loader.dataset.tensors[0].shape[0] > new_batch_size,
                 num_workers=data_loader.num_workers,
                 pin_memory=data_loader.pin_memory,
                 collate_fn=data_loader.collate_fn,
@@ -1048,9 +1041,6 @@ class VAEVAE(object):
                 raise ValueError("All elements of batchsteps must be integers")
             if max(batchsteps, default=0) >= nepochs:
                 raise ValueError("Max batchsteps must not equal or exceed nepochs")
-            last_batchsize = dataloader.batch_size * 2 ** len(batchsteps)
-            if len(dataloader.dataset) < last_batchsize:
-                raise ValueError("Last batch size exceeds dataset length")
             batchsteps_set = set(batchsteps)
 
         # Get number of features

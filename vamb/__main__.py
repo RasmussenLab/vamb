@@ -1056,7 +1056,8 @@ def trainvae(
     begintime = time.time()
     logger.info("Creating and training VAE")
 
-    nsamples = data_loader.dataset.tensors[0].shape[1]  # type:ignore
+    n_obs = data_loader.dataset.tensors[0].shape[0]  # type: ignore
+    nsamples = data_loader.dataset.tensors[0].shape[1]  # type: ignore
     vae = vamb.encode.VAE(
         nsamples,
         nhiddens=vae_options.nhiddens,
@@ -1072,7 +1073,9 @@ def trainvae(
     modelpath = vamb_options.out_dir.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(
-            data_loader, vae_options.basic_options.starting_batch_size
+            data_loader,
+            vae_options.basic_options.starting_batch_size,
+            n_obs,
         ),
         nepochs=vae_options.basic_options.num_epochs,
         batchsteps=vae_options.basic_options.batch_steps,
@@ -1115,8 +1118,11 @@ def trainaae(
 
     logger.info("\tCreated AAE")
     modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
+    n_obs = data_loader.dataset.tensors[0].shape[0]  # type: ignore
     aae.trainmodel(
-        vamb.encode.set_batchsize(data_loader, aae_options.basic.starting_batch_size),
+        vamb.encode.set_batchsize(
+            data_loader, aae_options.basic.starting_batch_size, n_obs
+        ),
         aae_options.basic.num_epochs,
         aae_options.basic.batch_steps,
         aae_options.temp,

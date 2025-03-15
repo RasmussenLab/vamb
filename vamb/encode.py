@@ -31,7 +31,7 @@ import torch as _torch
 
 
 def set_batchsize(
-    data_loader: _DataLoader, batch_size: int, encode=False
+    data_loader: _DataLoader, batch_size: int, n_obs: int, encode=False
 ) -> _DataLoader:
     """Effectively copy the data loader, but with a different batch size.
 
@@ -43,7 +43,7 @@ def set_batchsize(
         dataset=data_loader.dataset,
         batch_size=batch_size,
         shuffle=not encode,
-        drop_last=False,
+        drop_last=not encode and (n_obs > batch_size),
         num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
     )
@@ -136,7 +136,7 @@ def make_dataloader(
     dataloader = _DataLoader(
         dataset=dataset,
         batch_size=batchsize,
-        drop_last=False,
+        drop_last=(len(depthstensor) > batchsize),
         shuffle=True,
         num_workers=n_workers,
         pin_memory=cuda,
@@ -362,10 +362,11 @@ class VAE(_nn.Module):
         optimizer,
         batchsteps: list[int],
     ) -> _DataLoader[tuple[Tensor, Tensor, Tensor]]:
-        if len(data_loader.dataset.tensors[0]) < 2:
+        n_seq = len(data_loader.dataset.tensors[0])
+        if n_seq < 2:
             raise ValueError(
                 "Cannot train on a dataset with fewer than 2 sequences, but got "
-                f"{len(data_loader.dataset.tensors[0])} sequences. "
+                f"{n_seq} sequences. "
                 "If you are trying to fit a DL model to this few sequences, "
                 "something probably went wrong in your pipeline."
             )
@@ -382,6 +383,7 @@ class VAE(_nn.Module):
             data_loader = set_batchsize(
                 data_loader,
                 data_loader.batch_size * 2,  # type:ignore
+                n_seq,
             )
 
         for depths_in, tnf_in, abundance_in, weights in data_loader:
@@ -446,11 +448,11 @@ class VAE(_nn.Module):
 
         self.eval()
 
+        depths_array, _, _, _ = data_loader.dataset.tensors
         new_data_loader = set_batchsize(
-            data_loader, data_loader.batch_size, encode=True
+            data_loader, data_loader.batch_size, len(depths_array), encode=True
         )
 
-        depths_array, _, _, _ = data_loader.dataset.tensors
         length = len(depths_array)
 
         # We make a Numpy array instead of a Torch array because, if we create
