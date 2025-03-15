@@ -182,7 +182,7 @@ class Composition:
             if skip:
                 continue
 
-            counts = entry.kmercounts(4)
+            counts = entry.kmercounts()
             if counts.sum() == 0:
                 raise ValueError(
                     f'TNF value of contig "{entry.header}" is all zeros. '

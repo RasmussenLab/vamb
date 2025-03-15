@@ -417,12 +417,10 @@ class FastaEntry:
         )
         return f">{self.header}\n{spacedseq}"
 
-    def kmercounts(self, k: int) -> _np.ndarray:
-        if k < 1 or k > 10:
-            raise ValueError("k must be between 1 and 10 inclusive")
+    def kmercounts(self) -> _np.ndarray:
 
-        counts = _np.zeros(1 << (2 * k), dtype=_np.uint32)
-        kmercounts(counts, self.sequence, k)
+        counts = _np.zeros(256, dtype=_np.uint32)
+        kmercounts(counts, self.sequence)
         return counts
 
 
