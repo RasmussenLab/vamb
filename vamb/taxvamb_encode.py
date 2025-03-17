@@ -957,7 +957,7 @@ class VAMB2Label(_nn.Module):
                 dataset=data_loader.dataset,
                 batch_size=new_batchsize,
                 shuffle=True,
-                drop_last=data_loader.datset.tensors[0].shape[0] > new_batchsize,
+                drop_last=data_loader.dataset.tensors[0].shape[0] > new_batchsize,
                 num_workers=data_loader.num_workers,
                 pin_memory=data_loader.pin_memory,
                 collate_fn=data_loader.collate_fn,
