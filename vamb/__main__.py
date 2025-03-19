@@ -2321,7 +2321,8 @@ def main():
 
 Required arguments: Outdir, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(vae_parser)
+    general_group = add_general_arguments(vae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vae_parser)
     add_abundance_arguments(vae_parser)
     add_bin_output_arguments(vae_parser)
@@ -2340,7 +2341,8 @@ Required arguments: Outdir, at least one composition input and at least one abun
 
 Required arguments: Outdir, taxonomy, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(vaevae_parser)
+    general_group = add_general_arguments(vaevae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vaevae_parser)
     add_abundance_arguments(vaevae_parser)
     add_taxonomy_arguments(vaevae_parser)
@@ -2355,7 +2357,8 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
         add_help=False,
         usage="%(prog)s [options]",
     )
-    add_general_arguments(vaeaae_parser)
+    general_group = add_general_arguments(vaeaae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vaeaae_parser)
     add_abundance_arguments(vaeaae_parser)
     add_bin_output_arguments(vaeaae_parser)
@@ -2375,7 +2378,8 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
 
 Required arguments: Outdir, unrefined taxonomy, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(predict_parser)
+    general_group = add_general_arguments(predict_parser)
+    add_minlength(general_group)
     add_composition_arguments(predict_parser)
     add_abundance_arguments(predict_parser)
     add_taxonomy_arguments(predict_parser, taxonomy_only=True)
@@ -2400,7 +2404,8 @@ Required arguments:
     at least one abundance input, at least one marker gene input, latent path and taxonomy
 """,
     )
-    add_general_arguments(recluster_parser)
+    general_group = add_general_arguments(recluster_parser)
+    add_minlength(general_group)
     add_composition_arguments(recluster_parser)
     add_abundance_arguments(recluster_parser)
     add_marker_arguments(recluster_parser)
