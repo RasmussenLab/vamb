@@ -68,6 +68,22 @@ def try_make_dir(name: Union[Path, str]):
         pass
 
 
+class CreatablePath:
+    def __init__(self, path: Path):
+        if path.exists():
+            raise FileExistsError(
+                f"Attempted to create path {path}, but it already exists"
+            )
+
+        # Cannot be created if the parent does not exist or is not a dir
+        parent_dir = path.parent
+        if not parent_dir.is_dir():
+            raise NotADirectoryError(
+                f"Attempted to create path {path}, but its parent is not an existing directory"
+            )
+        self.path = path
+
+
 class FASTAPath:
     def __init__(self, path: Path):
         self.path = check_existing_file(path)
@@ -314,6 +330,19 @@ class VAEOptions:
         self.dropout = dropout
 
 
+class MinContigLength:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(typeasserted(args.minlength, int))
+
+    def __init__(self, min_contig_length: int):
+        if min_contig_length < 250:
+            raise argparse.ArgumentTypeError(
+                "Minimum contig length must be at least 250"
+            )
+        self.n = min_contig_length
+
+
 class GeneralOptions:
     __slots__ = [
         "out_dir",
@@ -328,7 +357,7 @@ class GeneralOptions:
     def from_args(cls, args: argparse.Namespace):
         return cls(
             typeasserted(args.outdir, Path),
-            typeasserted(args.minlength, int),
+            MinContigLength.from_args(args),
             typeasserted(args.nthreads, int),
             not typeasserted(args.norefcheck, bool),
             typeasserted(args.seed, int),
@@ -338,30 +367,16 @@ class GeneralOptions:
     def __init__(
         self,
         out_dir: Path,
-        min_contig_length: int,
+        min_contig_length: MinContigLength,
         n_threads: int,
         refcheck: bool,
         seed: int,
         cuda: bool,
     ):
-        # Outdir does not exist
-        if out_dir.exists():
-            raise FileExistsError(out_dir)
-
-        # Outdir is in an existing parent dir
-        parent_dir = out_dir.parent
-        if not parent_dir.is_dir():
-            raise NotADirectoryError(parent_dir)
-        self.out_dir = out_dir
-
+        self.out_dir = CreatablePath(out_dir)
         if n_threads < 1:
             raise ValueError(f"Must pass at least 1 thread, not {n_threads}")
         self.n_threads = n_threads
-
-        if min_contig_length < 250:
-            raise argparse.ArgumentTypeError(
-                "Minimum contig length must be at least 250"
-            )
         self.min_contig_length = min_contig_length
 
         if cuda and not torch.cuda.is_available():
@@ -691,8 +706,8 @@ def run(
     general: GeneralOptions,
 ):
     torch.set_num_threads(general.n_threads)
-    try_make_dir(general.out_dir)
-    logger.add(general.out_dir.joinpath("log.txt"), format=format_log)
+    try_make_dir(general.out_dir.path)
+    logger.add(general.out_dir.path.joinpath("log.txt"), format=format_log)
     begintime = time.time()
     logger.info("Starting Vamb version " + vamb.__version_str__)
     logger.info("Random seed is " + str(general.seed))
@@ -1001,11 +1016,14 @@ def load_composition_and_abundance(
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     composition = calc_tnf(
-        comp_options, vamb_options.min_contig_length, vamb_options.out_dir, binsplitter
+        comp_options,
+        vamb_options.min_contig_length.n,
+        vamb_options.out_dir.path,
+        binsplitter,
     )
     abundance = calc_abundance(
         abundance_options,
-        vamb_options.out_dir,
+        vamb_options.out_dir.path,
         vamb_options.refcheck,
         composition.metadata,
         vamb_options.n_threads,
@@ -1070,7 +1088,7 @@ def trainvae(
     )
 
     logger.info("\tCreated VAE")
-    modelpath = vamb_options.out_dir.joinpath("model.pt")
+    modelpath = vamb_options.out_dir.path.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(
             data_loader,
@@ -1084,7 +1102,7 @@ def trainvae(
 
     logger.info("\tEncoding to latent representation")
     latent = vae.encode(data_loader)
-    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
+    vamb.vambtools.write_npz(vamb_options.out_dir.path.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
@@ -1117,7 +1135,7 @@ def trainaae(
     )
 
     logger.info("\tCreated AAE")
-    modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
+    modelpath = os.path.join(vamb_options.out_dir.path, "aae_model.pt")
     n_obs = data_loader.dataset.tensors[0].shape[0]  # type: ignore
     aae.trainmodel(
         vamb.encode.set_batchsize(
@@ -1132,7 +1150,7 @@ def trainaae(
     logger.info("\tEncoding to latent representation")
     clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
     vamb.vambtools.write_npz(
-        os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
+        os.path.join(vamb_options.out_dir.path, "aae_z_latent.npz"), latent
     )
 
     del aae  # Needed to free "latent" array's memory references?
@@ -1155,7 +1173,7 @@ class FastaOutput(NamedTuple):
             assert isinstance(common.comp.path, FASTAPath)
             return cls(
                 common.comp.path,
-                common.general.out_dir.joinpath("bins"),
+                common.general.out_dir.path.joinpath("bins"),
                 common.output.min_fasta_output_size,
             )
         else:
@@ -1343,7 +1361,7 @@ def run_bin_default(opt: BinDefaultOptions):
         comp_metadata.lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("vae_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("vae_clusters")),
         FastaOutput.try_from_common(opt.common),
         None,
     )
@@ -1390,7 +1408,7 @@ def run_bin_aae(opt: BinAvambOptions):
         comp_metadata.lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("aae_z_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("aae_z_clusters")),
         FastaOutput.try_from_common(opt.common),
         "z_",
     )
@@ -1403,7 +1421,9 @@ def run_bin_aae(opt: BinAvambOptions):
         FastaOutput.try_from_common(opt.common),
         "y_",
         binsplitter=opt.common.output.binsplitter,
-        base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
+        base_clusters_name=str(
+            opt.common.general.out_dir.path.joinpath("aae_y_clusters")
+        ),
         clusters=clusters_y_dict,
         sequence_names=cast(Sequence[str], comp_metadata.identifiers),
         sequence_lens=cast(Sequence[int], comp_metadata.lengths),
@@ -1531,7 +1551,7 @@ def run_taxonomy_predictor(opt: TaxometerOptions):
         abundance=abundance,
         tnfs=tnfs,
         lengths=lengths,
-        out_dir=opt.general.out_dir,
+        out_dir=opt.general.out_dir.path,
         taxonomy_options=opt,
         cuda=opt.general.cuda,
     )
@@ -1557,7 +1577,7 @@ def run_vaevae(opt: BinTaxVambOptions):
             abundance=abundance,
             tnfs=tnfs,
             lengths=lengths,
-            out_dir=opt.common.general.out_dir,
+            out_dir=opt.common.general.out_dir.path,
             taxonomy_options=opt.taxonomy,
             cuda=opt.common.general.cuda,
         )
@@ -1637,7 +1657,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         batchsize=vae_options.basic_options.starting_batch_size,
         cuda=opt.common.general.cuda,
     )
-    model_path = opt.common.general.out_dir.joinpath("vaevae_model.pt")
+    model_path = opt.common.general.out_dir.path.joinpath("vaevae_model.pt")
     with open(model_path, "wb") as modelfile:
         vae.trainmodel(
             dataloader,
@@ -1649,7 +1669,7 @@ def run_vaevae(opt: BinTaxVambOptions):
     latent_both = vae.VAEJoint.encode(dataloader_joint)
     logger.info(f"{latent_both.shape} embedding shape")
 
-    latent_path = opt.common.general.out_dir.joinpath("vaevae_latent.npz")
+    latent_path = opt.common.general.out_dir.path.joinpath("vaevae_latent.npz")
     vamb.vambtools.write_npz(latent_path, latent_both)
 
     # Cluster, save tsv file
@@ -1661,7 +1681,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("vaevae_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("vaevae_clusters")),
         FastaOutput.try_from_common(opt.common),
         None,
     )
@@ -1670,12 +1690,15 @@ def run_vaevae(opt: BinTaxVambOptions):
 def run_reclustering(opt: ReclusteringOptions):
     composition = calc_tnf(
         opt.composition,
-        opt.general.min_contig_length,
-        opt.general.out_dir,
+        opt.general.min_contig_length.n,
+        opt.general.out_dir.path,
         opt.output.binsplitter,
     )
     markers = load_markers(
-        opt.markers, composition.metadata, opt.general.out_dir, opt.general.n_threads
+        opt.markers,
+        composition.metadata,
+        opt.general.out_dir.path,
+        opt.general.n_threads,
     )
     latent = vamb.vambtools.read_npz(opt.latent_path)
     alg = opt.algorithm
@@ -1686,7 +1709,7 @@ def run_reclustering(opt: ReclusteringOptions):
             taxopt = alg.taxonomy
             abundance = calc_abundance(
                 taxopt.abundance,
-                taxopt.general.out_dir,
+                taxopt.general.out_dir.path,
                 taxopt.general.refcheck,
                 composition.metadata,
                 taxopt.general.n_threads,
@@ -1696,7 +1719,7 @@ def run_reclustering(opt: ReclusteringOptions):
                 abundance.matrix,
                 composition.matrix,
                 composition.metadata.lengths,
-                taxopt.general.out_dir,
+                taxopt.general.out_dir.path,
                 taxopt,
                 taxopt.general.cuda,
             )
@@ -1764,7 +1787,7 @@ def run_reclustering(opt: ReclusteringOptions):
         assert isinstance(opt.composition.path, FASTAPath)
         fasta_output = FastaOutput(
             opt.composition.path,
-            opt.general.out_dir.joinpath("bins"),
+            opt.general.out_dir.path.joinpath("bins"),
             opt.output.min_fasta_output_size,
         )
 
@@ -1772,7 +1795,7 @@ def run_reclustering(opt: ReclusteringOptions):
         fasta_output,
         None,
         opt.output.binsplitter,
-        str(opt.general.out_dir.joinpath("clusters_reclustered")),
+        str(opt.general.out_dir.path.joinpath("clusters_reclustered")),
         clusters_dict,
         cast(Sequence[str], composition.metadata.identifiers),
         cast(Sequence[int], composition.metadata.lengths),
@@ -2425,9 +2448,10 @@ Required arguments:
         # TODO: Not implemented. Need to refactor to universal options, then minlength, then add composition
         # then make a function to run tnf only
         if args.partial_part == "composition":
-            opt = CompositionOptions.from_args(args)
-            runner = partial(run_tnf, opt)
-            run(runner, opt)
+            # opt = CompositionOptions.from_args(args)
+            # runner = partial(run_tnf, opt)
+            # run(runner, opt)
+            pass
         else:
             # TODO: Add abundance
             # TODO: Add encoding w. VAE
