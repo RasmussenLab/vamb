@@ -144,26 +144,6 @@ class CompositionOptions:
         self.min_contig_length = min_contig_length
 
 
-class PartialCompositionOptions:
-    @classmethod
-    def from_args(cls, args: argparse.Namespace):
-        return cls(
-            CreatablePath(typeasserted(args.outdir, Path)),
-            MinContigLength.from_args(args),
-            FASTAPath(typeasserted(args.fasta, Path)),
-        )
-
-    def __init__(
-        self,
-        outdir: CreatablePath,
-        min_contig_length: MinContigLength,
-        fasta_path: FASTAPath,
-    ):
-        self.outdir = outdir
-        self.min_contig_length = min_contig_length
-        self.fasta_path = fasta_path
-
-
 class AbundancePath:
     def __init__(self, path: Path):
         self.path = check_existing_file(path)
@@ -404,6 +384,26 @@ class GeneralOptions:
             )
         self.seed = seed
         self.cuda = cuda
+
+
+class PartialCompositionOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(
+            GeneralOptions.from_args(args),
+            MinContigLength.from_args(args),
+            FASTAPath(typeasserted(args.fasta, Path)),
+        )
+
+    def __init__(
+        self,
+        general: GeneralOptions,
+        min_contig_length: MinContigLength,
+        path: FASTAPath,
+    ):
+        self.general = general
+        self.min_contig_length = min_contig_length
+        self.path = path
 
 
 class TaxonomyBase:
@@ -902,9 +902,9 @@ class ReclusteringOptions:
 
 
 def calc_tnf(
-    options: CompositionOptions,
+    options: CompositionOptions | PartialCompositionOptions,
     outdir: Path,
-    binsplitter: vamb.vambtools.BinSplitter,
+    binsplitter: Optional[vamb.vambtools.BinSplitter],
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     logger.info("Loading TNF")
@@ -925,7 +925,10 @@ def calc_tnf(
             )
         composition.save(outdir.joinpath("composition.npz"))
 
-    binsplitter.initialize(composition.metadata.identifiers)
+    # Initialize binsplitter on the identifiers. Only done if we actually need to binsplit
+    # later.
+    if binsplitter is not None:
+        binsplitter.initialize(composition.metadata.identifiers)
 
     if composition.nseqs < MINIMUM_SEQS:
         err = (
@@ -1340,6 +1343,10 @@ def add_bin_prefix(
         return clusters
     else:
         return {prefix + b: c for (b, c) in clusters.items()}
+
+
+def run_partial_composition(opt: PartialCompositionOptions):
+    calc_tnf(opt, opt.general.out_dir.path, None)
 
 
 def run_bin_default(opt: BinDefaultOptions):
@@ -1824,33 +1831,6 @@ def add_help_arguments(parser: argparse.ArgumentParser):
     )
 
 
-def add_universal_arguments(subparser: argparse.ArgumentParser):
-    add_help_arguments(subparser)
-    reqos = subparser.add_argument_group(title="Output", description=None)
-    reqos.add_argument(
-        "--outdir",
-        metavar="",
-        type=Path,
-        # required=True, # Setting this flag breaks the argparse with positional arguments. The existence of the folder is checked elsewhere
-        help="Output directory to create",
-        required=True,
-    )
-
-
-# TODO: These are not general.
-# Outdir: All
-# Minlength: Composition and abundance
-# Nthreads: abundance, encoding and clustering
-# norefcheck: abundance, encoding, clustering
-# cuda: encoding and clustering
-# seed: encoding and clustering
-def add_general_group(subparser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
-    general = subparser.add_argument_group(
-        title="General optional arguments", description=None
-    )
-    return general
-
-
 def add_minlength(general: argparse._ArgumentGroup):
     general.add_argument(
         "-m",
@@ -1863,10 +1843,20 @@ def add_minlength(general: argparse._ArgumentGroup):
 
 
 def add_general_arguments(subparser: argparse.ArgumentParser):
-    add_universal_arguments(subparser)
+    add_help_arguments(subparser)
+    reqos = subparser.add_argument_group(title="Output", description=None)
+    reqos.add_argument(
+        "--outdir",
+        metavar="",
+        type=Path,
+        # required=True, # Setting this flag breaks the argparse with positional arguments. The existence of the folder is checked elsewhere
+        help="Output directory to create",
+        required=True,
+    )
 
-    general = add_general_group(subparser)
-    add_minlength(general)
+    general = subparser.add_argument_group(
+        title="General optional arguments", description=None
+    )
 
     general.add_argument(
         "-p",
@@ -1891,12 +1881,17 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         default=int.from_bytes(os.urandom(7), "little"),
         help="Random seed (determinism not guaranteed)",
     )
-    return subparser
+    return general
+
+
+def add_fasta_arguments(subparser: argparse.ArgumentParser):
+    tnfos = subparser.add_argument_group(title="Composition input")
+    tnfos.add_argument("--fasta", metavar="", type=Path, help="Path to fasta file")
+    return tnfos
 
 
 def add_composition_arguments(subparser: argparse.ArgumentParser):
-    tnfos = subparser.add_argument_group(title="Composition input")
-    tnfos.add_argument("--fasta", metavar="", type=Path, help="Path to fasta file")
+    tnfos = add_fasta_arguments(subparser)
     tnfos.add_argument(
         "--composition", metavar="", type=Path, help="Path to .npz of composition"
     )
@@ -2422,10 +2417,9 @@ Required arguments:
     composition_parser = partial_part.add_parser(
         "composition", help="Process composition data", add_help=False
     )
-    add_universal_arguments(composition_parser)
-    general = add_general_group(composition_parser)
-    add_minlength(general)
-    add_composition_arguments(composition_parser)
+    general_group = add_general_arguments(composition_parser)
+    add_minlength(general_group)
+    add_fasta_arguments(composition_parser)
 
     args = parser.parse_args()
 
@@ -2457,15 +2451,10 @@ Required arguments:
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
     elif args.subcommand == PARTIAL:
-        # TODO: Not implemented. Need to refactor to universal options, then minlength, then add composition
-        # then make a function to run tnf only
         if args.partial_part == "composition":
-            opt = GeneralOptions.from_args(args)
-
-            # opt = CompositionOptions.from_args(args)
-            # runner = partial(run_tnf, opt)
-            # run(runner, opt)
-            pass
+            opt = PartialCompositionOptions.from_args(args)
+            runner = partial(run_partial_composition, opt)
+            run(runner, opt.general)
         else:
             # TODO: Add abundance
             # TODO: Add encoding w. VAE
