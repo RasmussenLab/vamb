@@ -94,9 +94,20 @@ class CompositionPath:
         self.path = check_existing_file(path)
 
 
-class CompositionOptions:
-    __slots__ = ["path"]
+class MinContigLength:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(typeasserted(args.minlength, int))
 
+    def __init__(self, min_contig_length: int):
+        if min_contig_length < 250:
+            raise argparse.ArgumentTypeError(
+                "Minimum contig length must be at least 250"
+            )
+        self.n = min_contig_length
+
+
+class CompositionOptions:
     @staticmethod
     def are_args_present(args: argparse.Namespace) -> bool:
         return isinstance(args.fasta, Path) or isinstance(args.composition, Path)
@@ -106,12 +117,14 @@ class CompositionOptions:
         return cls(
             typeasserted(args.fasta, (Path, type(None))),
             typeasserted(args.composition, (Path, type(None))),
+            MinContigLength.from_args(args),
         )
 
     def __init__(
         self,
         fastapath: Optional[Path],
         npzpath: Optional[Path],
+        min_contig_length: MinContigLength,
     ):
         if not (fastapath is None) ^ (npzpath is None):
             raise argparse.ArgumentTypeError(
@@ -127,6 +140,28 @@ class CompositionOptions:
         else:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
+
+        self.min_contig_length = min_contig_length
+
+
+class PartialCompositionOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(
+            CreatablePath(typeasserted(args.outdir, Path)),
+            MinContigLength.from_args(args),
+            FASTAPath(typeasserted(args.fasta, Path)),
+        )
+
+    def __init__(
+        self,
+        outdir: CreatablePath,
+        min_contig_length: MinContigLength,
+        fasta_path: FASTAPath,
+    ):
+        self.outdir = outdir
+        self.min_contig_length = min_contig_length
+        self.fasta_path = fasta_path
 
 
 class AbundancePath:
@@ -178,8 +213,6 @@ class AbundanceTSVPath:
 
 
 class AbundanceOptions:
-    __slots__ = ["paths"]
-
     @staticmethod
     def are_args_present(args: argparse.Namespace) -> bool:
         return (
@@ -197,6 +230,8 @@ class AbundanceOptions:
             typeasserted(args.abundance_tsv, (Path, type(None))),
             typeasserted(args.abundancepath, (Path, type(None))),
             typeasserted(args.min_alignment_id, (float, type(None))),
+            MinContigLength.from_args(args),
+            not args.norefcheck,
         )
 
     def __init__(
@@ -206,6 +241,8 @@ class AbundanceOptions:
         abundance_tsv: Optional[Path],
         abundancepath: Optional[Path],
         min_alignment_id: Optional[float],
+        min_contig_length: MinContigLength,
+        refcheck: bool,
     ):
         # Make sure only one abundance input is there
         if (
@@ -229,6 +266,8 @@ class AbundanceOptions:
             self.paths = BAMPaths(bampaths, min_alignment_id)
         elif abundance_tsv is not None:
             self.paths = AbundanceTSVPath(abundance_tsv)
+        self.min_contig_length = min_contig_length
+        self.refcheck = refcheck
 
 
 class BasicTrainingOptions:
@@ -330,25 +369,10 @@ class VAEOptions:
         self.dropout = dropout
 
 
-class MinContigLength:
-    @classmethod
-    def from_args(cls, args: argparse.Namespace):
-        return cls(typeasserted(args.minlength, int))
-
-    def __init__(self, min_contig_length: int):
-        if min_contig_length < 250:
-            raise argparse.ArgumentTypeError(
-                "Minimum contig length must be at least 250"
-            )
-        self.n = min_contig_length
-
-
 class GeneralOptions:
     __slots__ = [
         "out_dir",
-        "min_contig_length",
         "n_threads",
-        "refcheck",
         "seed",
         "cuda",
     ]
@@ -357,9 +381,7 @@ class GeneralOptions:
     def from_args(cls, args: argparse.Namespace):
         return cls(
             typeasserted(args.outdir, Path),
-            MinContigLength.from_args(args),
             typeasserted(args.nthreads, int),
-            not typeasserted(args.norefcheck, bool),
             typeasserted(args.seed, int),
             typeasserted(args.cuda, bool),
         )
@@ -367,9 +389,7 @@ class GeneralOptions:
     def __init__(
         self,
         out_dir: Path,
-        min_contig_length: MinContigLength,
         n_threads: int,
-        refcheck: bool,
         seed: int,
         cuda: bool,
     ):
@@ -377,7 +397,6 @@ class GeneralOptions:
         if n_threads < 1:
             raise ValueError(f"Must pass at least 1 thread, not {n_threads}")
         self.n_threads = n_threads
-        self.min_contig_length = min_contig_length
 
         if cuda and not torch.cuda.is_available():
             raise ModuleNotFoundError(
@@ -385,7 +404,6 @@ class GeneralOptions:
             )
         self.seed = seed
         self.cuda = cuda
-        self.refcheck = refcheck
 
 
 class TaxonomyBase:
@@ -885,26 +903,25 @@ class ReclusteringOptions:
 
 def calc_tnf(
     options: CompositionOptions,
-    min_contig_length: int,
     outdir: Path,
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     logger.info("Loading TNF")
-    logger.info(f"\tMinimum sequence length: {min_contig_length}")
+    logger.info(f"\tMinimum sequence length: {options.min_contig_length.n}")
 
     path = options.path
 
     if isinstance(path, CompositionPath):
         logger.info(f'\tLoading composition from npz at: "{path.path}"')
         composition = vamb.parsecontigs.Composition.load(path.path)
-        composition.filter_min_length(min_contig_length)
+        composition.filter_min_length(options.min_contig_length.n)
     else:
         assert isinstance(path, FASTAPath)
         logger.info(f"\tLoading data from FASTA file {path.path}")
         with vamb.vambtools.Reader(path.path) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, str(path.path), minlength=min_contig_length
+                file, str(path.path), minlength=options.min_contig_length.n
             )
         composition.save(outdir.joinpath("composition.npz"))
 
@@ -925,7 +942,7 @@ def calc_tnf(
     if not np.all(composition.metadata.mask):
         n_removed = len(composition.metadata.mask) - np.sum(composition.metadata.mask)
         message = (
-            f"The minimum sequence length has been set to {min_contig_length}, "
+            f"The minimum sequence length has been set to {options.min_contig_length.n}, "
             f"but {n_removed} sequences fell below this threshold and was filtered away."
             "\nBetter results are obtained if the sequence file is filtered to the minimum "
             "sequence length before mapping.\n"
@@ -945,14 +962,13 @@ def calc_tnf(
 def calc_abundance(
     abundance_options: AbundanceOptions,
     outdir: Path,
-    refcheck: bool,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     nthreads: int,
 ) -> vamb.parsebam.Abundance:
     begintime = time.time()
     logger.info("Loading depths")
     logger.info(
-        f"\tReference hash: {comp_metadata.refhash.hex() if refcheck else 'None'}"
+        f"\tReference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else 'None'}"
     )
 
     paths = abundance_options.paths
@@ -961,13 +977,13 @@ def calc_abundance(
 
         abundance = vamb.parsebam.Abundance.load(
             paths.path,
-            comp_metadata.refhash if refcheck else None,
+            comp_metadata.refhash if abundance_options.refcheck else None,
         )
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
         if abundance.nseqs != comp_metadata.nseqs:
-            assert not refcheck
+            assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
@@ -980,7 +996,7 @@ def calc_abundance(
             list(paths.paths),
             outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
-            refcheck,
+            abundance_options.refcheck,
             paths.min_alignment_id,
             nthreads,
         )
@@ -1017,14 +1033,12 @@ def load_composition_and_abundance(
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     composition = calc_tnf(
         comp_options,
-        vamb_options.min_contig_length.n,
         vamb_options.out_dir.path,
         binsplitter,
     )
     abundance = calc_abundance(
         abundance_options,
         vamb_options.out_dir.path,
-        vamb_options.refcheck,
         composition.metadata,
         vamb_options.n_threads,
     )
@@ -1690,7 +1704,6 @@ def run_vaevae(opt: BinTaxVambOptions):
 def run_reclustering(opt: ReclusteringOptions):
     composition = calc_tnf(
         opt.composition,
-        opt.general.min_contig_length.n,
         opt.general.out_dir.path,
         opt.output.binsplitter,
     )
@@ -1710,7 +1723,6 @@ def run_reclustering(opt: ReclusteringOptions):
             abundance = calc_abundance(
                 taxopt.abundance,
                 taxopt.general.out_dir.path,
-                taxopt.general.refcheck,
                 composition.metadata,
                 taxopt.general.n_threads,
             )
@@ -2448,6 +2460,8 @@ Required arguments:
         # TODO: Not implemented. Need to refactor to universal options, then minlength, then add composition
         # then make a function to run tnf only
         if args.partial_part == "composition":
+            opt = GeneralOptions.from_args(args)
+
             # opt = CompositionOptions.from_args(args)
             # runner = partial(run_tnf, opt)
             # run(runner, opt)
