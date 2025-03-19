@@ -406,6 +406,54 @@ class PartialCompositionOptions:
         self.path = path
 
 
+class PartialAbundanceOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        comp = CompositionOptions(
+            None, typeasserted(args.composition, Path), MinContigLength.from_args(args)
+        )
+        return cls(
+            GeneralOptions.from_args(args),
+            comp,
+            typeasserted(args.abundance_tsv, (Path, type(None))),
+            typeasserted(args.bampaths, (list, type(None))),
+            typeasserted(args.bamdir, (Path, type(None))),
+            typeasserted(args.min_alignment_id, (float, type(None))),
+            not typeasserted(args.norefcheck, bool),
+        )
+
+    def __init__(
+        self,
+        general: GeneralOptions,
+        composition_options: CompositionOptions,
+        abundance_tsv: Optional[Path],
+        bam_paths: Optional[list[Path]],
+        bam_dir: Optional[Path],
+        min_alignment_id: Optional[float],
+        refcheck: bool,
+    ):
+        if (
+            (bam_paths is not None)
+            + (abundance_tsv is not None)
+            + (bam_dir is not None)
+        ) != 1:
+            raise argparse.ArgumentTypeError(
+                "Must specify exactly one of BAM files, BAM dir or TSV file input"
+            )
+        if bam_dir is not None:
+            self.paths = BAMPaths.from_dir(bam_dir, min_alignment_id)
+        elif bam_paths is not None:
+            logger.warning(
+                "The --bamfiles argument is deprecated. It works, but might be removed in future versions of Vamb. Please use --bamdir instead"
+            )
+            self.paths = BAMPaths(bam_paths, min_alignment_id)
+        elif abundance_tsv is not None:
+            self.paths = AbundanceTSVPath(abundance_tsv)
+        self.general = general
+        self.refcheck = refcheck
+        self.composition_options = composition_options
+
+
 class TaxonomyBase:
     __slots__ = ["path"]
 
@@ -923,6 +971,7 @@ def calc_tnf(
             composition = vamb.parsecontigs.Composition.from_file(
                 file, str(path.path), minlength=options.min_contig_length.n
             )
+        assert outdir is not None
         composition.save(outdir.joinpath("composition.npz"))
 
     # Initialize binsplitter on the identifiers. Only done if we actually need to binsplit
@@ -963,7 +1012,7 @@ def calc_tnf(
 
 
 def calc_abundance(
-    abundance_options: AbundanceOptions,
+    abundance_options: AbundanceOptions | PartialAbundanceOptions,
     outdir: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     nthreads: int,
@@ -1347,6 +1396,13 @@ def add_bin_prefix(
 
 def run_partial_composition(opt: PartialCompositionOptions):
     calc_tnf(opt, opt.general.out_dir.path, None)
+
+
+def run_partial_abundance(opt: PartialAbundanceOptions):
+    composition = calc_tnf(opt.composition_options, opt.general.out_dir.path, None)
+    calc_abundance(
+        opt, opt.general.out_dir.path, composition.metadata, opt.general.n_threads
+    )
 
 
 def run_bin_default(opt: BinDefaultOptions):
@@ -1884,21 +1940,37 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
     return general
 
 
-def add_fasta_arguments(subparser: argparse.ArgumentParser):
-    tnfos = subparser.add_argument_group(title="Composition input")
+def make_composition_group(subparser: argparse.ArgumentParser):
+    return subparser.add_argument_group(title="Composition input")
+
+
+def add_fasta_to_group(tnfos: argparse._ArgumentGroup):
     tnfos.add_argument("--fasta", metavar="", type=Path, help="Path to fasta file")
-    return tnfos
 
 
-def add_composition_arguments(subparser: argparse.ArgumentParser):
-    tnfos = add_fasta_arguments(subparser)
+def add_composition_npz_to_group(tnfos: argparse._ArgumentGroup):
     tnfos.add_argument(
         "--composition", metavar="", type=Path, help="Path to .npz of composition"
     )
-    return subparser
 
 
-def add_abundance_arguments(subparser: argparse.ArgumentParser):
+def add_fasta_arguments(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_fasta_to_group(tnfos)
+
+
+def add_composition_npz_argument(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_composition_npz_to_group(tnfos)
+
+
+def add_composition_arguments(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_fasta_to_group(tnfos)
+    add_composition_npz_to_group(tnfos)
+
+
+def add_abundance_args_nonpz(subparser: argparse.ArgumentParser):
     abundanceos = subparser.add_argument_group(title="Abundance input")
     # Note: This argument is deprecated, but we'll keep supporting it for now.
     # Instead, use --bamdir.
@@ -1923,19 +1995,24 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
         help='Path to TSV file of precomputed abundances with header being "contigname(\\t<samplename>)*"',
     )
     abundanceos.add_argument(
-        "--abundance",
-        metavar="",
-        dest="abundancepath",
-        type=Path,
-        help="Path to .npz of abundances",
-    )
-    abundanceos.add_argument(
         "-z",
         dest="min_alignment_id",
         metavar="",
         type=float,
         default=None,
         help=argparse.SUPPRESS,
+    )
+    return abundanceos
+
+
+def add_abundance_arguments(subparser: argparse.ArgumentParser):
+    abundanceos = add_abundance_args_nonpz(subparser)
+    abundanceos.add_argument(
+        "--abundance",
+        metavar="",
+        dest="abundancepath",
+        type=Path,
+        help="Path to .npz of abundances",
     )
     return subparser
 
@@ -2426,6 +2503,14 @@ Required arguments:
     add_minlength(general_group)
     add_fasta_arguments(composition_parser)
 
+    abundance_parser = partial_part.add_parser(
+        "abundance", help="Process abundance data", add_help=False
+    )
+    general_group = add_general_arguments(abundance_parser)
+    add_minlength(general_group)
+    add_composition_npz_argument(abundance_parser)
+    add_abundance_args_nonpz(abundance_parser)
+
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -2459,6 +2544,10 @@ Required arguments:
         if args.partial_part == "composition":
             opt = PartialCompositionOptions.from_args(args)
             runner = partial(run_partial_composition, opt)
+            run(runner, opt.general)
+        elif args.partial_part == "abundance":
+            opt = PartialAbundanceOptions.from_args(args)
+            runner = partial(run_partial_abundance, opt)
             run(runner, opt.general)
         else:
             # TODO: Add abundance
