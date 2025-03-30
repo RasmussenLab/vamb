@@ -44,7 +44,6 @@ url = "https://github.com/RasmussenLab/vamb"
 requires = [
     "setuptools ~= 70.1",
     "setuptools-scm >= 8.0",
-    "Cython ~= 3.0.1"
 ]
 build-backend = "setuptools.build_meta"
 
