@@ -1,5 +1,16 @@
 # Tips for running Vamb
 
+## Use the latest released version
+Vamb generally gets faster and more accurate over time, so it's worth it to get the latest version.
+Note that Conda releases are typically (far) behind pip releases, so I recommend installation using pip.
+
+```{image} ../benchmark/benchmark.png
+:alt: Vamb gets better over time
+:width: 600px
+```
+_Figure 1: Newer Vamb releases are faster and more accurate.
+Results are from binning the CAMI2 toy human microbiome short read gold standard assembly datasets, using the recommended multi-split workflow, and binned with Vamb using default settings._
+
 ## Garbage in, garbage out
 For the best results when running Vamb, make sure the inputs to Vamb are as good as they can be.
 In particular, the assembly process is a main bottleneck in the total binning workflow, so improving assembly
