@@ -11,7 +11,9 @@ but it requires more compute than either.
 I recommend new users run either TaxVamb or Vamb.
 
 ## Quickstart
-### Vamb
+The general workflow looks like this.
+For more detailed information, see the documentation page on Vamb's inputs and outputs, as well as the page with tips on how to run Vamb.
+
 ```shell
 # Assemble your reads, one assembly per sample, e.g. with SPAdes
 for sample in 1 2 3; do
@@ -37,20 +39,50 @@ python src/merge_aemb.py aemb abundance.tsv
 vamb bin default --outdir vambout --fasta contigs.fna.gz --abundance_tsv abundance.tsv
 ```
 
-### TaxVamb
-First, process your FASTA file and abundance using the same commands as when running default Vamb.
+## Running with test data
+We provide example data under the "releases" section on the Vamb Github repository: https://github.com/RasmussenLab/vamb/releases/download/input_data/inputs.tar.gz
 
-Then, prepare a _taxonomy file_.
-See the description of the taxonomy input in the section on inputs. 
+After downloading, extract its content:
+```shell
+$ tar -xzf inputs.tar.gz
+```
 
-Finally, run TaxVamb with:
+This data is only for demonstrating the Vamb commands, and test running Vamb, and does not reflect a realistic metagenome. It is not suitable for benchmarking the accuracy of any binner.
+
+The following commands makes use of these example files. You can substitute those files with your own in the commands.
+
+
+### Vamb
+Default command:
 
 ```shell
-$ vamb bin taxvamb --outdir path/to/outdir --fasta /path/to/catalogue.fna.gz --abundance_tsv abundance.tsv --taxonomy taxonomy.tsv
+$ vamb bin default --outdir out1 --fasta contigs.fna.gz --abundance_tsv abundances.tsv
+```
+
+### TaxVamb
+For TaxVamb, it's almost the same, but we also provide the taxonomy file:
+
+```shell
+$ vamb bin taxvamb --outdir out2 --fasta contigs.fna.gz --abundance_tsv abundances.tsv --taxonomy taxonomy.tsv
+```
+
+### Taxometer
+Same default arguments as TaxVamb:
+
+```shell
+$ vamb taxometer --outdir out3 --fasta contigs.fna.gz --abundance_tsv abundances.tsv --taxonomy taxonomy.tsv
 ```
 
 ### AVAMB
 See the README.md file in the `workflow_avamb` directory.
+
+### Reducing the number of epochs for testing
+For testing purposes, e.g. when running on the test data, it may be useful to reduce the number of training epochs, so Vamb finishes faster.
+This will cause Vamb's models to be severely underfitted and perform terribly, so doing it is only recommended for testing.
+
+* For Vamb: Add flags `-e 5 -q 2 3`
+* For TaxVamb: Add flags `-e 5 -q 2 3 -pe 5 -pq 2 3`
+* For Taxometer: Add flags `-pe 5 -pq 2 3`
 
 ## Explanation of command-line options
 Each program in Vamb only has a subset of the following options.

@@ -30,7 +30,7 @@ See also [our tool BinBencher.jl](https://github.com/jakobnissen/BinBencher.jl) 
 e.g. for simulated data or a mock microbiome.
 
 ## Quickstart
-See [the documentation for more details.](https://vamb.readthedocs.io/en/latest/)
+For more details, and how to run on an example dataset [see the documentation.](https://vamb.readthedocs.io/en/latest/)
 
 ```shell
 # Assemble your reads, one assembly per sample, e.g. with SPAdes
