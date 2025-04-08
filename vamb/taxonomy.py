@@ -81,19 +81,26 @@ class Taxonomy:
         contig_taxonomies: list[Optional[ContigTaxonomy]] = [None] * len(
             metadata.identifiers
         )
+        n_found = 0
         for contigname, taxonomy in observed_taxonomies:
             index = index_of_contigname.get(contigname)
             if index is None:
-                raise ValueError(
-                    f'When parsing taxonomy, found contigname "{contigname}", '
-                    "but no sequence of that name is in the FASTA file"
-                )
+                continue
+            n_found += 1
             existing = contig_taxonomies[index]
             if existing is not None:
                 raise ValueError(
                     f'Duplicate contigname when parsing taxonomy: "{contigname}"'
                 )
             contig_taxonomies[index] = taxonomy
+
+        if n_found != metadata.nseqs:
+            raise ValueError(
+                f"In taxonomy file, expected {metadata.nseqs} contigs that are "
+                f"also present in the filtered FASTA file, but found {n_found}. "
+                "Note that this might occur because some contigs in the taxonomy "
+                "file falls under the minimum length threshold."
+            )
         return cls(contig_taxonomies, metadata.refhash, is_canonical)
 
     def __init__(
