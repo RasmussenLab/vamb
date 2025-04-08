@@ -2,7 +2,7 @@
 # PlasMAAG 
 
 PlasMAAG (**Plas**mid and organism **M**etagenomic binning using **A**ssembly **A**lignment **G**raphs) is a framework to recover **plasmids** and **organisms** from **metagenomic** samples, offering state-of-the-art plasmid reconstruction with reduced computational costs.
-* On synthetic benchmark datasets, PlasMAAG reconstructs **50-121%** more near-complete plasmids than competing methods.
+* On synthetic benchmark datasets, PlasMAAG reconstructs **50-121%** more near-complete confident plasmids than competing methods.
 * On hospital sewage samples, PlasMAAG outperforms all other methods, reconstructing **33%** more plasmid sequences.
   
 See the preprint for more information: ["Accurate plasmid reconstruction from metagenomics data using assembly-alignment graphs and contrastive learning"](https://www.biorxiv.org/content/10.1101/2025.02.26.640269v2.abstract)
