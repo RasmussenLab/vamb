@@ -545,33 +545,6 @@ class VAE(_nn.Module):
 
         )
 
-    # def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
-    #     avg_cosine_distances = _torch.empty(
-    #         len(mu),
-    #         device=mu.device
-    #         )
-        
-    #     for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
-    #         if not neighs_mask_i:
-            
-    #             # If it has no neighbors or neighs_mask_i is False
-    #             cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
-    #             avg_cosine_distance = cosine_distances
-    #             avg_cosine_distance = _torch.tensor(0.0, device=mu.device)
-
-    #         else:
-    #             # Select the neighbors
-    #             mus_neighs = self.mu_container[self.neighs[idx_pred]].to(mu.device)
-                
-    #             # Compute distances
-    #             cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i )
-    #             avg_cosine_distance = cosine_distances.mean()
-
-    #         # Append to the result lists
-    #         avg_cosine_distances[i] = avg_cosine_distance
-
-    #     return avg_cosine_distances
-
     def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
         results = []
 
