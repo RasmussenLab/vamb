@@ -3,6 +3,7 @@ from pathlib import Path
 import vamb
 import vamb.vambtools as _vambtools
 #from vamb.cluster import _normalize, _calc_distances
+import time
 from torch.utils.data.dataset import TensorDataset as _TensorDataset
 from torch.utils.data import DataLoader as _DataLoader
 from torch.nn.functional import softmax as _softmax
