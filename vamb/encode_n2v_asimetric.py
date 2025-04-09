@@ -687,7 +687,7 @@ class VAE(_nn.Module):
         #     epoch_ablongsseloss_time += time_sse_long
         
         # epoch_loss_time = epoch_kldloss_time + epoch_sseloss_time + epoch_celoss_time + epoch_embloss_pop_time + epoch_absseloss_time + epoch_ablongsseloss_time
-        logger.info("monitoring runtimes")
+        #logger.info("monitoring runtimes")
         logger.info(
             "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.6f}\tAB:{:.4e}\tABlong:{:.4e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
