@@ -545,28 +545,48 @@ class VAE(_nn.Module):
 
         )
 
-    def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
-        avg_cosine_distances = _torch.empty(len(mu),device=mu.device)
-        for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
-            if not neighs_mask_i:
+    # def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
+    #     avg_cosine_distances = _torch.empty(
+    #         len(mu),
+    #         device=mu.device
+    #         )
+        
+    #     for i,(mu_i, idx_pred, neighs_mask_i) in enumerate(zip(mu, idxs_preds, neighs_mask)):
+    #         if not neighs_mask_i:
             
-                # If it has no neighbors or neighs_mask_i is False
-                cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
-                avg_cosine_distance = cosine_distances
+    #             # If it has no neighbors or neighs_mask_i is False
+    #             cosine_distances = _torch.tensor(0.0)  # A single value of 1.0
+    #             avg_cosine_distance = cosine_distances
+    #             avg_cosine_distance = _torch.tensor(0.0, device=mu.device)
 
-            else:
-                # Select the neighbors
-                mus_neighs = self.mu_container[self.neighs[idx_pred]].to(mu.device)
+    #         else:
+    #             # Select the neighbors
+    #             mus_neighs = self.mu_container[self.neighs[idx_pred]].to(mu.device)
                 
-                # Compute distances
-                cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i )
+    #             # Compute distances
+    #             cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i )
+    #             avg_cosine_distance = cosine_distances.mean()
+
+    #         # Append to the result lists
+    #         avg_cosine_distances[i] = avg_cosine_distance
+
+    #     return avg_cosine_distances
+
+    def cosinesimilarity_loss(self, mu, idxs_preds, neighs_mask):
+        results = []
+
+        for mu_i, idx_pred, neighs_mask_i in zip(mu, idxs_preds, neighs_mask):
+            if not neighs_mask_i:
+                avg_cosine_distance = _torch.tensor(0.0, device=mu.device)
+            else:
+                mus_neighs = self.mu_container[self.neighs[idx_pred]].to(mu.device)
+                cosine_distances = 2 * self.calc_cosine_distances(mus_neighs, mu_i)
                 avg_cosine_distance = cosine_distances.mean()
 
-            # Append to the result lists
-            avg_cosine_distances[i] = avg_cosine_distance
+            results.append(avg_cosine_distance)
 
-        return avg_cosine_distances
-
+        return _torch.stack(results)
+    
     def calc_cosine_distances(self,matrix, vector):
         "Return vector of cosine distances from rows of normalized matrix to given row."
         # normalize vector 
@@ -677,35 +697,35 @@ class VAE(_nn.Module):
             epoch_absseloss += ab_sse.data.item()
             epoch_ablongsseloss += ab_long_sse.data.item()
             
-            #time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr = times
+            time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr = times
             
-        #     epoch_kldloss_time += time_kld
-        #     epoch_sseloss_time += time_sse
-        #     epoch_celoss_time += time_ce
-        #     epoch_embloss_pop_time += time_contr
-        #     epoch_absseloss_time += time_ab_sse
-        #     epoch_ablongsseloss_time += time_sse_long
+            epoch_kldloss_time += time_kld
+            epoch_sseloss_time += time_sse
+            epoch_celoss_time += time_ce
+            epoch_embloss_pop_time += time_contr
+            epoch_absseloss_time += time_ab_sse
+            epoch_ablongsseloss_time += time_sse_long
         
-        # epoch_loss_time = epoch_kldloss_time + epoch_sseloss_time + epoch_celoss_time + epoch_embloss_pop_time + epoch_absseloss_time + epoch_ablongsseloss_time
+        epoch_loss_time = epoch_kldloss_time + epoch_sseloss_time + epoch_celoss_time + epoch_embloss_pop_time + epoch_absseloss_time + epoch_ablongsseloss_time
         #logger.info("monitoring runtimes")
         logger.info(
             "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.6f}\tAB:{:.4e}\tABlong:{:.4e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
-                epoch_loss / len(data_loader),
-                epoch_celoss / len(data_loader),
-                epoch_absseloss / len(data_loader),
-                epoch_ablongsseloss / len(data_loader),
-                epoch_sseloss / len(data_loader),
-                epoch_embloss_pop / len(data_loader),
-                epoch_kldloss / len(data_loader),
+                # epoch_loss / len(data_loader),
+                # epoch_celoss / len(data_loader),
+                # epoch_absseloss / len(data_loader),
+                # epoch_ablongsseloss / len(data_loader),
+                # epoch_sseloss / len(data_loader),
+                # epoch_embloss_pop / len(data_loader),
+                # epoch_kldloss / len(data_loader),
 
-                # epoch_loss_time,
-                # epoch_celoss_time,
-                # epoch_absseloss_time,
-                # epoch_ablongsseloss_time,
-                # epoch_sseloss_time,
-                # epoch_embloss_pop_time,
-                # epoch_kldloss_time,
+                epoch_loss_time,
+                epoch_celoss_time,
+                epoch_absseloss_time,
+                epoch_ablongsseloss_time,
+                epoch_sseloss_time,
+                epoch_embloss_pop_time,
+                epoch_kldloss_time,
                 
                 data_loader.batch_size,
                 
