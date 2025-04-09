@@ -467,12 +467,16 @@ class VAE(_nn.Module):
         abundance_long_mask: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor,Tensor]:
         
+        
         # If multiple samples, use cross entropy, else use SSE for abundance
+        t0=time.time()
         ab_sse = (abundance_out - abundance_in).pow(2).sum(dim=1)
+        ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
+        weighed_ab = ab_sse * ab_sse_weight
+        time_ab_sse=time.time()-t0
+        
+        t0=time.time()
         ce = -((depths_out + 1e-9).log() * depths_in).sum(dim=1)
-        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
-        sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask 
-        kld = 0.5 * (mu.pow(2)).sum(dim=1)
         # Avoid having the denominator be zero
         if self.nsamples == 1:
             ce_weight = 0.0
@@ -480,24 +484,33 @@ class VAE(_nn.Module):
             ce_weight = ((1 - self.alpha) * (self.nsamples - 1)) / (
                 self.nsamples * _log(self.nsamples)
             )
-
+        weighed_ce = ce * ce_weight        
+        time_ce=time.time()-t0
         
-        ab_sse_weight = (1 - self.alpha) * (1 / self.nsamples)
+        t0=time.time()
+        sse = (tnf_out - tnf_in).pow(2).sum(dim=1)
         sse_weight = self.alpha / self.ntnf
-        ab_long_sse_weight = self.alpha / (self.nsamples)
-        kld_weight = 1 / (self.nlatent * self.beta)
-        
-        weighed_ab = ab_sse * ab_sse_weight
-        weighed_ce = ce * ce_weight
         weighed_sse = sse * sse_weight
+        time_sse=time.time()-t0
+        
+        t0=time.time()
+        sse_ab_long = (abundance_long_out - abundance_long_in).pow(2).sum(dim=1)*abundance_long_mask 
+        ab_long_sse_weight = self.alpha / (self.nsamples)
         weighed_ab_long_sse = sse_ab_long * ab_long_sse_weight
+        time_sse_long=time.time()-t0
+        
+        t0=time.time()
+        kld = 0.5 * (mu.pow(2)).sum(dim=1)
+        kld_weight = 1 / (self.nlatent * self.beta)
         weighed_kld = kld * kld_weight
+        time_kld=time.time()-t0
+        
+        t0=time.time()
         loss_emb = self.cosinesimilarity_loss(
             mu,
             preds_idxs,
             neighs_mask,
         )
-
         loss_emb_cat = _torch.cat(
             (
                 loss_emb.unsqueeze(0) - self.margin,
@@ -505,6 +518,7 @@ class VAE(_nn.Module):
             ),
             dim=0,
         )
+        time_contr=time.time()-t0
 
         reconstruction_loss = (
             weighed_ce
@@ -526,6 +540,7 @@ class VAE(_nn.Module):
             (weighed_ab_long_sse[abundance_long_mask]).mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(), 
+            (time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr)
 
         )
 
@@ -577,6 +592,15 @@ class VAE(_nn.Module):
         epoch_absseloss = 0.0
         epoch_ablongsseloss = 0.0
 
+        
+        epoch_kldloss_time = 0.0
+        epoch_sseloss_time = 0.0
+        epoch_celoss_time = 0.0
+        epoch_embloss_pop_time = 0.0
+        epoch_absseloss_time = 0.0
+        epoch_ablongsseloss_time = 0.0
+
+
         if epoch in batchsteps:
             data_loader = set_batchsize(data_loader, data_loader.batch_size * 2)
 
@@ -623,6 +647,7 @@ class VAE(_nn.Module):
                 ab_long_sse,
                 kld,
                 loss_emb_pop,
+                times
             ) = self.calc_loss(
                 depths_in,
                 depths_out,
@@ -639,6 +664,8 @@ class VAE(_nn.Module):
                 abundance_long_mask,
             )
             
+            
+            
             loss.backward()
             optimizer.step()
             epoch_loss += loss.data.item()
@@ -648,7 +675,17 @@ class VAE(_nn.Module):
             epoch_embloss_pop += loss_emb_pop.item() 
             epoch_absseloss += ab_sse.data.item()
             epoch_ablongsseloss += ab_long_sse.data.item()
+            
+            time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr = times
+            
+            epoch_kldloss_time += time_kld
+            epoch_sseloss_time += time_sse
+            epoch_celoss_time += time_ce
+            epoch_embloss_pop_time += time_contr
+            epoch_absseloss_time += time_ab_sse
+            epoch_ablongsseloss_time += time_sse_long
 
+        logger.info("monitoring runtimes")
         logger.info(
             "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.6f}\tAB:{:.4e}\tABlong:{:.4e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
@@ -660,6 +697,8 @@ class VAE(_nn.Module):
                 epoch_embloss_pop / len(data_loader),
                 epoch_kldloss / len(data_loader),
                 data_loader.batch_size,
+                
+                
             )
         )
         
