@@ -43,11 +43,11 @@ def find_neighbours_optimized(
         if torch.sum(within_radius) == 0:  # in such case it will not have a neighbour
             continue
         else:
-            for lat_neigh_idx in np.where(within_radius)[0]:
+            for j,lat_neigh_idx in enumerate(np.where(within_radius)[0]):
                 if c_cc_d[contignames[lat_neigh_idx]] == c_cc_d[contignames[i]]:
-                    communities_g.add_edge(contignames[i], contignames[lat_neigh_idx])
+                    communities_g.add_edge(contignames[i], contignames[lat_neigh_idx],distance=distances[within_radius][j].item())
                     neighs[i].append(lat_neigh_idx)
-
+    
     return (np.array(neighs, dtype=object), communities_g)
 
 
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-r",
-        default=[0.05],
+        default=[0.1],
         help="Radius within 2 contigs are considered neighbours.",
         nargs="+",
     )
