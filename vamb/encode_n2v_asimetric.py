@@ -541,7 +541,7 @@ class VAE(_nn.Module):
             (weighed_ab_long_sse[abundance_long_mask]).mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(), 
-            #(time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr)
+            (time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr)
 
         )
 
@@ -668,7 +668,7 @@ class VAE(_nn.Module):
                 ab_long_sse,
                 kld,
                 loss_emb_pop,
-                #times
+                times
             ) = self.calc_loss(
                 depths_in,
                 depths_out,
