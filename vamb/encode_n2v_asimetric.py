@@ -541,7 +541,7 @@ class VAE(_nn.Module):
             (weighed_ab_long_sse[abundance_long_mask]).mean(),
             weighed_kld.mean(),
             loss_emb_pop.mean(), 
-            (time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr)
+            #(time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr)
 
         )
 
@@ -648,7 +648,7 @@ class VAE(_nn.Module):
                 ab_long_sse,
                 kld,
                 loss_emb_pop,
-                times
+                #times
             ) = self.calc_loss(
                 depths_in,
                 depths_out,
@@ -677,34 +677,35 @@ class VAE(_nn.Module):
             epoch_absseloss += ab_sse.data.item()
             epoch_ablongsseloss += ab_long_sse.data.item()
             
-            time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr = times
+            #time_ab_sse,time_ce,time_sse,time_sse_long,time_kld,time_contr = times
             
-            epoch_kldloss_time += time_kld
-            epoch_sseloss_time += time_sse
-            epoch_celoss_time += time_ce
-            epoch_embloss_pop_time += time_contr
-            epoch_absseloss_time += time_ab_sse
-            epoch_ablongsseloss_time += time_sse_long
+        #     epoch_kldloss_time += time_kld
+        #     epoch_sseloss_time += time_sse
+        #     epoch_celoss_time += time_ce
+        #     epoch_embloss_pop_time += time_contr
+        #     epoch_absseloss_time += time_ab_sse
+        #     epoch_ablongsseloss_time += time_sse_long
         
-        epoch_loss_time = epoch_kldloss_time + epoch_sseloss_time + epoch_celoss_time + epoch_embloss_pop_time + epoch_absseloss_time + epoch_ablongsseloss_time
+        # epoch_loss_time = epoch_kldloss_time + epoch_sseloss_time + epoch_celoss_time + epoch_embloss_pop_time + epoch_absseloss_time + epoch_ablongsseloss_time
         logger.info("monitoring runtimes")
         logger.info(
             "\tEpoch: {}\tLoss: {:.6f}\tCE: {:.6f}\tAB:{:.4e}\tABlong:{:.4e}\tSSE: {:.6f}\tembloss_pop: {:.6f}\tKLD: {:.4f}\tBatchsize: {}".format(
                 epoch + 1,
-                # epoch_loss / len(data_loader),
-                # epoch_celoss / len(data_loader),
-                # epoch_absseloss / len(data_loader),
-                # epoch_ablongsseloss / len(data_loader),
-                # epoch_sseloss / len(data_loader),
-                # epoch_embloss_pop / len(data_loader),
-                # epoch_kldloss / len(data_loader),
-                epoch_loss_time,
-                epoch_celoss_time,
-                epoch_absseloss_time,
-                epoch_ablongsseloss_time,
-                epoch_sseloss_time,
-                epoch_embloss_pop_time,
-                epoch_kldloss_time,
+                epoch_loss / len(data_loader),
+                epoch_celoss / len(data_loader),
+                epoch_absseloss / len(data_loader),
+                epoch_ablongsseloss / len(data_loader),
+                epoch_sseloss / len(data_loader),
+                epoch_embloss_pop / len(data_loader),
+                epoch_kldloss / len(data_loader),
+
+                # epoch_loss_time,
+                # epoch_celoss_time,
+                # epoch_absseloss_time,
+                # epoch_ablongsseloss_time,
+                # epoch_sseloss_time,
+                # epoch_embloss_pop_time,
+                # epoch_kldloss_time,
                 
                 data_loader.batch_size,
                 
