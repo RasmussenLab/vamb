@@ -183,12 +183,8 @@ snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 ```
 
 # TODO
-- [x] Remove seed from vamb asymmetric
-- [x] Write section on output files
 - [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproducibility
 - [ ] Add fasta files of the contigs to the output directory
 - [ ] Test that cluster submit works
       - plasmid_bins/ *.fna 
       - nonplasmid_bins/ *.fna 
-- [ ] why is this created
-      ─ vae_clusters_unsplit.tsv # TODO why is this generated ?  - remove it ? 
