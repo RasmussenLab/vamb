@@ -66,9 +66,9 @@ The *results* directory contains:
 results
 ├── candidate_plasmids.tsv : The candidate plasmids
 ├── candidate_genomes.tsv : The candidate chromosomes
-└── scores.tsv : The scores for each contig 
+└── scores.tsv : The aggregated scores for each cluster 
 ````
-The `candidate_genomes.tsv` and `candidate_genomes.tsv` files are formatted as:
+The `candidate_plasmids.tsv` and `candidate_genomes.tsv` files are formatted as:
 ````
 clustername     contigname
 nneighs_1051    Ssample0CNODE_198_length_19708_cov_59.381163
@@ -87,13 +87,13 @@ So for example `< output directory > /log/intermidiate_files_run_contrastive_VAE
 The *intermidiate_files* directory contains the intermidiate files from the pipeline. 
 
 ## Advanced
-### Using an allready downloaded geNomad database
-To use an allready downloaded database, pass in a path to the genomad database with the --genomad_db argument
+### Using an already downloaded geNomad database
+To use an already downloaded database, pass in a path to the genomad database with the ``` --genomad_db ``` argument
 
 ### Resources 
 
 The pipeline can be configurated in: ``` config/config.yaml ```
-Here the resources for each rule can be configurated as follows
+Here, the resources for each rule can be configurated as follows
 ```
 spades:
   walltime: "15-00:00:00"
