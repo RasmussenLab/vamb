@@ -456,7 +456,6 @@ rule run_contrastive_VAE:
         nb_file = os.path.join(OUTDIR,"{key}",'neighs','neighs_intraonly_rm_object_r_%s.npz'%NEIGHS_R)
     output:
         directory = directory(os.path.join(OUTDIR,"{key}", 'contrastive_VAE')),
-        bins = os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_unsplit.tsv'),
         finished = os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_contrastive_VAE.finished'),
         lengths = os.path.join(OUTDIR,"{key}",'contrastive_VAE','lengths.npz'),
         vae_clusters = os.path.join(OUTDIR, '{key}','contrastive_VAE/vae_clusters_community_based_complete_unsplit.tsv'),
@@ -474,7 +473,7 @@ rule run_contrastive_VAE:
         vamb bin contr_vamb --outdir {output.directory} --fasta {input.contigs} -p {threads} --bamfiles {input.bamfiles}\
         --neighs {input.nb_file}  -m {MIN_CONTIG_LEN} {PLAMB_PARAMS}\
          {params.cuda} &> {log}
-        touch {output}
+        touch {output.finished}
         """
 
 
