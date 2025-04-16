@@ -528,7 +528,7 @@ rule classify_bins_with_geNomad:
         os.path.join(OUTDIR,"{key}",'geNomad','contigs.flt_aggregated_classification','contigs.flt_aggregated_classification.tsv'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_contrastive_VAE.finished'),
         os.path.join(OUTDIR,"{key}",'rule_completed_checks/run_geNomad.finished'),
-        os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_unsplit.tsv'),
+        os.path.join(OUTDIR,"{key}",'contrastive_VAE','vae_clusters_density_unsplit.tsv'),
         contignames = OUTDIR / "{key}/assembly_mapping_output/contigs.names.sorted",
         lengths = os.path.join(OUTDIR,"{key}",'contrastive_VAE','lengths.npz'),
         comm_clusters = os.path.join(OUTDIR,'{key}','contrastive_VAE','vae_clusters_community_based_complete_and_circular_unsplit.tsv'),
