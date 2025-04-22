@@ -66,7 +66,7 @@ if __name__ == "__main__":
     with gzip.open(args.contigs, "rt") as handle:
         for record in SeqIO.parse(handle, "fasta"):
             bin_file = record.id+".fna"
-            bin_dir =  candidate_plasmids if record.id in pl_cs else "candidate_genomes"
+            bin_dir =  "candidate_plasmids" if record.id in pl_cs else "candidate_genomes"
             bin_path = os.path.join(args.outdir,"%s/%s"%(bin_dir,bin_file))
             with open(bin_path, "a") as out:
                 SeqIO.write(record, out, "fasta")
