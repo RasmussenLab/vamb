@@ -67,7 +67,7 @@ if __name__ == "__main__":
         for record in SeqIO.parse(handle, "fasta"):
             contig_name= record.id
             bin_dir =  "candidate_plasmids" if contig_name in pl_cs else "candidate_genomes"
-            bin_name= c2plcl[contigname] if bin_dir == "candidate_plasmids" else c2nonplcl
+            bin_name= c2plcl[contig_name] if bin_dir == "candidate_plasmids" else c2nonplcl[contig_name]
             bin_file = bin_name+".fna"
             bin_path = os.path.join(args.outdir,"%s/%s"%(bin_dir,bin_file))
             with open(bin_path, "a") as out:
