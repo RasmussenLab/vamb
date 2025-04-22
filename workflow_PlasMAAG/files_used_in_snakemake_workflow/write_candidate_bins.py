@@ -60,8 +60,8 @@ if __name__ == "__main__":
     c2nonplcl={ c:cl for cl,cs in nonplcl_cs_d.items() for c in cs}
     nonpl_cs = set(c2plcl.keys())
     
-    os.mkdir(os.path.join(args.outdir,"candidate_plasmids"))
-    os.mkdir(os.path.join(args.outdir,"candidate_genomes"))
+    os.makedirs(os.path.join(args.outdir,"candidate_plasmids"))
+    os.makedirs(os.path.join(args.outdir,"candidate_genomes"))
     
     with gzip.open(args.contigs, "rt") as handle:
         for record in SeqIO.parse(handle, "fasta"):
