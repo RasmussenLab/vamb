@@ -46,16 +46,16 @@ if __name__ == "__main__":
     print(args)
 
     # 
-    plcl_cs_d = { cl:set() for cl,c in np.loadtxt(arg.cls_pl,dtype=object,skiprows=1)}
-    for cl,c in np.loadtxt(arg.cls_pl,dtype=object,skiprows=1):
+    plcl_cs_d = { cl:set() for cl,c in np.loadtxt(args.cls_pl,dtype=object,skiprows=1)}
+    for cl,c in np.loadtxt(args.cls_pl,dtype=object,skiprows=1):
         plcl_cs_d[cl].add(c)
     c2plcl={ c:cl for cl,cs in plcl_cs_d.items() for c in cs}
     pl_cs = set(c2plcl.keys())
     
     
-    nonplcl_cs_d = { cl:set() for cl,c in np.loadtxt(arg.cls_nonpl,dtype=object,skiprows=1)}
+    nonplcl_cs_d = { cl:set() for cl,c in np.loadtxt(args.cls_nonpl,dtype=object,skiprows=1)}
     for cl,c in np.loadtxt(
-        arg.cls_nonpl,dtype=object,skiprows=1):
+        args.cls_nonpl,dtype=object,skiprows=1):
         nonplcl_cs_d[cl].add(c)
     c2nonplcl={ c:cl for cl,cs in nonplcl_cs_d.items() for c in cs}
     nonpl_cs = set(c2plcl.keys())
