@@ -1935,10 +1935,7 @@ def load_composition_and_abundance_and_neighs(
     neighs_options: NeighsOptions,
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance, np.ndarray]:
-    logger.info(
-        "Starting contrastive-Vamb version "
-        + ".".join(map(str, vamb.__version_str__))
-    )
+    logger.info("Starting contrastive-Vamb version " + vamb.__version_str__)
 
     logger.info("Date and time is " + str(datetime.datetime.now()))
     begintime = time.time()
