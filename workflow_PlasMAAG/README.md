@@ -53,7 +53,7 @@ The path to the SPAdes output directory (under the assembly_dir column in the ab
 | The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
 | A metadata file                     | `contigs.paths`                         |
 
-If interested on executing a testrun of PlasMAAG, please check the Zenodo entry ["here"](https://zenodo.org/records/15263434). 
+If interested on executing a testrun of PlasMAAG, please check the Zenodo entry [here](https://zenodo.org/records/15263434). 
 
 ## Output files
 The program produces three directories in the output directory choosen
