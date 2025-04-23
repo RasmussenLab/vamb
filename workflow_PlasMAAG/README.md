@@ -53,6 +53,8 @@ The path to the SPAdes output directory (under the assembly_dir column in the ab
 | The simplified assembly graphs      | `assembly_graph_after_simplification.gfa` |
 | A metadata file                     | `contigs.paths`                         |
 
+If interested on executing a testrun of PlasMAAG, please check the Zenodo entry ["here"](https://zenodo.org/records/15263434). 
+
 ## Output files
 The program produces three directories in the output directory choosen
 ```
@@ -184,7 +186,6 @@ snakemake <arguments> --config genomad_database=<path_to_genomad_database>
 
 # TODO
 - [ ] Lock in package versions for conda such that we do not need to solve the environments each time, and for reproducibility
-- [ ] Add fasta files of the contigs to the output directory
 - [ ] Test that cluster submit works
       - plasmid_bins/ *.fna 
       - nonplasmid_bins/ *.fna 
