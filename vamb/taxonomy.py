@@ -1,6 +1,7 @@
 from typing import Optional, IO
 from pathlib import Path
 from vamb.parsecontigs import CompositionMetaData
+from vamb.vambtools import strip_string_newline
 import numpy as np
 from typing import Union
 
@@ -29,7 +30,10 @@ class ContigTaxonomy:
 
     @classmethod
     def from_semicolon_sep(cls, s: str, is_canonical: bool = False):
-        return cls(s.split(";"), is_canonical)
+        if len(s) == 0:
+            return cls([], is_canonical)
+        else:
+            return cls(s.split(";"), is_canonical)
 
     @property
     def genus(self) -> Optional[str]:
@@ -129,6 +133,7 @@ class Taxonomy:
                 )
             # Minus two because we already read header, and because Python is zero-indexed
             for lineno_minus_two, line in enumerate(file):
+                line = strip_string_newline(line)
                 fields = line.split("\t")
                 if len(fields) != 2:
                     raise ValueError(
