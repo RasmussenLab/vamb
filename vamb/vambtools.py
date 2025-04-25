@@ -434,6 +434,16 @@ def strip_newline(s: bytes) -> bytes:
         return s
 
 
+def strip_string_newline(s: str) -> str:
+    if len(s) > 0 and s[-1] == "\n":
+        if len(s) > 1 and s[-2] == "\r":
+            return s[:-2]
+        else:
+            return s[:-1]
+    else:
+        return s
+
+
 def byte_iterfasta(
     filehandle: Iterable[bytes], filename: Optional[str]
 ) -> Iterator[FastaEntry]:
