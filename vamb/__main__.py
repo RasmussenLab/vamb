@@ -769,7 +769,7 @@ class BinTaxVambOptions:
                     common.comp,
                     common.abundance,
                     taxonomy,
-                    basic,
+                    BasicTrainingOptions.from_args_taxometer(args),
                     typeasserted(args.pred_softmax_threshold, float),
                     args.ploss,
                 )
@@ -2048,15 +2048,6 @@ def add_predictor_arguments(subparser: argparse.ArgumentParser):
         metavar="",
         type=int,
         default=1024,
-        help=argparse.SUPPRESS,
-    )
-    pred_trainos.add_argument(
-        "-pq",
-        dest="pred_batchsteps",
-        metavar="",
-        type=int,
-        nargs="*",
-        default=[25, 75],
         help=argparse.SUPPRESS,
     )
     pred_trainos.add_argument(
