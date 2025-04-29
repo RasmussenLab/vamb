@@ -81,8 +81,8 @@ For testing purposes, e.g. when running on the test data, it may be useful to re
 This will cause Vamb's models to be severely underfitted and perform terribly, so doing it is only recommended for testing.
 
 * For Vamb: Add flags `-e 5 -q 2 3`
-* For TaxVamb: Add flags `-e 5 -q 2 3 -pe 5 -pq 2 3`
-* For Taxometer: Add flags `-pe 5 -pq 2 3`
+* For TaxVamb: Add flags `-e 5 -q 2 3 -pe 5`
+* For Taxometer: Add flags `-pe 5`
 
 ## Explanation of command-line options
 Each program in Vamb only has a subset of the following options.
