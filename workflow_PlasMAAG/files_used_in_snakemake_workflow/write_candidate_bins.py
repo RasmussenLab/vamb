@@ -50,7 +50,7 @@ if __name__ == "__main__":
         "--min_plas_len",
         required=False,
         type=int,
-        help="Min nonplasmid length",
+        help="Min plasmid length",
         default=1,
     )
 
