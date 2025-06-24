@@ -1195,17 +1195,25 @@ def cluster_and_write_files(
         cuda=cuda,
         rng_seed=seed,
     )
-    # This also works correctly when max_clusters is None
+
     clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
-    cluster_dict: dict[str, set[str]] = dict()
 
     # Write the cluster metadata to file
     with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
         print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
+        logger.info(clusters)
+
         for i, cluster in enumerate(clusters):
-            cluster_dict[str(i + 1)] = {
-                sequence_names[cast(int, i)] for i in cluster.members
-            }
+            cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
+            write_clusters_and_bins(
+                fasta_output,
+                bin_prefix,
+                binsplitter,
+                base_clusters_name,
+                {i: cluster_members},
+                sequence_names,
+                cast(Sequence[int], sequence_lens),
+            )
             print(
                 str(i + 1),
                 None if cluster.radius is None else round(cluster.radius, 3),
@@ -1221,18 +1229,14 @@ def cluster_and_write_files(
                 file=file,
                 sep="\t",
             )
+            cMembs = len(cluster.members)
+            if cMembs > 1:
+                plural = "s"
+            else:
+                plural = ""
+            logger.info(f"\tCluster {i} created with {len(cluster.members)} contig{plural}.\n")
 
     elapsed = round(time.time() - begintime, 2)
-
-    write_clusters_and_bins(
-        fasta_output,
-        bin_prefix,
-        binsplitter,
-        base_clusters_name,
-        cluster_dict,
-        sequence_names,
-        cast(Sequence[int], sequence_lens),
-    )
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
 
