@@ -571,11 +571,11 @@ class RefHasher:
 def write_clusters(
     io: IO[str],
     clusters: Iterable[tuple[str, set[str]]],
-    printLine = True
+    print_line: bool = True
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
-    if printLine:
+    if print_line:
         print(CLUSTERS_HEADER, file=io)
     for cluster_name, contig_names in clusters:
         n_clusters += 1
