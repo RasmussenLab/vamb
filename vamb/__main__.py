@@ -39,9 +39,6 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
-#Helps with headers
-header = True
-
 def check_existing_file(path: Path) -> Path:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -1203,9 +1200,9 @@ def cluster_and_write_files(
     # Write the cluster metadata to file
     with open(Path(base_clusters_name + "_metadata.tsv"), "a") as file:
         print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
-        global header
         for i, cluster in enumerate(clusters):
             cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
+            header = (i == 0)
             write_clusters_and_bins(
                 fasta_output,
                 bin_prefix,
@@ -1216,7 +1213,6 @@ def cluster_and_write_files(
                 cast(Sequence[int], sequence_lens),
                 header
             )
-            header = False
 
             print(
                 str(i + 1),
@@ -1253,25 +1249,15 @@ def write_clusters_and_bins(
     clusters: dict[str, set[str]],
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
-    toFile = True
+    to_file = True
 ):
     # Write unsplit clusters to file
     begintime = time.time()
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
     with open(unsplit_path, "a") as file:
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-            file, clusters.items(), toFile
+            file, clusters.items(), to_file
         )
-        #print("clustername\tcontigname", file=vae_clusters_unsplit.tsv)
-
-    #def injectText(
-    #fileName
-    #):
-    #    unsplit_path = Path(base_clusters_name + fileName)
-    #    with open(unsplit_path, "a") as file:
-    #        content = file.read()
-    #        f.write("clustername\tcontigname")
-    #        f.write(content)
 
     # Open unsplit clusters and split them
     if binsplitter.splitter is not None:
@@ -1281,7 +1267,7 @@ def write_clusters_and_bins(
         clusters = add_bin_prefix(clusters, bin_prefix)
         with open(split_path, "a") as file:
             (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file, clusters.items(), toFile
+                file, clusters.items(), to_file
             )
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
