@@ -1249,7 +1249,7 @@ def write_clusters_and_bins(
     clusters: dict[str, set[str]],
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
-    to_file = True
+    to_file: bool = True
 ):
     # Write unsplit clusters to file
     begintime = time.time()
