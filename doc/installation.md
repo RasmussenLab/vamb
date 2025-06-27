@@ -8,6 +8,8 @@ Recommended: Vamb can be installed with `pip` (thanks to contribution from C. Ti
 pip install vamb
 ```
 
+Recommended Python versions for VAMB v5.0.3 is <3.14, >=3.10.0
+
 Note: Check that you've installed the latest version by comparing the installed version with [the latest version on PyPI](https://pypi.org/project/vamb/#history).
 
 Note: An active Conda environment can hijack your system's linker, causing an error during installation.
