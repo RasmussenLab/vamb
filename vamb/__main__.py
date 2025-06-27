@@ -39,7 +39,6 @@ os.environ["OMP_NUM_THREADS"] = str(DEFAULT_THREADS)
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parentdir)
 
-
 def check_existing_file(path: Path) -> Path:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -1195,17 +1194,26 @@ def cluster_and_write_files(
         cuda=cuda,
         rng_seed=seed,
     )
-    # This also works correctly when max_clusters is None
+
     clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
-    cluster_dict: dict[str, set[str]] = dict()
 
     # Write the cluster metadata to file
-    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+    with open(Path(base_clusters_name + "_metadata.tsv"), "a") as file:
         print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
         for i, cluster in enumerate(clusters):
-            cluster_dict[str(i + 1)] = {
-                sequence_names[cast(int, i)] for i in cluster.members
-            }
+            cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
+            header = (i == 0)
+            write_clusters_and_bins(
+                fasta_output,
+                bin_prefix,
+                binsplitter,
+                base_clusters_name,
+                {i: cluster_members},
+                sequence_names,
+                cast(Sequence[int], sequence_lens),
+                header
+            )
+
             print(
                 str(i + 1),
                 None if cluster.radius is None else round(cluster.radius, 3),
@@ -1221,19 +1229,12 @@ def cluster_and_write_files(
                 file=file,
                 sep="\t",
             )
+            plural = 's' if len(cluster.members) > 1 else ''
+            logger.info(f"\tCluster {i} created with {len(cluster.members)} contig{plural}.\n")
 
     elapsed = round(time.time() - begintime, 2)
-
-    write_clusters_and_bins(
-        fasta_output,
-        bin_prefix,
-        binsplitter,
-        base_clusters_name,
-        cluster_dict,
-        sequence_names,
-        cast(Sequence[int], sequence_lens),
-    )
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
+
 
 
 def write_clusters_and_bins(
@@ -1248,13 +1249,14 @@ def write_clusters_and_bins(
     clusters: dict[str, set[str]],
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
+    to_file: bool = True
 ):
     # Write unsplit clusters to file
     begintime = time.time()
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
-    with open(unsplit_path, "w") as file:
+    with open(unsplit_path, "a") as file:
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-            file, clusters.items()
+            file, clusters.items(), to_file
         )
 
     # Open unsplit clusters and split them
@@ -1263,9 +1265,9 @@ def write_clusters_and_bins(
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        with open(split_path, "w") as file:
+        with open(split_path, "a") as file:
             (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file, clusters.items()
+                file, clusters.items(), to_file
             )
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
