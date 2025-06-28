@@ -68,6 +68,22 @@ def try_make_dir(name: Union[Path, str]):
         pass
 
 
+class CreatablePath:
+    def __init__(self, path: Path):
+        if path.exists():
+            raise FileExistsError(
+                f"Attempted to create path {path}, but it already exists"
+            )
+
+        # Cannot be created if the parent does not exist or is not a dir
+        parent_dir = path.parent
+        if not parent_dir.is_dir():
+            raise NotADirectoryError(
+                f"Attempted to create path {path}, but its parent is not an existing directory"
+            )
+        self.path = path
+
+
 class FASTAPath:
     def __init__(self, path: Path):
         self.path = check_existing_file(path)
@@ -78,9 +94,20 @@ class CompositionPath:
         self.path = check_existing_file(path)
 
 
-class CompositionOptions:
-    __slots__ = ["path"]
+class MinContigLength:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(typeasserted(args.minlength, int))
 
+    def __init__(self, min_contig_length: int):
+        if min_contig_length < 250:
+            raise argparse.ArgumentTypeError(
+                "Minimum contig length must be at least 250"
+            )
+        self.n = min_contig_length
+
+
+class CompositionOptions:
     @staticmethod
     def are_args_present(args: argparse.Namespace) -> bool:
         return isinstance(args.fasta, Path) or isinstance(args.composition, Path)
@@ -90,12 +117,14 @@ class CompositionOptions:
         return cls(
             typeasserted(args.fasta, (Path, type(None))),
             typeasserted(args.composition, (Path, type(None))),
+            MinContigLength.from_args(args),
         )
 
     def __init__(
         self,
         fastapath: Optional[Path],
         npzpath: Optional[Path],
+        min_contig_length: MinContigLength,
     ):
         if not (fastapath is None) ^ (npzpath is None):
             raise argparse.ArgumentTypeError(
@@ -111,6 +140,8 @@ class CompositionOptions:
         else:
             assert npzpath is not None
             self.path = CompositionPath(npzpath)
+
+        self.min_contig_length = min_contig_length
 
 
 class AbundancePath:
@@ -162,8 +193,6 @@ class AbundanceTSVPath:
 
 
 class AbundanceOptions:
-    __slots__ = ["paths"]
-
     @staticmethod
     def are_args_present(args: argparse.Namespace) -> bool:
         return (
@@ -181,6 +210,8 @@ class AbundanceOptions:
             typeasserted(args.abundance_tsv, (Path, type(None))),
             typeasserted(args.abundancepath, (Path, type(None))),
             typeasserted(args.min_alignment_id, (float, type(None))),
+            MinContigLength.from_args(args),
+            not args.norefcheck,
         )
 
     def __init__(
@@ -190,6 +221,8 @@ class AbundanceOptions:
         abundance_tsv: Optional[Path],
         abundancepath: Optional[Path],
         min_alignment_id: Optional[float],
+        min_contig_length: MinContigLength,
+        refcheck: bool,
     ):
         # Make sure only one abundance input is there
         if (
@@ -213,6 +246,8 @@ class AbundanceOptions:
             self.paths = BAMPaths(bampaths, min_alignment_id)
         elif abundance_tsv is not None:
             self.paths = AbundanceTSVPath(abundance_tsv)
+        self.min_contig_length = min_contig_length
+        self.refcheck = refcheck
 
 
 class BasicTrainingOptions:
@@ -317,9 +352,7 @@ class VAEOptions:
 class GeneralOptions:
     __slots__ = [
         "out_dir",
-        "min_contig_length",
         "n_threads",
-        "refcheck",
         "seed",
         "cuda",
     ]
@@ -328,9 +361,7 @@ class GeneralOptions:
     def from_args(cls, args: argparse.Namespace):
         return cls(
             typeasserted(args.outdir, Path),
-            typeasserted(args.minlength, int),
             typeasserted(args.nthreads, int),
-            not typeasserted(args.norefcheck, bool),
             typeasserted(args.seed, int),
             typeasserted(args.cuda, bool),
         )
@@ -338,31 +369,14 @@ class GeneralOptions:
     def __init__(
         self,
         out_dir: Path,
-        min_contig_length: int,
         n_threads: int,
-        refcheck: bool,
         seed: int,
         cuda: bool,
     ):
-        # Outdir does not exist
-        if out_dir.exists():
-            raise FileExistsError(out_dir)
-
-        # Outdir is in an existing parent dir
-        parent_dir = out_dir.parent
-        if not parent_dir.is_dir():
-            raise NotADirectoryError(parent_dir)
-        self.out_dir = out_dir
-
+        self.out_dir = CreatablePath(out_dir)
         if n_threads < 1:
             raise ValueError(f"Must pass at least 1 thread, not {n_threads}")
         self.n_threads = n_threads
-
-        if min_contig_length < 250:
-            raise argparse.ArgumentTypeError(
-                "Minimum contig length must be at least 250"
-            )
-        self.min_contig_length = min_contig_length
 
         if cuda and not torch.cuda.is_available():
             raise ModuleNotFoundError(
@@ -370,7 +384,74 @@ class GeneralOptions:
             )
         self.seed = seed
         self.cuda = cuda
+
+
+class PartialCompositionOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        return cls(
+            GeneralOptions.from_args(args),
+            MinContigLength.from_args(args),
+            FASTAPath(typeasserted(args.fasta, Path)),
+        )
+
+    def __init__(
+        self,
+        general: GeneralOptions,
+        min_contig_length: MinContigLength,
+        path: FASTAPath,
+    ):
+        self.general = general
+        self.min_contig_length = min_contig_length
+        self.path = path
+
+
+class PartialAbundanceOptions:
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        comp = CompositionOptions(
+            None, typeasserted(args.composition, Path), MinContigLength.from_args(args)
+        )
+        return cls(
+            GeneralOptions.from_args(args),
+            comp,
+            typeasserted(args.abundance_tsv, (Path, type(None))),
+            typeasserted(args.bampaths, (list, type(None))),
+            typeasserted(args.bamdir, (Path, type(None))),
+            typeasserted(args.min_alignment_id, (float, type(None))),
+            not typeasserted(args.norefcheck, bool),
+        )
+
+    def __init__(
+        self,
+        general: GeneralOptions,
+        composition_options: CompositionOptions,
+        abundance_tsv: Optional[Path],
+        bam_paths: Optional[list[Path]],
+        bam_dir: Optional[Path],
+        min_alignment_id: Optional[float],
+        refcheck: bool,
+    ):
+        if (
+            (bam_paths is not None)
+            + (abundance_tsv is not None)
+            + (bam_dir is not None)
+        ) != 1:
+            raise argparse.ArgumentTypeError(
+                "Must specify exactly one of BAM files, BAM dir or TSV file input"
+            )
+        if bam_dir is not None:
+            self.paths = BAMPaths.from_dir(bam_dir, min_alignment_id)
+        elif bam_paths is not None:
+            logger.warning(
+                "The --bamfiles argument is deprecated. It works, but might be removed in future versions of Vamb. Please use --bamdir instead"
+            )
+            self.paths = BAMPaths(bam_paths, min_alignment_id)
+        elif abundance_tsv is not None:
+            self.paths = AbundanceTSVPath(abundance_tsv)
+        self.general = general
         self.refcheck = refcheck
+        self.composition_options = composition_options
 
 
 class TaxonomyBase:
@@ -691,8 +772,8 @@ def run(
     general: GeneralOptions,
 ):
     torch.set_num_threads(general.n_threads)
-    try_make_dir(general.out_dir)
-    logger.add(general.out_dir.joinpath("log.txt"), format=format_log)
+    try_make_dir(general.out_dir.path)
+    logger.add(general.out_dir.path.joinpath("log.txt"), format=format_log)
     begintime = time.time()
     logger.info("Starting Vamb version " + vamb.__version_str__)
     logger.info("Random seed is " + str(general.seed))
@@ -869,31 +950,34 @@ class ReclusteringOptions:
 
 
 def calc_tnf(
-    options: CompositionOptions,
-    min_contig_length: int,
+    options: CompositionOptions | PartialCompositionOptions,
     outdir: Path,
-    binsplitter: vamb.vambtools.BinSplitter,
+    binsplitter: Optional[vamb.vambtools.BinSplitter],
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     logger.info("Loading TNF")
-    logger.info(f"\tMinimum sequence length: {min_contig_length}")
+    logger.info(f"\tMinimum sequence length: {options.min_contig_length.n}")
 
     path = options.path
 
     if isinstance(path, CompositionPath):
         logger.info(f'\tLoading composition from npz at: "{path.path}"')
         composition = vamb.parsecontigs.Composition.load(path.path)
-        composition.filter_min_length(min_contig_length)
+        composition.filter_min_length(options.min_contig_length.n)
     else:
         assert isinstance(path, FASTAPath)
         logger.info(f"\tLoading data from FASTA file {path.path}")
         with vamb.vambtools.Reader(path.path) as file:
             composition = vamb.parsecontigs.Composition.from_file(
-                file, str(path.path), minlength=min_contig_length
+                file, str(path.path), minlength=options.min_contig_length.n
             )
+        assert outdir is not None
         composition.save(outdir.joinpath("composition.npz"))
 
-    binsplitter.initialize(composition.metadata.identifiers)
+    # Initialize binsplitter on the identifiers. Only done if we actually need to binsplit
+    # later.
+    if binsplitter is not None:
+        binsplitter.initialize(composition.metadata.identifiers)
 
     if composition.nseqs < MINIMUM_SEQS:
         err = (
@@ -910,7 +994,7 @@ def calc_tnf(
     if not np.all(composition.metadata.mask):
         n_removed = len(composition.metadata.mask) - np.sum(composition.metadata.mask)
         message = (
-            f"The minimum sequence length has been set to {min_contig_length}, "
+            f"The minimum sequence length has been set to {options.min_contig_length.n}, "
             f"but {n_removed} sequences fell below this threshold and was filtered away."
             "\nBetter results are obtained if the sequence file is filtered to the minimum "
             "sequence length before mapping.\n"
@@ -928,16 +1012,15 @@ def calc_tnf(
 
 
 def calc_abundance(
-    abundance_options: AbundanceOptions,
+    abundance_options: AbundanceOptions | PartialAbundanceOptions,
     outdir: Path,
-    refcheck: bool,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     nthreads: int,
 ) -> vamb.parsebam.Abundance:
     begintime = time.time()
     logger.info("Loading depths")
     logger.info(
-        f"\tReference hash: {comp_metadata.refhash.hex() if refcheck else 'None'}"
+        f"\tReference hash: {comp_metadata.refhash.hex() if abundance_options.refcheck else 'None'}"
     )
 
     paths = abundance_options.paths
@@ -946,13 +1029,13 @@ def calc_abundance(
 
         abundance = vamb.parsebam.Abundance.load(
             paths.path,
-            comp_metadata.refhash if refcheck else None,
+            comp_metadata.refhash if abundance_options.refcheck else None,
         )
         # I don't want this check in any constructors of abundance, since the constructors
         # should be able to skip this check in case comp and abundance are independent.
         # But when running the main Vamb workflow, we need to assert this.
         if abundance.nseqs != comp_metadata.nseqs:
-            assert not refcheck
+            assert not abundance_options.refcheck
             raise ValueError(
                 f"Loaded abundance has {abundance.nseqs} sequences, "
                 f"but composition has {comp_metadata.nseqs}."
@@ -965,7 +1048,7 @@ def calc_abundance(
             list(paths.paths),
             outdir.joinpath("tmp").joinpath("pycoverm"),
             comp_metadata,
-            refcheck,
+            abundance_options.refcheck,
             paths.min_alignment_id,
             nthreads,
         )
@@ -1001,12 +1084,13 @@ def load_composition_and_abundance(
     binsplitter: vamb.vambtools.BinSplitter,
 ) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     composition = calc_tnf(
-        comp_options, vamb_options.min_contig_length, vamb_options.out_dir, binsplitter
+        comp_options,
+        vamb_options.out_dir.path,
+        binsplitter,
     )
     abundance = calc_abundance(
         abundance_options,
-        vamb_options.out_dir,
-        vamb_options.refcheck,
+        vamb_options.out_dir.path,
         composition.metadata,
         vamb_options.n_threads,
     )
@@ -1070,7 +1154,7 @@ def trainvae(
     )
 
     logger.info("\tCreated VAE")
-    modelpath = vamb_options.out_dir.joinpath("model.pt")
+    modelpath = vamb_options.out_dir.path.joinpath("model.pt")
     vae.trainmodel(
         vamb.encode.set_batchsize(
             data_loader,
@@ -1084,7 +1168,7 @@ def trainvae(
 
     logger.info("\tEncoding to latent representation")
     latent = vae.encode(data_loader)
-    vamb.vambtools.write_npz(vamb_options.out_dir.joinpath("latent.npz"), latent)
+    vamb.vambtools.write_npz(vamb_options.out_dir.path.joinpath("latent.npz"), latent)
     del vae  # Needed to free "latent" array's memory references?
 
     elapsed = round(time.time() - begintime, 2)
@@ -1117,7 +1201,7 @@ def trainaae(
     )
 
     logger.info("\tCreated AAE")
-    modelpath = os.path.join(vamb_options.out_dir, "aae_model.pt")
+    modelpath = os.path.join(vamb_options.out_dir.path, "aae_model.pt")
     n_obs = data_loader.dataset.tensors[0].shape[0]  # type: ignore
     aae.trainmodel(
         vamb.encode.set_batchsize(
@@ -1132,7 +1216,7 @@ def trainaae(
     logger.info("\tEncoding to latent representation")
     clusters_y_dict, latent = aae.get_latents(contignames, data_loader)
     vamb.vambtools.write_npz(
-        os.path.join(vamb_options.out_dir, "aae_z_latent.npz"), latent
+        os.path.join(vamb_options.out_dir.path, "aae_z_latent.npz"), latent
     )
 
     del aae  # Needed to free "latent" array's memory references?
@@ -1155,7 +1239,7 @@ class FastaOutput(NamedTuple):
             assert isinstance(common.comp.path, FASTAPath)
             return cls(
                 common.comp.path,
-                common.general.out_dir.joinpath("bins"),
+                common.general.out_dir.path.joinpath("bins"),
                 common.output.min_fasta_output_size,
             )
         else:
@@ -1310,6 +1394,17 @@ def add_bin_prefix(
         return {prefix + b: c for (b, c) in clusters.items()}
 
 
+def run_partial_composition(opt: PartialCompositionOptions):
+    calc_tnf(opt, opt.general.out_dir.path, None)
+
+
+def run_partial_abundance(opt: PartialAbundanceOptions):
+    composition = calc_tnf(opt.composition_options, opt.general.out_dir.path, None)
+    calc_abundance(
+        opt, opt.general.out_dir.path, composition.metadata, opt.general.n_threads
+    )
+
+
 def run_bin_default(opt: BinDefaultOptions):
     composition, abundance = load_composition_and_abundance(
         vamb_options=opt.common.general,
@@ -1343,7 +1438,7 @@ def run_bin_default(opt: BinDefaultOptions):
         comp_metadata.lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("vae_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("vae_clusters")),
         FastaOutput.try_from_common(opt.common),
         None,
     )
@@ -1390,7 +1485,7 @@ def run_bin_aae(opt: BinAvambOptions):
         comp_metadata.lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("aae_z_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("aae_z_clusters")),
         FastaOutput.try_from_common(opt.common),
         "z_",
     )
@@ -1403,7 +1498,9 @@ def run_bin_aae(opt: BinAvambOptions):
         FastaOutput.try_from_common(opt.common),
         "y_",
         binsplitter=opt.common.output.binsplitter,
-        base_clusters_name=str(opt.common.general.out_dir.joinpath("aae_y_clusters")),
+        base_clusters_name=str(
+            opt.common.general.out_dir.path.joinpath("aae_y_clusters")
+        ),
         clusters=clusters_y_dict,
         sequence_names=cast(Sequence[str], comp_metadata.identifiers),
         sequence_lens=cast(Sequence[int], comp_metadata.lengths),
@@ -1531,7 +1628,7 @@ def run_taxonomy_predictor(opt: TaxometerOptions):
         abundance=abundance,
         tnfs=tnfs,
         lengths=lengths,
-        out_dir=opt.general.out_dir,
+        out_dir=opt.general.out_dir.path,
         taxonomy_options=opt,
         cuda=opt.general.cuda,
     )
@@ -1557,7 +1654,7 @@ def run_vaevae(opt: BinTaxVambOptions):
             abundance=abundance,
             tnfs=tnfs,
             lengths=lengths,
-            out_dir=opt.common.general.out_dir,
+            out_dir=opt.common.general.out_dir.path,
             taxonomy_options=opt.taxonomy,
             cuda=opt.common.general.cuda,
         )
@@ -1637,7 +1734,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         batchsize=vae_options.basic_options.starting_batch_size,
         cuda=opt.common.general.cuda,
     )
-    model_path = opt.common.general.out_dir.joinpath("vaevae_model.pt")
+    model_path = opt.common.general.out_dir.path.joinpath("vaevae_model.pt")
     with open(model_path, "wb") as modelfile:
         vae.trainmodel(
             dataloader,
@@ -1649,7 +1746,7 @@ def run_vaevae(opt: BinTaxVambOptions):
     latent_both = vae.VAEJoint.encode(dataloader_joint)
     logger.info(f"{latent_both.shape} embedding shape")
 
-    latent_path = opt.common.general.out_dir.joinpath("vaevae_latent.npz")
+    latent_path = opt.common.general.out_dir.path.joinpath("vaevae_latent.npz")
     vamb.vambtools.write_npz(latent_path, latent_both)
 
     # Cluster, save tsv file
@@ -1661,7 +1758,7 @@ def run_vaevae(opt: BinTaxVambOptions):
         lengths,
         opt.common.general.seed,
         opt.common.general.cuda,
-        str(opt.common.general.out_dir.joinpath("vaevae_clusters")),
+        str(opt.common.general.out_dir.path.joinpath("vaevae_clusters")),
         FastaOutput.try_from_common(opt.common),
         None,
     )
@@ -1670,12 +1767,14 @@ def run_vaevae(opt: BinTaxVambOptions):
 def run_reclustering(opt: ReclusteringOptions):
     composition = calc_tnf(
         opt.composition,
-        opt.general.min_contig_length,
-        opt.general.out_dir,
+        opt.general.out_dir.path,
         opt.output.binsplitter,
     )
     markers = load_markers(
-        opt.markers, composition.metadata, opt.general.out_dir, opt.general.n_threads
+        opt.markers,
+        composition.metadata,
+        opt.general.out_dir.path,
+        opt.general.n_threads,
     )
     latent = vamb.vambtools.read_npz(opt.latent_path)
     alg = opt.algorithm
@@ -1686,8 +1785,7 @@ def run_reclustering(opt: ReclusteringOptions):
             taxopt = alg.taxonomy
             abundance = calc_abundance(
                 taxopt.abundance,
-                taxopt.general.out_dir,
-                taxopt.general.refcheck,
+                taxopt.general.out_dir.path,
                 composition.metadata,
                 taxopt.general.n_threads,
             )
@@ -1696,7 +1794,7 @@ def run_reclustering(opt: ReclusteringOptions):
                 abundance.matrix,
                 composition.matrix,
                 composition.metadata.lengths,
-                taxopt.general.out_dir,
+                taxopt.general.out_dir.path,
                 taxopt,
                 taxopt.general.cuda,
             )
@@ -1764,7 +1862,7 @@ def run_reclustering(opt: ReclusteringOptions):
         assert isinstance(opt.composition.path, FASTAPath)
         fasta_output = FastaOutput(
             opt.composition.path,
-            opt.general.out_dir.joinpath("bins"),
+            opt.general.out_dir.path.joinpath("bins"),
             opt.output.min_fasta_output_size,
         )
 
@@ -1772,7 +1870,7 @@ def run_reclustering(opt: ReclusteringOptions):
         fasta_output,
         None,
         opt.output.binsplitter,
-        str(opt.general.out_dir.joinpath("clusters_reclustered")),
+        str(opt.general.out_dir.path.joinpath("clusters_reclustered")),
         clusters_dict,
         cast(Sequence[str], composition.metadata.identifiers),
         cast(Sequence[int], composition.metadata.lengths),
@@ -1786,6 +1884,17 @@ def add_help_arguments(parser: argparse.ArgumentParser):
         "--version",
         action="version",
         version=f"Vamb {vamb.__version_str__}",
+    )
+
+
+def add_minlength(general: argparse._ArgumentGroup):
+    general.add_argument(
+        "-m",
+        dest="minlength",
+        metavar="",
+        type=int,
+        default=2000,
+        help="Ignore contigs shorter than this [2000]",
     )
 
 
@@ -1803,14 +1912,6 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
 
     general = subparser.add_argument_group(
         title="General optional arguments", description=None
-    )
-    general.add_argument(
-        "-m",
-        dest="minlength",
-        metavar="",
-        type=int,
-        default=2000,
-        help="Ignore contigs shorter than this [2000]",
     )
 
     general.add_argument(
@@ -1836,19 +1937,40 @@ def add_general_arguments(subparser: argparse.ArgumentParser):
         default=int.from_bytes(os.urandom(7), "little"),
         help="Random seed (determinism not guaranteed)",
     )
-    return subparser
+    return general
 
 
-def add_composition_arguments(subparser: argparse.ArgumentParser):
-    tnfos = subparser.add_argument_group(title="Composition input")
+def make_composition_group(subparser: argparse.ArgumentParser):
+    return subparser.add_argument_group(title="Composition input")
+
+
+def add_fasta_to_group(tnfos: argparse._ArgumentGroup):
     tnfos.add_argument("--fasta", metavar="", type=Path, help="Path to fasta file")
+
+
+def add_composition_npz_to_group(tnfos: argparse._ArgumentGroup):
     tnfos.add_argument(
         "--composition", metavar="", type=Path, help="Path to .npz of composition"
     )
-    return subparser
 
 
-def add_abundance_arguments(subparser: argparse.ArgumentParser):
+def add_fasta_arguments(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_fasta_to_group(tnfos)
+
+
+def add_composition_npz_argument(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_composition_npz_to_group(tnfos)
+
+
+def add_composition_arguments(subparser: argparse.ArgumentParser):
+    tnfos = make_composition_group(subparser)
+    add_fasta_to_group(tnfos)
+    add_composition_npz_to_group(tnfos)
+
+
+def add_abundance_args_nonpz(subparser: argparse.ArgumentParser):
     abundanceos = subparser.add_argument_group(title="Abundance input")
     # Note: This argument is deprecated, but we'll keep supporting it for now.
     # Instead, use --bamdir.
@@ -1873,19 +1995,24 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
         help='Path to TSV file of precomputed abundances with header being "contigname(\\t<samplename>)*"',
     )
     abundanceos.add_argument(
-        "--abundance",
-        metavar="",
-        dest="abundancepath",
-        type=Path,
-        help="Path to .npz of abundances",
-    )
-    abundanceos.add_argument(
         "-z",
         dest="min_alignment_id",
         metavar="",
         type=float,
         default=None,
         help=argparse.SUPPRESS,
+    )
+    return abundanceos
+
+
+def add_abundance_arguments(subparser: argparse.ArgumentParser):
+    abundanceos = add_abundance_args_nonpz(subparser)
+    abundanceos.add_argument(
+        "--abundance",
+        metavar="",
+        dest="abundancepath",
+        type=Path,
+        help="Path to .npz of abundances",
     )
     return subparser
 
@@ -2238,6 +2365,7 @@ def main():
     TAXVAMB = "taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
+    PARTIAL = "partial"
 
     vaevae_parserbin_parser = subparsers.add_parser(
         BIN,
@@ -2261,7 +2389,8 @@ def main():
 
 Required arguments: Outdir, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(vae_parser)
+    general_group = add_general_arguments(vae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vae_parser)
     add_abundance_arguments(vae_parser)
     add_bin_output_arguments(vae_parser)
@@ -2280,7 +2409,8 @@ Required arguments: Outdir, at least one composition input and at least one abun
 
 Required arguments: Outdir, taxonomy, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(vaevae_parser)
+    general_group = add_general_arguments(vaevae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vaevae_parser)
     add_abundance_arguments(vaevae_parser)
     add_taxonomy_arguments(vaevae_parser)
@@ -2295,7 +2425,8 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
         add_help=False,
         usage="%(prog)s [options]",
     )
-    add_general_arguments(vaeaae_parser)
+    general_group = add_general_arguments(vaeaae_parser)
+    add_minlength(general_group)
     add_composition_arguments(vaeaae_parser)
     add_abundance_arguments(vaeaae_parser)
     add_bin_output_arguments(vaeaae_parser)
@@ -2315,7 +2446,8 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
 
 Required arguments: Outdir, unrefined taxonomy, at least one composition input and at least one abundance input""",
     )
-    add_general_arguments(predict_parser)
+    general_group = add_general_arguments(predict_parser)
+    add_minlength(general_group)
     add_composition_arguments(predict_parser)
     add_abundance_arguments(predict_parser)
     add_taxonomy_arguments(predict_parser, taxonomy_only=True)
@@ -2340,7 +2472,8 @@ Required arguments:
     at least one abundance input, at least one marker gene input, latent path and taxonomy
 """,
     )
-    add_general_arguments(recluster_parser)
+    general_group = add_general_arguments(recluster_parser)
+    add_minlength(general_group)
     add_composition_arguments(recluster_parser)
     add_abundance_arguments(recluster_parser)
     add_marker_arguments(recluster_parser)
@@ -2348,6 +2481,26 @@ Required arguments:
     add_reclustering_arguments(recluster_parser)
     add_predictor_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser)
+
+    partial_subparser = subparsers.add_parser(
+        PARTIAL, help="Process individual parts of the VAMB pipelines", add_help=False
+    )
+    partial_part = partial_subparser.add_subparsers(dest="partial_part")
+
+    composition_parser = partial_part.add_parser(
+        "composition", help="Process composition data", add_help=False
+    )
+    general_group = add_general_arguments(composition_parser)
+    add_minlength(general_group)
+    add_fasta_arguments(composition_parser)
+
+    abundance_parser = partial_part.add_parser(
+        "abundance", help="Process abundance data", add_help=False
+    )
+    general_group = add_general_arguments(abundance_parser)
+    add_minlength(general_group)
+    add_composition_npz_argument(abundance_parser)
+    add_abundance_args_nonpz(abundance_parser)
 
     args = parser.parse_args()
 
@@ -2372,10 +2525,27 @@ Required arguments:
             opt = BinAvambOptions.from_args(args)
             runner = partial(run_bin_aae, opt)
             run(runner, opt.common.general)
+        else:
+            assert False  # no other options
     elif args.subcommand == RECLUSTER:
         opt = ReclusteringOptions.from_args(args)
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
+    elif args.subcommand == PARTIAL:
+        if args.partial_part == "composition":
+            opt = PartialCompositionOptions.from_args(args)
+            runner = partial(run_partial_composition, opt)
+            run(runner, opt.general)
+        elif args.partial_part == "abundance":
+            opt = PartialAbundanceOptions.from_args(args)
+            runner = partial(run_partial_abundance, opt)
+            run(runner, opt.general)
+        else:
+            # TODO: Add abundance
+            # TODO: Add encoding w. VAE
+            # TODO: Add encoding w. VAEVAE
+            # TODO: Add clustering
+            assert False  # no other options
     else:
         # There are no more subcommands
         assert False
