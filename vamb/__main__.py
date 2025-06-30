@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
+from typing import Optional, TextIO
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -1198,43 +1199,60 @@ def cluster_and_write_files(
     clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
 
     # Write the cluster metadata to file
-    with open(Path(base_clusters_name + "_metadata.tsv"), "a") as file:
-        print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
-        for i, cluster in enumerate(clusters):
-            cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
-            header = (i == 0)
-            write_clusters_and_bins(
-                fasta_output,
-                bin_prefix,
-                binsplitter,
-                base_clusters_name,
-                {i: cluster_members},
-                sequence_names,
-                cast(Sequence[int], sequence_lens),
-                header
-            )
+    with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
+        unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+        split_path = Path(base_clusters_name + "_split.tsv")
+        percent_done: int = 0
+        done: int = 0
+        with open(unsplit_path, "a") as file2, open(split_path, "a") as file3:
+            print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
+            num_contigs = latent.shape[0]
+            progress_step = num_contigs / 10
+            comparer = progress_step
+            progress = 0
+            logger.info("")
+            for i, cluster in enumerate(clusters):
+                cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
+                header = (i == 0)
+                if i > 0:
+                    if (write_clusters_and_bins.counter >= comparer):
+                        comparer += progress_step
+                        progress += 10
+                        logger.info(f"{progress} percent of contigs clustered\n")
 
-            print(
-                str(i + 1),
-                None if cluster.radius is None else round(cluster.radius, 3),
-                (
-                    None
-                    if cluster.observed_pvr is None
-                    else round(cluster.observed_pvr, 2)
-                ),
-                cluster.kind_str,
-                sum(sequence_lens[i] for i in cluster.members),
-                len(cluster.members),
-                sequence_names[cluster.medoid],
-                file=file,
-                sep="\t",
-            )
-            plural = 's' if len(cluster.members) > 1 else ''
-            logger.info(f"\tCluster {i} created with {len(cluster.members)} contig{plural}.\n")
+                write_clusters_and_bins(
+                    fasta_output,
+                    bin_prefix,
+                    binsplitter,
+                    base_clusters_name,
+                    {i: cluster_members},
+                    sequence_names,
+                    cast(Sequence[int], sequence_lens),
+                    header,
+                    file2,
+                    file3,
+                    num_contigs,
+                )
 
+                print(
+                    str(i + 1),
+                    None if cluster.radius is None else round(cluster.radius, 3),
+                    (
+                        None
+                        if cluster.observed_pvr is None
+                        else round(cluster.observed_pvr, 2)
+                    ),
+                    cluster.kind_str,
+                    sum(sequence_lens[i] for i in cluster.members),
+                    len(cluster.members),
+                    sequence_names[cluster.medoid],
+                    file=file,
+                    sep="\t",
+                )
+                
+        
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
-
 
 
 def write_clusters_and_bins(
@@ -1249,34 +1267,45 @@ def write_clusters_and_bins(
     clusters: dict[str, set[str]],
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
-    to_file: bool = True
+    to_file: bool = True,
+    file2: Optional[TextIO] = None,
+    file3: Optional[TextIO] = None,
+    num_contigs: int = None,
 ):
     # Write unsplit clusters to file
     begintime = time.time()
-    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
-    with open(unsplit_path, "a") as file:
+    if file2:
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-            file, clusters.items(), to_file
+            file2, clusters.items(), to_file
         )
+    else:
+        with open(unsplit_path, "a") as file:
+            (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
+                file, clusters.items(), to_file
+            )
 
     # Open unsplit clusters and split them
     if binsplitter.splitter is not None:
-        split_path = Path(base_clusters_name + "_split.tsv")
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        with open(split_path, "a") as file:
+        if file3:
             (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file, clusters.items(), to_file
+                file3, clusters.items(), to_file
             )
+        else:
+            with open(split_path, "a") as file:
+                (n_split_clusters, _) = vamb.vambtools.write_clusters(
+                file, clusters.items(), to_file
+                )       
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
         clusters = add_bin_prefix(clusters, bin_prefix)
 
-    logger.info(msg)
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+    if not hasattr(write_clusters_and_bins, "counter"):
+        write_clusters_and_bins.counter = 0
+    write_clusters_and_bins.counter += n_contigs
 
     # Write bins, if necessary
     if fasta_output is not None:
@@ -1302,6 +1331,11 @@ def write_clusters_and_bins(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
 
+    if write_clusters_and_bins.counter == num_contigs:
+        logger.info("100 percent of contigs clustered\n")
+        logger.info(msg)
+        elapsed = round(time.time() - begintime, 2)
+        logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
 def add_bin_prefix(
     clusters: dict[str, set[str]], prefix: Optional[str]
