@@ -1202,25 +1202,18 @@ def cluster_and_write_files(
     with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
         unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
         split_path = Path(base_clusters_name + "_split.tsv")
-        percent_done: int = 0
-        done: int = 0
         with open(unsplit_path, "a") as file2, open(split_path, "a") as file3:
             print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
             num_contigs = latent.shape[0]
             progress_step = num_contigs / 10
             comparer = progress_step
             progress = 0
+            processed_contigs = 0
             logger.info("")
             for i, cluster in enumerate(clusters):
                 cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
                 header = (i == 0)
-                if i > 0:
-                    if (write_clusters_and_bins.counter >= comparer):
-                        comparer += progress_step
-                        progress += 10
-                        logger.info(f"{progress} percent of contigs clustered\n")
-
-                write_clusters_and_bins(
+                n_contigs, msg = write_clusters_and_bins(
                     fasta_output,
                     bin_prefix,
                     binsplitter,
@@ -1231,9 +1224,8 @@ def cluster_and_write_files(
                     header,
                     file2,
                     file3,
-                    num_contigs,
-                )
-
+                )  
+                
                 print(
                     str(i + 1),
                     None if cluster.radius is None else round(cluster.radius, 3),
@@ -1249,6 +1241,16 @@ def cluster_and_write_files(
                     file=file,
                     sep="\t",
                 )
+                processed_contigs += len(cluster.members)
+                if (processed_contigs >= comparer):
+                    comparer += progress_step
+                    progress += 10
+                    logger.info(f"{progress} percent of contigs clustered\n")  
+                if processed_contigs == num_contigs:
+                    logger.info(msg)
+                    elapsed = round(time.time() - begintime, 2)
+                    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.\n")
+                
                 
         
     elapsed = round(time.time() - begintime, 2)
@@ -1270,7 +1272,6 @@ def write_clusters_and_bins(
     to_file: bool = True,
     file2: Optional[TextIO] = None,
     file3: Optional[TextIO] = None,
-    num_contigs: int = None,
 ):
     # Write unsplit clusters to file
     begintime = time.time()
@@ -1303,10 +1304,6 @@ def write_clusters_and_bins(
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
         clusters = add_bin_prefix(clusters, bin_prefix)
 
-    if not hasattr(write_clusters_and_bins, "counter"):
-        write_clusters_and_bins.counter = 0
-    write_clusters_and_bins.counter += n_contigs
-
     # Write bins, if necessary
     if fasta_output is not None:
         starttime = time.time()
@@ -1330,12 +1327,9 @@ def write_clusters_and_bins(
         logger.info(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
+        
+    return n_contigs, msg
 
-    if write_clusters_and_bins.counter == num_contigs:
-        logger.info("100 percent of contigs clustered\n")
-        logger.info(msg)
-        elapsed = round(time.time() - begintime, 2)
-        logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
 def add_bin_prefix(
     clusters: dict[str, set[str]], prefix: Optional[str]
