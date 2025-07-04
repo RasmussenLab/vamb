@@ -1076,6 +1076,46 @@ def calc_abundance(
 
     return abundance
 
+def train(args):
+    logger.info("It works!!")
+
+    composition = vamb.parsecontigs.Composition.load(args.composition_file)
+    abundance = vamb.parsebam.Abundance.load(args.abundance_file, composition.metadata.refhash)
+
+    data_loader = vamb.encode.make_dataloader(
+        abundance.matrix,
+        composition.matrix,
+        composition.metadata.lengths,
+        batchsize=256,
+        destroy=True,
+        cuda=False,
+    )
+
+    vae_options = VAEOptions(
+        basic_options=BasicTrainingOptions(
+            num_epochs=4,
+            starting_batch_size=256, 
+            batch_steps=[1, 3],
+        ),
+        nhiddens=[512, 512],
+        nlatent=32,
+        alpha=0.01,
+        beta=200.0,
+        dropout=0.2,
+    )
+
+    vamb_options = GeneralOptions(
+        out_dir=Path(args.outdir),
+        n_threads=4,
+        seed=42,
+        cuda=False,
+    )
+
+    os.makedirs(args.outdir, exist_ok=True)
+
+    trainvae(vae_options, vamb_options, data_loader)
+    logger.info("Latent space written to latent.npz")
+
 
 def load_composition_and_abundance(
     vamb_options: GeneralOptions,
@@ -1088,6 +1128,7 @@ def load_composition_and_abundance(
         vamb_options.out_dir.path,
         binsplitter,
     )
+
     abundance = calc_abundance(
         abundance_options,
         vamb_options.out_dir.path,
@@ -2016,6 +2057,13 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
     )
     return subparser
 
+def add_training_arguments(subparser: argparse.ArgumentParser):
+    trainingos = subparser.add_argument_group(title="Training options")
+    trainingos.add_argument(
+        "--print_test",
+        type=str,
+        help="Print test output"
+    )
 
 def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=False):
     taxonomys = subparser.add_argument_group(title="Taxonomy input")
@@ -2383,8 +2431,7 @@ def main():
         """,
         add_help=False,
     )
-    add_help_arguments(vaevae_parserbin_parser)
-    subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
+    subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand", required=True)
 
     vae_parser = subparsers_model.add_parser(
         VAMB,
@@ -2393,7 +2440,7 @@ def main():
         default binner based on a variational autoencoder. 
         See the paper 'Improved metagenome binning and assembly using deep variational autoencoders'""",
         add_help=False,
-        usage="%(prog)s [options]",
+        #usage="%(prog)s [options]",
         description="""Bin using a VAE that merges composition and abundance information.
 
 Required arguments: Outdir, at least one composition input and at least one abundance input""",
@@ -2413,7 +2460,7 @@ Required arguments: Outdir, at least one composition input and at least one abun
         taxonomy informed binner based on a bi-modal variational autoencoder. 
         See the paper 'TaxVAMB: taxonomic annotations improve metagenome binning'""",
         add_help=False,
-        usage="%(prog)s [options]",
+        #usage="%(prog)s [options]",
         description="""Bin using a semi-supervised VAEVAE model that merges composition, abundance and taxonomic information.
 
 Required arguments: Outdir, taxonomy, at least one composition input and at least one abundance input""",
@@ -2432,7 +2479,7 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
         AVAMB,
         help=argparse.SUPPRESS,
         add_help=False,
-        usage="%(prog)s [options]",
+        #usage="%(prog)s [options]",
     )
     general_group = add_general_arguments(vaeaae_parser)
     add_minlength(general_group)
@@ -2511,9 +2558,17 @@ Required arguments:
     add_composition_npz_argument(abundance_parser)
     add_abundance_args_nonpz(abundance_parser)
 
+    train_parser = partial_part.add_parser(
+        "train", help="Do training without clustering", add_help=False
+    )
+    general_group = add_training_arguments(train_parser)
+    train_parser.add_argument('--abundance_file', type=str, help='Input filename')
+    train_parser.add_argument('--composition_file', type=str, help='Input filename')
+    train_parser.add_argument('--outdir', type=str, help='Output directory')
+
     args = parser.parse_args()
 
-    if args.subcommand == TAXOMETER:
+    if args.subcommand == TAXOMETER:    
         opt = TaxometerOptions.from_args(args)
         runner = partial(run_taxonomy_predictor, opt)
         run(runner, opt.general)
@@ -2549,6 +2604,12 @@ Required arguments:
             opt = PartialAbundanceOptions.from_args(args)
             runner = partial(run_partial_abundance, opt)
             run(runner, opt.general)
+        elif args.partial_part == "train":
+            logger.info("Almost thereeeee!!!")
+            train(args)
+            #opt = PartialTrainOptions.from_args(args)
+            #runner = partial(run_partial_train, opt)
+            #run(runner, opt.general)
         else:
             # TODO: Add abundance
             # TODO: Add encoding w. VAE
