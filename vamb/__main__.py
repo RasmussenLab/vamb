@@ -1202,18 +1202,20 @@ def cluster_and_write_files(
     with open(Path(base_clusters_name + "_metadata.tsv"), "w") as file:
         unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
         split_path = Path(base_clusters_name + "_split.tsv")
-        with open(unsplit_path, "a") as file2, open(split_path, "a") as file3:
+        with open(unsplit_path, "a") as unsplit_clusters_file, open(split_path, "a") as split_clusters_file:
             print("name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file)
             num_contigs = latent.shape[0]
             progress_step = num_contigs / 10
             comparer = progress_step
             progress = 0
             processed_contigs = 0
+            total_unsplit = 0
+            total_split = 0
             logger.info("")
             for i, cluster in enumerate(clusters):
                 cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
                 header = (i == 0)
-                n_contigs, msg = write_clusters_and_bins(
+                if_split, n_unsplit_clusters, n_split_clusters = write_clusters_and_bins(
                     fasta_output,
                     bin_prefix,
                     binsplitter,
@@ -1222,8 +1224,8 @@ def cluster_and_write_files(
                     sequence_names,
                     cast(Sequence[int], sequence_lens),
                     header,
-                    file2,
-                    file3,
+                    unsplit_clusters_file,
+                    split_clusters_file,
                 )  
                 
                 print(
@@ -1236,23 +1238,27 @@ def cluster_and_write_files(
                     ),
                     cluster.kind_str,
                     sum(sequence_lens[i] for i in cluster.members),
-                    len(cluster.members),
+                    len(cluster_members),
                     sequence_names[cluster.medoid],
                     file=file,
                     sep="\t",
                 )
-                processed_contigs += len(cluster.members)
+                total_unsplit += n_unsplit_clusters
+                total_split += n_split_clusters
+                processed_contigs += len(cluster_members)
                 if (processed_contigs >= comparer):
                     comparer += progress_step
                     progress += 10
                     logger.info(f"{progress} percent of contigs clustered\n")  
                 if processed_contigs == num_contigs:
+                    if if_split:
+                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)\n"
+                    else:
+                        msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
                     logger.info(msg)
                     elapsed = round(time.time() - begintime, 2)
                     logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.\n")
-                
-                
-        
+                    
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
@@ -1270,37 +1276,40 @@ def write_clusters_and_bins(
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
     to_file: bool = True,
-    file2: Optional[TextIO] = None,
-    file3: Optional[TextIO] = None,
+    unsplit_clusters_file: Optional[TextIO] = None,
+    split_clusters_file: Optional[TextIO] = None,
 ):
+    
     # Write unsplit clusters to file
     begintime = time.time()
-    if file2:
+    if unsplit_clusters_file:
         (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-            file2, clusters.items(), to_file
+            unsplit_clusters_file, clusters.items(), to_file
         )
     else:
-        with open(unsplit_path, "a") as file:
+        with open(unsplit_path, "w") as file:
             (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
                 file, clusters.items(), to_file
             )
-
+    
     # Open unsplit clusters and split them
     if binsplitter.splitter is not None:
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        if file3:
+        if split_clusters_file:
             (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file3, clusters.items(), to_file
+                split_clusters_file, clusters.items(), to_file
             )
         else:
             with open(split_path, "a") as file:
                 (n_split_clusters, _) = vamb.vambtools.write_clusters(
                 file, clusters.items(), to_file
                 )       
+        if_split = True
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
+        if_split = False
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
         clusters = add_bin_prefix(clusters, bin_prefix)
 
@@ -1328,7 +1337,7 @@ def write_clusters_and_bins(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
         
-    return n_contigs, msg
+    return if_split, n_unsplit_clusters, n_split_clusters
 
 
 def add_bin_prefix(
@@ -2406,10 +2415,3 @@ Required arguments:
         opt = ReclusteringOptions.from_args(args)
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
-    else:
-        # There are no more subcommands
-        assert False
-
-
-if __name__ == "__main__":
-    main()
