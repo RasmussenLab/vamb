@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
-from typing import Optional, TextIO
+from typing import TextIO
 from contextlib import nullcontext
 
 _ncpu = os.cpu_count()
@@ -1162,7 +1162,13 @@ class FastaOutput(NamedTuple):
         else:
             return None
             
-def write_clusters_to_file(file_handle, file_path, clusters, to_file):
+
+def write_clusters_to_file(
+    file_handle: Optional[TextIO],
+    file_path: Optional[str],
+    clusters: dict[str, set[str]],
+    to_file: bool
+    ):
     handle = nullcontext(file_handle) if file_handle else open(file_path, 'w')
     with handle as file:
         return vamb.vambtools.write_clusters(file, clusters, to_file)
@@ -1254,12 +1260,12 @@ def cluster_and_write_files(
                 if (processed_contigs >= comparer):
                     comparer += progress_step
                     progress += 10
-                    logger.info(f"{progress} percent of contigs clustered\n")  
+                    logger.info(f"{progress}% of contigs clustered")  
                 if processed_contigs == num_contigs:
                     if binsplitter.splitter is not None:
-                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
+                        msg = f"\t\nClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
                     else:
-                        msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
+                        msg = f"\t\nClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
                     logger.info(msg)
                     elapsed = round(time.time() - begintime, 2)
                     logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
@@ -1306,7 +1312,7 @@ def write_clusters_and_bins(
     else:
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
         clusters = add_bin_prefix(clusters, bin_prefix)
-        n_split_clusters = 0
+        n_split_clusters = n_unsplit_clusters
 
     # Write bins, if necessary
     if fasta_output is not None:
