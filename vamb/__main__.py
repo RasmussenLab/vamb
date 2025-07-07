@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
 from typing import Optional, TextIO
+from contextlib import nullcontext
 
 _ncpu = os.cpu_count()
 DEFAULT_THREADS = 8 if _ncpu is None else min(_ncpu, 8)
@@ -1160,6 +1161,11 @@ class FastaOutput(NamedTuple):
             )
         else:
             return None
+            
+def write_clusters_to_file(file_handle, file_path, clusters, to_file):
+    handle = nullcontext(file_handle) if file_handle else open(file_path, 'w')
+    with handle as file:
+        return vamb.vambtools.write_clusters(file, clusters, to_file)
 
 
 def cluster_and_write_files(
@@ -1211,11 +1217,10 @@ def cluster_and_write_files(
             processed_contigs = 0
             total_unsplit = 0
             total_split = 0
-            logger.info("")
             for i, cluster in enumerate(clusters):
                 cluster_members = {sequence_names[cast(int,i)] for i in cluster.members}
                 header = (i == 0)
-                if_split, n_unsplit_clusters, n_split_clusters = write_clusters_and_bins(
+                n_unsplit_clusters, n_split_clusters = write_clusters_and_bins(
                     fasta_output,
                     bin_prefix,
                     binsplitter,
@@ -1226,7 +1231,7 @@ def cluster_and_write_files(
                     header,
                     unsplit_clusters_file,
                     split_clusters_file,
-                )  
+                )
                 
                 print(
                     str(i + 1),
@@ -1251,17 +1256,16 @@ def cluster_and_write_files(
                     progress += 10
                     logger.info(f"{progress} percent of contigs clustered\n")  
                 if processed_contigs == num_contigs:
-                    if if_split:
-                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)\n"
+                    if binsplitter.splitter is not None:
+                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
                     else:
                         msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
                     logger.info(msg)
                     elapsed = round(time.time() - begintime, 2)
-                    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.\n")
+                    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
                     
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
-
 
 def write_clusters_and_bins(
     fasta_output: Optional[FastaOutput],
@@ -1282,36 +1286,27 @@ def write_clusters_and_bins(
     
     # Write unsplit clusters to file
     begintime = time.time()
-    if unsplit_clusters_file:
-        (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-            unsplit_clusters_file, clusters.items(), to_file
-        )
-    else:
-        with open(unsplit_path, "w") as file:
-            (n_unsplit_clusters, n_contigs) = vamb.vambtools.write_clusters(
-                file, clusters.items(), to_file
-            )
-    
+    unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
+    split_path = Path(base_clusters_name + "_split.tsv")
+
+    n_unsplit_clusters, n_contigs = write_clusters_to_file(
+    unsplit_clusters_file, unsplit_path, clusters.items(), to_file
+    )
+
+
     # Open unsplit clusters and split them
     if binsplitter.splitter is not None:
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        if split_clusters_file:
-            (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                split_clusters_file, clusters.items(), to_file
-            )
-        else:
-            with open(split_path, "a") as file:
-                (n_split_clusters, _) = vamb.vambtools.write_clusters(
-                file, clusters.items(), to_file
-                )       
-        if_split = True
+        n_split_clusters, _ = write_clusters_to_file(
+        split_clusters_file, split_path, clusters.items(), to_file
+        )                  
         msg = f"\tClustered {n_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
     else:
-        if_split = False
         msg = f"\tClustered {n_contigs} contigs in {n_unsplit_clusters} unsplit bins"
         clusters = add_bin_prefix(clusters, bin_prefix)
+        n_split_clusters = 0
 
     # Write bins, if necessary
     if fasta_output is not None:
@@ -1337,7 +1332,7 @@ def write_clusters_and_bins(
             f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
         )
         
-    return if_split, n_unsplit_clusters, n_split_clusters
+    return n_unsplit_clusters, n_split_clusters
 
 
 def add_bin_prefix(
