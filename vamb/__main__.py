@@ -1307,7 +1307,7 @@ def write_clusters_and_bins(
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
     split_path = Path(base_clusters_name + "_split.tsv")
 
-    n_unsplit_clusters, n_contigs = write_clusters_to_file(
+    n_unsplit_clusters, n_split_clusters = write_clusters_to_file(
         unsplit_clusters_file, unsplit_path, clusters.items(), to_file
     )
 
@@ -1316,7 +1316,7 @@ def write_clusters_and_bins(
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        n_split_clusters, _ = write_clusters_to_file(
+        _, n_split_clusters = write_clusters_to_file(
             split_clusters_file, split_path, clusters.items(), to_file
         )
     else:
