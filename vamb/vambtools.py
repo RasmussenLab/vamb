@@ -569,9 +569,7 @@ class RefHasher:
 
 
 def write_clusters(
-    io: IO[str],
-    clusters: Iterable[tuple[str, set[str]]],
-    print_line: bool = True
+    io: IO[str], clusters: Iterable[tuple[str, set[str]]], print_line: bool = True
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
