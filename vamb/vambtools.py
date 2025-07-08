@@ -679,7 +679,7 @@ def write_bins(
                 )
 
         # Print bin to file
-        with open(directory.joinpath(binname + ".fna"), "wb") as file:
+        with open(directory.joinpath(str(binname) + ".fna"), "wb") as file:
             for contig in contigs:
                 file.write(_gzip.decompress(bytes_by_id[contig]))
                 file.write(b"\n")
