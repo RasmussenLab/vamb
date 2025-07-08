@@ -1164,7 +1164,7 @@ class FastaOutput(NamedTuple):
             return None
 
 
-def write_clusters_to_file(
+def write_clusters_table(
     file_handle: Optional[TextIO],
     file_path: Optional[str],
     clusters: dict[str, set[str]],
@@ -1185,7 +1185,7 @@ def cluster_and_write_files(
     cuda: bool,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
     fasta_output: Optional[FastaOutput],
-    bin_prefix: Optional[str],  # see write_clusters_and_bins
+    bin_prefix: Optional[str],  # see export_binning_results
 ):
     begintime = time.time()
     # Create cluser iterator
@@ -1234,7 +1234,7 @@ def cluster_and_write_files(
                     sequence_names[cast(int, i)] for i in cluster.members
                 }
                 header = i == 0
-                n_unsplit_clusters, n_split_clusters = write_clusters_and_bins(
+                n_unsplit_clusters, n_split_clusters = export_binning_results(
                     fasta_output,
                     bin_prefix,
                     binsplitter,
@@ -1287,7 +1287,7 @@ def cluster_and_write_files(
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
 
 
-def write_clusters_and_bins(
+def export_binning_results(
     fasta_output: Optional[FastaOutput],
     # If `x` and not None, clusters will be renamed `x` + old_name.
     # This is necessary since for the AAE, we may need to write bins
@@ -1307,7 +1307,7 @@ def write_clusters_and_bins(
     unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
     split_path = Path(base_clusters_name + "_split.tsv")
 
-    n_unsplit_clusters, n_split_clusters = write_clusters_to_file(
+    n_unsplit_clusters, _ = write_clusters_table(
         unsplit_clusters_file, unsplit_path, clusters.items(), to_file
     )
 
@@ -1316,7 +1316,7 @@ def write_clusters_and_bins(
         clusters = dict(binsplitter.binsplit(clusters.items()))
         # Add prefix before writing the clusters to file
         clusters = add_bin_prefix(clusters, bin_prefix)
-        _, n_split_clusters = write_clusters_to_file(
+        n_split_clusters, _ = write_clusters_table(
             split_clusters_file, split_path, clusters.items(), to_file
         )
     else:
@@ -1419,11 +1419,11 @@ def run_bin_aae(opt: BinAvambOptions):
     del composition, abundance
     assert comp_metadata.nseqs == len(latent_z)
     # Cluster and output the Z clusters
-    # This function calls write_clusters_and_bins,
+    # This function calls export_binning_results,
     # but also does the actual clustering and writes cluster metadata.
     # This does not apply to the aae_y clusters, since their cluster label
     # can be extracted directly from the latent space without clustering,
-    # and hence below, `write_clusters_and_bins` is called directly instead.
+    # and hence below, `export_binning_results` is called directly instead.
     cluster_and_write_files(
         opt.common.clustering,
         opt.common.output.binsplitter,
@@ -1441,7 +1441,7 @@ def run_bin_aae(opt: BinAvambOptions):
     # We enforce this in the VAEAAEOptions constructor, see comment there
     # Cluster and output the Y clusters
     assert opt.common.clustering.max_clusters is None
-    write_clusters_and_bins(
+    export_binning_results(
         FastaOutput.try_from_common(opt.common),
         "y_",
         binsplitter=opt.common.output.binsplitter,
@@ -1810,7 +1810,7 @@ def run_reclustering(opt: ReclusteringOptions):
             opt.output.min_fasta_output_size,
         )
 
-    write_clusters_and_bins(
+    export_binning_results(
         fasta_output,
         None,
         opt.output.binsplitter,
