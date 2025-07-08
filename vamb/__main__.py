@@ -1260,15 +1260,20 @@ def cluster_and_write_files(
                 if (processed_contigs >= comparer):
                     comparer += progress_step
                     progress += 10
-                    logger.info(f"{progress}% of contigs clustered")  
+                    logger.info(f"{progress}% of contigs clustered") 
                 if processed_contigs == num_contigs:
                     if binsplitter.splitter is not None:
-                        msg = f"\t\nClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
+                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
                     else:
-                        msg = f"\t\nClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
+                        msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
                     logger.info(msg)
                     elapsed = round(time.time() - begintime, 2)
                     logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+
+                    if fasta_output is not None:
+                        logger.info(
+                        f"\tWrote {max(total_split, total_unsplit)} bins with {processed_contigs} sequences in {elapsed} seconds."
+                        )
                     
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
@@ -1331,12 +1336,6 @@ def write_clusters_and_bins(
                 file,
                 None,
             )
-        elapsed = round(time.time() - starttime, 2)
-        n_bins = len(filtered_clusters)
-        n_contigs = sum(len(v) for v in filtered_clusters.values())
-        logger.info(
-            f"\tWrote {n_bins} bins with {n_contigs} sequences in {elapsed} seconds."
-        )
         
     return n_unsplit_clusters, n_split_clusters
 
@@ -2416,3 +2415,4 @@ Required arguments:
         opt = ReclusteringOptions.from_args(args)
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
+ 
