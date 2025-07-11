@@ -360,12 +360,13 @@ class GeneralOptions:
     @classmethod
     def from_args(cls, args: argparse.Namespace):
         return cls(
-            typeasserted(args.outdir, Path),
+            typeasserted(Path(args.outdir), Path),
             typeasserted(args.nthreads, int),
             typeasserted(args.seed, int),
             typeasserted(args.cuda, bool),
         )
-
+    def training_args_assertions(cls, args: argparse.Namespace):
+        None
     def __init__(
         self,
         out_dir: Path,
@@ -793,7 +794,6 @@ class BinnerCommonOptions:
             ClusterOptions.from_args(args),
             BinOutputOptions.from_args(comp, args),
         )
-
     # We do not have BasicTrainingOptions because that is model-specific
     def __init__(
         self,
@@ -809,6 +809,52 @@ class BinnerCommonOptions:
         self.clustering = clustering
         self.output = output
 
+class TrainingCommonOptions:
+    def __init__(self, general: GeneralOptions, comp: CompositionPath, abundance: AbundancePath):
+        self.general = general
+        self.comp = comp
+        self.abundance = abundance
+
+class PartialTrainingOptions: 
+    def __init__(
+        self,
+        general: GeneralOptions,
+        common: TrainingCommonOptions,
+        comp: CompositionPath,
+        abundance: AbundancePath,
+        min_contig_length: MinContigLength,
+        vae: VAEOptions
+    ):
+        self.general = general
+        self.common = common
+        self.comp = comp
+        self.abundance = abundance
+        self.min_contig_length = min_contig_length
+        self.vae = vae
+    @classmethod
+    def from_args(cls, args: argparse.Namespace):
+        general = GeneralOptions.from_args(args)
+        comp = CompositionPath(Path(args.composition_file))
+        abundance_path = Path(args.abundance_file)
+        min_contig_length = MinContigLength.from_args(args)
+        basic = BasicTrainingOptions.from_args_vae(args)
+        vae = VAEOptions.from_args(basic, args)
+
+        
+        abundance = AbundanceOptions(
+            bampaths=None,
+            bamdir=None,
+            abundance_tsv=None,
+            abundancepath=abundance_path,
+            min_alignment_id=0.0,
+            min_contig_length=min_contig_length,
+            refcheck=False
+        )
+
+        common = TrainingCommonOptions(general, comp, abundance)
+        return cls(general, common, comp, abundance, min_contig_length, vae)
+
+        
 
 class BinDefaultOptions:
     @classmethod
@@ -948,6 +994,51 @@ class ReclusteringOptions:
         self.output = output
         self.algorithm = algorithm
 
+def calc_tnf_train_only(
+    options: PartialTrainingOptions,
+    outdir: Path,
+) -> vamb.parsecontigs.Composition:
+    begintime = time.time()
+    logger.info("Loading TNF")
+    #logger.info(f"\tMinimum sequence length: {options.min_contig_length.n}")
+
+    path = options.comp
+    if isinstance(path, CompositionPath):
+        logger.info(f'\tLoading composition from npz at: "{path.path}"')
+        composition = vamb.parsecontigs.Composition.load(path.path)
+        composition.filter_min_length(options.min_contig_length.n)
+    else:
+        raise TypeError("Training-only mode requires a CompositionPath (precomputed .npz)")
+    if composition.nseqs < MINIMUM_SEQS:
+        err = (
+            f"Found only {composition.nseqs} contigs, but Vamb currently requires at least "
+            f"{MINIMUM_SEQS} to work correctly. "
+            "If you have this few sequences in a metagenomic assembly, "
+            "it's probably an error somewhere in your workflow."
+        )
+        logger.error(err)
+        raise ValueError(err)
+
+    # Warn the user if any contigs have been observed, which is smaller
+    # than the threshold.
+    if not np.all(composition.metadata.mask):
+        n_removed = len(composition.metadata.mask) - np.sum(composition.metadata.mask)
+        message = (
+            f"The minimum sequence length has been set to {options.min_contig_length.n}, "
+            f"but {n_removed} sequences fell below this threshold and was filtered away."
+            "\nBetter results are obtained if the sequence file is filtered to the minimum "
+            "sequence length before mapping.\n"
+        )
+        logger.opt(raw=True).info("\n")
+        logger.warning(message)
+
+    elapsed = round(time.time() - begintime, 2)
+    logger.info(
+        f"\tKept {composition.count_bases()} bases in {composition.nseqs} sequences"
+    )
+    logger.info(f"\tProcessed TNF in {elapsed} seconds.\n")
+
+    return composition
 
 def calc_tnf(
     options: CompositionOptions | PartialCompositionOptions,
@@ -1076,47 +1167,6 @@ def calc_abundance(
 
     return abundance
 
-def train(args):
-    logger.info("It works!!")
-
-    composition = vamb.parsecontigs.Composition.load(args.composition_file)
-    abundance = vamb.parsebam.Abundance.load(args.abundance_file, composition.metadata.refhash)
-
-    data_loader = vamb.encode.make_dataloader(
-        abundance.matrix,
-        composition.matrix,
-        composition.metadata.lengths,
-        batchsize=256,
-        destroy=True,
-        cuda=False,
-    )
-
-    vae_options = VAEOptions(
-        basic_options=BasicTrainingOptions(
-            num_epochs=4,
-            starting_batch_size=256, 
-            batch_steps=[1, 3],
-        ),
-        nhiddens=[512, 512],
-        nlatent=32,
-        alpha=0.01,
-        beta=200.0,
-        dropout=0.2,
-    )
-
-    vamb_options = GeneralOptions(
-        out_dir=Path(args.outdir),
-        n_threads=4,
-        seed=42,
-        cuda=False,
-    )
-
-    os.makedirs(args.outdir, exist_ok=True)
-
-    trainvae(vae_options, vamb_options, data_loader)
-    logger.info("Latent space written to latent.npz")
-
-
 def load_composition_and_abundance(
     vamb_options: GeneralOptions,
     comp_options: CompositionOptions,
@@ -1137,6 +1187,21 @@ def load_composition_and_abundance(
     )
     return (composition, abundance)
 
+def load_composition_and_abundance_train_only(
+    opt: PartialTrainingOptions,
+) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
+    composition = calc_tnf_train_only(
+        opt,
+        opt.general.out_dir.path
+    )
+
+    abundance = calc_abundance(
+        opt.abundance,
+        opt.general.out_dir.path,
+        composition.metadata,
+        opt.general.n_threads,
+    )
+    return (composition, abundance)
 
 def load_markers(
     options: MarkerOptions,
@@ -1444,15 +1509,7 @@ def run_partial_abundance(opt: PartialAbundanceOptions):
     calc_abundance(
         opt, opt.general.out_dir.path, composition.metadata, opt.general.n_threads
     )
-
-
-def run_bin_default(opt: BinDefaultOptions):
-    composition, abundance = load_composition_and_abundance(
-        vamb_options=opt.common.general,
-        comp_options=opt.common.comp,
-        abundance_options=opt.common.abundance,
-        binsplitter=opt.common.output.binsplitter,
-    )
+def run_train_vae(opt: BinDefaultOptions, composition: CompositionPath, abundance: AbundancePath):
     data_loader = vamb.encode.make_dataloader(
         abundance.matrix,
         composition.matrix,
@@ -1471,6 +1528,12 @@ def run_bin_default(opt: BinDefaultOptions):
     del composition, abundance
     assert comp_metadata.nseqs == len(latent)
 
+    return latent
+
+def run_cluster_and_write_files(latent, opt: BinDefaultOptions, composition: CompositionPath):
+    
+    comp_metadata = composition.metadata
+    assert comp_metadata.nseqs == len(latent)
     cluster_and_write_files(
         opt.common.clustering,
         opt.common.output.binsplitter,
@@ -1483,6 +1546,15 @@ def run_bin_default(opt: BinDefaultOptions):
         FastaOutput.try_from_common(opt.common),
         None,
     )
+def run_bin_default(opt: BinDefaultOptions):
+    composition, abundance = load_composition_and_abundance(
+    vamb_options=opt.common.general,
+    comp_options=opt.common.comp,
+    abundance_options=opt.common.abundance,
+    binsplitter=opt.common.output.binsplitter,
+    )
+    latent = run_train_vae(opt, composition, abundance)
+    run_cluster_and_write_files(latent, opt, composition)
     del latent
 
 
@@ -2059,10 +2131,29 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
 
 def add_training_arguments(subparser: argparse.ArgumentParser):
     trainingos = subparser.add_argument_group(title="Training options")
+    add_minlength(trainingos)
     trainingos.add_argument(
         "--print_test",
         type=str,
         help="Print test output"
+    )
+    trainingos.add_argument(
+        "-p",
+        dest="nthreads",
+        metavar="",
+        type=int,
+        default=DEFAULT_THREADS,
+        help="number of threads to use where customizable",
+        )
+    trainingos.add_argument(
+        "--seed",
+        metavar="",
+        type=int,
+        default=int.from_bytes(os.urandom(7), "little"),
+        help="Random seed (determinism not guaranteed)",
+    )
+    trainingos.add_argument(
+        "--cuda", help="Use GPU to train & cluster [False]", action="store_true"
     )
 
 def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=False):
@@ -2173,7 +2264,11 @@ def add_vae_arguments(subparser: argparse.ArgumentParser):
     trainos = subparser.add_argument_group(title="Training options", description=None)
 
     trainos.add_argument(
-        "-e", dest="nepochs", metavar="", type=int, default=300, help=argparse.SUPPRESS
+        "-e", dest="nepochs",
+        metavar="",
+        type=int,
+        default=70,
+        help=argparse.SUPPRESS,
     )
     trainos.add_argument(
         "-t",
@@ -2565,6 +2660,15 @@ Required arguments:
     train_parser.add_argument('--abundance_file', type=str, help='Input filename')
     train_parser.add_argument('--composition_file', type=str, help='Input filename')
     train_parser.add_argument('--outdir', type=str, help='Output directory')
+    train_parser.add_argument('--nepochs', type=int, default=70, help='Number of training epochs (default: 70)')
+    train_parser.add_argument('--batchsize', type=int, default=64, help='Batchsize')
+    train_parser.add_argument('--batchsteps', type=int, nargs='+', default=[], help='Epochs at which to update batch statistics (default: none)')
+    train_parser.add_argument('--nhiddens', type=int, nargs='*', default=None, help='List of hidden layer sizes for the VAE (e.g., --nhiddens 512 256)')
+    parser.add_argument('--nlatent', type=int, default=32, help='Size of the VAE latent space (default: 32)')
+    parser.add_argument('--alpha', type=float, default=None, help='Beta-VAE alpha parameter (optional, default: None)')
+    parser.add_argument('--beta', type=float, default=1.0, help='KL-divergence weight for Beta-VAE (default: 1.0)')
+    parser.add_argument('--dropout', type=float, default=None, help='Dropout rate for VAE layers (optional, default: None)')
+
 
     args = parser.parse_args()
 
@@ -2605,11 +2709,16 @@ Required arguments:
             runner = partial(run_partial_abundance, opt)
             run(runner, opt.general)
         elif args.partial_part == "train":
-            logger.info("Almost thereeeee!!!")
-            train(args)
-            #opt = PartialTrainOptions.from_args(args)
-            #runner = partial(run_partial_train, opt)
-            #run(runner, opt.general)
+            starting_time = time.time()
+            opt = PartialTrainingOptions.from_args(args)
+            os.makedirs(args.outdir, exist_ok=False)
+            composition, abundance = load_composition_and_abundance_train_only(opt)
+            run_train_vae(opt, composition, abundance)
+            logger.info(f"Saved latent.npz to /{args.outdir}")
+            ending_time = time.time()
+            elapsed = ending_time - starting_time
+            logger.info(f"Completed training in {elapsed:.2f} seconds")
+
         else:
             # TODO: Add abundance
             # TODO: Add encoding w. VAE
