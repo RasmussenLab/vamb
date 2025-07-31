@@ -569,11 +569,11 @@ class RefHasher:
 
 
 def write_clusters(
-    io: IO[str], clusters: Iterable[tuple[str, set[str]]], print_line: bool = True
+    io: IO[str], clusters: Iterable[tuple[str, set[str]]], print_header: bool = True
 ) -> tuple[int, int]:
     n_clusters = 0
     n_contigs = 0
-    if print_line:
+    if print_header:
         print(CLUSTERS_HEADER, file=io)
     for cluster_name, contig_names in clusters:
         n_clusters += 1
@@ -677,7 +677,7 @@ def write_bins(
                 )
 
         # Print bin to file
-        with open(directory.joinpath(str(binname) + ".fna"), "wb") as file:
+        with open(directory.joinpath(binname + ".fna"), "wb") as file:
             for contig in contigs:
                 file.write(_gzip.decompress(bytes_by_id[contig]))
                 file.write(b"\n")

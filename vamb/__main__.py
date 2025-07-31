@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from functools import partial
 from loguru import logger
 from typing import TextIO
+from typing import Iterable
 from contextlib import nullcontext
 
 _ncpu = os.cpu_count()
@@ -1168,11 +1169,11 @@ def write_clusters_table(
     file_handle: Optional[TextIO],
     file_path: Optional[str],
     clusters: dict[str, set[str]],
-    to_file: bool,
-):
+    print_header: bool,
+) -> tuple[int, dict[str, set[str]]]:
     handle = nullcontext(file_handle) if file_handle else open(file_path, "w")
     with handle as file:
-        return vamb.vambtools.write_clusters(file, clusters, to_file)
+        return vamb.vambtools.write_clusters(file, clusters, print_header)
 
 
 def cluster_and_write_files(
@@ -1216,15 +1217,15 @@ def cluster_and_write_files(
         unsplit_path = Path(base_clusters_name + "_unsplit.tsv")
         split_path = Path(base_clusters_name + "_split.tsv")
         with (
-            open(unsplit_path, "a") as unsplit_clusters_file,
-            open(split_path, "a") as split_clusters_file,
+            open(unsplit_path, "w") as unsplit_clusters_file,
+            open(split_path, "w") as split_clusters_file,
         ):
             print(
                 "name\tradius\tpeak valley ratio\tkind\tbp\tncontigs\tmedoid", file=file
             )
             num_contigs = latent.shape[0]
             progress_step = num_contigs / 10
-            comparer = progress_step
+            next_reporting_threshold = progress_step
             progress = 0
             processed_contigs = 0
             total_unsplit = 0
@@ -1239,7 +1240,7 @@ def cluster_and_write_files(
                     bin_prefix,
                     binsplitter,
                     base_clusters_name,
-                    {i: cluster_members},
+                    [(str(i), cluster_members)],
                     sequence_names,
                     cast(Sequence[int], sequence_lens),
                     header,
@@ -1265,23 +1266,23 @@ def cluster_and_write_files(
                 total_unsplit += n_unsplit_clusters
                 total_split += n_split_clusters
                 processed_contigs += len(cluster_members)
-                if processed_contigs >= comparer:
-                    comparer += progress_step
+                while processed_contigs >= next_reporting_threshold:
+                    next_reporting_threshold += progress_step
                     progress += 10
                     logger.info(f"{progress}% of contigs clustered")
-                if processed_contigs == num_contigs:
-                    if binsplitter.splitter is not None:
-                        msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
-                    else:
-                        msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
-                    logger.info(msg)
-                    elapsed = round(time.time() - begintime, 2)
-                    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+            if processed_contigs == num_contigs:
+                if binsplitter.splitter is not None:
+                    msg = f"\tClustered {processed_contigs} contigs in {total_split} split bins ({total_unsplit} clusters)"
+                else:
+                    msg = f"\tClustered {processed_contigs} contigs in {total_unsplit} unsplit bins"
+                logger.info(msg)
+                elapsed = round(time.time() - begintime, 2)
+                logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
-                    if fasta_output is not None:
-                        logger.info(
-                            f"\tWrote {max(total_split, total_unsplit)} bins with {processed_contigs} sequences in {elapsed} seconds."
-                        )
+                if fasta_output is not None:
+                    logger.info(
+                        f"\tWrote {max(total_split, total_unsplit)} bins with {processed_contigs} sequences in {elapsed} seconds."
+                    )
 
     elapsed = round(time.time() - begintime, 2)
     logger.info(f"\tClustered contigs in {elapsed} seconds.\n")
@@ -1296,7 +1297,7 @@ def export_binning_results(
     bin_prefix: Optional[str],
     binsplitter: vamb.vambtools.BinSplitter,
     base_clusters_name: str,  # e.g. /foo/bar/vae -> /foo/bar/vae_unsplit.tsv
-    clusters: dict[str, set[str]],
+    clusters: Iterable[tuple[str, set[str]]],
     sequence_names: Sequence[str],
     sequence_lens: Sequence[int],
     to_file: bool = True,
@@ -1308,19 +1309,21 @@ def export_binning_results(
     split_path = Path(base_clusters_name + "_split.tsv")
 
     n_unsplit_clusters, _ = write_clusters_table(
-        unsplit_clusters_file, unsplit_path, clusters.items(), to_file
+        unsplit_clusters_file, unsplit_path, clusters, to_file
     )
 
     # Open unsplit clusters and split them
     if binsplitter.splitter is not None:
-        clusters = dict(binsplitter.binsplit(clusters.items()))
-        # Add prefix before writing the clusters to file
-        clusters = add_bin_prefix(clusters, bin_prefix)
+        split_clusters = binsplitter.binsplit(clusters)
+        if bin_prefix is not None:
+            split_clusters = add_bin_prefix(dict(split_clusters), bin_prefix).items()
         n_split_clusters, _ = write_clusters_table(
-            split_clusters_file, split_path, clusters.items(), to_file
+            split_clusters_file, split_path, split_clusters, to_file
         )
     else:
-        clusters = add_bin_prefix(clusters, bin_prefix)
+        clusters_with_prefix = clusters
+        if bin_prefix is not None:
+            clusters_with_prefix = add_bin_prefix(dict(clusters), bin_prefix).items()
         n_split_clusters = n_unsplit_clusters
 
     # Write bins, if necessary
@@ -1328,7 +1331,7 @@ def export_binning_results(
         filtered_clusters: dict[str, set[str]] = dict()
         assert len(sequence_lens) == len(sequence_names)
         sizeof = dict(zip(sequence_names, sequence_lens))
-        for binname, contigs in clusters.items():
+        for binname, contigs in clusters_with_prefix:
             if sum(sizeof[c] for c in contigs) >= fasta_output.min_fasta_size:
                 filtered_clusters[binname] = contigs
 
