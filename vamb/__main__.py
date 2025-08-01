@@ -1173,7 +1173,7 @@ def write_clusters_table(
 ) -> tuple[int, dict[str, set[str]]]:
     handle = nullcontext(file_handle) if file_handle else open(file_path, "w")
     with handle as file:
-        return vamb.vambtools.write_clusters(file, clusters, print_header)
+        return vamb.vambtools.write_clusters(file, clusters.items(), print_header)
 
 
 def cluster_and_write_files(
