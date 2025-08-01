@@ -1317,6 +1317,7 @@ def export_binning_results(
         split_clusters = binsplitter.binsplit(clusters)
         if bin_prefix is not None:
             split_clusters = add_bin_prefix(dict(split_clusters), bin_prefix).items()
+        clusters_with_prefix = split_clusters
         n_split_clusters, _ = write_clusters_table(
             split_clusters_file, split_path, split_clusters, to_file
         )
