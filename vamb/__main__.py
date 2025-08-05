@@ -1168,12 +1168,12 @@ class FastaOutput(NamedTuple):
 def write_clusters_table(
     file_handle: Optional[TextIO],
     file_path: Optional[str],
-    clusters: dict[str, set[str]],
+    clusters: Iterable[tuple[str, set[str]]],
     print_header: bool,
 ) -> tuple[int, dict[str, set[str]]]:
     handle = nullcontext(file_handle) if file_handle else open(file_path, "w")
     with handle as file:
-        return vamb.vambtools.write_clusters(file, clusters.items(), print_header)
+        return vamb.vambtools.write_clusters(file, clusters, print_header)
 
 
 def cluster_and_write_files(
@@ -1800,9 +1800,12 @@ def run_reclustering(opt: ReclusteringOptions):
 
     logger.info("\tReclustering complete")
     identifiers = composition.metadata.identifiers
-    clusters_dict: dict[str, set[str]] = dict()
-    for i, cluster in enumerate(reclustered_contigs):
-        clusters_dict[str(i)] = {identifiers[c] for c in cluster}
+    clusters_dict: Iterable[tuple[str, set[str]]] = [
+        (str(i), {identifiers[c] for c in cluster})
+        for i, cluster in enumerate(reclustered_contigs)
+    ]
+    # for i, cluster in enumerate(reclustered_contigs):
+    #    clusters_dict[str(i)] = {identifiers[c] for c in cluster}
 
     if opt.output.min_fasta_output_size is None:
         fasta_output = None
