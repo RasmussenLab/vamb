@@ -366,9 +366,6 @@ class GeneralOptions:
             typeasserted(args.cuda, bool),
         )
 
-    def training_args_assertions(cls, args: argparse.Namespace):
-        None
-
     def __init__(
         self,
         out_dir: Path,
@@ -810,6 +807,7 @@ class BinnerCommonOptions:
         self.comp = comp
         self.abundance = abundance
         self.clustering = clustering
+        self.output = output
 
 
 class TrainingCommonOptions:
@@ -1010,23 +1008,21 @@ class ReclusteringOptions:
 
 
 def calc_tnf(
-    options: CompositionOptions | PartialCompositionOptions | PartialTrainingOptions,
+    options: CompositionOptions | PartialCompositionOptions,
     outdir: Path,
-    binsplitter: Optional[vamb.vambtools.BinSplitter] = None,
-    train_only: bool = False,
+    binsplitter: Optional[vamb.vambtools.BinSplitter],
 ) -> vamb.parsecontigs.Composition:
     begintime = time.time()
     logger.info("Loading TNF")
-    if not train_only:
-        logger.info(f"\tMinimum sequence length: {options.min_contig_length.n}")
-        path = options.path
-    else:
-        path = options.validate_comp_is_npz()
+    logger.info(f"\tMinimum sequence length: {options.min_contig_length.n}")
+
+    path = options.path
+
     if isinstance(path, CompositionPath):
         logger.info(f'\tLoading composition from npz at: "{path.path}"')
         composition = vamb.parsecontigs.Composition.load(path.path)
         composition.filter_min_length(options.min_contig_length.n)
-    elif not train_only:
+    else:
         assert isinstance(path, FASTAPath)
         logger.info(f"\tLoading data from FASTA file {path.path}")
         with vamb.vambtools.Reader(path.path) as file:
@@ -1035,16 +1031,11 @@ def calc_tnf(
             )
         assert outdir is not None
         composition.save(outdir.joinpath("composition.npz"))
-    else:
-        raise TypeError(
-            "In training-only mode, path must be a CompositionPath with a valid .npz file"
-        )
 
-    if not train_only:
-        # Initialize binsplitter on the identifiers. Only done if we actually need to binsplit
-        # later.
-        if binsplitter is not None:
-            binsplitter.initialize(composition.metadata.identifiers)
+    # Initialize binsplitter on the identifiers. Only done if we actually need to binsplit
+    # later.
+    if binsplitter is not None:
+        binsplitter.initialize(composition.metadata.identifiers)
 
     if composition.nseqs < MINIMUM_SEQS:
         err = (
@@ -1161,20 +1152,6 @@ def load_composition_and_abundance(
         vamb_options.out_dir.path,
         composition.metadata,
         vamb_options.n_threads,
-    )
-    return (composition, abundance)
-
-
-def load_composition_and_abundance_train_only(
-    opt: PartialTrainingOptions,
-) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
-    composition = calc_tnf(opt, opt.general.out_dir.path, train_only=True)
-
-    abundance = calc_abundance(
-        opt.abundance,
-        opt.general.out_dir.path,
-        composition.metadata,
-        opt.general.n_threads,
     )
     return (composition, abundance)
 
@@ -1508,8 +1485,6 @@ def run_train_vae(
     del composition, abundance
     assert comp_metadata.nseqs == len(latent)
 
-    logger.info(f"Saved latent.npz to {opt.outdir}")
-
     return latent
 
 
@@ -1532,16 +1507,19 @@ def run_cluster_and_write_files(
     )
 
 
-def run_bin_default(opt: BinDefaultOptions):
+def load_train_bin(opt: BinDefaultOptions, partial_mode: str = "default", latent=None):
     composition, abundance = load_composition_and_abundance(
         vamb_options=opt.common.general,
         comp_options=opt.common.comp,
         abundance_options=opt.common.abundance,
         binsplitter=opt.common.output.binsplitter,
     )
-    latent = run_train_vae(opt, composition, abundance)
-    run_cluster_and_write_files(latent, opt, composition)
-    del latent
+    if partial_mode == "default" or partial_mode == "train":
+        latent = run_train_vae(opt, composition, abundance)
+
+    if partial_mode == "default" or partial_mode == "cluster":
+        run_cluster_and_write_files(latent, opt, composition)
+        del latent
 
 
 def run_bin_aae(opt: BinAvambOptions):
@@ -2116,30 +2094,6 @@ def add_abundance_arguments(subparser: argparse.ArgumentParser):
     return subparser
 
 
-def add_training_arguments(subparser: argparse.ArgumentParser):
-    trainingos = subparser.add_argument_group(title="Training options")
-    add_minlength(trainingos)
-    trainingos.add_argument("--print_test", type=str, help="Print test output")
-    trainingos.add_argument(
-        "-p",
-        dest="nthreads",
-        metavar="",
-        type=int,
-        default=DEFAULT_THREADS,
-        help="number of threads to use where customizable",
-    )
-    trainingos.add_argument(
-        "--seed",
-        metavar="",
-        type=int,
-        default=int.from_bytes(os.urandom(7), "little"),
-        help="Random seed (determinism not guaranteed)",
-    )
-    trainingos.add_argument(
-        "--cuda", help="Use GPU to train & cluster [False]", action="store_true"
-    )
-
-
 def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=False):
     taxonomys = subparser.add_argument_group(title="Taxonomy input")
     taxonomys.add_argument(
@@ -2332,6 +2286,20 @@ def add_predictor_arguments(subparser: argparse.ArgumentParser):
         help=argparse.SUPPRESS,
     )
     return subparser
+
+
+def add_cluster_only_args(subparser: argparse.ArgumentParser):
+    c_only_arg = subparser.add_argument_group(
+        title="Clustering options", description=None
+    )
+    c_only_arg.add_argument(
+        "--latent",
+        dest="latent_file",
+        required=True,
+        metavar="",
+        type=lambda p: np.load(Path(p)),
+        help="Path to latent.npz file",
+    )
 
 
 def add_clustering_arguments(subparser: argparse.ArgumentParser):
@@ -2643,11 +2611,33 @@ Required arguments:
     train_parser = partial_part.add_parser(
         "train", help="Do training without clustering", add_help=False
     )
-    general_group = add_training_arguments(train_parser)
+
+    train_parser.set_defaults(model_subcommand=VAMB)
+
+    general_group = add_general_arguments(train_parser)
+    add_minlength(general_group)
+    add_composition_arguments(train_parser)
+    add_abundance_arguments(train_parser)
+    add_taxonomy_arguments(train_parser)
+    add_bin_output_arguments(train_parser)
     add_vae_arguments(train_parser)
-    train_parser.add_argument("--abundance_file", type=str, help="Input filename")
-    train_parser.add_argument("--composition_file", type=str, help="Input filename")
-    train_parser.add_argument("--outdir", type=str, help="Output directory")
+    add_clustering_arguments(train_parser)
+
+    cluster_parser = partial_part.add_parser(
+        "cluster", help="Cluster after training", add_help=False
+    )
+    cluster_parser.set_defaults(model_subcommand=VAMB)
+
+    general_group = add_general_arguments(cluster_parser)
+    add_minlength(general_group)
+    add_composition_arguments(cluster_parser)
+    add_abundance_arguments(cluster_parser)
+    add_taxonomy_arguments(cluster_parser)
+    add_bin_output_arguments(cluster_parser)
+    add_vae_arguments(cluster_parser)
+    add_clustering_arguments(cluster_parser)
+    add_cluster_only_args(cluster_parser)
+
     args = parser.parse_args()
 
     if args.subcommand == TAXOMETER:
@@ -2661,7 +2651,7 @@ Required arguments:
             sys.exit(1)
         if model == VAMB:
             opt = BinDefaultOptions.from_args(args)
-            runner = partial(run_bin_default, opt)
+            runner = partial(load_train_bin, opt)
             run(runner, opt.common.general)
         elif model == TAXVAMB:
             opt = BinTaxVambOptions.from_args(args)
@@ -2687,14 +2677,18 @@ Required arguments:
             runner = partial(run_partial_abundance, opt)
             run(runner, opt.general)
         elif args.partial_part == "train":
-            starting_time = time.time()
-            opt = PartialTrainingOptions.from_args(args)
-            os.makedirs(args.outdir, exist_ok=False)
-            composition, abundance = load_composition_and_abundance_train_only(opt)
-            run_train_vae(opt, composition, abundance)
-            ending_time = time.time()
-            elapsed = ending_time - starting_time
-            logger.info(f"Completed training in {elapsed:.2f} seconds")
+            opt = BinDefaultOptions.from_args(args)
+            runner = partial(load_train_bin, opt, partial_mode="train")
+            run(runner, opt.common.general)
+        elif args.partial_part == "cluster":
+            opt = BinDefaultOptions.from_args(args)
+            runner = partial(
+                load_train_bin,
+                opt,
+                partial_mode="cluster",
+                latent=args.latent_file["arr_0"],
+            )
+            run(runner, opt.common.general)
 
         else:
             # TODO: Add abundance
@@ -2709,5 +2703,3 @@ Required arguments:
 
 if __name__ == "__main__":
     main()
-
-
