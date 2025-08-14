@@ -2168,7 +2168,7 @@ def add_vae_arguments(subparser: argparse.ArgumentParser):
         dest="nepochs",
         metavar="",
         type=int,
-        default=70,
+        default=300,
         help=argparse.SUPPRESS,
     )
     trainos.add_argument(
@@ -2472,7 +2472,7 @@ Required arguments: Outdir, at least one composition input and at least one abun
         taxonomy informed binner based on a bi-modal variational autoencoder. 
         See the paper 'TaxVAMB: taxonomic annotations improve metagenome binning'""",
         add_help=False,
-        # usage="%(prog)s [options]",
+        usage="%(prog)s [options]",
         description="""Bin using a semi-supervised VAEVAE model that merges composition, abundance and taxonomic information.
 
 Required arguments: Outdir, taxonomy, at least one composition input and at least one abundance input""",
@@ -2491,7 +2491,7 @@ Required arguments: Outdir, taxonomy, at least one composition input and at leas
         AVAMB,
         help=argparse.SUPPRESS,
         add_help=False,
-        # usage="%(prog)s [options]",
+        usage="%(prog)s [options]",
     )
     general_group = add_general_arguments(vaeaae_parser)
     add_minlength(general_group)
