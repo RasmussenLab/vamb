@@ -810,64 +810,6 @@ class BinnerCommonOptions:
         self.output = output
 
 
-class TrainingCommonOptions:
-    def __init__(
-        self, general: GeneralOptions, comp: CompositionPath, abundance: AbundancePath
-    ):
-        self.general = general
-        self.comp = comp
-        self.abundance = abundance
-
-
-class PartialTrainingOptions:
-    def __init__(
-        self,
-        general: GeneralOptions,
-        common: TrainingCommonOptions,
-        comp: CompositionPath,
-        abundance: AbundancePath,
-        min_contig_length: MinContigLength,
-        vae: VAEOptions,
-        outdir: Path,
-    ):
-        self.general = general
-        self.common = common
-        self.comp = comp
-        self.abundance = abundance
-        self.min_contig_length = min_contig_length
-        self.vae = vae
-        self.outdir = outdir
-
-    @classmethod
-    def from_args(cls, args: argparse.Namespace):
-        general = GeneralOptions.from_args(args)
-        comp = CompositionPath(Path(args.composition_file))
-        abundance_path = Path(args.abundance_file)
-        min_contig_length = MinContigLength.from_args(args)
-        basic = BasicTrainingOptions.from_args_vae(args)
-        vae = VAEOptions.from_args(basic, args)
-        outdir = Path(args.outdir)
-
-        abundance = AbundanceOptions(
-            bampaths=None,
-            bamdir=None,
-            abundance_tsv=None,
-            abundancepath=abundance_path,
-            min_alignment_id=0.0,
-            min_contig_length=min_contig_length,
-            refcheck=False,
-        )
-        common = TrainingCommonOptions(general, comp, abundance)
-        return cls(general, common, comp, abundance, min_contig_length, vae, outdir)
-
-    def validate_comp_is_npz(self) -> Path:
-        if not isinstance(self.comp, CompositionPath):
-            raise TypeError(
-                "Training-only mode requires a CompositionPath (precomputed .npz)"
-            )
-        return self.comp
-
-
 class BinDefaultOptions:
     @classmethod
     def from_args(cls, args: argparse.Namespace):
@@ -1507,19 +1449,39 @@ def run_cluster_and_write_files(
     )
 
 
-def load_train_bin(opt: BinDefaultOptions, partial_mode: str = "default", latent=None):
+class RunDefault:
+    pass
+
+
+class RunTrain:
+    pass
+
+
+class RunCluster:
+    def __init__(self, latent: Path):
+        self.latent = latent
+
+
+def load_train_bin(
+    opt: BinDefaultOptions, partial_mode: Union[RunDefault, RunTrain, RunCluster]
+):
     composition, abundance = load_composition_and_abundance(
         vamb_options=opt.common.general,
         comp_options=opt.common.comp,
         abundance_options=opt.common.abundance,
         binsplitter=opt.common.output.binsplitter,
     )
-    if partial_mode == "default" or partial_mode == "train":
+
+    latent = None
+
+    if isinstance(partial_mode, (RunDefault, RunTrain)):
         latent = run_train_vae(opt, composition, abundance)
 
-    if partial_mode == "default" or partial_mode == "cluster":
+    if isinstance(partial_mode, RunCluster):
+        latent = partial_mode.latent
+
+    if isinstance(partial_mode, (RunDefault, RunCluster)):
         run_cluster_and_write_files(latent, opt, composition)
-        del latent
 
 
 def run_bin_aae(opt: BinAvambOptions):
@@ -2490,7 +2452,7 @@ def main():
         default binner based on a variational autoencoder. 
         See the paper 'Improved metagenome binning and assembly using deep variational autoencoders'""",
         add_help=False,
-        # usage="%(prog)s [options]",
+        usage="%(prog)s [options]",
         description="""Bin using a VAE that merges composition and abundance information.
 
 Required arguments: Outdir, at least one composition input and at least one abundance input""",
@@ -2607,7 +2569,6 @@ Required arguments:
     add_minlength(general_group)
     add_composition_npz_argument(abundance_parser)
     add_abundance_args_nonpz(abundance_parser)
-
     train_parser = partial_part.add_parser(
         "train", help="Do training without clustering", add_help=False
     )
@@ -2651,7 +2612,7 @@ Required arguments:
             sys.exit(1)
         if model == VAMB:
             opt = BinDefaultOptions.from_args(args)
-            runner = partial(load_train_bin, opt)
+            runner = partial(load_train_bin, opt, RunDefault())
             run(runner, opt.common.general)
         elif model == TAXVAMB:
             opt = BinTaxVambOptions.from_args(args)
@@ -2668,6 +2629,8 @@ Required arguments:
         runner = partial(run_reclustering, opt)
         run(runner, opt.general)
     elif args.subcommand == PARTIAL:
+        # TODO: args.partial_part is not a string, so why is it being
+        # compared to a string here??
         if args.partial_part == "composition":
             opt = PartialCompositionOptions.from_args(args)
             runner = partial(run_partial_composition, opt)
@@ -2678,15 +2641,14 @@ Required arguments:
             run(runner, opt.general)
         elif args.partial_part == "train":
             opt = BinDefaultOptions.from_args(args)
-            runner = partial(load_train_bin, opt, partial_mode="train")
+            runner = partial(load_train_bin, opt, partial_mode=RunTrain())
             run(runner, opt.common.general)
         elif args.partial_part == "cluster":
             opt = BinDefaultOptions.from_args(args)
             runner = partial(
                 load_train_bin,
                 opt,
-                partial_mode="cluster",
-                latent=args.latent_file["arr_0"],
+                partial_mode=RunCluster(args.latent_file["arr_0"]),
             )
             run(runner, opt.common.general)
 
