@@ -1407,8 +1407,10 @@ def run_partial_abundance(opt: PartialAbundanceOptions):
 
 
 def run_train_vae(
-    opt: BinDefaultOptions, composition: CompositionPath, abundance: AbundancePath
-):
+    opt: BinDefaultOptions,
+    composition: vamb.parsecontigs.Composition,
+    abundance: vamb.parsebam.Abundance,
+) -> np.ndarray:
     data_loader = vamb.encode.make_dataloader(
         abundance.matrix,
         composition.matrix,
@@ -1431,7 +1433,7 @@ def run_train_vae(
 
 
 def run_cluster_and_write_files(
-    latent, opt: BinDefaultOptions, composition: CompositionPath
+    latent, opt: BinDefaultOptions, composition: vamb.parsecontigs.Composition
 ):
     comp_metadata = composition.metadata
     assert comp_metadata.nseqs == len(latent)
@@ -1472,13 +1474,11 @@ def load_train_bin(
         binsplitter=opt.common.output.binsplitter,
     )
 
-    latent = None
-
     if isinstance(partial_mode, (RunDefault, RunTrain)):
         latent = run_train_vae(opt, composition, abundance)
 
     if isinstance(partial_mode, RunCluster):
-        latent = partial_mode.latent
+        latent = vamb.vambtools.read_npz(partial_mode.latent)
 
     if isinstance(partial_mode, (RunDefault, RunCluster)):
         run_cluster_and_write_files(latent, opt, composition)
@@ -2259,7 +2259,7 @@ def add_cluster_only_args(subparser: argparse.ArgumentParser):
         dest="latent_file",
         required=True,
         metavar="",
-        type=lambda p: np.load(Path(p)),
+        type=Path,
         help="Path to latent.npz file",
     )
 
@@ -2648,7 +2648,7 @@ Required arguments:
             runner = partial(
                 load_train_bin,
                 opt,
-                partial_mode=RunCluster(args.latent_file["arr_0"]),
+                partial_mode=RunCluster(args.latent_file),
             )
             run(runner, opt.common.general)
 
