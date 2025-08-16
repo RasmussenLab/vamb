@@ -5,7 +5,7 @@ name = "vamb"
 dependencies = [
     "vambcore == 0.1.2",
     "numpy == 1.26.4",
-    "torch == 2.6.0",
+    "torch == 2.7.1",
     "pycoverm == 0.6.2",
     "networkx == 3.4.2",
     "scikit-learn == 1.6.1",
