@@ -13,7 +13,7 @@ import pycoverm
 import itertools
 import csv
 from math import isfinite
-from typing import Optional, Tuple, Union, cast, Callable, Literal, NamedTuple
+from typing import Optional, Union, cast, Callable, Literal, NamedTuple
 from pathlib import Path
 from collections.abc import Sequence
 from torch.utils.data import DataLoader
@@ -23,7 +23,6 @@ from typing import TextIO
 from typing import Iterable
 from contextlib import nullcontext
 from sklearn.model_selection import KFold
-import concurrent.futures
 
 
 _ncpu = os.cpu_count()
@@ -1006,7 +1005,7 @@ def load_composition_and_abundance(
     comp_options: CompositionOptions,
     abundance_options: AbundanceOptions,
     binsplitter: vamb.vambtools.BinSplitter,
-) -> Tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
+) -> tuple[vamb.parsecontigs.Composition, vamb.parsebam.Abundance]:
     composition = calc_tnf(
         comp_options, vamb_options.min_contig_length, vamb_options.out_dir, binsplitter
     )
@@ -1563,31 +1562,12 @@ def predict_taxonomy(
     return taxonomy
 
 
-def _read_tsv_to_dict(path, key_col="contigs", val_col="predictions"):
-    d = {}
-    with open(path, newline="") as f:
-        r = csv.DictReader(f, delimiter="\t")
-        for row in r:
-            d[row[key_col]] = row[val_col]
-    return d
-
-
-def _parse_taxonomy_string(s, max_levels):
-    """
-    Returns a list of length max_levels.
-    - If s is None/empty: returns all Nones.
-    - Otherwise splits on ';', trims whitespace, pads with None.
-    """
-    if not s:
-        return [None] * max_levels
-    parts = [p.strip() or None for p in str(s).split(";")]
-    parts = parts[:max_levels]
-    if len(parts) < max_levels:
-        parts += [None] * (max_levels - len(parts))
-    return parts
-
-
-def compare_taxonomies(pred_file, true_file, output_file):
+def compare_taxonomies(
+    pred_file: Union[str, Path],
+    true_file: Union[str, Path],
+    output_file: Union[str, Path],
+    comp_metadata: vamb.parsecontigs.CompositionMetaData,
+):
     """
     Accuracy per level:
         accuracy_i = (# contigs with true label at level i AND pred == true) / (total # contigs)
@@ -1599,30 +1579,34 @@ def compare_taxonomies(pred_file, true_file, output_file):
       - Every contig contributes to the denominator (n_contigs).
       - If a true label is missing at a level, that contig cannot be counted correct at that level.
     """
-    pred = _read_tsv_to_dict(pred_file, "contigs", "predictions")
-    true = _read_tsv_to_dict(true_file, "contigs", "predictions")
+    pred_taxonomy = vamb.taxonomy.Taxonomy.from_refined_file(
+        pred_file, comp_metadata, False
+    )
+    true_taxonomy = vamb.taxonomy.Taxonomy.from_file(true_file, comp_metadata, False)
 
-    contigs = list(pred.keys())
-    n_contigs = len(contigs)
-
-    def _max_levels_from_dict(d):
-        m = 0
-        for v in d.values():
-            if v:
-                m = max(m, len(str(v).split(";")))
-        return m
-
-    max_levels_true = _max_levels_from_dict(true)
-    max_levels_pred = _max_levels_from_dict(pred)
-    max_levels = max(max_levels_true, max_levels_pred, 1)
+    n_contigs = len(pred_taxonomy.contig_taxonomies)
+    max_levels_pred = max(
+        (len(t.ranks) if t is not None else 0) for t in pred_taxonomy.contig_taxonomies
+    )
+    max_levels_true = max(
+        (len(t.ranks) if t is not None else 0) for t in true_taxonomy.contig_taxonomies
+    )
+    max_levels = max(max_levels_pred, max_levels_true, 1)
 
     correct_per_level = [0] * max_levels
     have_truth_per_level = [0] * max_levels
 
-    for c in contigs:
-        pred_levels = _parse_taxonomy_string(pred.get(c), max_levels)
-        true_levels = _parse_taxonomy_string(true.get(c), max_levels)
-
+    for pred_t, true_t in zip(
+        pred_taxonomy.contig_taxonomies, true_taxonomy.contig_taxonomies
+    ):
+        pred_levels = [None] * max_levels
+        true_levels = [None] * max_levels
+        if pred_t is not None and pred_t.ranks:
+            for i, v in enumerate(pred_t.ranks[:max_levels]):
+                pred_levels[i] = v
+        if true_t is not None and true_t.ranks:
+            for i, v in enumerate(true_t.ranks[:max_levels]):
+                true_levels[i] = v
         for i in range(max_levels):
             t = true_levels[i]
             if t is None:
@@ -1663,6 +1647,98 @@ def compare_taxonomies(pred_file, true_file, output_file):
         w.writerows(rows)
 
 
+def train_and_predict_fold(
+    fold: int,
+    train_idx: np.ndarray,
+    test_idx: np.ndarray,
+    n_contigs: int,
+    tnfs: np.ndarray,
+    abundance: np.ndarray,
+    lengths: np.ndarray,
+    targets: np.ndarray,
+    nodes: list[str],
+    table_parent: np.ndarray,
+    taxonomy_options: TaxometerOptions,
+    cuda: bool,
+) -> tuple[list[vamb.taxonomy.PredictedContigTaxonomy], float]:
+    logger.info(
+        f"Fold {fold + 1}: Training on {len(train_idx)} contigs, testing on {len(test_idx)} contigs"
+    )
+    train_mask = np.zeros(n_contigs, dtype=bool)
+    train_mask[train_idx] = True
+    test_mask = ~train_mask
+
+    train_comp = tnfs[train_mask]
+    train_abund = abundance[train_mask]
+    train_lengths = lengths[train_mask]
+    train_targets = targets[train_idx]
+
+    test_comp = tnfs[test_mask]
+    test_abund = abundance[test_mask]
+    test_lengths = lengths[test_mask]
+    test_targets = targets[test_idx]
+
+    model = vamb.taxvamb_encode.VAMB2Label(
+        train_abund.shape[1],
+        len(nodes),
+        nodes,
+        table_parent,
+        nhiddens=[512, 512, 512, 512],
+        hier_loss=taxonomy_options.ploss,
+        cuda=cuda,
+    )
+    dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
+        train_abund,
+        train_comp,
+        train_lengths,
+        train_targets,
+        len(nodes),
+        table_parent,
+        batchsize=taxonomy_options.basic.starting_batch_size,
+    )
+    model.trainmodel(
+        dataloader_joint,
+        nepochs=taxonomy_options.basic.num_epochs,
+        modelfile=None,
+        batchsteps=taxonomy_options.basic.batch_steps,
+    )
+
+    dataloader_joint_test = vamb.taxvamb_encode.make_dataloader_concat_hloss(
+        test_abund,
+        test_comp,
+        test_lengths,
+        test_targets,
+        len(nodes),
+        table_parent,
+        batchsize=taxonomy_options.basic.starting_batch_size,
+    )
+
+    nodes_ar = np.array(nodes)
+    fold_predicted_taxonomies = []
+
+    logger.info(f"Predicting on fold {fold + 1} with {len(test_idx)} contigs")
+
+    losses = []
+
+    for predicted_vector, predicted_labels, loss in model.predict_with_ground_truth(
+        dataloader_joint_test
+    ):
+        for j in range(predicted_vector.shape[0]):
+            label = predicted_labels[j]
+            while table_parent[label] != -1:
+                label = table_parent[label]
+            threshold_mask = predicted_vector[j] > taxonomy_options.softmax_threshold
+            pred_ranks = nodes_ar[threshold_mask]
+            ranks = list(pred_ranks[1:])
+            probs = predicted_vector[j][threshold_mask][1:]
+            tax_pred = vamb.taxonomy.PredictedContigTaxonomy(
+                vamb.taxonomy.ContigTaxonomy(ranks), probs
+            )
+            fold_predicted_taxonomies.append(tax_pred)
+        losses.append(loss.item())
+    return fold_predicted_taxonomies, np.mean(losses)
+
+
 def cross_validate_taxonomy(
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
     abundance: np.ndarray,
@@ -1670,13 +1746,14 @@ def cross_validate_taxonomy(
     lengths: np.ndarray,
     out_dir: Path,
     taxonomy_options: TaxometerOptions,
+    seed: int,
     cuda: bool,
-) -> vamb.taxonomy.PredictedTaxonomy:
+):
     logger.info("Running cross validation for the taxonomy")
 
     tax = taxonomy_options.taxonomy
-    t = vamb.taxonomy.Taxonomy.from_file(tax.path, comp_metadata, False)
-    n_contigs = len(t.contig_taxonomies)
+    taxonomy = vamb.taxonomy.Taxonomy.from_file(tax.path, comp_metadata, False)
+    n_contigs = len(taxonomy.contig_taxonomies)
     orig_path = str(tax.path)
     predicted_path = out_dir.joinpath("results_taxonomy_predicted_kfold.tsv")
     file_tracking = out_dir.joinpath("file_tracking.tsv")
@@ -1684,107 +1761,39 @@ def cross_validate_taxonomy(
 
     all_predicted_taxonomies = []
     k = 5
-    kf = KFold(n_splits=k, shuffle=True)
+    kf = KFold(n_splits=k, shuffle=True, random_state=abs(seed) % 4294967295)
 
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(t.contig_taxonomies)
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
+        taxonomy.contig_taxonomies
+    )
     classes_order: list[str] = []
-    for i in t.contig_taxonomies:
+    for i in taxonomy.contig_taxonomies:
         if i is None or len(i.ranks) == 0:
             classes_order.append("root")
         else:
             classes_order.append(i.ranks[-1])
     targets = np.array([ind_nodes[i] for i in classes_order])
 
-    def train_and_predict_fold(fold, train_idx, test_idx):
-        logger.info(
-            f"Fold {fold + 1}/{k}: Training on {len(train_idx)} contigs, testing on {len(test_idx)} contigs"
-        )
-        train_mask = np.zeros(n_contigs, dtype=bool)
-        train_mask[train_idx] = True
-        test_mask = ~train_mask
-
-        train_comp = tnfs[train_mask]
-        train_abund = abundance[train_mask]
-        train_lengths = lengths[train_mask]
-        train_targets = targets[train_idx]
-
-        test_comp = tnfs[test_mask]
-        test_abund = abundance[test_mask]
-        test_lengths = lengths[test_mask]
-        test_targets = targets[test_idx]
-
-        model = vamb.taxvamb_encode.VAMB2Label(
-            train_abund.shape[1],
-            len(nodes),
+    fold_args = [
+        (
+            fold,
+            train_idx,
+            test_idx,
+            n_contigs,
+            tnfs,
+            abundance,
+            lengths,
+            targets,
             nodes,
             table_parent,
-            nhiddens=[512, 512, 512, 512],
-            hier_loss=taxonomy_options.ploss,
-            cuda=cuda,
+            taxonomy_options,
+            cuda,
         )
-        dataloader_joint = vamb.taxvamb_encode.make_dataloader_concat_hloss(
-            train_abund,
-            train_comp,
-            train_lengths,
-            train_targets,
-            len(nodes),
-            table_parent,
-            batchsize=taxonomy_options.basic.starting_batch_size,
-        )
-        model.trainmodel(
-            dataloader_joint,
-            nepochs=taxonomy_options.basic.num_epochs,
-            modelfile=None,
-            batchsteps=taxonomy_options.basic.batch_steps,
-        )
-
-        dataloader_joint_test = vamb.taxvamb_encode.make_dataloader_concat_hloss(
-            test_abund,
-            test_comp,
-            test_lengths,
-            test_targets,
-            len(nodes),
-            table_parent,
-            batchsize=taxonomy_options.basic.starting_batch_size,
-        )
-
-        nodes_ar = np.array(nodes)
-        fold_predicted_taxonomies = []
-
-        logger.info(f"Predicting on fold {fold + 1}/{k} with {len(test_idx)} contigs")
-
-        losses = []
-
-        for predicted_vector, predicted_labels, loss in model.predict_with_ground_truth(
-            dataloader_joint_test
-        ):
-            for j in range(predicted_vector.shape[0]):
-                label = predicted_labels[j]
-                while table_parent[label] != -1:
-                    label = table_parent[label]
-                threshold_mask = (
-                    predicted_vector[j] > taxonomy_options.softmax_threshold
-                )
-                pred_ranks = nodes_ar[threshold_mask]
-                ranks = list(pred_ranks[1:])
-                probs = predicted_vector[j][threshold_mask][1:]
-                tax_pred = vamb.taxonomy.PredictedContigTaxonomy(
-                    vamb.taxonomy.ContigTaxonomy(ranks), probs
-                )
-                fold_predicted_taxonomies.append(tax_pred)
-            losses.append(loss.item())
-        return fold_predicted_taxonomies, np.mean(losses)
-
-    fold_args = [
-        (fold, train_idx, test_idx)
         for fold, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_contigs)))
     ]
     loss_tests = []
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(
-            executor.map(lambda args: train_and_predict_fold(*args), fold_args)
-        )
+    results = [train_and_predict_fold(*args) for args in fold_args]
 
     for fold_predicted_taxonomies, loss_test in results:
         all_predicted_taxonomies.extend(fold_predicted_taxonomies)
@@ -1798,7 +1807,7 @@ def cross_validate_taxonomy(
         file.write(f"{orig_path}\t{predicted_path}\n")
     logger.info(f"Wrote k-fold predicted taxonomy for {orig_path} to {predicted_path}")
 
-    compare_taxonomies(predicted_path, orig_path, accuracy_file)
+    compare_taxonomies(predicted_path, orig_path, accuracy_file, comp_metadata)
 
 
 def run_taxonomy_predictor(opt: TaxometerOptions):
@@ -1845,6 +1854,7 @@ def run_taxonomy_cross_validation(opt: TaxometerOptions):
         lengths=lengths,
         out_dir=opt.general.out_dir,
         taxonomy_options=opt,
+        seed=opt.general.seed,
         cuda=opt.general.cuda,
     )
 

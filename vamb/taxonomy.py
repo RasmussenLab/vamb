@@ -4,7 +4,6 @@ from vamb.parsecontigs import CompositionMetaData
 from vamb.vambtools import strip_string_newline
 import numpy as np
 from typing import Union
-from loguru import logger
 
 TAXONOMY_HEADER = "contigs\tpredictions"
 PREDICTED_TAXONOMY_HEADER = "contigs\tpredictions\tscores"
@@ -177,10 +176,9 @@ class PredictedTaxonomy:
         is_canonical: bool,
     ):
         if len(taxonomies) != len(metadata.identifiers):
-            logger.error(
-                f"Taxonomies length: {len(taxonomies)}, Identifiers length: {len(metadata.identifiers)}"
+            raise ValueError(
+                f"Taxonomies length: {len(taxonomies)}, Identifiers length: {len(metadata.identifiers)}. Length of taxonomies must match that of identifiers"
             )
-            raise ValueError("Length of taxonomies must match that of identifiers")
 
         self.contig_taxonomies = taxonomies
         self.refhash = metadata.refhash

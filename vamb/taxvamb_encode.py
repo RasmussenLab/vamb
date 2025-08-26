@@ -919,7 +919,7 @@ class VAMB2Label(_nn.Module):
 
     def predict_with_ground_truth(
         self, data_loader
-    ) -> Iterable[tuple[_np.ndarray, _np.ndarray]]:
+    ) -> Iterable[tuple[_np.ndarray, _np.ndarray, float]]:
         self.eval()
 
         new_data_loader = _encode.set_batchsize(
