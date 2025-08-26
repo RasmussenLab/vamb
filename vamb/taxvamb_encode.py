@@ -30,11 +30,9 @@ def make_graph(
     taxes: Sequence[Optional[ContigTaxonomy]],
 ) -> tuple[list[str], dict[str, int], list[int]]:
     logger.info("Creating taxonomy graph from contig taxonomies")
-    logger.info(f'len(taxes): {len(taxes)}')
     G = nx.DiGraph()
     root = "root"
     G.add_node(root)
-    logger.info([t.ranks for t in taxes[:10]])
     for contig_taxonomy in taxes:
         if contig_taxonomy is None:
             continue
