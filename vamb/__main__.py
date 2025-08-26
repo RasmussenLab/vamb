@@ -1473,12 +1473,10 @@ def predict_taxonomy(
 ) -> vamb.taxonomy.PredictedTaxonomy:
     begintime = time.time()
     logger.info("Predicting taxonomy with Taxometer")
-    logger.info(comp_metadata)
 
     taxonomies = vamb.taxonomy.Taxonomy.from_file(
         taxonomy_options.taxonomy.path, comp_metadata, False
     )
-    logger.info([t.ranks for t in taxonomies.contig_taxonomies[:10]])
     nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
         taxonomies.contig_taxonomies
     )
