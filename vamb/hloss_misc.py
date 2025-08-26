@@ -11,6 +11,7 @@ from typing import Callable, Hashable, Optional, Sequence, Tuple, TextIO, cast
 
 import networkx as nx
 from numpy.typing import ArrayLike
+from loguru import logger
 
 import torch
 from torch import nn
