@@ -195,3 +195,8 @@ Same as Vamb, but also:
 - `aae_z_latent.npz`: Like `latent.npz`, but of the adversarial Z latent space
 - `aae_z_clusters_{metadata,split,unsplit}.tsv`: Like the corresponding `vae_clusters*` files, but from the adversarial Z latent space
 
+## Taxonomy benchmarking
+* `log.txt`: Same as when running `Vamb`
+* `results_taxonomy_predicted_kfold.tsv`: Taxonomy file that is predicted with cross-validation
+* `file_tracking.tsv`: Filepaths used for the provided and the predicted taxonomy
+* `accuracy_report.tsv`: The evaluation results. You are interested in "Accuracy" for the Domain level - which is usually "Level_0" for GTDB, and can be "Level_1" for NCBI. Please check your provided taxonomy. The higher value the better.

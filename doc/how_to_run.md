@@ -76,13 +76,19 @@ $ vamb taxometer --outdir out3 --fasta contigs.fna.gz --abundance_tsv abundances
 ### AVAMB
 See the README.md file in the `workflow_avamb` directory.
 
+
+### Taxonomy benchmarking
+```shell
+$ vamb taxonomy_benchmark --outdir out4 --fasta contigs.fna.gz --abundance_tsv abundances.tsv --taxonomy taxonomy.tsv
+```
+
 ### Reducing the number of epochs for testing
 For testing purposes, e.g. when running on the test data, it may be useful to reduce the number of training epochs, so Vamb finishes faster.
 This will cause Vamb's models to be severely underfitted and perform terribly, so doing it is only recommended for testing.
 
 * For Vamb: Add flags `-e 5 -q 2 3`
 * For TaxVamb: Add flags `-e 5 -q 2 3 -pe 5`
-* For Taxometer: Add flags `-pe 5`
+* For Taxometer and taxonomy benchmarking: Add flags `-pe 5`
 
 ## Explanation of command-line options
 Each program in Vamb only has a subset of the following options.
