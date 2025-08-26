@@ -13,9 +13,8 @@ import pycoverm
 import itertools
 import csv
 from math import isfinite
-from typing import Optional, Tuple, Union, cast, Callable, Literal, NamedTuple, List
+from typing import Optional, Tuple, Union, cast, Callable, Literal, NamedTuple
 from pathlib import Path
-from collections import defaultdict
 from collections.abc import Sequence
 from torch.utils.data import DataLoader
 from functools import partial
@@ -24,7 +23,6 @@ from typing import TextIO
 from typing import Iterable
 from contextlib import nullcontext
 from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report, accuracy_score
 import concurrent.futures
 
 
@@ -1680,9 +1678,9 @@ def cross_validate_taxonomy(
     t = vamb.taxonomy.Taxonomy.from_file(tax.path, comp_metadata, False)
     n_contigs = len(t.contig_taxonomies)
     orig_path = str(tax.path)
-    predicted_path = out_dir.joinpath(f"results_taxonomy_predicted_kfold.tsv")
-    file_tracking = out_dir.joinpath(f"file_tracking.tsv")
-    accuracy_file = out_dir.joinpath(f"accuracy_report.tsv")
+    predicted_path = out_dir.joinpath("results_taxonomy_predicted_kfold.tsv")
+    file_tracking = out_dir.joinpath("file_tracking.tsv")
+    accuracy_file = out_dir.joinpath("accuracy_report.tsv")
 
     all_predicted_taxonomies = []
     k = 5
