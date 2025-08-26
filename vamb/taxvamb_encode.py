@@ -917,7 +917,9 @@ class VAMB2Label(_nn.Module):
                     )
                 yield prob.numpy(), pred
 
-    def predict_with_ground_truth(self, data_loader) -> Iterable[tuple[_np.ndarray, _np.ndarray]]:
+    def predict_with_ground_truth(
+        self, data_loader
+    ) -> Iterable[tuple[_np.ndarray, _np.ndarray]]:
         self.eval()
 
         new_data_loader = _encode.set_batchsize(

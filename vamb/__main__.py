@@ -1634,8 +1634,10 @@ def compare_taxonomies(pred_file, true_file, output_file):
                 correct_per_level[i] += 1
 
     levels = [f"Level_{i}" for i in range(max_levels)]
-    accuracy_per_level = [correct_per_level[i] / n_contigs if n_contigs else 0.0
-                          for i in range(max_levels)]
+    accuracy_per_level = [
+        correct_per_level[i] / n_contigs if n_contigs else 0.0
+        for i in range(max_levels)
+    ]
 
     headers = [
         "Level",
@@ -1647,13 +1649,15 @@ def compare_taxonomies(pred_file, true_file, output_file):
 
     rows = []
     for i in range(max_levels):
-        rows.append([
-            levels[i],
-            correct_per_level[i],
-            have_truth_per_level[i],
-            n_contigs,
-            f"{accuracy_per_level[i]:.6f}",
-        ])
+        rows.append(
+            [
+                levels[i],
+                correct_per_level[i],
+                have_truth_per_level[i],
+                n_contigs,
+                f"{accuracy_per_level[i]:.6f}",
+            ]
+        )
 
     with open(output_file, "w", newline="") as f:
         w = csv.writer(f, delimiter="\t")
@@ -1684,9 +1688,7 @@ def cross_validate_taxonomy(
     k = 5
     kf = KFold(n_splits=k, shuffle=True)
 
-    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
-        t.contig_taxonomies
-    )
+    nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(t.contig_taxonomies)
     classes_order: list[str] = []
     for i in t.contig_taxonomies:
         if i is None or len(i.ranks) == 0:
@@ -1696,7 +1698,9 @@ def cross_validate_taxonomy(
     targets = np.array([ind_nodes[i] for i in classes_order])
 
     def train_and_predict_fold(fold, train_idx, test_idx):
-        logger.info(f"Fold {fold+1}/{k}: Training on {len(train_idx)} contigs, testing on {len(test_idx)} contigs")
+        logger.info(
+            f"Fold {fold + 1}/{k}: Training on {len(train_idx)} contigs, testing on {len(test_idx)} contigs"
+        )
         train_mask = np.zeros(n_contigs, dtype=bool)
         train_mask[train_idx] = True
         test_mask = ~train_mask
@@ -1749,16 +1753,20 @@ def cross_validate_taxonomy(
         nodes_ar = np.array(nodes)
         fold_predicted_taxonomies = []
 
-        logger.info(f"Predicting on fold {fold+1}/{k} with {len(test_idx)} contigs")
+        logger.info(f"Predicting on fold {fold + 1}/{k} with {len(test_idx)} contigs")
 
         losses = []
 
-        for predicted_vector, predicted_labels, loss in model.predict_with_ground_truth(dataloader_joint_test):
+        for predicted_vector, predicted_labels, loss in model.predict_with_ground_truth(
+            dataloader_joint_test
+        ):
             for j in range(predicted_vector.shape[0]):
                 label = predicted_labels[j]
                 while table_parent[label] != -1:
                     label = table_parent[label]
-                threshold_mask = predicted_vector[j] > taxonomy_options.softmax_threshold
+                threshold_mask = (
+                    predicted_vector[j] > taxonomy_options.softmax_threshold
+                )
                 pred_ranks = nodes_ar[threshold_mask]
                 ranks = list(pred_ranks[1:])
                 probs = predicted_vector[j][threshold_mask][1:]
@@ -1769,18 +1777,25 @@ def cross_validate_taxonomy(
             losses.append(loss.item())
         return fold_predicted_taxonomies, np.mean(losses)
 
-    fold_args = [(fold, train_idx, test_idx) for fold, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_contigs)))]
+    fold_args = [
+        (fold, train_idx, test_idx)
+        for fold, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_contigs)))
+    ]
     loss_tests = []
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(executor.map(lambda args: train_and_predict_fold(*args), fold_args))
+        results = list(
+            executor.map(lambda args: train_and_predict_fold(*args), fold_args)
+        )
 
     for fold_predicted_taxonomies, loss_test in results:
         all_predicted_taxonomies.extend(fold_predicted_taxonomies)
         loss_tests.append(loss_test)
 
     with open(predicted_path, "w") as file:
-        vamb.taxonomy.PredictedTaxonomy(all_predicted_taxonomies, comp_metadata, False).write_as_tsv(file, comp_metadata)
+        vamb.taxonomy.PredictedTaxonomy(
+            all_predicted_taxonomies, comp_metadata, False
+        ).write_as_tsv(file, comp_metadata)
     with open(file_tracking, "w") as file:
         file.write(f"{orig_path}\t{predicted_path}\n")
     logger.info(f"Wrote k-fold predicted taxonomy for {orig_path} to {predicted_path}")
