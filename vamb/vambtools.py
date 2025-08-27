@@ -9,7 +9,7 @@ from vambcore import kmercounts, overwrite_matrix
 import collections as _collections
 from itertools import zip_longest
 from hashlib import md5 as _md5
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Collection
 from typing import Optional, IO, Union
 from pathlib import Path
 from loguru import logger
@@ -634,7 +634,7 @@ def create_dir_if_not_existing(path: Path) -> None:
 
 def write_bins(
     directory: Path,
-    bins: dict[str, set[str]],
+    bins: Collection[tuple[str, Iterable[str]]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 1000,
 ):
@@ -657,8 +657,9 @@ def write_bins(
     create_dir_if_not_existing(directory)
 
     keep: set[str] = set()
-    for i in bins.values():
-        keep.update(i)
+    for _, contigs in bins:
+        for contig in contigs:
+            keep.add(contig)
 
     bytes_by_id: dict[str, bytes] = dict()
     for entry in byte_iterfasta(fastaio, None):
@@ -668,7 +669,7 @@ def write_bins(
             )
 
     # Now actually print all the contigs to files
-    for binname, contigs in bins.items():
+    for binname, contigs in bins:
         for contig in contigs:
             byts = bytes_by_id.get(contig)
             if byts is None:
