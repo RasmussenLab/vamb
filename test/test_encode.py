@@ -90,8 +90,8 @@ class TestDataLoader(unittest.TestCase):
         # in the same order
         self.assertTrue(
             (
-                torch.argsort(dl.dataset.tensors[2], dim=0)
-                == torch.argsort(torch.from_numpy(copy_single), dim=0)
+                torch.argsort(dl.dataset.tensors[2], dim=0, stable=True)
+                == torch.argsort(torch.from_numpy(copy_single), dim=0, stable=True)
             )
             .all()
             .item()
