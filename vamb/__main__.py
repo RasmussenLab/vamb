@@ -1200,19 +1200,19 @@ def export_clusters(
             for unsplit_contig in unsplit_contigs:
                 print(unsplit_bin_name, unsplit_contig, file=unsplit_clusters_file)
 
-        if maybe_split_file is not None:
-            for split_bin_name, split_members in binsplitter.split_bin(
-                unsplit_bin_name, unsplit_contigs
-            ):
-                n_split_clusters += 1
+            if maybe_split_file is not None:
+                for split_bin_name, split_members in binsplitter.split_bin(
+                    unsplit_bin_name, unsplit_contigs
+                ):
+                    n_split_clusters += 1
 
-                for split_member in split_members:
-                    print(
-                        split_bin_name,
-                        split_member,
-                        sep="\t",
-                        file=unsplit_clusters_file,
-                    )
+                    for split_member in split_members:
+                        print(
+                            split_bin_name,
+                            split_member,
+                            sep="\t",
+                            file=unsplit_clusters_file,
+                        )
 
     # When done: Log the time
     if binsplitter.splitter is not None:

@@ -537,14 +537,14 @@ class TestWriteBins(unittest.TestCase):
         # Too many bins for maxbins
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                self.dir, self.bins, self.file, maxbins=self.N_BINS - 1
+                self.dir, self.bins.items(), self.file, maxbins=self.N_BINS - 1
             )
 
         # Parent does not exist
         with self.assertRaises(NotADirectoryError):
             vamb.vambtools.write_bins(
                 pathlib.Path("svogew/foo"),
-                self.bins,
+                self.bins.items(),
                 self.file,
                 maxbins=self.N_BINS + 1,
             )
@@ -554,7 +554,7 @@ class TestWriteBins(unittest.TestCase):
             with tempfile.NamedTemporaryFile() as file:
                 vamb.vambtools.write_bins(
                     pathlib.Path(file.name),
-                    self.bins,
+                    self.bins.items(),
                     self.file,
                     maxbins=self.N_BINS + 1,
                 )
@@ -564,14 +564,14 @@ class TestWriteBins(unittest.TestCase):
             bins = {k: v.copy() for k, v in self.bins.items()}
             next(iter(bins.values())).add("a_new_bin_which_does_not_exist")
             vamb.vambtools.write_bins(
-                self.dir, bins, self.file, maxbins=self.N_BINS + 1
+                self.dir, bins.items(), self.file, maxbins=self.N_BINS + 1
             )
 
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as dir:
             vamb.vambtools.write_bins(
                 pathlib.Path(dir),
-                self.bins,
+                self.bins.items(),
                 self.file,
                 maxbins=self.N_BINS,
             )
