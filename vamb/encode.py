@@ -46,6 +46,7 @@ def set_batchsize(
         drop_last=not encode and (n_obs > batch_size),
         num_workers=1 if encode else data_loader.num_workers,
         pin_memory=data_loader.pin_memory,
+        collate_fn=data_loader.collate_fn,
     )
 
 

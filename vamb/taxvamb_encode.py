@@ -29,8 +29,10 @@ from vamb.taxonomy import ContigTaxonomy
 def make_graph(
     taxes: Sequence[Optional[ContigTaxonomy]],
 ) -> tuple[list[str], dict[str, int], list[int]]:
+    logger.info("Creating taxonomy graph from contig taxonomies")
     G = nx.DiGraph()
     root = "root"
+    G.add_node(root)
     for contig_taxonomy in taxes:
         if contig_taxonomy is None:
             continue
@@ -914,6 +916,39 @@ class VAMB2Label(_nn.Module):
                         self.specificity, prob.numpy(), 0.5, self.not_trivial
                     )
                 yield prob.numpy(), pred
+
+    def predict_with_ground_truth(
+        self, data_loader
+    ) -> Iterable[tuple[_np.ndarray, _np.ndarray, float]]:
+        self.eval()
+
+        new_data_loader = _encode.set_batchsize(
+            data_loader,
+            data_loader.batch_size,
+            data_loader.dataset.tensors[0].shape[0],
+            encode=True,
+        )
+
+        with _torch.no_grad():
+            for depths_in, tnf_in, abundances_in, weights, labels_in in new_data_loader:
+                if self.usecuda:
+                    depths_in = depths_in.cuda()
+                    tnf_in = tnf_in.cuda()
+                    abundances_in = abundances_in.cuda()
+                    weights = weights.cuda()
+                    labels_in = labels_in.cuda()
+
+                labels_out = self(depths_in, tnf_in, abundances_in, weights)
+                loss, correct_labels = self.calc_loss(labels_in, labels_out)
+                # Evaluate
+                with _torch.no_grad():
+                    prob = self.pred_fn(labels_out)
+                    if self.usecuda:
+                        prob = prob.cpu()
+                    pred = _hloss.argmax_with_confidence(
+                        self.specificity, prob.numpy(), 0.5, self.not_trivial
+                    )
+                yield prob.numpy(), pred, loss.mean().item()
 
     def save(self, filehandle):
         """Saves the VAE to a path or binary opened file. Load with VAE.load

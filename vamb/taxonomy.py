@@ -176,7 +176,9 @@ class PredictedTaxonomy:
         is_canonical: bool,
     ):
         if len(taxonomies) != len(metadata.identifiers):
-            raise ValueError("Length of taxonomies must match that of identifiers")
+            raise ValueError(
+                f"Taxonomies length: {len(taxonomies)}, Identifiers length: {len(metadata.identifiers)}. Length of taxonomies must match that of identifiers"
+            )
 
         self.contig_taxonomies = taxonomies
         self.refhash = metadata.refhash
@@ -209,7 +211,18 @@ class PredictedTaxonomy:
                 )
             for linenum_minus_two, line in enumerate(lines):
                 fields = line.split("\t")
-                if len(fields) != 3:
+                if len(fields) == 1:
+                    # This is a single contig with no taxonomy or scores
+                    contigname = fields[0]
+                    contig_taxonomy = ContigTaxonomy([], force_canonical)
+                    result.append(
+                        (
+                            contigname,
+                            PredictedContigTaxonomy(contig_taxonomy, np.array([])),
+                        )
+                    )
+                    continue
+                elif len(fields) != 3:
                     raise ValueError(
                         f"Expected 3 fields in line {linenum_minus_two + 2} of file '{path}', "
                         f"got {len(fields)}.\nLine: '{line}'"
