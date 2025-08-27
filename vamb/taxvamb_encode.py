@@ -948,7 +948,7 @@ class VAMB2Label(_nn.Module):
                     pred = _hloss.argmax_with_confidence(
                         self.specificity, prob.numpy(), 0.5, self.not_trivial
                     )
-                yield prob.numpy(), pred, loss.mean()
+                yield prob.numpy(), pred, loss.mean().item()
 
     def save(self, filehandle):
         """Saves the VAE to a path or binary opened file. Load with VAE.load

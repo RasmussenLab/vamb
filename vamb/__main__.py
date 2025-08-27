@@ -1563,9 +1563,9 @@ def predict_taxonomy(
 
 
 def compare_taxonomies(
-    pred_file: Union[str, Path],
-    true_file: Union[str, Path],
-    output_file: Union[str, Path],
+    pred_file: Path,
+    true_file: Path,
+    output_file: Path,
     comp_metadata: vamb.parsecontigs.CompositionMetaData,
 ):
     """
@@ -1599,8 +1599,8 @@ def compare_taxonomies(
     for pred_t, true_t in zip(
         pred_taxonomy.contig_taxonomies, true_taxonomy.contig_taxonomies
     ):
-        pred_levels = [None] * max_levels
-        true_levels = [None] * max_levels
+        pred_levels: list[Optional[str]] = [None] * max_levels
+        true_levels: list[Optional[str]] = [None] * max_levels
         if pred_t is not None and pred_t.ranks:
             for i, v in enumerate(pred_t.ranks[:max_levels]):
                 pred_levels[i] = v
@@ -1718,7 +1718,7 @@ def train_and_predict_fold(
 
     logger.info(f"Predicting on fold {fold + 1} with {len(test_idx)} contigs")
 
-    losses = []
+    losses: list[float] = []
 
     for predicted_vector, predicted_labels, loss in model.predict_with_ground_truth(
         dataloader_joint_test
@@ -1735,8 +1735,8 @@ def train_and_predict_fold(
                 vamb.taxonomy.ContigTaxonomy(ranks), probs
             )
             fold_predicted_taxonomies.append(tax_pred)
-        losses.append(loss.item())
-    return fold_predicted_taxonomies, np.mean(losses)
+        losses.append(loss)
+    return fold_predicted_taxonomies, np.mean(losses).item()
 
 
 def cross_validate_taxonomy(
@@ -1754,7 +1754,7 @@ def cross_validate_taxonomy(
     tax = taxonomy_options.taxonomy
     taxonomy = vamb.taxonomy.Taxonomy.from_file(tax.path, comp_metadata, False)
     n_contigs = len(taxonomy.contig_taxonomies)
-    orig_path = str(tax.path)
+    orig_path = tax.path
     predicted_path = out_dir.joinpath("results_taxonomy_predicted_kfold.tsv")
     file_tracking = out_dir.joinpath("file_tracking.tsv")
     accuracy_file = out_dir.joinpath("accuracy_report.tsv")
