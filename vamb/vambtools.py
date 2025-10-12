@@ -637,6 +637,7 @@ def write_bins(
     bins: Collection[tuple[str, Iterable[str]]],
     fastaio: Iterable[bytes],
     maxbins: Optional[int] = 1000,
+    compress_output: bool = False,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
 
@@ -645,6 +646,7 @@ def write_bins(
         bins: dict[str: set[str]] (can be loaded from clusters.tsv using vamb.cluster.read_clusters)
         fastaio: bytes iterator containing FASTA file with all sequences
         maxbins: None or else raise an error if trying to make more bins than this [1000]
+        compress_output: Write the output as gzipped files [True]
     Output: None
     """
 
@@ -678,10 +680,16 @@ def write_bins(
                 )
 
         # Print bin to file
-        with open(directory.joinpath(binname + ".fna"), "wb") as file:
-            for contig in contigs:
-                file.write(_gzip.decompress(bytes_by_id[contig]))
-                file.write(b"\n")
+        if compress_output:
+            with open(directory.joinpath(binname + ".fna.gz"), "wb") as file:
+                for contig in contigs:
+                    file.write(bytes_by_id[contig])
+                    file.write(_gzip.compress(b"\n"))
+        else:
+            with open(directory.joinpath(binname + ".fna"), "wb") as file:
+                for contig in contigs:
+                    file.write(_gzip.decompress(bytes_by_id[contig]))
+                    file.write(b"\n")
 
 
 def validate_input_array(array: _np.ndarray) -> _np.ndarray:
