@@ -13,6 +13,7 @@ from collections.abc import Iterable, Iterator, Collection
 from typing import Optional, IO, Union
 from pathlib import Path
 from loguru import logger
+import time
 
 CLUSTERS_HEADER = "clustername\tcontigname"
 
@@ -57,6 +58,11 @@ class BinSplitter:
                 self.splitter = binsplitter
 
         self.is_initialized = False
+
+    def is_disabled(self) -> bool:
+        "Return whether binsplitting is disabled and should not happen"
+
+        return self.splitter is None
 
     @classmethod
     def inert_splitter(cls):
@@ -112,10 +118,13 @@ class BinSplitter:
         identifiers: Iterable[str],
     ) -> Iterable[tuple[str, set[str]]]:
         "Split a single bin by the prefix of the headers"
-        if self.splitter is None:
+        if self.is_disabled():
             yield (binname, set(identifiers))
             return None
         else:
+            # By the definition of is_disabled, this must be true
+            assert self.splitter is not None
+
             by_sample: dict[str, set[str]] = _collections.defaultdict(set)
             for identifier in identifiers:
                 sample, _, rest = identifier.partition(self.splitter)
@@ -153,15 +162,30 @@ class BinSplitter:
 
     def log_string(self) -> str:
         if not self.is_default:
-            if self.splitter is None:
+            if self.is_disabled():
                 return "Explicitly passed as empty (no binsplitting)"
             else:
                 return f'"{self.splitter}"'
         else:
-            if self.splitter is None:
+            if self.is_disabled():
                 return "Defaulting to 'C', but disabled due to incompatible identifiers"
             else:
                 return "Defaulting to 'C'"
+
+    def log_clustering_result(
+        self,
+        n_total_contigs: int,
+        n_split_clusters: int,
+        n_unsplit_clusters: int,
+        start_time: float,
+    ):
+        if self.is_disabled():
+            msg = f"\tClustered {n_total_contigs} contigs in {n_unsplit_clusters} unsplit bins"
+        else:
+            msg = f"\tClustered {n_total_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
+        logger.info(msg)
+        elapsed = round(time.time() - start_time, 2)
+        logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
 
 
 class PushArray:
