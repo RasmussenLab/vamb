@@ -14,6 +14,7 @@ parser.add_argument("fastapath", help="Path to FASTA file")
 parser.add_argument("clusterspath", help="Path to clusters.tsv")
 parser.add_argument("minsize", help="Minimum size of bin in bp", type=int, default=0)
 parser.add_argument("outdir", help="Directory to create")
+parser.add_argument("compress", action="store_true")
 
 if len(sys.argv) == 1:
     parser.print_help()
@@ -31,11 +32,13 @@ with vamb.vambtools.Reader(args.fastapath) as file:
 with open(args.clusterspath) as file:
     clusters = vamb.vambtools.read_clusters(file)
 
-clusters = {
-    cluster: contigs
+clusters = [
+    (cluster, contigs)
     for (cluster, contigs) in clusters.items()
     if sum(lens[c] for c in contigs) >= args.minsize
-}
+]
 
 with vamb.vambtools.Reader(args.fastapath) as file:
-    vamb.vambtools.write_bins(pathlib.Path(args.outdir), clusters, file, maxbins=None)
+    vamb.vambtools.write_bins(
+        pathlib.Path(args.outdir), clusters, file, args.compress, maxbins=None
+    )

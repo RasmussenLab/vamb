@@ -20,7 +20,7 @@ import torch.nn.functional as F
 class Hierarchy:
     """Hierarchy of nodes 0, ..., n-1."""
 
-    def __init__(self, parents):
+    def __init__(self, parents: np.ndarray):
         n = len(parents)
         assert np.all(parents[1:] < np.arange(1, n))
         self._parents = parents

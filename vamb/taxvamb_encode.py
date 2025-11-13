@@ -145,7 +145,7 @@ def make_dataloader_concat_hloss(
     lengths,
     labels,
     N: int,
-    table_parent,
+    table_parent: list[int],
     no_filter: bool = True,
     batchsize: int = 256,
     destroy: bool = False,
@@ -775,7 +775,7 @@ class VAMB2Label(_nn.Module):
         nsamples: int,
         nlabels: int,
         nodes,
-        table_parent,
+        table_parent: list[int],
         nhiddens: Optional[list[int]] = None,
         alpha: Optional[float] = None,
         beta: float = 200.0,
@@ -832,7 +832,7 @@ class VAMB2Label(_nn.Module):
             self.encoderlayers.append(_nn.Linear(nin, nout))
             self.encodernorms.append(_nn.BatchNorm1d(nout))
 
-        self.tree = _hloss.Hierarchy(table_parent)
+        self.tree = _hloss.Hierarchy(_np.array(table_parent))
         self.n_tree_nodes = nlabels
 
         self.nodes = nodes
