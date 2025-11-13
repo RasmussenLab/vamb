@@ -656,7 +656,7 @@ class AAEOptions:
 
 
 class BinOutputOptions:
-    __slots__ = ["binsplitter", "min_fasta_output_size"]
+    __slots__ = ["binsplitter", "min_fasta_output_size", "compress_fasta_output"]
 
     # We take a composition as arguments, because if min_fasta_output_size is set,
     # we need to guarantee that the composition is passed as fasta.
@@ -669,6 +669,7 @@ class BinOutputOptions:
             comp,
             typeasserted(args.binsplit_separator, (str, type(None))),
             typeasserted(args.min_fasta_output_size, (int, type(None))),
+            args.compress_fasta_output,
         )
 
     def __init__(
@@ -676,6 +677,7 @@ class BinOutputOptions:
         composition: CompositionOptions,
         binsplit_separator: Optional[str],
         min_fasta_output_size: Optional[int],
+        compress_fasta_output: bool,
     ):
         self.binsplitter = vamb.vambtools.BinSplitter(binsplit_separator)
         if min_fasta_output_size is not None:
@@ -687,7 +689,14 @@ class BinOutputOptions:
                 raise argparse.ArgumentTypeError(
                     "Minimum FASTA output size must be nonnegative"
                 )
+        else:
+            if compress_fasta_output:
+                raise argparse.ArgumentError(
+                    None, "If `--compress` is set, `minfasta` cannot be None"
+                )
+
         self.min_fasta_output_size = min_fasta_output_size
+        self.compress_fasta_output = compress_fasta_output
 
 
 @logger.catch(reraise=True)
@@ -1152,6 +1161,7 @@ class FastaOutput(NamedTuple):
     existing_fasta_path: FASTAPath
     bins_dir_to_populate: Path  # (or to create, if not existing)
     min_fasta_size: int
+    compress_output: bool
 
     @classmethod
     def try_from_common(cls, common: BinnerCommonOptions):
@@ -1162,6 +1172,7 @@ class FastaOutput(NamedTuple):
                 common.comp.path,
                 common.general.out_dir.joinpath("bins"),
                 common.output.min_fasta_output_size,
+                common.output.compress_fasta_output,
             )
         else:
             return None
@@ -1234,6 +1245,7 @@ def export_clusters(
             sequence_lens,
             sequence_names,
             fasta_output_struct.min_fasta_size,
+            fasta_output_struct.compress_output,
         )
 
     return None
@@ -1388,6 +1400,7 @@ def cluster_and_write_files(
             cast(Sequence[int], sequence_lens),
             sequence_names,
             fasta_output.min_fasta_size,
+            fasta_output.compress_output,
         )
 
 
@@ -1398,6 +1411,7 @@ def create_cluster_fasta_files(
     sequence_lens: Sequence[int],
     sequence_names: Sequence[str],
     min_bin_size: int,
+    compress_output: bool,
 ) -> None:
     begintime = time.time()
     filtered_clusters: list[tuple[str, list[str]]] = []
@@ -1407,11 +1421,16 @@ def create_cluster_fasta_files(
         if sum(sizeof[c] for c in contigs) >= min_bin_size:
             filtered_clusters.append((binname, list(contigs)))
 
+    logger.opt(raw=True).info("\n")
+    logger.info("Writing clusters.")
+    logger.info(f"\tCompression: {compress_output}")
+
     with vamb.vambtools.Reader(existing_fasta_path) as file:
         vamb.vambtools.write_bins(
             dir_to_populate,
             filtered_clusters,
             file,
+            compress_output,
             None,
         )
     elapsed = round(time.time() - begintime, 2)
@@ -1718,7 +1737,7 @@ def train_and_predict_fold(
     lengths: np.ndarray,
     targets: np.ndarray,
     nodes: list[str],
-    table_parent: np.ndarray,
+    table_parent: list[int],
     taxonomy_options: TaxometerOptions,
     cuda: bool,
 ) -> tuple[list[vamb.taxonomy.PredictedContigTaxonomy], float]:
@@ -1835,8 +1854,9 @@ def cross_validate_taxonomy(
             classes_order.append(i.ranks[-1])
     targets = np.array([ind_nodes[i] for i in classes_order])
 
-    fold_args = [
-        (
+    results: list[tuple[list[vamb.taxonomy.PredictedContigTaxonomy], float]] = []
+    for fold, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_contigs))):
+        local_results = train_and_predict_fold(
             fold,
             train_idx,
             test_idx,
@@ -1850,11 +1870,9 @@ def cross_validate_taxonomy(
             taxonomy_options,
             cuda,
         )
-        for fold, (train_idx, test_idx) in enumerate(kf.split(np.arange(n_contigs)))
-    ]
-    loss_tests = []
+        results.append(local_results)
 
-    results = [train_and_predict_fold(*args) for args in fold_args]
+    loss_tests = []
 
     for fold_predicted_taxonomies, loss_test in results:
         all_predicted_taxonomies.extend(fold_predicted_taxonomies)
@@ -2150,6 +2168,7 @@ def run_reclustering(opt: ReclusteringOptions):
             opt.composition.path,
             opt.general.out_dir.joinpath("bins"),
             opt.output.min_fasta_output_size,
+            opt.output.compress_fasta_output,
         )
         fasta_output = (
             fasta_output_struct,
@@ -2319,6 +2338,12 @@ def add_bin_output_arguments(subparser: argparse.ArgumentParser):
         type=int,
         default=None,
         help="Minimum bin size to output as fasta [None = no files]",
+    )
+    bin_os.add_argument(
+        "--compress",
+        dest="compress_fasta_output",
+        help="Compress FASTA output to with extension '.fna.gz'",
+        action="store_true",
     )
     bin_os.add_argument(
         "-o",

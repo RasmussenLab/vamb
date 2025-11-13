@@ -537,7 +537,7 @@ class TestWriteBins(unittest.TestCase):
         # Too many bins for maxbins
         with self.assertRaises(ValueError):
             vamb.vambtools.write_bins(
-                self.dir, self.bins.items(), self.file, maxbins=self.N_BINS - 1
+                self.dir, self.bins.items(), self.file, False, maxbins=self.N_BINS - 1
             )
 
         # Parent does not exist
@@ -546,6 +546,7 @@ class TestWriteBins(unittest.TestCase):
                 pathlib.Path("svogew/foo"),
                 self.bins.items(),
                 self.file,
+                False,
                 maxbins=self.N_BINS + 1,
             )
 
@@ -556,6 +557,7 @@ class TestWriteBins(unittest.TestCase):
                     pathlib.Path(file.name),
                     self.bins.items(),
                     self.file,
+                    False,
                     maxbins=self.N_BINS + 1,
                 )
 
@@ -564,31 +566,35 @@ class TestWriteBins(unittest.TestCase):
             bins = {k: v.copy() for k, v in self.bins.items()}
             next(iter(bins.values())).add("a_new_bin_which_does_not_exist")
             vamb.vambtools.write_bins(
-                self.dir, bins.items(), self.file, maxbins=self.N_BINS + 1
+                self.dir, bins.items(), self.file, False, maxbins=self.N_BINS + 1
             )
 
     def test_round_trip(self):
-        with tempfile.TemporaryDirectory() as dir:
-            vamb.vambtools.write_bins(
-                pathlib.Path(dir),
-                self.bins.items(),
-                self.file,
-                maxbins=self.N_BINS,
+        for opener, compress, suffix_len in [(open, False, 4), (gzip.open, True, 7)]:
+            self.file.seek(0)
+            with tempfile.TemporaryDirectory() as dir:
+                vamb.vambtools.write_bins(
+                    pathlib.Path(dir),
+                    self.bins.items(),
+                    self.file,
+                    compress,
+                    maxbins=self.N_BINS,
+                )
+
+                reconstructed_bins: dict[str, set[str]] = dict()
+                for filename in os.listdir(dir):
+                    with opener(os.path.join(dir, filename), "rb") as file:
+                        entries = list(vamb.vambtools.byte_iterfasta(file, None))
+                        binname = filename[:-suffix_len]
+                        print(compress, binname)
+                        reconstructed_bins[binname] = set()
+                        for entry in entries:
+                            reconstructed_bins[binname].add(entry.identifier)
+
+            # Same bins
+            self.assertEqual(len(self.bins), len(reconstructed_bins))
+            self.assertEqual(
+                sum(map(len, self.bins.values())),
+                sum(map(len, reconstructed_bins.values())),
             )
-
-            reconstructed_bins: dict[str, set[str]] = dict()
-            for filename in os.listdir(dir):
-                with open(os.path.join(dir, filename), "rb") as file:
-                    entries = list(vamb.vambtools.byte_iterfasta(file, None))
-                    binname = filename[:-4]
-                    reconstructed_bins[binname] = set()
-                    for entry in entries:
-                        reconstructed_bins[binname].add(entry.identifier)
-
-        # Same bins
-        self.assertEqual(len(self.bins), len(reconstructed_bins))
-        self.assertEqual(
-            sum(map(len, self.bins.values())),
-            sum(map(len, reconstructed_bins.values())),
-        )
-        self.assertEqual(self.bins, reconstructed_bins)
+            self.assertEqual(self.bins, reconstructed_bins)

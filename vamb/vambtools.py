@@ -660,6 +660,7 @@ def write_bins(
     directory: Path,
     bins: Collection[tuple[str, Iterable[str]]],
     fastaio: Iterable[bytes],
+    compress: bool,
     maxbins: Optional[int] = 1000,
 ):
     """Writes bins as FASTA files in a directory, one file per bin.
@@ -702,7 +703,15 @@ def write_bins(
                 )
 
         # Print bin to file
-        with open(directory.joinpath(binname + ".fna"), "wb") as file:
+        base_output_name = directory.joinpath(binname)
+        if compress:
+            context = _gzip.open(
+                base_output_name.with_suffix(".fna.gz"), "wb", compresslevel=1
+            )
+        else:
+            context = open(base_output_name.with_suffix(".fna"), "wb")
+
+        with context as file:
             for contig in contigs:
                 file.write(_gzip.decompress(bytes_by_id[contig]))
                 file.write(b"\n")
