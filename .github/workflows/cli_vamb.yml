@@ -37,7 +37,7 @@ jobs:
         pip install -e .
     - name: Run VAMB
       run: |
-        vamb bin default --outdir outdir_vamb --fasta catalogue_mock.fna.gz --abundance abundance_mock.npz -l 32 -e 10 -q 2 -o C --minfasta 200000 -t 10
+        vamb bin default --outdir outdir_vamb --fasta catalogue_mock.fna.gz --abundance abundance_mock.npz -l 32 -e 10 -q 2 -o C --minfasta 200000 --compress -t 10
         ls -la outdir_vamb
         cat outdir_vamb/log.txt
     - name: Run TaxVAMB
