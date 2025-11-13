@@ -1183,7 +1183,7 @@ def export_clusters(
 ) -> None:
     begintime = time.time()
 
-    if binsplitter.splitter is None:
+    if binsplitter.is_disabled():
         context = nullcontext(None)
     else:
         context = open(base_clusters_name + "_split.tsv", "w")
@@ -1217,14 +1217,12 @@ def export_clusters(
                             file=unsplit_clusters_file,
                         )
 
-    # When done: Log the time
-    if binsplitter.splitter is not None:
-        msg = f"\tClustered {n_total_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
-    else:
-        msg = f"\tClustered {n_total_contigs} contigs in {n_unsplit_clusters} unsplit bins"
-    logger.info(msg)
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+    binsplitter.log_clustering_result(
+        n_total_contigs,
+        n_split_clusters,
+        n_unsplit_clusters,
+        begintime,
+    )
 
     # If FASTA output requested, create those files
     if fasta_output is not None:
@@ -1278,7 +1276,7 @@ def cluster_and_write_files(
     # Take only the first `max_clusters` clusters
     clusters = itertools.islice(cluster_generator, cluster_options.max_clusters)
 
-    if binsplitter.splitter is None:
+    if binsplitter.is_disabled():
         context = nullcontext(None)
     else:
         context = open(base_clusters_name + "_split.tsv", "w")
@@ -1329,6 +1327,8 @@ def cluster_and_write_files(
                 print(cluster_name, member, sep="\t", file=unsplit_clusters_file)
 
             if maybe_split_file is not None:
+                assert not binsplitter.is_disabled()
+
                 for split_bin_name, split_members in binsplitter.split_bin(
                     cluster_name, cluster_members
                 ):
@@ -1344,7 +1344,7 @@ def cluster_and_write_files(
                             split_bin_name,
                             split_member,
                             sep="\t",
-                            file=unsplit_clusters_file,
+                            file=maybe_split_file,
                         )
 
             # Print metadata
@@ -1371,14 +1371,12 @@ def cluster_and_write_files(
 
             last_decile_printed = current_decile
 
-    # When done: Log the time
-    if binsplitter.splitter is not None:
-        msg = f"\tClustered {n_processed_contigs} contigs in {n_split_clusters} split bins ({n_unsplit_clusters} clusters)"
-    else:
-        msg = f"\tClustered {n_processed_contigs} contigs in {n_unsplit_clusters} unsplit bins"
-    logger.info(msg)
-    elapsed = round(time.time() - begintime, 2)
-    logger.info(f"\tWrote cluster file(s) in {elapsed} seconds.")
+    binsplitter.log_clustering_result(
+        n_total_contigs,
+        n_split_clusters,
+        n_unsplit_clusters,
+        begintime,
+    )
 
     # If FASTA output requested, create those files
     if fasta_output is not None:
