@@ -33,6 +33,8 @@ docs = [
 authors = [
   {name = "Jakob Nybo Nissen", email = "jakobnybonissen@gmail.com"},
   {name = "Pau Piera", email = "pau.piera@cpr.ku.dk"},
+  {name = "Svetlana Kutuzova", email = "svegal@di.ku.dk"},
+  {name = "Lasse Schnell Danielsen", email = "lasse.danielsen@sund.ku.dk"},
   {name = "Simon Rasmussen", email = "simon.rasmussen@cpr.ku.dk"},
 ]
 description = "Variational and Adversarial autoencoders for Metagenomic Binning"

@@ -19,3 +19,5 @@ doc/_build
 doc/reference
 target
 Manifest.toml
+test/database
+Makefile
