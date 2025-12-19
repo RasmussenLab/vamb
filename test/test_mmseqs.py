@@ -3,21 +3,29 @@ from pathlib import Path
 import unittest
 
 from pymmseqs.utils import run_mmseqs_command
+from pymmseqs.commands import createdb
 from vamb.taxvamb_easy import MMseqsRunner, Mmseqs
 import os
 
 PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTDIR = Path(PARENTDIR) / "test" 
 
-class TestMmseqs(unittest.TestCase):
+class TestDownloadDBMmseqs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmpdir = TESTDIR / "tmp"
+        cls.tmpdir = TESTDIR / "tmp" 
         cls.downloadlocation = TESTDIR / "database"
         cls.database = "Kalamari" # We use the kalmari db as it is small and takes ~1 min to download
+        cls.filtered_db = TESTDIR / "database" / "filtered_db"
         if not cls.downloadlocation.exists():
+            # Install the database
             Mmseqs().installDatabase(cls.downloadlocation, cls.tmpdir, cls.database)
-        
+
+            # Create a smaller version of it for querying. Here filtering only for eukaryotes
+            MMseqsRunner().add_arguments([
+                "filtertaxseqdb", cls.downloadlocation / cls.database, cls.filtered_db, "--taxon-list", "2759"
+            ]).run()
+
     def test_download_db(self):
         files_which_should_exist = [
             "Kalamari",
@@ -39,13 +47,9 @@ class TestMmseqs(unittest.TestCase):
         Mmseqs().removeTmpFiles(self.tmpdir, self.database)
         assert not self.tmpdir.exists()
 
+    def test_run_mmseqs(self):
+        # Given test dataset assign taxonomy
+        contigs = TESTDIR / "data/mmseqs.fna"
+        Mmseqs().assignTaxonomy(self.filtered_db, contigs, self.tmpdir)
 
 
-
-
-
-
-
-    # def test_mmseqs_works(self):
-    #     result = run_mmseqs_command(["--help"])
-    #     print(f"{result.stdout!r}")
