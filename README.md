@@ -33,6 +33,9 @@ e.g. for simulated data or a mock microbiome.
 For more details, and how to run on an example dataset [see the documentation.](https://vamb.readthedocs.io/en/latest/)
 
 ```shell
+# Install Vamb in an environment with python <3.14, >=3.10.0
+pip install vamb
+
 # Assemble your reads, one assembly per sample, e.g. with SPAdes
 for sample in 1 2 3; do
     spades.py --meta ${sample}.{fw,rv}.fq.gz -t 24 -m 100gb -o asm_${sample};
