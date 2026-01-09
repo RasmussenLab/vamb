@@ -567,18 +567,21 @@ class RefHasher:
             for i, (observed_id, target_id) in enumerate(
                 zip_longest(observed_ids, target_ids)
             ):
+                # target_ids is longer
                 if observed_id is None:
                     message += (
                         f"\nIdentifier mismatch: {obs_name} has only "
                         f"{i} identifier(s), which is fewer than {tgt_name}"
                     )
                     log_and_error(ValueError, message)
+                # observed_ids is longer
                 elif target_id is None:
                     message += (
                         f"\nIdentifier mismatch: {tgt_name} has only "
                         f"{i} identifier(s), which is fewer than {obs_name}"
                     )
                     log_and_error(ValueError, message)
+                # An element differ
                 elif observed_id != target_id:
                     message += (
                         f"\nIdentifier mismatch: Identifier number {i + 1} does not match "
@@ -587,6 +590,10 @@ class RefHasher:
                         f'{tgt_name}: "{target_id}"'
                     )
                     log_and_error(ValueError, message)
+
+            # If the refhashes are different, then they must either contain
+            # different element, or have different lengths.
+            # Therefore, this line can never be hit.
             assert False
         else:
             log_and_error(ValueError, message)
