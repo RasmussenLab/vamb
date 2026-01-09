@@ -10,6 +10,10 @@ _KERNEL: _np.ndarray = _vambtools.read_npz(
     _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kernel.npz")
 )
 
+# This kernel is precomputed, and used to project 4^4 mers into a 103-dimensional
+# space. Code below assumes this shape
+assert _KERNEL.shape == (256, 103)
+
 
 class CompositionMetaData:
     """A class containing metadata of sequence composition.
@@ -140,7 +144,10 @@ class Composition:
         s[s == 0] = 1.0
         fourmers *= 1 / s
         fourmers += -(1 / 256)
-        return _np.dot(fourmers, kernel)
+        projected = _np.dot(fourmers, kernel)
+        # We know this from the _KERNEL shape
+        assert projected.shape[1] == 103
+        return projected
 
     @staticmethod
     def _convert(raw: _vambtools.PushArray, projected: _vambtools.PushArray):
@@ -203,6 +210,8 @@ class Composition:
         tnfs_arr = projected.take()
         _vambtools.mask_lower_bits(tnfs_arr, 12)
 
+        # We have checked this in _project
+        assert tnfs_arr.shape[0] % 103 == 0
         # Don't use reshape since it creates a new array object with shared memory
         tnfs_arr.shape = (len(tnfs_arr) // 103, 103)
         lengths_arr = lengths.take()
