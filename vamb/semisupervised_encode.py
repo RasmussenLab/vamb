@@ -254,7 +254,6 @@ class VAELabels(_encode.VAE):
         loss = ce_labels * ce_labels_weight + kld * kld_weight
 
         _, labels_out_indices = labels_out.max(dim=1)
-        _, labels_in_indices = labels_in.max(dim=1)
         return loss, ce_labels, kld, _torch.sum(labels_out_indices == labels_in_indices)
 
     def trainepoch(self, data_loader, epoch, optimizer, batchsteps):
