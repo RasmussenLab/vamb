@@ -384,7 +384,7 @@ class VAELabels(_encode.VAE):
             raise ValueError(f"Learning rate must be positive, not {lrate}")
 
         if nepochs < 1:
-            raise ValueError("Minimum 1 epoch, not {nepochs}")
+            raise ValueError(f"Minimum 1 epoch, not {nepochs}")
 
         if batchsteps is None:
             batchsteps_set: set[int] = set()
