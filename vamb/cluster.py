@@ -224,9 +224,9 @@ class ClusterGenerator:
     def _init_histogram_kept_mask(self, N: int) -> tuple[_Tensor, _Tensor]:
         "N is number of contigs"
 
-        kept_mask = _torch.ones(N, dtype=_torch.bool)
-        if self.cuda:
-            kept_mask = kept_mask.cuda()
+        kept_mask = _torch.ones(
+            N, dtype=_torch.bool, device="cuda" if self.cuda else "cpu"
+        )
 
         histogram = _torch.empty(_ceil(_XMAX / _DELTA_X))
         return histogram, kept_mask
@@ -258,10 +258,9 @@ class ClusterGenerator:
             _normalize(torch_matrix, inplace=True)
 
         # Move to GPU
-        torch_lengths = _torch.Tensor(lengths)
-        if cuda:
-            torch_matrix = torch_matrix.cuda()
-            torch_lengths = torch_lengths.cuda()
+        device = "cuda" if cuda else "cpu"
+        torch_matrix = torch_matrix.to(device)
+        torch_lengths = _torch.tensor(lengths, dtype=_torch.float32, device=device)
 
         self.maxsteps: int = maxsteps
         self.minsuccesses: int = minsuccesses
@@ -274,9 +273,7 @@ class ClusterGenerator:
         self.indices = _torch.arange(len(matrix))
         self.order = _np.argsort(lengths)[::-1]
         self.order_index = 0
-        self.lengths = _torch.Tensor(lengths)
-        if cuda:
-            self.lengths = self.lengths.cuda()
+        self.lengths = torch_lengths
         self.n_emitted_clusters = 0
         self.n_remaining_points = len(torch_matrix)
         self.peak_valley_ratio = 0.1
@@ -321,7 +318,7 @@ class ClusterGenerator:
             cpu_kept_mask = self.kept_mask.cpu()
             self.matrix = _vambtools.torch_inplace_maskarray(
                 self.matrix.cpu(), cpu_kept_mask
-            ).cuda()
+            ).to("cuda")
             self.indices = self.indices[cpu_kept_mask]
 
         else:

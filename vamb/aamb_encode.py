@@ -122,9 +122,6 @@ class AAE(nn.Module):
 
         std = torch.exp(logvar / 2)
         sampled_z = Variable(Tensor(self.rng.normal(0, 1, (mu.size(0), self.ld))))
-
-        if self.usecuda:
-            sampled_z = sampled_z.cuda()
         z = sampled_z * std + mu
 
         return z
@@ -248,7 +245,7 @@ class AAE(nn.Module):
         # Define adversarial loss for the discriminators
         adversarial_loss = torch.nn.BCELoss()
         if self.usecuda:
-            adversarial_loss.cuda()
+            adversarial_loss = adversarial_loss.cuda()
 
         #### Optimizers
         optimizer_E = torch.optim.Adam(enc_params, lr=lr)
@@ -290,16 +287,15 @@ class AAE(nn.Module):
                 )
 
                 # Sample noise as discriminator Z,Y ground truth
+                device = "cuda" if self.usecuda else "cpu"
 
                 if self.usecuda:
                     z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()
-                    z_prior.cuda()
                     ohc = RelaxedOneHotCategorical(
-                        torch.tensor([T], device="cuda"),
-                        torch.ones([nrows, self.y_len], device="cuda"),
+                        torch.tensor([T], device=device),
+                        torch.ones([nrows, self.y_len], device=device),
                     )
                     y_prior = ohc.sample()
-                    y_prior = y_prior.cuda()
 
                 else:
                     z_prior = Variable(Tensor(self.rng.normal(0, 1, (nrows, self.ld))))
@@ -308,9 +304,8 @@ class AAE(nn.Module):
 
                 del ohc
 
-                if self.usecuda:
-                    depths_in = depths_in.cuda()
-                    tnfs_in = tnfs_in.cuda()
+                depths_in = depths_in.to(device)
+                tnfs_in = tnfs_in.to(device)
 
                 # -----------------
                 #  Train Generator
@@ -461,15 +456,15 @@ class AAE(nn.Module):
         with torch.no_grad():
             for depths_in, tnfs_in, _, _ in new_data_loader:
                 nrows, _ = depths_in.shape
+                device = "cuda" if self.usecuda else "cpu"
+
                 if self.usecuda:
                     z_prior = torch.cuda.FloatTensor(nrows, self.ld).normal_()
-                    z_prior.cuda()
                     ohc = RelaxedOneHotCategorical(
-                        torch.tensor([0.15], device="cuda"),
-                        torch.ones([nrows, self.y_len], device="cuda"),
+                        torch.tensor([0.15], device=device),
+                        torch.ones([nrows, self.y_len], device=device),
                     )
                     y_prior = ohc.sample()
-                    y_prior = y_prior.cuda()
 
                 else:
                     z_prior = Variable(Tensor(self.rng.normal(0, 1, (nrows, self.ld))))
@@ -478,9 +473,8 @@ class AAE(nn.Module):
                     )
                     y_prior = ohc.sample()
 
-                if self.usecuda:
-                    depths_in = depths_in.cuda()
-                    tnfs_in = tnfs_in.cuda()
+                depths_in = depths_in.to(device)
+                tnfs_in = tnfs_in.to(device)
 
                 mu, _, _, _, y_sample = self(depths_in, tnfs_in)[0:5]
 

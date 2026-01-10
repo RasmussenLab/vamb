@@ -274,10 +274,9 @@ class VAE(_nn.Module):
 
     # sample with gaussian noise
     def reparameterize(self, mu: Tensor) -> Tensor:
-        epsilon = _torch.randn(mu.size(0), mu.size(1))
-
-        if self.usecuda:
-            epsilon = epsilon.cuda()
+        epsilon = _torch.randn(
+            mu.size(0), mu.size(1), device="cuda" if self.usecuda else "cpu"
+        )
 
         epsilon.requires_grad = True
 
@@ -392,11 +391,11 @@ class VAE(_nn.Module):
             tnf_in.requires_grad = True
             abundance_in.requires_grad = True
 
-            if self.usecuda:
-                depths_in = depths_in.cuda()
-                tnf_in = tnf_in.cuda()
-                abundance_in = abundance_in.cuda()
-                weights = weights.cuda()
+            device = "cuda" if self.usecuda else "cpu"
+            depths_in = depths_in.to(device)
+            tnf_in = tnf_in.to(device)
+            abundance_in = abundance_in.to(device)
+            weights = weights.to(device)
 
             optimizer.zero_grad()
 
@@ -465,10 +464,10 @@ class VAE(_nn.Module):
         with _torch.no_grad():
             for depths, tnf, ab, _ in new_data_loader:
                 # Move input to GPU if requested
-                if self.usecuda:
-                    depths = depths.cuda()
-                    tnf = tnf.cuda()
-                    ab = ab.cuda()
+                device = "cuda" if self.usecuda else "cpu"
+                depths = depths.to(device)
+                tnf = tnf.to(device)
+                ab = ab.to(device)
 
                 # Evaluate
                 _, _, _, mu = self(depths, tnf, ab)
