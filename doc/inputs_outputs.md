@@ -107,7 +107,8 @@ To do this efficiently, the identifiers are _hashed_ to provide a _reference has
 If you, for some reason, can't create input files with matching identifiers, and you are 100% sure the order of the sequences is identical in the composition input and abundance input, you can disable this reference hashing with the `--norefcheck` option.
 
 ## Taxonomy
-Vamb operates with two kinds of taxonomies:
+### About taxonomy files
+Vamb takes one of two kinds of taxonomic files:
 * _Unrefined_ taxonomies give the taxonomic annotation for each contig
 * _Refined_ taxonomies gives the taxonomic annotation _plus a probability estimate_ for each contig
 
@@ -145,7 +146,29 @@ S18C25	Bacteria;Pseudomonadota
 S18C67	Bacteria;Bacillota;Bacilli;Bacillales;Staphylococcaceae;Staphylococcus
 ```
 
-Our tool  [__Taxconverter__](https://github.com/RasmussenLab/taxconverter) can be used to create unrefined taxonomy files from MMSeqs2, Centrifuge, Kraken2, Metabuli or MetaMaps output files.
+### How to create a taxonomy file
+The taxonomy file format detailed above is independent of the annotation tool used to generate the taxonomy.
+Users may use any taxonomic classifier, and convert the output of that classifier to the TSV format above.
+
+**We recommend using MMseqs2 combined with GTDB** for taxonomic classification, as that has given the best results in our tests.
+
+:::{warning}
+The commands below only works for a given input format of MMseqs2.
+Since we can not control whether MMseqs2 changes their output formats,
+the code below may fail for future versions of MMseqs2.
+When running the code below, **please verify** that your MMseqs2 output format is as expected.
+:::
+
+```shell
+# Run MMseqs2 taxonomy with GTDB v 220 downloaded with mmseqs databases
+mmseqs easy-taxonomy $(path_to_contigs) $(path_to_db) $(mmseqs_output_dir) --tax-lineage 1
+
+# 2. Format taxonomy file for TAXVAMB
+echo -e "contigs\tpredictions" > $(taxonomy_path)
+
+# Replace taxonomy of unclassified contigs from the empty string to 'unknown'
+sed 's/\t$/\tunknown/' $(mmseqs_output_dir)/gtdb_lca.tsv |  awk -F "\t" '{print $1 "\t" $9 }' >>$(taxonomy_path)
+```
 
 # Outputs
 
