@@ -13,6 +13,7 @@ dependencies = [
     "loguru == 0.7.3",
     "pyhmmer == 0.10.15",
     "pyrodigal == 3.6.3",
+    "pymmseqs == 1.0.5"
 ]
 # Currently pycoverm does not have binaries for Python > 3.13.
 # The dependency resolver, will not error on Python 3.14, but attempt

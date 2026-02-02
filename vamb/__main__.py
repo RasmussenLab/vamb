@@ -2647,6 +2647,7 @@ def main():
     BIN = "bin"
     VAMB = "default"
     TAXVAMB = "taxvamb"
+    EASY_TAXVAMB = "easy_taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
     TAXONOMY_BENCHMARK = "taxonomy_benchmark"
@@ -2798,6 +2799,10 @@ Required arguments:
             runner = partial(run_bin_default, opt)
             run(runner, opt.common.general)
         elif model == TAXVAMB:
+            opt = BinTaxVambOptions.from_args(args)
+            runner = partial(run_vaevae, opt)
+            run(runner, opt.common.general)
+        elif model == EASY_TAXVAMB:
             opt = BinTaxVambOptions.from_args(args)
             runner = partial(run_vaevae, opt)
             run(runner, opt.common.general)

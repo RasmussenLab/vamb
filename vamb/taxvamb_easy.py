@@ -61,7 +61,7 @@ class Mmseqs():
         MMseqsRunner().add_arguments(["databases", database, DBdownloadlocation, tmpdir, '--remove-tmp-files']).run()
         self.removeTmpFiles(tmpdir, database)
 
-    def removeTmpFiles(self,tmpdir: Path, database):
+    def removeTmpFiles(self,tmpdir: Path, database: Path):
         # Remove the temp files. Delete specific files for safety. The argument ("--remove-tmp-files") for mmseqs does not work
         tmp_files = (tmpdir / "latest")
         if tmp_files.is_symlink(): # tmpfiles should be refered by a symlink
@@ -72,6 +72,27 @@ class Mmseqs():
             (tmp_files.resolve()).rmdir()
             tmp_files.unlink()
             tmpdir.rmdir()
+
+    def assignTaxonomy(self, database: Path, contigs:Path, output: Path):
+        # mmseqs easy-taxonomy {input.contigs_decompressed} {params.db} {output.mmseqs2} {output.tmp} --tax-lineage 1
+
+        tmp_output  = output / "tmp"
+        tmp_output.mkdir(parents=True)
+        output_tsv = output / "tsv"
+
+        arguments = [
+            "easy-taxonomy",  
+            contigs,
+            database, 
+            output_tsv, 
+            tmp_output, 
+            "--tax-lineage", "1",
+            "--search-type", "3"
+        ]
+
+        MMseqsRunner().add_arguments(arguments).run()
+
+
             
 
 
