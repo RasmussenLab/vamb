@@ -66,6 +66,18 @@ For TaxVamb, it's almost the same, but we also provide the taxonomy file:
 $ vamb bin taxvamb --outdir out2 --fasta contigs.fna.gz --abundance_tsv abundances.tsv --taxonomy taxonomy.tsv
 ```
 
+Alternativly we can pass in a path to a mmseqs GTDB database
+
+```shell
+$ vamb bin taxvamb --outdir out2 --fasta contigs.fna.gz --abundance_tsv abundances.tsv --db GTDB_database
+```
+
+You can either download the database through the mmseqs program, or through the wrapper we provide: 
+
+```shell
+$ taxvamb_db --output /output/path
+```
+
 ### Taxometer
 Same default arguments as TaxVamb:
 

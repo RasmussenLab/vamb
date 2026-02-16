@@ -1,5 +1,6 @@
 
 from pathlib import Path
+from typing import override
 import unittest
 
 from pymmseqs.utils import run_mmseqs_command
@@ -8,19 +9,24 @@ from vamb.taxvamb_easy import MMseqsRunner, Mmseqs
 import os
 import tempfile
 
+from vamb.taxonomy import Taxonomy
+import vamb.vambtools
+import vamb.parsecontigs
+
 PARENTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTDIR = Path(PARENTDIR) / "test" 
 
 class TestDownloadDBMmseqs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._tmp_dir_resource = tempfile.TemporaryDirectory(prefix="mmseqs_test_")
+        cls._tmp_dir_resource = tempfile.TemporaryDirectory(prefix="mmseqs_test_", dir="test", delete=False)
         cls.tmpdir_runmmseqs = Path(cls._tmp_dir_resource.name) 
         cls.tmpdir_db = TESTDIR / "tmp" 
         cls.downloadlocation = TESTDIR / "database"
         cls.database = "Kalamari" # We use the kalmari db as it is small and takes ~1 min to download
         cls.filtered_db = TESTDIR / "database" / "filtered_db"
-        if not cls.downloadlocation.exists():
+        if not Mmseqs().DatabaseExist(DBdownloadlocation=cls.downloadlocation, database=cls.database) or \
+            not Mmseqs().DatabaseExist(DBdownloadlocation=cls.filtered_db.parent, database="filtered_db"):
             # Install the database
             Mmseqs().installDatabase(cls.downloadlocation, cls.tmpdir_db, cls.database)
 
@@ -56,5 +62,68 @@ class TestDownloadDBMmseqs(unittest.TestCase):
         contigs = TESTDIR / "data/mmseqs.fna"
         Mmseqs().assignTaxonomy(self.filtered_db, contigs, self.tmpdir_runmmseqs)
 
+class TestMmseqsTaxonomyReader(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomyfile = "test/data/mmseqs_lca.tsv"
+        cls.fastafile = "test/data/mmseqs.fna"
 
+    def test_load_mmseqs_taxonomy(self):
+        parsed_tax = Taxonomy.parse_mmseqs_file(self.taxonomyfile, False)
+        assert parsed_tax[1][1].ranks == ["unknown"]
+        assert parsed_tax[0][0] == "KC153975.1"
+        assert parsed_tax[0][1].ranks == [
+        '-_cellular organisms',
+         '-_Eukaryota',
+         '-_Opisthokonta',
+         'k_Metazoa',
+         '-_Eumetazoa',
+         '-_Bilateria',
+         '-_Deuterostomia',
+         'p_Chordata',
+         '-_Craniata',
+         '-_Vertebrata',
+         '-_Gnathostomata',
+         '-_Teleostomi',
+         '-_Euteleostomi'
+         ]
+    def test_build_taxonomy(self):
+        with vamb.vambtools.Reader(self.fastafile) as f:
+          composition = vamb.parsecontigs.Composition.from_file(f, filename=None, minlength=20)
+        tax = Taxonomy.from_file(self.taxonomyfile, composition.metadata, is_canonical=False, mmseqs_taxonomy=True)
+        assert tax.contig_taxonomies[1].ranks == ["unknown"]
+        assert tax.contig_taxonomies[0].ranks == [
+        '-_cellular organisms',
+         '-_Eukaryota',
+         '-_Opisthokonta',
+         'k_Metazoa',
+         '-_Eumetazoa',
+         '-_Bilateria',
+         '-_Deuterostomia',
+         'p_Chordata',
+         '-_Craniata',
+         '-_Vertebrata',
+         '-_Gnathostomata',
+         '-_Teleostomi',
+         '-_Euteleostomi'
+         ]
+    def test_build_taxonomy_if_missmatch_in_contigs_due_to_length(self):
+        with vamb.vambtools.Reader(self.fastafile) as f:
+          composition = vamb.parsecontigs.Composition.from_file(f, filename=None, minlength=2000)
+        tax = Taxonomy.from_file(self.taxonomyfile, composition.metadata, is_canonical=False, mmseqs_taxonomy=True)
+        assert tax.contig_taxonomies[0].ranks == [
+        '-_cellular organisms',
+         '-_Eukaryota',
+         '-_Opisthokonta',
+         'k_Metazoa',
+         '-_Eumetazoa',
+         '-_Bilateria',
+         '-_Deuterostomia',
+         'p_Chordata',
+         '-_Craniata',
+         '-_Vertebrata',
+         '-_Gnathostomata',
+         '-_Teleostomi',
+         '-_Euteleostomi'
+         ]
 

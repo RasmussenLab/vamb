@@ -45,26 +45,56 @@ class Mmseqs():
 
         if database not in ["Kalamari"]:
             raise ValueError()
-        if DBdownloadlocation.exists():
+        if self.DatabaseExist(DBdownloadlocation=DBdownloadlocation, database=database):
             raise FileExistsError(f"downloadlocation: {DBdownloadlocation} allready exist")
         if tmpdir.exists():
             raise FileExistsError(f"tmpdir: {tmpdir} allready exist")
-
 
         # MMseqs downloads databases for path a/b/c as: for directory b it creates files c.1 c.2 .. inside it. 
         # This is not that logical so instead we change it so users pass a path and 
         # the program make a directory there with the database files
         DBdownloadlocation.mkdir(parents=True)
-        DBdownloadlocation = DBdownloadlocation / database
+        DBdownloadlocationFiles = DBdownloadlocation / database
+
+        logger.info(f"Installing {database} to directory {DBdownloadlocation}")
+        try:
+            MMseqsRunner().add_arguments(["databases", database, DBdownloadlocationFiles, tmpdir, '--remove-tmp-files']).run()
+            if not self.DatabaseExist(DBdownloadlocation=DBdownloadlocation, database=database):
+                raise Exception
+        except Exception as err:
+            logger.error(f"Downloading database failed, rerun to contine installation: {err}")
+            raise err
+        else:
+            # mmseqs has a built in flag to remove tmp files -- but it does not work.
+            self.removeTmpFiles(tmpdir, database) # We could use a built in tempdir, but since we want to continue a download if it failed we clean up manually
+
+    def DatabaseExist(self, DBdownloadlocation, database) -> bool:
+
+        files_which_should_exist = [
+            f"{database}",
+            f"{database}.dbtype",
+            f"{database}.index",
+            f"{database}.lookup",
+            f"{database}.source",
+            f"{database}_h",
+            f"{database}_h.dbtype",
+            f"{database}_h.index",
+            f"{database}_mapping",
+            f"{database}_taxonomy",
+            # f"{database}.version",  A filtered db does not contain .version, therefore do not require it
+        ]
+        for file in files_which_should_exist:
+            if not (DBdownloadlocation / file).exists():
+                print(f"{file} does not exist. DBdownloadlocation: {DBdownloadlocation}, database: {database}")
+                return False
+        return True
+                
 
 
-        MMseqsRunner().add_arguments(["databases", database, DBdownloadlocation, tmpdir, '--remove-tmp-files']).run()
-        self.removeTmpFiles(tmpdir, database)
-
-    def removeTmpFiles(self,tmpdir: Path, database: Path):
+    def removeTmpFiles(self, tmpdir: Path, database: Path):
         # Remove the temp files. Delete specific files for safety. The argument ("--remove-tmp-files") for mmseqs does not work
         tmp_files = (tmpdir / "latest")
-        if tmp_files.is_symlink(): # tmpfiles should be refered by a symlink
+        if tmp_files.is_symlink(): # tmpfiles should be referenced by a symlink
             taxonomy_dir = tmp_files.resolve() / "taxonomy"
             (taxonomy_dir / "createindex.sh").unlink()
             (tmp_files.resolve() / f"{database.lower()}.tsv").unlink()

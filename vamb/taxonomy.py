@@ -59,9 +59,12 @@ class Taxonomy:
 
     @classmethod
     def from_file(
-        cls, tax_file: Path, metadata: CompositionMetaData, is_canonical: bool
-    ):
-        observed = cls.parse_tax_file(tax_file, is_canonical)
+        cls, tax_file: Path, metadata: CompositionMetaData, is_canonical: bool, mmseqs_taxonomy:bool = False
+    ) :
+        if mmseqs_taxonomy:
+            observed = cls.parse_mmseqs_file(tax_file, is_canonical)
+        else:
+            observed = cls.parse_tax_file(tax_file, is_canonical)
         return cls.from_observed(observed, metadata, is_canonical)
 
     @classmethod
@@ -141,6 +144,36 @@ class Taxonomy:
                         f"expected 2 tab-separated columns, but found {len(fields)}."
                     )
                 (contigname, taxonomy) = fields
+                result.append(
+                    (
+                        contigname,
+                        ContigTaxonomy.from_semicolon_sep(taxonomy, force_canonical),
+                    )
+                )
+
+        return result
+
+    @staticmethod
+    def parse_mmseqs_file(
+        path: Path,force_canonical: bool
+    ) -> list[tuple[str, ContigTaxonomy]]:
+        with open(path) as file:
+            result: list[tuple[str, ContigTaxonomy]] = []
+
+            for lineno, line in enumerate(file):
+                line = strip_string_newline(line)
+                fields = line.split("\t")
+                if len(fields) != 5:
+                    raise ValueError(
+                        f"In taxonomy file '{path}', on line {lineno + 1}, "
+                        f"expected 5 tab-separated columns, but found {len(fields)}."
+                    )
+                contigname = fields[0]
+                taxonomy = fields[4]
+                # Benchmarking shows that taxvamb for mmseqs has better performance with "unknown" instead of "". 
+                # This performance difference is likely due to the fact that taxometer treats "unknown" as it's own taxonomy and groups them together in latent space, while "" are added to "root" -- Maybe because contigs categorized as unknown are more likely to be from the same organism.
+                if taxonomy == "":
+                    taxonomy = "unknown"
                 result.append(
                     (
                         contigname,
