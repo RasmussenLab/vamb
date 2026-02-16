@@ -2303,6 +2303,12 @@ def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=Fal
         type=Path,
         help="Path to the taxonomy file",
     )
+    taxonomys.add_argument(
+        "--db",
+        metavar="",
+        type=Path,
+        help="Path to the GTDB database",
+    )
     if not taxonomy_only:
         taxonomys.add_argument(
             "--no_predictor",
@@ -2799,10 +2805,6 @@ Required arguments:
             runner = partial(run_bin_default, opt)
             run(runner, opt.common.general)
         elif model == TAXVAMB:
-            opt = BinTaxVambOptions.from_args(args)
-            runner = partial(run_vaevae, opt)
-            run(runner, opt.common.general)
-        elif model == EASY_TAXVAMB:
             opt = BinTaxVambOptions.from_args(args)
             runner = partial(run_vaevae, opt)
             run(runner, opt.common.general)
