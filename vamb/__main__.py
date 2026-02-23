@@ -1567,7 +1567,7 @@ def predict_taxonomy(
     logger.info("Predicting taxonomy with Taxometer")
 
     taxonomies = vamb.taxonomy.Taxonomy.from_file(
-        taxonomy_options.taxonomy.path, comp_metadata, False, mmseqs_taxonomy=taxonomy_options.mmseqs_taxonomy
+        taxonomy_options.taxonomy.path, comp_metadata, False, mmseqs_taxonomy=taxonomy_options.taxonomy.from_mmseqs
     )
     nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
         taxonomies.contig_taxonomies
@@ -1986,7 +1986,7 @@ def run_vaevae(opt: BinTaxVambOptions):
     else:
         logger.info(f'Loading unrefined taxonomy from file "{opt.taxonomy.path}"')
         contig_taxonomies = vamb.taxonomy.Taxonomy.from_file(
-            opt.taxonomy.path, composition.metadata, False
+            opt.taxonomy.path, composition.metadata, False, mmseqs_taxonomy=False
         )
 
     nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(

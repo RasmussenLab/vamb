@@ -118,7 +118,7 @@ class Mmseqs():
             "--search-type", "3"
         ]
 
-        MMseqsRunner().add_arguments(arguments).run()
+        MMseqsRunner().add_arguments(arguments).run()  
 
         return Path(str(output_tsv) + "_lca.tsv")
 
