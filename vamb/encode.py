@@ -558,7 +558,7 @@ class VAE(_nn.Module):
         Output: None
         """
         if nepochs < 1:
-            raise ValueError("Minimum 1 epoch, not {nepochs}")
+            raise ValueError(f"Minimum 1 epoch, not {nepochs}")
 
         if batchsteps is None:
             batchsteps_set: set[int] = set()

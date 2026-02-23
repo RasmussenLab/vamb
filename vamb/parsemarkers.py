@@ -19,6 +19,7 @@ from collections import defaultdict
 import json
 import numpy as np
 from loguru import logger
+import contextlib
 
 MarkerID = NewType("MarkerID", int)
 MarkerName = NewType("MarkerName", str)
@@ -206,20 +207,23 @@ def split_file(
     names = set(contignames)
     os.mkdir(tmpdir_to_create)
     paths = [tmpdir_to_create.joinpath(str(i)) for i in range(n_splits)]
-    filehandles = [open(path, "w") for path in paths]
-    refhasher = RefHasher()
-    with Reader(input) as infile:
-        for i, (outfile, record) in enumerate(
-            zip(
-                itertools.cycle(filehandles),
-                filter(lambda x: x.identifier in names, byte_iterfasta(infile, None)),
-            )
-        ):
-            refhasher.add_refname(record.identifier)
-            print(record.format(), file=outfile)
 
-    for filehandle in filehandles:
-        filehandle.close()
+    # Automatically close all the files on exit
+    with contextlib.ExitStack() as stack:
+        filehandles = [stack.enter_context(open(fname, "w")) for fname in paths]
+        refhasher = RefHasher()
+        with Reader(input) as infile:
+            for i, (outfile, record) in enumerate(
+                zip(
+                    itertools.cycle(filehandles),
+                    filter(
+                        lambda x: x.identifier in names, byte_iterfasta(infile, None)
+                    ),
+                )
+            ):
+                refhasher.add_refname(record.identifier)
+                print(record.format(), file=outfile)
+
     refhash = refhasher.digest()
     return (refhash, paths)
 
