@@ -55,7 +55,7 @@ class Mmseqs():
         """
 
         if self.DatabaseExist():
-            raise FileExistsError(f"Datbase at `{self.dbdir}` allready exist")
+            raise FileExistsError(f"Database at `{self.dbdir}` allready exist")
 
         # MMseqs downloads databases for path a/b/c as: for directory b it creates files c.1 c.2 .. inside it. 
         # This is not that logical so instead we change it so users pass a path and 
@@ -72,7 +72,7 @@ class Mmseqs():
             if not self.DatabaseExist():
                 raise Exception
         except Exception as err:
-            logger.error(f"Downloading database failed, rerun to contine installation: {err}")
+            logger.error(f"Downloading database failed, rerun to continue installation: {err}")
             raise err
         else:
             # mmseqs has a built in flag to remove tmp files -- but it does not work.
@@ -102,7 +102,7 @@ class Mmseqs():
                 return False
         return True
 
-    def assignTaxonomy(self, database: Path, contigs:Path, output: Path):
+    def assignTaxonomy(self, contigs:Path, output: Path):
         # mmseqs easy-taxonomy {input.contigs_decompressed} {params.db} {output.mmseqs2} {output.tmp} --tax-lineage 1
 
         tmp_output  = output / "tmp"
@@ -112,7 +112,7 @@ class Mmseqs():
         arguments = [
             "easy-taxonomy",  
             contigs,
-            database, 
+            self.dbdir / self.database.value, 
             output_tsv, 
             tmp_output, 
             "--tax-lineage", "1",

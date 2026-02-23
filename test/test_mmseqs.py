@@ -26,12 +26,13 @@ class TestDownloadDBMmseqs(unittest.TestCase):
         cls.database = Database.KALAMARI # We use the kalmari db as it is small and takes ~1 min to download
         cls.filtered_db = TESTDIR / "database" / "filtered_db"
 
-        cls.mmseqs = Mmseqs(dbdir=cls.downloadlocation, cls.database)
+        cls.mmseqs = Mmseqs(dbdir=cls.downloadlocation, database=cls.database)
+        cls.filtered_mmseqs = Mmseqs(dbdir=cls.filtered_db.parent, database=Database.FILTERED_DB)
 
-        if not mmseqs.DatabaseExist() or \
-            not Mmseqs().DatabaseExist(DBdownloadlocation=cls.filtered_db.parent, database=Database.FILTERED_DB):
+        if not cls.mmseqs.DatabaseExist() or \
+            not cls.filtered_mmseqs.DatabaseExist():
             # Install the database
-            Mmseqs().installDatabase(cls.downloadlocation, cls.tmpdir_db, cls.database)
+            cls.mmseqs.installDatabase(cls.downloadlocation, cls.tmpdir_db, cls.database)
 
             # Create a smaller version of it for querying. Here filtering only for eukaryotes
             MMseqsRunner().add_arguments([
@@ -63,7 +64,7 @@ class TestDownloadDBMmseqs(unittest.TestCase):
     def test_run_mmseqs(self):
         # Given test dataset assign taxonomy
         contigs = TESTDIR / "data/mmseqs.fna"
-        Mmseqs().assignTaxonomy(self.filtered_db, contigs, self.tmpdir_runmmseqs)
+        self.filtered_mmseqs.assignTaxonomy(contigs, self.tmpdir_runmmseqs)
 
 class TestMmseqsTaxonomyReader(unittest.TestCase):
     @classmethod
