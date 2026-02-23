@@ -379,10 +379,11 @@ class GeneralOptions:
 
 
 class TaxonomyBase:
-    __slots__ = ["path"]
+    __slots__ = ["path", "from_mmseqs"]
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, from_mmseqs=False):
         self.path = path
+        self.from_mmseqs = from_mmseqs
 
 
 class RefinedTaxonomy(TaxonomyBase):
@@ -395,10 +396,24 @@ class UnrefinedTaxonomy(TaxonomyBase):
 
 def get_taxonomy(args: argparse.Namespace) -> Union[RefinedTaxonomy, UnrefinedTaxonomy]:
     path = args.taxonomy
-    if path is None:
+    mmseqs_db = args.db
+
+    if path is None and mmseqs_db is None:
         raise ValueError(
-            "Cannot load taxonomy for Taxometer without specifying --taxonomy"
+            "Cannot load taxonomy without specifying either --taxonomy or --db"
         )
+
+    if path is not None and mmseqs_db is not None:
+        raise ValueError(
+            "Cannot specify both --taxonomy or --db"
+        )
+    
+    if mmseqs_db is not None:
+        # TODO: fasta should be filtered.. 
+        output_taxonomy_file = vamb.mmseqs_wrapper.run_mmseqs(mmseqs_db, args.fasta, args.outdir)
+
+        return UnrefinedTaxonomy(output_taxonomy_file, from_mmseqs=True)
+
     with open(check_existing_file(path)) as file:
         try:
             header = next(file).rstrip("\r\n")
@@ -1552,7 +1567,7 @@ def predict_taxonomy(
     logger.info("Predicting taxonomy with Taxometer")
 
     taxonomies = vamb.taxonomy.Taxonomy.from_file(
-        taxonomy_options.taxonomy.path, comp_metadata, False
+        taxonomy_options.taxonomy.path, comp_metadata, False, mmseqs_taxonomy=taxonomy_options.mmseqs_taxonomy
     )
     nodes, ind_nodes, table_parent = vamb.taxvamb_encode.make_graph(
         taxonomies.contig_taxonomies
@@ -2307,7 +2322,7 @@ def add_taxonomy_arguments(subparser: argparse.ArgumentParser, taxonomy_only=Fal
         "--db",
         metavar="",
         type=Path,
-        help="Path to the GTDB database",
+        help="Path to a GTDB database",
     )
     if not taxonomy_only:
         taxonomys.add_argument(

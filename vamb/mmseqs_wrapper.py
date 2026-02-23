@@ -102,12 +102,11 @@ class Mmseqs():
                 return False
         return True
 
-    def assignTaxonomy(self, contigs:Path, output: Path):
-        # mmseqs easy-taxonomy {input.contigs_decompressed} {params.db} {output.mmseqs2} {output.tmp} --tax-lineage 1
+    def assignTaxonomy(self, contigs:Path, output: Path) -> Path:
 
         tmp_output  = output / "tmp"
         tmp_output.mkdir(parents=True)
-        output_tsv = output / "tsv"
+        output_tsv = output / "mmseqs"
 
         arguments = [
             "easy-taxonomy",  
@@ -120,6 +119,8 @@ class Mmseqs():
         ]
 
         MMseqsRunner().add_arguments(arguments).run()
+
+        return Path(str(output_tsv) + "_lca.tsv")
 
     def removeTmpFiles(self, tmpdir: Path, database: Path):
         # Remove the temp files. Delete specific files for safety. The argument ("--remove-tmp-files") for mmseqs does not work
@@ -145,4 +146,12 @@ def download_mmseqs_db(args: argparse.Namespace) -> None:
 
     mmseqs = Mmseqs(dbdir=dbdir, database=Database.GTDB)
     mmseqs.installDatabase()
+
+def run_mmseqs(dbdir: Path, contigs: Path, outdir: Path) -> Path:
+
+    mmseqs = Mmseqs(dbdir=dbdir, database=Database.FILTERED_DB) # TODO: Go back to GTDB
+    output_taxonomy_file = mmseqs.assignTaxonomy(contigs, outdir / "mmseqs")
+    return output_taxonomy_file
+
+
 

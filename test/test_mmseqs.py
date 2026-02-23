@@ -58,7 +58,7 @@ class TestDownloadDBMmseqs(unittest.TestCase):
             assert (self.downloadlocation / file).exists()
 
     def test_remove_tmp_files(self):
-        Mmseqs().removeTmpFiles(self.tmpdir_db, self.database)
+        self.mmseqs.removeTmpFiles(self.tmpdir_db, self.database)
         assert not self.tmpdir_db.exists()
 
     def test_run_mmseqs(self):
