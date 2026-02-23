@@ -24,6 +24,7 @@ from . import semisupervised_encode
 from . import hloss_misc
 from . import taxvamb_encode
 from . import reclustering
+from . import mmseqs_wrapper
 
 from importlib.metadata import version as get_version
 from loguru import logger

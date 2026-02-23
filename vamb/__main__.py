@@ -2624,6 +2624,14 @@ def add_reclustering_arguments(subparser: argparse.ArgumentParser):
     )
     return subparser
 
+def add_dbdownload_arguments(subparser: argparse.ArgumentParser):
+    subparser.add_argument(
+        "--output",
+        metavar="",
+        type=Path,
+        help="Directory to download the database in. *Required*"
+    )
+
 
 def main():
     doc = f"""
@@ -2650,10 +2658,10 @@ def main():
     subparsers = parser.add_subparsers(dest="subcommand")
 
     TAXOMETER = "taxometer"
+    DBDOWNLOAD = "dbdownload"
     BIN = "bin"
     VAMB = "default"
     TAXVAMB = "taxvamb"
-    EASY_TAXVAMB = "easy_taxvamb"
     AVAMB = "avamb"
     RECLUSTER = "recluster"
     TAXONOMY_BENCHMARK = "taxonomy_benchmark"
@@ -2666,6 +2674,7 @@ def main():
         add_help=False,
     )
     add_help_arguments(vaevae_parserbin_parser)
+
     subparsers_model = vaevae_parserbin_parser.add_subparsers(dest="model_subcommand")
 
     vae_parser = subparsers_model.add_parser(
@@ -2784,6 +2793,18 @@ Required arguments:
     add_reclustering_arguments(recluster_parser)
     add_predictor_arguments(recluster_parser)
     add_taxonomy_arguments(recluster_parser)
+    
+    dbdownload_parser = subparsers.add_parser(
+        name=DBDOWNLOAD,
+        help="""
+        Download the GTDB mmseqs database used with TaxVAMB""",
+        add_help=False,
+        usage="%(prog)s [options]",
+        description="Download the GTDB database uesd with TaxVAMB. Wrapper around `mmseqs databases`"
+    )
+    add_help_arguments(dbdownload_parser)
+    add_dbdownload_arguments(dbdownload_parser)
+
 
     args = parser.parse_args()
 
@@ -2795,6 +2816,9 @@ Required arguments:
         opt = TaxometerOptions.from_args(args)
         runner = partial(run_taxonomy_cross_validation, opt)
         run(runner, opt.general)
+    if args.subcommand == DBDOWNLOAD:
+        vamb.mmseqs_wrapper.download_mmseqs_db(args)
+
     elif args.subcommand == BIN:
         model = args.model_subcommand
         if model is None:

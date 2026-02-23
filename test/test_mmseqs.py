@@ -5,7 +5,7 @@ import unittest
 
 from pymmseqs.utils import run_mmseqs_command
 from pymmseqs.commands import createdb
-from vamb.taxvamb_easy import MMseqsRunner, Mmseqs
+from vamb.mmseqs_wrapper import Database, MMseqsRunner, Mmseqs
 import os
 import tempfile
 
@@ -23,16 +23,19 @@ class TestDownloadDBMmseqs(unittest.TestCase):
         cls.tmpdir_runmmseqs = Path(cls._tmp_dir_resource.name) 
         cls.tmpdir_db = TESTDIR / "tmp" 
         cls.downloadlocation = TESTDIR / "database"
-        cls.database = "Kalamari" # We use the kalmari db as it is small and takes ~1 min to download
+        cls.database = Database.KALAMARI # We use the kalmari db as it is small and takes ~1 min to download
         cls.filtered_db = TESTDIR / "database" / "filtered_db"
-        if not Mmseqs().DatabaseExist(DBdownloadlocation=cls.downloadlocation, database=cls.database) or \
-            not Mmseqs().DatabaseExist(DBdownloadlocation=cls.filtered_db.parent, database="filtered_db"):
+
+        cls.mmseqs = Mmseqs(dbdir=cls.downloadlocation, cls.database)
+
+        if not mmseqs.DatabaseExist() or \
+            not Mmseqs().DatabaseExist(DBdownloadlocation=cls.filtered_db.parent, database=Database.FILTERED_DB):
             # Install the database
             Mmseqs().installDatabase(cls.downloadlocation, cls.tmpdir_db, cls.database)
 
             # Create a smaller version of it for querying. Here filtering only for eukaryotes
             MMseqsRunner().add_arguments([
-                "filtertaxseqdb", cls.downloadlocation / cls.database, cls.filtered_db, "--taxon-list", "2759"
+                "filtertaxseqdb", cls.downloadlocation / cls.database.value, cls.filtered_db, "--taxon-list", "2759"
             ]).run()
 
 
@@ -107,6 +110,7 @@ class TestMmseqsTaxonomyReader(unittest.TestCase):
          '-_Teleostomi',
          '-_Euteleostomi'
          ]
+
     def test_build_taxonomy_if_missmatch_in_contigs_due_to_length(self):
         with vamb.vambtools.Reader(self.fastafile) as f:
           composition = vamb.parsecontigs.Composition.from_file(f, filename=None, minlength=2000)
