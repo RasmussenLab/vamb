@@ -11,7 +11,7 @@ The Vamb package contains several programs, including three binners:
 
 * __TaxVamb__: A semi-supervised binner that uses taxonomy information from e.g. `mmseqs taxonomy`.
   TaxVamb produces the best results, but requires you have run a taxonomic annotation workflow.
-  [Link to article](https://doi.org/10.1101/2024.10.25.620172).
+  [Link to article](https://doi.org/10.1038/s41587-026-03098-0).
 * __Vamb__: The original binner based on variational autoencoders.
   This has been upgraded significantly since its original release.
   Vamb strikes a good balance between speed and accuracy.
