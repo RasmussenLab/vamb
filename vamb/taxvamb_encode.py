@@ -900,11 +900,11 @@ class VAMB2Label(_nn.Module):
         with _torch.no_grad():
             for depths, tnf, abundances, weights in new_data_loader:
                 # Move input to GPU if requested
-                if self.usecuda:
-                    depths = depths.cuda()
-                    tnf = tnf.cuda()
-                    abundances = abundances.cuda()
-                    weights = weights.cuda()
+                device = "cuda" if self.usecuda else "cpu"
+                depths = depths.to(device)
+                tnf = tnf.to(device)
+                abundances = abundances.to(device)
+                weights = weights.to(device)
 
                 # Evaluate
                 labels = self(depths, tnf, abundances, weights)
@@ -931,12 +931,12 @@ class VAMB2Label(_nn.Module):
 
         with _torch.no_grad():
             for depths_in, tnf_in, abundances_in, weights, labels_in in new_data_loader:
-                if self.usecuda:
-                    depths_in = depths_in.cuda()
-                    tnf_in = tnf_in.cuda()
-                    abundances_in = abundances_in.cuda()
-                    weights = weights.cuda()
-                    labels_in = labels_in.cuda()
+                device = "cuda" if self.usecuda else "cpu"
+                depths_in = depths_in.to(device)
+                tnf_in = tnf_in.to(device)
+                abundances_in = abundances_in.to(device)
+                weights = weights.to(device)
+                labels_in = labels_in.to(device)
 
                 labels_out = self(depths_in, tnf_in, abundances_in, weights)
                 loss, correct_labels = self.calc_loss(labels_in, labels_out)
@@ -1004,12 +1004,12 @@ class VAMB2Label(_nn.Module):
             abundances_in.requires_grad = True
             labels_in.requires_grad = True
 
-            if self.usecuda:
-                depths_in = depths_in.cuda()
-                tnf_in = tnf_in.cuda()
-                abundances_in = abundances_in.cuda()
-                weights = weights.cuda()
-                labels_in = labels_in.cuda()
+            device = "cuda" if self.usecuda else "cpu"
+            depths_in = depths_in.to(device)
+            tnf_in = tnf_in.to(device)
+            abundances_in = abundances_in.to(device)
+            weights = weights.to(device)
+            labels_in = labels_in.to(device)
 
             optimizer.zero_grad()
 

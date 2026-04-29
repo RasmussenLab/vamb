@@ -238,9 +238,7 @@ class VAELabels(_encode.VAE):
 
     def forward(self, labels):
         mu = self._encode(labels)
-        logsigma = _torch.zeros(mu.size())
-        if self.usecuda:
-            logsigma = logsigma.cuda()
+        logsigma = _torch.zeros(mu.size(), device="cuda" if self.usecuda else "cpu")
         latent = self.reparameterize(mu)
         labels_out = self._decode(latent)
         return labels_out, mu, logsigma
@@ -281,8 +279,7 @@ class VAELabels(_encode.VAE):
             labels_in = labels_in[0]
             labels_in.requires_grad = True
 
-            if self.usecuda:
-                labels_in = labels_in.cuda()
+            labels_in = labels_in.to("cuda" if self.usecuda else "cpu")
 
             optimizer.zero_grad()
 
@@ -343,8 +340,7 @@ class VAELabels(_encode.VAE):
             for labels in new_data_loader:
                 labels = labels[0]
                 # Move input to GPU if requested
-                if self.usecuda:
-                    labels = labels.cuda()
+                labels = labels.to("cuda" if self.usecuda else "cpu")
 
                 # Evaluate
                 out_labels, mu, logsigma = self(labels)
@@ -504,9 +500,7 @@ class VAEConcat(_encode.VAE):
     def forward(self, depths, tnf, abundance, labels):
         tensor = _torch.cat((depths, tnf, abundance, labels), 1)
         mu = self._encode(tensor)
-        logsigma = _torch.zeros(mu.size())
-        if self.usecuda:
-            logsigma = logsigma.cuda()
+        logsigma = _torch.zeros(mu.size(), device="cuda" if self.usecuda else "cpu")
         latent = self.reparameterize(mu)
         depths_out, tnf_out, abundance_out, labels_out = self._decode(latent)
 
@@ -596,12 +590,12 @@ class VAEConcat(_encode.VAE):
             abundance_in.requires_grad = True
             labels_in.requires_grad = True
 
-            if self.usecuda:
-                depths_in = depths_in.cuda()
-                tnf_in = tnf_in.cuda()
-                abundance_in = abundance_in.cuda()
-                weights = weights.cuda()
-                labels_in = labels_in.cuda()
+            device = "cuda" if self.usecuda else "cpu"
+            depths_in = depths_in.to(device)
+            tnf_in = tnf_in.to(device)
+            abundance_in = abundance_in.to(device)
+            weights = weights.to(device)
+            labels_in = labels_in.to(device)
 
             optimizer.zero_grad()
 
@@ -677,11 +671,11 @@ class VAEConcat(_encode.VAE):
         with _torch.no_grad():
             for depths, tnf, ab, weights, labels in new_data_loader:
                 # Move input to GPU if requested
-                if self.usecuda:
-                    depths = depths.cuda()
-                    tnf = tnf.cuda()
-                    ab = ab.cuda()
-                    labels = labels.cuda()
+                device = "cuda" if self.usecuda else "cpu"
+                depths = depths.to(device)
+                tnf = tnf.to(device)
+                ab = ab.to(device)
+                labels = labels.to(device)
 
                 # Evaluate
                 _, _, _, _, mu, _ = self(depths, tnf, ab, labels)
@@ -882,17 +876,17 @@ class VAEVAE(object):
             abundance_in_unsup.requires_grad = True
             labels_in_unsup.requires_grad = True
 
-            if self.VAEVamb.usecuda:
-                depths_in_sup = depths_in_sup.cuda()
-                tnf_in_sup = tnf_in_sup.cuda()
-                abundance_in_sup = abundance_in_sup.cuda()
-                weights_in_sup = weights_in_sup.cuda()
-                labels_in_sup = labels_in_sup.cuda()
-                depths_in_unsup = depths_in_unsup.cuda()
-                tnf_in_unsup = tnf_in_unsup.cuda()
-                abundance_in_unsup = abundance_in_unsup.cuda()
-                weights_in_unsup = weights_in_unsup.cuda()
-                labels_in_unsup = labels_in_unsup.cuda()
+            device = "cuda" if self.VAEVamb.usecuda else "cpu"
+            depths_in_sup = depths_in_sup.to(device)
+            tnf_in_sup = tnf_in_sup.to(device)
+            abundance_in_sup = abundance_in_sup.to(device)
+            weights_in_sup = weights_in_sup.to(device)
+            labels_in_sup = labels_in_sup.to(device)
+            depths_in_unsup = depths_in_unsup.to(device)
+            tnf_in_unsup = tnf_in_unsup.to(device)
+            abundance_in_unsup = abundance_in_unsup.to(device)
+            weights_in_unsup = weights_in_unsup.to(device)
+            labels_in_unsup = labels_in_unsup.to(device)
 
             optimizer.zero_grad()
 
@@ -913,15 +907,15 @@ class VAEVAE(object):
                 abundance_out_unsup,
                 mu_vamb_unsup,
             ) = self.VAEVamb(depths_in_unsup, tnf_in_unsup, abundance_in_unsup)
-            logsigma_vamb_unsup = _torch.zeros(mu_vamb_unsup.size())
-            if self.usecuda:
-                logsigma_vamb_unsup = logsigma_vamb_unsup.cuda()
+            logsigma_vamb_unsup = _torch.zeros(
+                mu_vamb_unsup.size(), device="cuda" if self.VAEVamb.usecuda else "cpu"
+            )
             _, _, _, mu_vamb_sup_s = self.VAEVamb(
                 depths_in_sup, tnf_in_sup, abundance_in_sup
             )
-            logsigma_vamb_sup_s = _torch.zeros(mu_vamb_sup_s.size())
-            if self.usecuda:
-                logsigma_vamb_sup_s = logsigma_vamb_sup_s.cuda()
+            logsigma_vamb_sup_s = _torch.zeros(
+                mu_vamb_sup_s.size(), device="cuda" if self.VAEVamb.usecuda else "cpu"
+            )
             labels_out_unsup, mu_labels_unsup, logsigma_labels_unsup = self.VAELabels(
                 labels_in_unsup
             )
